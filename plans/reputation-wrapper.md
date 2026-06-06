@@ -108,7 +108,7 @@ row is signed by the author's wallet.
 ```
 
 - Query: by `(subjectKind, subjectId)` to get all comments on that subject.
-- Sort: by `ts` or (later) like count.
+- Sort: by `ts` (likes, if any, are off-chain — see §5).
 - **Write gate:** on write, the contract/gateway checks that
   `SkillOwnership(subjectId, author)` exists (§2).
 
@@ -160,7 +160,11 @@ an open decision §5.) But **only owners can register** (§2), so there's a mini
   vs public.
 - **Source-repo auto-verification** — currently self-attested. Later, weak auto-checks like
   "is the skillId stamped in the repo metadata?"
-- **Comment likes / sorting** — whether to add likes to sort comments (another public table).
+- **Comment likes / sorting** — **decided (zo): keep likes off-chain, or drop them.** An
+  on-chain like is high-frequency, low-value data: a row per like + aggregation would be slow
+  and costly, and would mean touching the contract. Not worth it. So likes are either an
+  off-chain index (gateway counts) or omitted entirely. On-chain stays comments + repos only;
+  default comment sort is by `ts`.
 - **Delete / hide** — malicious comments can't be deleted, but the gateway could hide them
   (inverse of iqchan bump).
 - **DbRoot/tables** — put `reputation-comments` and `reputation-repos` under `agentnet-root`?

@@ -96,8 +96,8 @@ flowchart LR
 - The agent's flow:
   1. When it needs an ability mid-work → **search** the hub (categories: clean-code / design / research / writing … not just coding, diverse like OpenClaw)
   2. **Fetch** the right skill → immediately work with that ability
-  3. If it was good → **star**, which **adds that skill to my agent's skill list.** A star isn't just a recommendation — it's *"equip as my own ability."* When a UI bot stars some design technique, that becomes the bot's own knowledge. And the star count also feeds discovery and ranking (a star is a signal).
-- Spam / low-quality skills? **The chain is the source of truth for writes; the gateway decides display order.** Sort by star count and reuse `iqchan`'s bump (recent-activity float) feature. "We can't delete it, but we can make it invisible."
+  3. If it was good → **star**, which **soulbound-mints that skill into my agent's wallet** — *"equip as my own ability,"* non-transferable. A star isn't just a recommendation; it *is* the act of acquiring the skill (see the unified model in §6). When a UI bot stars some design technique, that becomes the bot's own knowledge. The mint count (number of owners) then feeds discovery and ranking.
+- Spam / low-quality skills? **The chain is the source of truth for writes; the gateway decides display order.** Sort by **mint count** (= number of owner records) and reuse `iqchan`'s bump (recent-activity float) feature. "We can't delete it, but we can make it invisible." Skills are also security-screened before/after publish (see §6.5). Ranking details: `plans/nft-ranking-structure.md`.
 
 **Core — the scenario of someone who knows nothing (this picture matters most):**
 Plug in a Solana RPC and a little money, and the agent pulls verified skills and works on its own.
@@ -146,7 +146,7 @@ flowchart TB
   - **Starred skills** (what this agent can do)
   - **Followers** (social reputation)
   - **Output repos** (linked to IQ GitHub — can link both web2/web3 git, you see the actual code)
-  - **And the work context (memory) goes up alongside** — next to the profile, the context of everything the agent has done so far (encrypted).
+  - **And the work context (memory) syncs alongside** — the agent's sessions/context. This is **encrypted off-chain (a storage the user owns — Google Drive / iCloud / custom), with only a `sessionId` pointer on-chain**, since context is large and private. The wallet key decrypts it; the same wallet derives the same key on any device. (Full design: `plans/offchain-session-sync.md`.)
 - So **looking at a profile = seeing what the agent can do, what it has built, and how far it has worked.** Data ownership is entirely in the wallet.
 
 **The permanence hook (emotionally important):**
@@ -256,7 +256,7 @@ flowchart TB
     subgraph L2["AgentNet protocol (core, thin)"]
         F[iqfetch / publish]
         ID[wallet = identity / SNS]
-        MEM[on-chain memory · context]
+        MEM[off-chain encrypted memory<br/>+ on-chain sessionId pointer]
     end
     subgraph L3["IQLabs — transaction = DB"]
         Chain[(on-chain)]
@@ -321,17 +321,18 @@ In other words, both are a **"user → (subscription / hosting / API fees) → c
 
 Components:
 
-- **iqfee (on-chain write fee)**: a small fee to publish a skill or record a star/follow. Blocks spam *with a cost*, and keeps the protocol sustainable.
-- **star = giving a star = micro-payment**: pressing star sends a small tip to the skill's creator *in the same transaction.* One tap does **discovery + tipping + spam-prevention** at once. Ordinary people don't agonize over "should I tip?" — they just press the star.
+- **iqfee (on-chain write fee)**: a small fee to publish a skill or record a purchase/follow. Blocks spam *with a cost*, and keeps the protocol sustainable.
+- **star = soulbound purchase = payment = equip (one instruction)**: we don't build star, payment, and "equip" separately — they're **one `buy_skill`**. Pressing star soulbound-mints the skill to your wallet; if priced, the same transaction pays the creator + a thin iqfee. **A free skill is just a price-0 mint**, not a separate mechanism. One tap does discovery + acquisition + (optional) tipping + spam-prevention at once. (Details: `plans/skill-soulbound-structure.md`.)
+- **popularity comes for free**: the number of soulbound owner records (= mint count) *is* the popularity signal — no separate counter. (Ranking + sybil: `plans/nft-ranking-structure.md`.)
 - **subscribe / hire a high-reputation agent**: subscribe to someone's hot agent (e.g. a famous `designer.sol`) to borrow its ability, or hand it a job. Reputation becomes revenue.
 
 **Why "the more you use it, the more it turns" — two markets feed each other:**
 
 ```mermaid
 flowchart LR
-    A[Creator publishes a skill] -->|star = micro-payment| B[💰 creator income]
+    A[Creator publishes a skill] -->|star = soulbound buy| B[💰 creator income]
     A -->|user fetches & uses it| C[User builds an output repo]
-    C -->|others star = micro-payment| D[💰 user income]
+    C -->|others star = soulbound buy| D[💰 user income]
     D --> E[followers ↑ · top placement]
     E -->|subscribe · hire offers| A
     E -->|more fetches| A
@@ -347,6 +348,29 @@ flowchart LR
 
 ---
 
+## 6.5 Design decisions since this doc (the `plans/` folder)
+
+As we verified the above against real code, several pieces got concrete. Summary (each has
+a build-plan doc under `plans/`):
+
+- **Sessions = off-chain, skills = on-chain.** The only off-chain thing is the session/context
+  blob (large, private, encrypted; user-owned storage). Everything else — skill text, identity,
+  reputation, payment — is on-chain. → `plans/offchain-session-sync.md`
+- **Skill = soulbound NFT.** Skill text is stored on-chain (code-in, usually one inline tx for
+  ≤700B); ownership is a soulbound, non-transferable record bound to the wallet. star = payment =
+  equip is one instruction; free = price-0 mint. → `plans/skill-soulbound-structure.md`
+- **Reputation = a shared wrapper over skill/agent.** Comments + source-repo registration
+  (on-chain or off-chain git), writable only by owners of that skill. No star rating (mint count
+  is the rating). Likes stay off-chain or are dropped. → `plans/reputation-wrapper.md`
+- **Validation + security.** A swappable validation adapter (skills.sh rules as reference) plus a
+  security layer modeled on skills.sh's `/audits` (text-maliciousness LLM review is our #1, since
+  skills are mostly text). Multi-stage: pre-publish gate, agent roaming, server periodic, and a
+  QAgent official audit. → `plans/skill-validation-adapter.md`
+- **NFT collection structure** (open): single mpl-core collection vs per-skill Master Edition —
+  research captured, decision pending. → `plans/nft-ranking-structure.md`
+
+---
+
 ## 7. Appendix: what already exists vs. what we build
 
 Exploration shows **~90% already exists in IQLabs / the SDKs.** Most is a clone of the IQ GitHub (git-sdk) pattern.
@@ -356,14 +380,16 @@ Exploration shows **~90% already exists in IQLabs / the SDKs.** Most is a clone 
 | `skills:all` public registry | git-sdk `git_repos:all` (empty writers = anyone writes) | ✅ exists (clone) |
 | `skills:<creator>` per-creator skills | `git_repos_v2_<owner>` (writers:[creator]) | ✅ exists |
 | wallet = identity, public read by address | IQ Profile / `getUserPda` / no login | ✅ exists |
-| store work memory/context | `User PDA` metadata + `agent_work:<agent>` table | ✅ exists |
-| encrypt memory (decrypt with my key only) | crypto: `deriveX25519Keypair` / `dhEncrypt` / `passwordEncrypt` | ✅ exists |
-| output (repo) ↔ skill link | git-sdk as-is | ✅ exists |
+| store session/context (off-chain blob + on-chain pointer) | `mysession` table (owner-only writes) holds the `sessionId` list; blob in user storage | 🔨 new (thin) |
+| encrypt memory (decrypt with my key only) | crypto: `deriveX25519Keypair` / `dhEncrypt` (used as-is) | ✅ exists |
+| output (repo) ↔ skill link | git-sdk as-is + reputation source-repo registration | ✅ / 🔨 |
 | `.sol` human name | wide-web SNS resolution | ✅ exists |
-| search · sort · bump | gateway + reuse `iqchan` bump | ✅ exists (reuse) |
-| **star = micro-payment (atomic)** | `writeRow` + `SystemProgram.transfer` in one tx | 🔨 new wrapper |
+| search · sort · bump | gateway + reuse `iqchan` bump; sort by mint count | ✅ exists (reuse) |
+| **soulbound skill ownership** | new `SkillOwnership` PDA + `buy_skill` ix | 🔨 new (thin) |
+| **star = soulbound buy = payment = equip (atomic)** | `buy_skill`: `SystemProgram.transfer` + PDA in one tx (free = price-0) | 🔨 new wrapper |
+| **reputation (comments + source repos)** | public tables, owner-gated writes | 🔨 new |
+| **skill validation + security audit** | adapter (skills.sh rules ref) + LLM maliciousness review | 🔨 new |
 | **one-way follow** | `follows:<owner>` plain table (Connection is bidirectional, unfit) | 🔨 new (simple) |
-| **paid fetch / read-gating** | gate only blocks writes → gateway auth or encryption | 🔨 new |
 | **iqfetch / publish (address convention)** | core protocol functions (git-sdk's sibling) | 🔨 new (thin) |
 
 **Reference code:**
@@ -378,8 +404,9 @@ Exploration shows **~90% already exists in IQLabs / the SDKs.** Most is a clone 
 
 ## Open questions (to dig into next)
 
-1. Reputation score formula + sybil (fake-star) prevention — the exact definition of "becoming famous"
-2. The exact mechanism for paid fetch / read-gating (gateway auth vs. encryption)
+1. Reputation/ranking formula + sybil (free-mint bot) prevention — exact definition of "becoming famous" (→ `plans/nft-ranking-structure.md`)
+2. NFT collection structure: single mpl-core collection vs per-skill Master Edition (→ `plans/nft-ranking-structure.md`)
 3. Hiring/settlement structure — is escrow needed, or is plain payment + reputation enough?
-4. Pick one first adapter to demo (after the core): VSCode (visible) vs. MCP (proves the protocol)
+4. First runtime to demo: web (PoC) → then VSCode / Claude CLI / Codex (→ `plans/offchain-session-sync.md`)
 5. The GPT "memory import" path (action-injection is blocked, but a path to push in context)
+6. QAgent official-audit trust — record audit results on-chain vs server view (→ `plans/skill-validation-adapter.md`)
