@@ -64,8 +64,7 @@ just swaps the subject.
 
 ## 2. Write permission — owners of that skill only
 
-> **Decision (zo): commenting and source-repo registration are limited to "owners of
-> that skill".**
+> **Commenting and source-repo registration are limited to "owners of that skill".**
 
 Unlike sessions (`mysession`, owner-only), reputation is **written by many — but not just
 anyone.** Only someone who **actually bought** the skill (= holds a `SkillOwnership` PDA)
@@ -147,9 +146,9 @@ flowchart TB
     style Show fill:#efe,stroke:#3a3
 ```
 
-**Verification is on you (zo):** "was this source really built with this skill/agent?" is
-**self-attested by the registrant**; the chain does not enforce it. (Auto-verification is
-an open decision §5.) But **only owners can register** (§2), so there's a minimal trust bar.
+**Verification is self-attested:** "was this source really built with this skill/agent?" is
+attested by the registrant; the chain does not enforce it (auto-verification is an open
+decision, §5). But **only owners can register** (§2), so there's a minimal trust bar.
 
 ---
 
@@ -160,11 +159,10 @@ an open decision §5.) But **only owners can register** (§2), so there's a mini
   vs public.
 - **Source-repo auto-verification** — currently self-attested. Later, weak auto-checks like
   "is the skillId stamped in the repo metadata?"
-- **Comment likes / sorting** — **decided (zo): keep likes off-chain, or drop them.** An
-  on-chain like is high-frequency, low-value data: a row per like + aggregation would be slow
-  and costly, and would mean touching the contract. Not worth it. So likes are either an
-  off-chain index (gateway counts) or omitted entirely. On-chain stays comments + repos only;
-  default comment sort is by `ts`.
+- **Comment likes / sorting** — likes stay **off-chain, or are dropped**. An on-chain like
+  is high-frequency low-value data (a row per like + aggregation = slow, costly, needs
+  contract changes), so likes are an off-chain index (gateway counts) or omitted. On-chain
+  stays comments + repos only; default comment sort is by `ts`.
 - **Delete / hide** — malicious comments can't be deleted, but the gateway could hide them
   (inverse of iqchan bump).
 - **DbRoot/tables** — put `reputation-comments` and `reputation-repos` under `agentnet-root`?

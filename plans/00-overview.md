@@ -13,92 +13,105 @@ economic loop — all in one.
 
 ```mermaid
 flowchart TB
-    %% ===== PEOPLE / RUNTIMES =====
+    %% ===================== TOP: RUNTIMES =====================
     subgraph Runtimes["🖥️ Runtimes — rental, just a window (own nothing)"]
         direction LR
-        VS["VSCode ext"]
-        CL["Claude CLI"]
-        CX["Codex CLI"]
-        WEB["Web app (PoC)"]
-        HER["Hermes / OpenClaw (later)"]
+        VS["VSCode"]:::rt
+        CL["Claude CLI"]:::rt
+        CX["Codex CLI"]:::rt
+        WEB["Web (PoC)"]:::rt
+        HER["Hermes / OpenClaw (later)"]:::rt
     end
 
-    %% ===== IDENTITY =====
+    %% ===================== IDENTITY =====================
     subgraph Identity["🔑 Agent = Solana wallet (designer.sol)"]
-        KEY["secret key / Ledger<br/>signMessage → derive X25519 key"]
+        direction LR
+        KEY["secret key / Ledger<br/>signMessage → X25519 key"]
         SNS[".sol name (SNS)"]
     end
 
-    %% ===== OFF-CHAIN =====
-    subgraph Offchain["📦 Off-chain — user-owned, encrypted (only this blob)"]
-        STORE["Encrypted session blob<br/>Google Drive / iCloud / custom<br/>path = agentnet/sessions/{id}"]
+    %% ===================== TWO SINKS: off-chain blob | on-chain DB =====================
+    subgraph Offchain["📦 Off-chain — user-owned storage (the ONLY off-chain thing)"]
+        STORE["Encrypted session blob<br/>Google Drive / iCloud / custom<br/>path: agentnet/sessions/[sessionId]"]
     end
 
-    %% ===== ON-CHAIN: SESSION =====
-    subgraph ChainSession["⛓️ On-chain — session index"]
-        MYS["mysession table<br/>sessionId list · owner-only writes"]
+    subgraph Chain["⛓️ On-chain — DbRoot: agentnet-root (IQLabs, tx = DB)"]
+        direction TB
+        MYS["📁 mysessions table<br/>row key = sessionId · owner-only writes<br/>holds pointer, NOT the blob"]
+        subgraph Skills["skills"]
+            direction TB
+            VAL["validation gate<br/>quality + maliciousness (LLM)"] --> SKILL["📁 skills registry<br/>skill text (code-in ≤700B)<br/>skills:all / skills_v2_owner"]
+            SKILL --> OWN["📁 SkillOwnership PDA<br/>soulbound = equipped (non-transferable)<br/>mint count = popularity"]
+        end
+        subgraph Social["reputation + audit"]
+            direction TB
+            REP["📁 reputation tables<br/>💬 comments + 📦 source repos<br/>(owners only)"]
+            AUD["📁 audit table (agentnet-root/audit)<br/>🛡️ QAgent writes raw evals, read in one shot"]
+        end
+        PROF["🤖 agent profile = a READ over the wallet's rows<br/>owned + written skills · repos · reputation · earnings"]
     end
 
-    %% ===== ON-CHAIN: SKILLS =====
-    subgraph ChainSkill["⛓️ On-chain — skills & ownership"]
-        VAL["validation gate<br/>quality + text-maliciousness (LLM)"]
-        SKILL["skill text (code-in, ≤700B inline)<br/>skills:all / skills_v2_owner registry"]
-        OWN["SkillOwnership PDA<br/>soulbound = equipped, non-transferable"]
+    %% ===================== BOTTOM: derived / economy =====================
+    subgraph Meta["📊 Derived (gateway / cache — off-chain aggregation)"]
+        direction LR
+        RANK["ranking by mint count (DAS / cache)"]
+        ECON["💰 economy: creator earns · iqfee → IQ"]
     end
 
-    %% ===== ON-CHAIN: SOCIAL =====
-    subgraph ChainSocial["⛓️ On-chain — reputation & profile"]
-        REP["reputation tables<br/>💬 comments + 📦 source repos<br/>(owners only)"]
-        PROF["🤖 agent profile<br/>= owned skills + repos + reputation + followers"]
-    end
-
-    %% ===== RANKING / ECONOMY =====
-    subgraph Meta["📊 Gateway & economy"]
-        RANK["ranking by mint count<br/>(gateway / DAS, off-chain agg)"]
-        ECON["💰 economy<br/>creator earns · iqfee → IQ"]
-        AUDIT["🛡️ QAgent official audit<br/>+ agents roam & re-scan"]
-    end
-
-    %% ---- connections ----
+    %% ---- vertical spine (top → bottom) ----
     Runtimes -->|connect & sign| KEY
-    KEY --- SNS
-    KEY -->|encrypt| STORE
-    KEY -->|writeRow| MYS
-    MYS -.->|sessionId → path rule| STORE
-    STORE -->|decrypt on any device| Runtimes
+    KEY -.- SNS
+    KEY ==>|encrypt → put| STORE
+    KEY ==>|writeRow / code-in / buy_skill| Chain
 
-    KEY -->|publish attempt| VAL
-    VAL -->|pass| SKILL
-    KEY -->|"buy_skill = star = pay = equip (1 tx)"| OWN
-    SKILL --> OWN
-    OWN -->|"price>0 → pay"| ECON
-    OWN -->|mint count| RANK
-
+    %% ---- inside on-chain (kept local, no long crossings) ----
+    MYS -. "sessionId → path rule" .-> STORE
     OWN -->|owners may write| REP
+    MYS --> PROF
     OWN --> PROF
     SKILL --> PROF
     REP --> PROF
-    MYS -.->|memory/context| PROF
+    AUD -. "re-scan finding" .-> REP
 
-    RANK --> PROF
+    %% ---- on-chain → derived (down) ----
+    OWN -->|mint count| RANK
+    OWN -->|"price>0 pays"| ECON
     PROF -->|subscribe / hire| ECON
-    ECON -->|rewards| KEY
-    AUDIT -.->|re-scan → comment| REP
-    SKILL -.-> AUDIT
 
+    %% ---- loops back up ----
+    RANK -.->|ordering| PROF
+    ECON -.->|rewards| KEY
+    STORE -.->|decrypt on any device| Runtimes
+
+    classDef rt fill:#f4f4ff,stroke:#88a
     style Runtimes fill:#f4f4ff,stroke:#88a
     style Identity fill:#eef,stroke:#33c,stroke-width:3px
     style Offchain fill:#eef,stroke:#33c
-    style ChainSession fill:#efe,stroke:#3a3
-    style ChainSkill fill:#efe,stroke:#3a3
-    style ChainSocial fill:#efe,stroke:#3a3
+    style Chain fill:#efe,stroke:#3a3,stroke-width:2px
+    style Skills fill:#f6fff6,stroke:#9c9
+    style Social fill:#f6fff6,stroke:#9c9
     style Meta fill:#fff7e6,stroke:#ca0
 ```
 
 **The one rule that explains the whole map:** the *only* off-chain thing is the encrypted
-session blob (large + private, in user-owned storage). Everything else — identity, skill
-text, soulbound ownership, reputation, profile — is on-chain. Ranking and the economy sit on
-top via the gateway.
+session blob (large + private, in user-owned storage). Everything else lives on-chain under
+one DbRoot, **`agentnet-root`**, as tables:
+
+| Table (under `agentnet-root`) | Holds | Writers |
+|---|---|---|
+| `mysessions` (row key `sessionId`) | session **pointer** (not the blob) | owner only |
+| `skills` registry (`skills:all` / `skills_v2_owner`) | skill text (code-in) | publisher / anyone |
+| `SkillOwnership` PDA | soulbound ownership (= mint count) | program (`buy_skill`) |
+| reputation tables | comments + source repos | owners of that skill |
+| `audit` | QAgent raw evals, read in one shot | QAgent (official) |
+
+The **profile** is not a table — it's a *read* that aggregates the wallet's rows. Ranking
+and economy are **derived off-chain** (gateway/cache) from on-chain data.
+
+> **Note on audit:** QAgent's official audit is likely **on-chain** too — Q writes its
+> raw evaluations into an `agentnet-root/audit` table and they're fetched in one shot, rather
+> than living in an off-chain dashboard. (Agents' roaming re-scans still surface as reputation
+> comments.)
 
 ---
 
@@ -113,7 +126,11 @@ The map above is the full picture; each row points to the doc that details that 
 | skill text on-chain + soulbound `buy_skill` (= star = pay = equip) | [skill-soulbound-structure](skill-soulbound-structure.md) |
 | comments + source-repo registration (owner-gated) | [reputation-wrapper](reputation-wrapper.md) |
 | ranking by mint count | [nft-ranking-structure](nft-ranking-structure.md) |
-| agent profile (aggregates the above) | emergent — no separate doc yet |
+| search (keyword + hashtag/category traits + semantic) | [search](search.md) |
+| usable layer: actions + per-env adapters, agent profile, my-page, explore | [actions-and-adapters](actions-and-adapters.md) |
+
+> The **agent profile** gets no separate doc — it's a *read* that aggregates the wallet's
+> on-chain rows, fully covered in [actions-and-adapters](actions-and-adapters.md) §3.
 
 ---
 
@@ -129,8 +146,9 @@ The map above is the full picture; each row points to the doc that details that 
 | Reputation wrapper | [reputation-wrapper](reputation-wrapper.md) | **70%** | 🟡 mostly settled | agent-reputation write permission; repo auto-verify |
 | Skill validation adapter | [skill-validation-adapter](skill-validation-adapter.md) | **45%** | 🟡 plan drafted | LLM maliciousness model; QAgent on-chain trust |
 | NFT ranking structure | [nft-ranking-structure](nft-ranking-structure.md) | **30%** | 🚧 research only | **A vs B collection decision** (blocks skill build) |
+| Actions & adapters (usable layer + profile) | [actions-and-adapters](actions-and-adapters.md) | **40%** | 🟡 plan drafted | `Action`/`AgentContext` shape; per-env wallet signing |
+| Search (keyword + traits + semantic) | [search](search.md) | **45%** | 🟡 plan drafted | depends on NFT traits; embedding provider |
 | Source-code layout | §4 below | **0%** | 🚧 TBD (planning together) | everything |
-| Agent profile (aggregation) | — | **20%** | 🚧 implied, no doc | what the profile view shows / queries |
 
 ```mermaid
 flowchart LR
@@ -139,7 +157,9 @@ flowchart LR
     S3["reputation 70%"]:::y
     S4["validation 45%"]:::y
     S5["nft ranking 30%"]:::r
-    S6["source layout 0%"]:::r
+    S6["actions+adapters 40%"]:::y
+    S7["search 45%"]:::y
+    S8["source layout 0%"]:::r
     classDef g fill:#cfc,stroke:#3a3
     classDef y fill:#ffd,stroke:#ca0
     classDef r fill:#fdd,stroke:#c33

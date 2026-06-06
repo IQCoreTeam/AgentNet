@@ -408,3 +408,10 @@ flowchart LR
 4. 첫 런타임 데모: 웹(PoC) → 그다음 VSCode / Claude CLI / Codex (→ `plans/offchain-session-sync.md`)
 5. GPT "기억 import" 경로 (행동주입은 막혔지만 컨텍스트를 밀어넣는 길)
 6. QAgent 공식 감사 신뢰성 — 감사 결과를 온체인 기록 vs 서버 뷰 (→ `plans/skill-validation-adapter.md`)
+
+---
+
+## 제작자
+
+- [zo-sol](https://github.com/zo-sol)
+- [SpaceBunEth](https://github.com/SpaceBunEth)

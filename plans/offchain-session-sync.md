@@ -89,7 +89,7 @@ Just two key properties:
 
 ## 3. Storage adapter — the only new component
 
-**Decision (zo): we provide no storage.** The user picks their own — Google Drive,
+**We provide no storage.** The user picks their own — Google Drive,
 iCloud, even a custom backend. Different stores mean different auth/APIs, so we hide them
 all behind one interface (the way `skills.sh` covered 71 editors with one dumb file convention):
 
@@ -126,7 +126,7 @@ flowchart TB
 
 ---
 
-## 4. On-chain index — keep on-chain minimal (corrected)
+## 4. On-chain index — keep on-chain minimal
 
 Session content is never uploaded. **Nor are the pointer, hash, or storage type.**
 On-chain holds only the **list** of "these sessionIds belong to this wallet":
@@ -145,7 +145,7 @@ nobody can inject a row into my session list.
 }
 ```
 
-**What we drop and why (zo's correction):**
+**What we drop and why:**
 
 | Dropped field | Why we can omit it |
 |---|---|
@@ -179,7 +179,7 @@ the `sessionId`. → Even the storage type is never made public.
 
 ## 5. The real end-to-end scenario (this must actually work)
 
-The flow zo asked for, made concrete enough to build.
+The end-to-end flow, concrete enough to build.
 
 ### 5.1 First run — `agentnet init`
 

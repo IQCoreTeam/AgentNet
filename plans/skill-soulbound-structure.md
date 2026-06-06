@@ -20,7 +20,7 @@ Skill text goes **fully on-chain** — not a pointer — because:
   meaningless. On-chain text = the asset *itself* is the chain entry. Ownership becomes real.
 - Owned/sold as **soulbound** = "this ability is mine," non-transferable, proven by wallet.
 
-> **Core unification (zo):** star, payment, and equip are not built separately — all three
+> **Core unification:** star, payment, and equip are not built separately — all three
 > are **one soulbound purchase** (`buy_skill`); "free" is just a price-0 mint. Full flow in §5.
 
 ---

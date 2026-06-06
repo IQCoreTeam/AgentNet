@@ -410,3 +410,10 @@ Exploration shows **~90% already exists in IQLabs / the SDKs.** Most is a clone 
 4. First runtime to demo: web (PoC) → then VSCode / Claude CLI / Codex (→ `plans/offchain-session-sync.md`)
 5. The GPT "memory import" path (action-injection is blocked, but a path to push in context)
 6. QAgent official-audit trust — record audit results on-chain vs server view (→ `plans/skill-validation-adapter.md`)
+
+---
+
+## Authors
+
+- [zo-sol](https://github.com/zo-sol)
+- [SpaceBunEth](https://github.com/SpaceBunEth)

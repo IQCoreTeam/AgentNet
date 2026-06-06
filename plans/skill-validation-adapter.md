@@ -6,26 +6,21 @@
 
 ---
 
-## 0. First — what skills.sh "validation" actually is (research)
+## 0. What skills.sh "validation" is
 
 > Source: `github.com/vercel-labs/skills` repo + skills.sh docs.
 
-The "validation" you saw on skills.sh is **not an official product.** Precisely:
+skills.sh has **no official validation product**:
+- The released CLI only enforces "`name` + `description` present and string" (`parseSkillMd()`
+  silently skips otherwise). No formal validate command.
+- A `skills validate` / `lint` command exists **only in an unmerged PR (#509)**, not on main.
+- No hosted validation API, not importable as a package, no JSON schema file.
 
-- The released CLI (`skills` npm) has **no formal validate command.** The only thing it
-  actually enforces: `parseSkillMd()` **silently skips** a skill if `name`/`description` is
-  missing or non-string. (= "has name + description" is the de-facto rule today.)
-- A `skills validate` / `lint` command exists **only in an unmerged PR (#509)** by an
-  outside contributor. Not on main.
-- **No hosted validation API.** All local CLI. There's no server endpoint to call.
-- **Not importable** as an npm package (no `main`/`exports`). No JSON schema file either.
+So there's nothing to fetch and reuse. **PR #509 is a reference template** — we copy its
+logic into our own adapter (reference, not dependency).
 
-**Conclusion:** there is no validation service to "fetch and reuse." Instead, **PR #509's
-validation logic is a good reference template** — we **implement our own adapter using it
-as reference** (a thing to copy, not a dependency).
-
-> ⚠️ The above "validation" is **quality lint** (name/description/length). But skills.sh
-> also has a **separate security-audit page** (`/audits`) — that one matters more. See §0b.
+This is **quality lint** (name/description/length). The more important piece is skills.sh's
+**security-audit page** (`/audits`) — §0b.
 
 ---
 
@@ -39,7 +34,7 @@ results of three external security tools.** Page text: *"Combined security audit
 from Gen Agent Trust Hub, Socket, and Snyk."* One row per skill, e.g.
 `azure-validate → Safe | 0 alerts | Critical`.
 
-| Column | Tool | What it checks (guess) | Result form |
+| Column | Tool | What it checks | Result form |
 |---|---|---|---|
 | **Gen** | Gen Agent Trust Hub | **maliciousness of SKILL.md text** (prompt injection, harmful instructions) — guessed LLM-based | `Safe` / `High Risk` |
 | **Socket** | Socket.dev | supply chain / install scripts / network (code shipped with the skill) | `0 alerts` etc. |
@@ -50,9 +45,9 @@ from Gen Agent Trust Hub, Socket, and Snyk."* One row per skill, e.g.
 ```mermaid
 flowchart TB
     Skill["skill (SKILL.md + shipped code/deps)"]
-    Skill --> S1["Socket.dev API<br/>supply-chain / install-script auto-scan (guess)"]
-    Skill --> S2["Snyk CLI/API<br/>dependency CVE scan (guess)"]
-    Skill --> S3["Gen Agent Trust Hub<br/>SKILL.md text maliciousness LLM review (guess)"]
+    Skill --> S1["Socket.dev API<br/>supply-chain / install-script auto-scan"]
+    Skill --> S2["Snyk CLI/API<br/>dependency CVE scan"]
+    Skill --> S3["Gen Agent Trust Hub<br/>SKILL.md text maliciousness LLM review"]
     S1 --> Agg["skills.sh aggregation dashboard /audits<br/>(an aggregator, not a scanner)"]
     S2 --> Agg
     S3 --> Agg
@@ -60,7 +55,7 @@ flowchart TB
     style Agg fill:#efe,stroke:#3a3
 ```
 
-**Takeaways from the guess:**
+**Takeaways:**
 - skills.sh itself is an **aggregator, not a scanner** — it collects three vendors' results.
 - As in `Safe | 0 alerts | Critical`, the **three tools look at different layers** (text /
   supply chain / CVE). One tool isn't enough.
