@@ -47,11 +47,10 @@ precision/determinism, embeddings add the vocabulary-mismatch leap.
 | **keyword** | words in name + description | skill text (code-in) | exact / substring |
 | **embedding** | vector of the skill's meaning | off-chain index (§3) | semantic leap |
 
-Because category + hashtags are **NFT traits**, they're on-chain, permanent, and filterable
-the same way the marketplace already filters NFTs (ties into
-[`nft-ranking-structure.md`](nft-ranking-structure.md) — traits depend on the A/B collection
-choice). `browseSkills` (in [`actions-and-adapters.md`](actions-and-adapters.md)) splits by
-these traits.
+Because category + hashtags are **NFT traits** (Token-2022 `TokenMetadata`), they're
+on-chain, permanent, and filterable the same way the marketplace filters skills (see
+[`nft-ranking-structure.md`](nft-ranking-structure.md)). `browseSkills` (in
+[`actions-and-adapters.md`](actions-and-adapters.md)) splits by these traits.
 
 ### category vs hashtag — they're complementary
 - **category** = a small fixed set, one big drawer per skill (also the NFT trait used for browsing).
@@ -147,8 +146,8 @@ flowchart LR
 ## 5. Build order
 
 1. ⬜ Keyword + substring over skill name/description (on-chain reads). $0, deterministic.
-2. ⬜ **category + hashtags as NFT traits** — depends on NFT collection A/B
-   ([`nft-ranking-structure.md`](nft-ranking-structure.md)) landing first.
+2. ⬜ **category + hashtags as NFT traits** (Token-2022 `TokenMetadata`) — depends on the
+   NFT mint structure ([`nft-ranking-structure.md`](nft-ranking-structure.md)) landing first.
 3. ⬜ Trait filter in `browseSkills` (split by category, filter by hashtags).
 4. ⬜ Embedding index (start with the cheapest: 3-small or self-host MiniLM) + in-memory
    cosine; wire as a hybrid fallback/re-rank.

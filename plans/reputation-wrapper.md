@@ -29,7 +29,7 @@ flowchart TB
 ```
 
 **No star rating.** "Rating" is read from the NFT mint count (= number of owners/downloads)
-— already handled by the `SkillOwnership` PDA count in
+— already handled by the skill mint's `supply` in
 [`skill-soulbound-structure.md`](skill-soulbound-structure.md). Here we only cover
 **comments and source repos**.
 
@@ -67,12 +67,12 @@ just swaps the subject.
 > **Commenting and source-repo registration are limited to "owners of that skill".**
 
 Unlike sessions (`mysession`, owner-only), reputation is **written by many — but not just
-anyone.** Only someone who **actually bought** the skill (= holds a `SkillOwnership` PDA)
+anyone.** Only someone who **actually bought** the skill (= holds its soulbound token)
 can write.
 
 ```mermaid
 flowchart LR
-    W["wallet tries to write comment/repo"] --> Q{"SkillOwnership PDA<br/>(skillId, wallet) exists?"}
+    W["wallet tries to write comment/repo"] --> Q{"wallet holds the<br/>skill's soulbound token?"}
     Q -->|yes = owner| Y["✅ allow row write"]
     Q -->|no| N["❌ reject"]
     style Y fill:#efe,stroke:#3a3
@@ -109,7 +109,7 @@ row is signed by the author's wallet.
 - Query: by `(subjectKind, subjectId)` to get all comments on that subject.
 - Sort: by `ts` (likes, if any, are off-chain — see §5).
 - **Write gate:** on write, the contract/gateway checks that
-  `SkillOwnership(subjectId, author)` exists (§2).
+  the author holds the skill's soulbound token (§2).
 
 ---
 
@@ -172,7 +172,7 @@ decision, §5). But **only owners can register** (§2), so there's a minimal tru
 ## 6. Build order (after skill soulbound)
 
 1. ⬜ `Reputation` shared class + `Subject` type (skill | agent).
-2. ⬜ `reputation-comments` public table + owner write-gate (check `SkillOwnership`).
+2. ⬜ `reputation-comments` public table + owner write-gate (check token holding).
 3. ⬜ `reputation-repos` public table + path kinds (onchain-git / offchain-git).
 4. ⬜ UI: render comments + sources with the same component on the NFT (skill) view and the
    agent profile.

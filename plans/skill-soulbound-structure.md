@@ -35,7 +35,7 @@ Skill text goes **fully on-chain** — not a pointer — because:
 | Atomic **write + SOL transfer in one tx** | ✅ exists | `db_code_in` does `system_program::transfer` then write |
 | NFT **collection gate** (gate writes by owning an NFT) | ✅ exists | `GateConfig` / `verify_collection` |
 | NFT **minting** | ✅ proven elsewhere — **IQ6900 NFT** mints with `mpl-core` + CandyMachine, image/metadata via code-in | see §1b |
-| **Soulbound / non-transferable ownership** | ❌ **build** (thin) | new `SkillOwnership` PDA + `buy_skill` ix |
+| **Soulbound / non-transferable ownership** | ✅ native — Token-2022 `NonTransferable` mint (or custom PDA) | see §4 |
 
 **Takeaway:** soulbound skill ownership is a **thin wrapper** — one new PDA + one
 instruction — on top of primitives that all exist. Not a big new chain.
@@ -137,7 +137,7 @@ flowchart TB
 ```
 
 > The publish registry only holds "which skills exist." **"How popular" (sorting/ranking)
-> is by NFT mint count (= number of `SkillOwnership` PDAs), and that aggregation/sorting/
+> is by NFT mint count (= a skill mint's `supply`), and that aggregation/sorting/
 > sybil design lives in a separate doc.**
 
 Registry columns (cloned + extended):
@@ -146,35 +146,24 @@ Registry columns (cloned + extended):
 
 ---
 
-## 4. Soulbound ownership — the one new thing
+## 4. Soulbound ownership = the Token-2022 mint itself
 
-No native soulbound exists, so we add a small ownership record the **program** controls
-(users can never reassign it):
-
-```rust
-// NEW — the only real addition
-#[account]
-pub struct SkillOwnership {
-    pub skill_id: String,   // which skill
-    pub owner:    Pubkey,   // bound to this wallet
-    pub acquired_at: i64,
-    pub price_paid: u64,    // 0 = free equip, >0 = paid (ranking signal)
-    pub locked:   bool,     // true = soulbound, non-transferable
-}
-// PDA seeds: ["skill_own", skill_id, owner] — deterministic, one per (skill, owner)
-```
-
-- Derived per `(skill_id, owner)` ⇒ can't move to another wallet.
-- Only the program can write it ⇒ there is no user-side transfer instruction ⇒ soulbound.
-- "Equip as my own ability" (the vision's *star*) = this record exists under my wallet.
+**Ownership is a Token-2022 token, not a custom record.** A skill is one
+`NonTransferable` semi-fungible mint; buying = minting one token to your wallet. Holding the
+token *is* the soulbound proof — no custom PDA. (Model: [`nft-ranking-structure.md`](nft-ranking-structure.md).)
 
 ```mermaid
 flowchart LR
-    Buy["buy skill"] --> PDA["SkillOwnership PDA<br/>seeds=[skill_own, skillId, MY_wallet]"]
-    PDA --> Bound["locked = true<br/>no transfer ix"]
-    Bound --> Proof["wallet proves: this ability is mine, forever"]
-    style PDA fill:#efe,stroke:#3a3
+    Buy["buy skill"] --> MINT["mint 1 token → my wallet<br/>(Token-2022, NonTransferable)"]
+    MINT --> Bound["can't transfer = soulbound<br/>supply++ = popularity"]
+    Bound --> Proof["wallet holds the token = this ability is mine"]
+    style MINT fill:#efe,stroke:#3a3
 ```
+
+Why no custom PDA: the mint already gives soulbound (`NonTransferable`), the popularity
+counter (`mint.supply`), the holder list (DAS), and traits (`TokenMetadata`) — a PDA would
+duplicate all of that and make the NFT pointless. So **no `SkillOwnership` PDA**; the token
+is the record.
 
 ---
 
@@ -189,11 +178,11 @@ it the same way — one tx, atomic.
 flowchart TB
     Star["press star = buy_skill(skillId)"]
     Star --> Q{"price?"}
-    Q -->|"0 (free equip)"| Free["skip transfer<br/>→ create SkillOwnership PDA only"]
-    Q -->|"N lamports (paid)"| Paid["transfer N×(1-fee) to creator<br/>+ iqfee to IQ treasury<br/>→ create SkillOwnership PDA"]
-    Free --> Own["✅ soulbound = equipped"]
+    Q -->|"0 (free equip)"| Free["skip transfer<br/>→ mint 1 token to me"]
+    Q -->|"N lamports (paid)"| Paid["transfer N×(1-fee) to creator<br/>+ iqfee to IQ treasury<br/>→ mint 1 token to me"]
+    Free --> Own["✅ mint token → soulbound = equipped"]
     Paid --> Own
-    Own --> Cnt["popularity count +1 (# PDAs)"]
+    Own --> Cnt["supply +1 = popularity"]
     style Own fill:#efe,stroke:#3a3
 ```
 
@@ -212,7 +201,7 @@ sequenceDiagram
         TX->>C: ① transfer(buyer → creator, price × (1-fee))
         TX->>IQ: ② transfer(buyer → IQ, iqfee)
     end
-    TX->>P: ③ init SkillOwnership PDA {owner=buyer, locked=true, price}
+    TX->>P: ③ mint 1 NonTransferable token → buyer (supply++)
     Note over TX: atomic — all or nothing
     P-->>B: ✅ skill is now soulbound to my wallet
 ```
@@ -221,13 +210,12 @@ sequenceDiagram
 - **No separate payment system** — price 0 or N, same `buy_skill`.
 - **No separate star/tip system** — star = purchase. Free star = price-0 purchase.
 - **iqfee = IQ revenue** — on a paid purchase, a portion auto-routes to the treasury.
-- **The foundation for popularity sorting comes for free** — a skill's `SkillOwnership`
-  PDA count (= NFT mint count) = number of owners. No separate counter table; it's already
-  on-chain data.
+- **The foundation for popularity sorting comes for free** — a skill mint's `supply` =
+  number of owners. No separate counter; it's a native token field.
 
-> 📄 **How to aggregate/sort these PDA counts and prevent sybil (free bot mints)** — i.e.
-> the popular-skill / famous-agent ranking design — lives in a **separate doc**. This doc
-> stops at "mint counts accumulate on-chain."
+> 📄 **How to aggregate/sort by supply and prevent sybil (free-mint bots)** — the
+> popular-skill / famous-agent ranking — lives in [`nft-ranking-structure.md`](nft-ranking-structure.md).
+> This doc stops at "supply accumulates on-chain."
 
 ---
 
@@ -258,7 +246,7 @@ flowchart TB
 ## 7. Build order (after the session-sync PoC)
 
 1. ⬜ Clone the git-sdk registry → `skills:all` + `skills_v2_<owner>`, publish/fetch skill text on-chain.
-2. ⬜ Add `SkillOwnership` PDA + `buy_skill` instruction — **this one thing is star,
+2. ⬜ Add Token-2022 skill mint + `buy_skill` instruction — **this one thing is star,
    payment, and free-equip all at once** (price 0 → skip transfer, >0 → creator+iqfee
    transfer, always create the PDA).
 3. ⬜ (later) gate premium-skill collections with the existing `GateConfig`.

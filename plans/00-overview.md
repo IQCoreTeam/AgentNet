@@ -41,7 +41,7 @@ flowchart TB
         subgraph Skills["skills"]
             direction TB
             VAL["validation gate<br/>quality + maliciousness (LLM)"] --> SKILL["📁 skills registry<br/>skill text (code-in ≤700B)<br/>skills:all / skills_v2_owner"]
-            SKILL --> OWN["📁 SkillOwnership PDA<br/>soulbound = equipped (non-transferable)<br/>mint count = popularity"]
+            SKILL --> OWN["🪙 skill = Token-2022 mint<br/>NonTransferable = soulbound<br/>supply = popularity · holders = owners"]
         end
         subgraph Social["reputation + audit"]
             direction TB
@@ -101,12 +101,15 @@ one DbRoot, **`agentnet-root`**, as tables:
 |---|---|---|
 | `mysessions` (row key `sessionId`) | session **pointer** (not the blob) | owner only |
 | `skills` registry (`skills:all` / `skills_v2_owner`) | skill text (code-in) | publisher / anyone |
-| `SkillOwnership` PDA | soulbound ownership (= mint count) | program (`buy_skill`) |
 | reputation tables | comments + source repos | owners of that skill |
 | `audit` | QAgent raw evals, read in one shot | QAgent (official) |
 
-The **profile** is not a table — it's a *read* that aggregates the wallet's rows. Ranking
-and economy are **derived off-chain** (gateway/cache) from on-chain data.
+**Skill ownership is not an IQLabs table** — it's a **Token-2022 mint per skill**
+(`NonTransferable` = soulbound, `supply` = popularity, holders = owners). The mint's `uri`
+holds the IQLabs code-in path to the skill text. See [`nft-ranking-structure.md`](nft-ranking-structure.md).
+
+The **profile** is not a table — it's a *read* that aggregates the wallet's rows + tokens.
+Ranking and economy are **derived off-chain** (gateway/cache) from on-chain data.
 
 > **Note on audit:** QAgent's official audit is likely **on-chain** too — Q writes its
 > raw evaluations into an `agentnet-root/audit` table and they're fetched in one shot, rather
@@ -142,10 +145,10 @@ The map above is the full picture; each row points to the doc that details that 
 | Plan | Doc | Design % | State | Biggest open item |
 |---|---|---|---|---|
 | Off-chain session sync | [offchain-session-sync](offchain-session-sync.md) | **85%** | 🟢 ready to build | CLI ↔ Phantom signature (deep-link), runtime format mapping |
-| Skill soulbound structure | [skill-soulbound-structure](skill-soulbound-structure.md) | **80%** | 🟢 ready to build | depends on NFT collection choice (A/B) |
+| Skill soulbound structure | [skill-soulbound-structure](skill-soulbound-structure.md) | **80%** | 🟢 ready to build | PDA vs Token-2022 mint as the soulbound record |
 | Reputation wrapper | [reputation-wrapper](reputation-wrapper.md) | **70%** | 🟡 mostly settled | agent-reputation write permission; repo auto-verify |
 | Skill validation adapter | [skill-validation-adapter](skill-validation-adapter.md) | **45%** | 🟡 plan drafted | LLM maliciousness model; QAgent on-chain trust |
-| NFT ranking structure | [nft-ranking-structure](nft-ranking-structure.md) | **30%** | 🚧 research only | **A vs B collection decision** (blocks skill build) |
+| NFT structure & ranking | [nft-ranking-structure](nft-ranking-structure.md) | **60%** | 🟡 model chosen | Token-2022 semi-fungible; trait schema + sybil |
 | Actions & adapters (usable layer + profile) | [actions-and-adapters](actions-and-adapters.md) | **40%** | 🟡 plan drafted | `Action`/`AgentContext` shape; per-env wallet signing |
 | Search (keyword + traits + semantic) | [search](search.md) | **45%** | 🟡 plan drafted | depends on NFT traits; embedding provider |
 | Source-code layout | §4 below | **0%** | 🚧 TBD (planning together) | everything |
@@ -156,7 +159,7 @@ flowchart LR
     S2["soulbound 80%"]:::g
     S3["reputation 70%"]:::y
     S4["validation 45%"]:::y
-    S5["nft ranking 30%"]:::r
+    S5["nft structure 60%"]:::y
     S6["actions+adapters 40%"]:::y
     S7["search 45%"]:::y
     S8["source layout 0%"]:::r
@@ -165,9 +168,11 @@ flowchart LR
     classDef r fill:#fdd,stroke:#c33
 ```
 
-**Critical path:** the **NFT collection decision (A vs B)** gates everything skill-related —
-soulbound minting and source-repo (`AppData`) depend on which standard. Session-sync has no
-NFT dependency, so it can proceed in parallel. (Build sequence in §6.)
+**Critical path:** the NFT model is now chosen — **Token-2022 semi-fungible** (`mint.supply`
+= popularity, `NonTransferable` = soulbound, traits on-chain), with the skill text via IQLabs
+code-in in the `uri` (no IQLabs/Token-2022 coupling). Remaining: trait schema + the
+PDA-vs-token soulbound-record question. Session-sync has no NFT dependency and runs in
+parallel. (Build sequence in §6.)
 
 ---
 
@@ -201,9 +206,9 @@ NFT dependency, so it can proceed in parallel. (Build sequence in §6.)
 
 ```mermaid
 flowchart TB
-    D["decide NFT collection A vs B"] --> P1
+    D["NFT model: Token-2022 semi-fungible<br/>(chosen) → finalize traits"] --> P1
     SS["session-sync PoC (web, manual adapter)<br/>— parallel, no NFT dependency"]
-    P1["skill registry + code-in publish"] --> P2["SkillOwnership PDA + buy_skill"]
+    P1["skill registry + code-in publish"] --> P2["Token-2022 mint + buy_skill"]
     P2 --> P3["reputation (comments + repos)"]
     P2 --> P4["validation gate before publish"]
     SS --> R1["runtime adapters: VSCode / Claude / Codex"]
@@ -212,6 +217,6 @@ flowchart TB
     style SS fill:#cfc,stroke:#3a3
 ```
 
-Two tracks run in parallel: the **A/B decision → skill chain** (red), and the
+Two tracks run in parallel: the **NFT model → skill chain** (red), and the
 **session-sync PoC → runtime adapters** (green). They converge once both the core and a
 runtime exist.

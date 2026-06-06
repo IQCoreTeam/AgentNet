@@ -54,7 +54,7 @@ Grouped by intent. Each action names the **plan doc** it builds on.
 | Action | What it does | Builds on |
 |---|---|---|
 | `myProfile` | the agent profile = this wallet (skills owned + written, repos, reputation, followers) | profile (this doc §3) |
-| `myBoughtSkills` | skills this agent purchased (its `SkillOwnership` PDAs) | [skill-soulbound-structure](skill-soulbound-structure.md) |
+| `myBoughtSkills` | skills this agent purchased (soulbound tokens it holds) | [skill-soulbound-structure](skill-soulbound-structure.md) |
 | `myWrittenSkills` | skills this agent authored | [skill-soulbound-structure](skill-soulbound-structure.md) |
 | `writeSkill` | author a new skill; **on publish, also mint one to yourself** (author gets their own copy) | [skill-soulbound-structure](skill-soulbound-structure.md) · [skill-validation-adapter](skill-validation-adapter.md) |
 | `myReputation` | comments received on me / my skills | [reputation-wrapper](reputation-wrapper.md) |
@@ -109,7 +109,7 @@ under the wallet:
 ```mermaid
 flowchart TB
     W["wallet (designer.sol)"]
-    W --> S1["owned skills (SkillOwnership PDAs)"]
+    W --> S1["owned skills (soulbound tokens held)"]
     W --> S2["written skills (authored + self-minted)"]
     W --> S3["source repos (reputation-repos)"]
     W --> S4["reputation (comments received)"]
@@ -136,7 +136,7 @@ The actions `myProfile` / `viewAgent` just gather these and hand them to the ada
   now.
 - Ideally it **fetches the list of wallets holding known NFTs from on-chain** (e.g. the
   gateway scanning the skills collection), but **that depends on the NFT structure**, which
-  isn't decided yet ([nft-ranking-structure](nft-ranking-structure.md), A vs B).
+  depends on the Token-2022 mint/group structure ([nft-ranking-structure](nft-ranking-structure.md)).
 - So: **build the agent structure first**, then the NFT structure, *then* wire `listAgents`
   to a concrete cache/index. Until then `listAgents` is an interface with a stub.
 

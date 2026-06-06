@@ -1,85 +1,152 @@
-# NFT Ranking Structure — 🚧 TODO / Research stage
+# NFT Structure & Ranking
 
-> Sibling: [`skill-soulbound-structure.md`](skill-soulbound-structure.md).
-> Design for ranking popular skills / famous agents by NFT mint count.
-> **Not decided yet.** For now this only captures our NFT-type research state.
-
----
-
-## 0. Purpose of this doc
-
-What the skill-soulbound doc deferred as "ranking → separate doc":
-- Popular-skill ranking = **NFT mint count** (= `SkillOwnership` PDA / NFT mint count)
-- Famous-agent ranking = e.g. sum of mint counts across the skills that agent created
-
-**Core question:** with **which NFT standard** do we accumulate the mint count, and **how
-do we count it** (on-chain vs gateway)? This decides the collection structure. Below are
-the research-verified facts — the decision is still TODO.
+> Sibling: [`skill-soulbound-structure.md`](skill-soulbound-structure.md) ·
+> [`search.md`](search.md) (traits) · [`actions-and-adapters.md`](actions-and-adapters.md).
+> The NFT model for skills — chosen so ranking, holder lists, categories, and search all
+> fall out of it for free.
 
 ---
 
-## 1. Research results — collection structure options (verified facts)
+## 0. What the NFT structure must give us
 
-> Source: official mpl-core / mpl-token-metadata / Token-2022 docs.
-> **Conclusion: Solana has no native "nested collection" (collection-in-collection).**
-> Owner count is **always off-chain aggregated** under any standard.
+A good NFT model makes almost everything else trivial:
+- **Popular skill** = how many copies of that skill exist (its supply).
+- **Famous agent** = sum of supply across the skills that agent created.
+- **Ecosystem user list** = the union of all holders.
+- **Category / hashtags** = NFT traits → drive [`search.md`](search.md) filtering.
 
-### Option A: single mpl-core collection + skillId attribute
-- One `IQ Skills` collection holds all skill NFTs, distinguished by a `skillId` attribute.
-- **Soulbound**: `PermanentFreezeDelegate` once at the **collection level** → all auto
-  non-transferable. ✅
-- **Source-repo registration**: native via mpl-core `AppData`/`LinkedAppData` plugin. ✅
-- **Mint-count ranking**: no per-skill count on-chain → gateway aggregates off-chain via DAS.
-- **Same stack as IQ6900** (mpl-core) → reuse code/patterns. ✅
-- New skill = mint 1 NFT (cheap).
-
-### Option B: skill = Master Edition (mpl-token-metadata)
-- One verified collection umbrella, each skill = a **Master Edition**, purchase = Print Edition.
-- **Mint count on-chain for free**: `MasterEdition.supply: u64` auto-increments per print. ✅
-  (But this is mint count, **not owner count** — one wallet holding several counts as several.)
-- **Soulbound**: needs freeze per print (more hands-on than A).
-- **No source-repo (AppData)** → needs a separate IQLabs table.
-- New skill = **create a master account** (pricier/heavier than A).
-- token-metadata (older standard) → different stack from IQ6900 (mpl-core).
-
-### Verified key facts
-- mpl-core's `MasterEdition`/`Edition` plugins are **"informational only, no counting".**
-  The ones that give an on-chain counter are **mpl-token-metadata's `MasterEdition.supply`**
-  or **Token-2022 `TokenGroup.size`** — both flat (beside the umbrella, not truly nested).
-- **Owner count** (unique owners) is not native on-chain under any standard → always off-chain.
-- DAS `getAssetsByGroup` groups **only by collection** → skillId-attribute aggregation is our
-  code (gateway).
-- Token-2022 group/member self-nesting isn't explicitly forbidden but is **undocumented/not
-  recommended** → treat as a hack.
-- Compressed NFTs (Bubblegum) aren't a grouping hierarchy (storage scaling).
+The hard requirement: **one umbrella collection; each item (skill) has a different creator;
+each item can be owned in many copies; with a per-item on-chain count.**
 
 ---
 
-## 2. A vs B comparison (verified)
+## 1. The model: Token-2022 semi-fungible (one mint per skill)
 
-| Item | A: single mpl-core collection | B: skill = Master Edition |
+The naive "1 NFT = 1 owner" model would make 500 owners = 500 NFT accounts (heavy). The
+right model is a **semi-fungible token**: **one mint per skill, and `supply` grows as each
+owner is minted one token.** `mint.supply` *is* the per-skill copy count — on-chain, free,
+enforced by the token program.
+
+```mermaid
+flowchart TB
+    GRP["Token-2022 Group (umbrella)<br/>TokenGroup.size = total # of skills"]
+    GRP --> SK["skill = one Token-2022 mint<br/>own mint authority = its creator"]
+    SK --> SUP["supply = # of copies owned<br/>(= popularity, on-chain, free)"]
+    SK --> NT["NonTransferable ext<br/>= native soulbound"]
+    SK --> MD["TokenMetadata ext<br/>category + hashtags (traits)<br/>uri → IQLabs on-chain path"]
+    style SK fill:#efe,stroke:#3a3,stroke-width:2px
+    style SUP fill:#cfc,stroke:#3a3
+```
+
+Everything maps to a native Token-2022 feature — **no custom soulbound to build**:
+
+| Requirement | Token-2022 feature | On-chain? |
 |---|---|---|
-| Standard | mpl-core (newest, rich plugins) | mpl-token-metadata (older, mature) |
-| Umbrella grouping | one collection ✅ | one verified collection ✅ |
-| Mint-count ranking | ⚠️ gateway off-chain (DAS) | ✅ `master.supply` on-chain free |
-| Soulbound | ✅ once at collection level | ⚠️ per print |
-| Source-repo (AppData) | ✅ native | ❌ separate IQLabs table |
-| New-skill minting | 1 NFT (cheap) | create master account (pricey) |
-| IQ6900 compat | same stack ✅ | different stack |
-| Owner-count counting | off-chain | off-chain (supply is mint count) |
+| umbrella collection | `TokenGroup` (`size` = # skills) | ✅ enforced count |
+| per-item different creator | each skill = own mint + own authority | ✅ |
+| many copies per item | mint 1 token per owner → `supply`++ | ✅ |
+| **per-skill popularity count** | **`mint.supply`** | ✅ free, enforced |
+| soulbound | **`NonTransferable` extension** | ✅ native (set at mint init) |
+| traits (category/hashtags) | `TokenMetadata` `additional_metadata` | ✅ on-chain |
+| all holders / user list | DAS `getTokenAccounts` per mint | indexer-fronted |
 
-**Tentative lean (undecided):** Option A. B's only advantage (mint count on-chain) is
-something the gateway does anyway, while A's advantages (native source-repo, soulbound in
-one go, same stack as IQ6900) are the features we actually need.
-→ **But final decision is TODO.**
+Two caveats to design around:
+- **Burn drift:** `NonTransferable` blocks transfer but **not burn**, so `supply` =
+  issued-not-burned. For a *live* holder list read DAS, don't trust `supply` as immutable.
+- **No nested groups:** a mint being both a group and a member is undocumented — don't rely
+  on it. Per-skill counts come from each mint's `supply`, not a sub-group `size`.
 
 ---
 
-## 3. TODO (not done yet)
+## 2. NFT layer ⟂ IQLabs are separate (key)
 
-- [ ] **Final A vs B decision** — based on the table above.
-- [ ] Define the mint-count → popularity-score **formula** (total mints vs paid-mint weighting).
-- [ ] **Famous-agent** score — sum of that agent's skill mint counts? followers? cumulative revenue?
-- [ ] **Sybil resistance** — block inflating mint count via free bot mints (make free mints costly, etc.).
-- [ ] Gateway aggregation method — DAS scan cadence/cache, per-`skillId` owner count.
-- [ ] If an on-chain counter is truly needed, whether to adopt part of B (hybrid).
+**IQLabs does not need to support Token-2022.** The two layers are independent and meet at
+one field:
+
+```mermaid
+flowchart LR
+    subgraph NFT["NFT layer — Token-2022 (standard, off-the-shelf)"]
+        T["skill mint: supply · soulbound · traits"]
+        URI["metadata uri"]
+    end
+    subgraph IQ["Content layer — IQLabs"]
+        CI["code-in skill text (tx)"]
+        RD["our reader"]
+    end
+    T --> URI
+    URI -->|"= IQLabs on-chain path"| CI
+    CI --> RD
+    style NFT fill:#eef,stroke:#33c
+    style IQ fill:#efe,stroke:#3a3
+```
+
+- **NFT layer** = Token-2022 mint (ownership, supply, soulbound, traits) — minted with the
+  standard, nothing IQLabs-specific.
+- **Content layer** = skill text stored via IQLabs **code-in**; the mint's `uri` holds the
+  **IQLabs on-chain path** (code-in tx). Our reader resolves it.
+- This is exactly IQ6900's pattern (NFT uri = code-in tx hash), swapping its mpl-core shell
+  for a Token-2022 semi-fungible mint. **The IQLabs contract is untouched** — it just stores
+  text and we read it.
+
+**Division of labor (the rule):**
+- **NFT (Token-2022) does everything NFT-shaped** — ownership, supply/popularity, soulbound,
+  traits, holder list. The NFT carries only a **txid** (the on-chain path) — nothing else.
+- **code-in / inscription is for text data only** — profiles, reputation, audit, skill text.
+  Not for ownership or counting (the NFT already does that for free).
+
+So we never rebuild on-chain what the token standard gives us; a custom PDA for ownership is
+out — it would make the NFT pointless.
+
+So: mint NFTs with Token-2022 ourselves (a sibling concern), put the IQLabs path in the uri.
+No IQLabs/Token-2022 coupling, no contract changes.
+
+---
+
+## 3. Alternatives (heavier — why not)
+
+Kept for the record; the semi-fungible model above wins on every axis we need.
+
+| Option | Per-item on-chain count | Soulbound | Why not |
+|---|---|---|---|
+| **mpl-core + Edition plugins** | ❌ `maxSupply` is informational, not a counter | build (freeze) | no real count; same IQ6900 stack but loses free supply |
+| **mpl-token-metadata Master/Print** | ✅ `MasterEdition.supply` enforced | build (freeze/pNFT) | **500 copies = 500 print mints** (heavy, pricey); bolt-on soulbound |
+| **Compressed NFTs (Bubblegum)** | ❌ count leaves via DAS | build | full DAS dependence, no native count; only if each copy must be a distinct traited NFT at huge scale |
+| **mpl-404 / hybrid, LibrePlex** | n/a | ❌ (404 is tradeable) | anti-soulbound / no unique advantage |
+
+The only one with a comparable native counter is mpl-token-metadata, but it forces a
+separate mint+account per copy (the heavy "edition" architecture). Token-2022 semi-fungible
+gives the same counter (`supply`) with **one mint per skill** + native soulbound + on-chain
+traits.
+
+---
+
+## 4. What ranking still needs (off-chain)
+
+On-chain gives the raw counters; ranking/aggregation is still a cheap off-chain read
+(the `CacheLayer` from [`actions-and-adapters.md`](actions-and-adapters.md) §4):
+- **per-skill popularity** = `mint.supply` (read directly).
+- **famous agent** = sum of `supply` over that creator's skill mints (aggregate via DAS).
+- **user list** = union of holders across mints (DAS `getTokenAccounts`).
+
+---
+
+## 5. TODO
+
+- [ ] Confirm the Token-2022 extension set per skill mint: `NonTransferable` +
+      `TokenMetadata` + `GroupMemberPointer`/`TokenGroupMember`; umbrella `TokenGroup`.
+- [ ] Minting flow: who pays, when supply increments (on `buy_skill`), free = price-0 mint.
+- [ ] Trait schema: exact category list + hashtag rules (feeds [`search.md`](search.md)).
+- [ ] Popularity formula: total supply vs paid-only weighting; sybil (free-mint bot) defense.
+- [ ] Famous-agent score: supply sum vs followers vs cumulative revenue.
+- [ ] Holder enumeration: DAS scan cadence/cache in the `CacheLayer`.
+- [ ] Update [`skill-soulbound-structure.md`](skill-soulbound-structure.md): the
+      `SkillOwnership` PDA is **dropped** — Token-2022 ownership *is* the soulbound record
+      (the mint handles soulbound + supply + holder list). No custom PDA (a PDA would make
+      the NFT pointless).
+
+---
+
+> **Sources:** Token-2022 extensions (NonTransferable, TokenMetadata, Token Groups
+> `size`/`max_size`) — solana.com/docs/tokens/extensions; mpl-token-metadata Print
+> (`supply`/`max_supply`) — developers.metaplex.com/token-metadata/print; mpl-core Editions
+> (informational only); Bubblegum/state compression; DAS `getTokenAccounts` (holders).
