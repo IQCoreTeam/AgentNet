@@ -1,178 +1,126 @@
 # Reputation Wrapper
 
 > Siblings: [`offchain-session-sync.md`](offchain-session-sync.md) (sessions) /
-> [`skill-soulbound-structure.md`](skill-soulbound-structure.md) (skill soulbound).
-> This doc covers **reputation** — the shared layer that attaches comments and source
-> repos to skills and agents.
+> [`skill-nft-structure.md`](skill-nft-structure.md) (skill soulbound).
+> Reputation = **comments** attached to a skill or an agent, where a comment may attach a
+> github / on-chain-git link.
 
 ---
 
 ## 0. One-line summary
 
-Reputation attaches to only two **subject** kinds — a **skill NFT** and an **agent wallet**.
-Both get the same things: **comments** and **source-repo registration**. So we handle it
-with **one shared class** that only varies the subject kind (we don't build two pointless
-wrappers).
+Reputation attaches to two **subject** kinds — a **skill NFT** and an **agent wallet** —
+and the thing attached is one primitive: a **comment** (which can carry a git link). One
+shared class, two backing tables keyed by the subject's address:
 
 ```mermaid
 flowchart TB
-    subgraph Subject["Subject — two kinds"]
-        Skill["🧩 skill NFT (skillId)"]
-        Agent["🤖 agent wallet (wallet)"]
-    end
-    Wrap{{"Reputation shared class<br/>subject = skill | agent"}}
-    Skill --> Wrap
-    Agent --> Wrap
-    Wrap --> C["💬 comments"]
-    Wrap --> R["📦 source-repo registration"]
-    style Wrap fill:#eef,stroke:#33c,stroke-width:2px
+    Skill["🧩 skill NFT (token address)"] --> CMT[("comments/[skillNFT]")]
+    Agent["🤖 agent wallet"] --> REP[("reputation/[agentWallet]")]
+    CMT --> C["💬 comment<br/>body + optional git attachment"]
+    REP --> C
+    style C fill:#efe,stroke:#3a3
 ```
 
-**No star rating.** "Rating" is read from the NFT mint count (= number of owners/downloads)
-— already handled by the skill mint's `supply` in
-[`skill-soulbound-structure.md`](skill-soulbound-structure.md). Here we only cover
-**comments and source repos**.
+**No star rating** — "rating" is the skill mint's `supply` (owner count), already in
+[`skill-nft-structure.md`](skill-nft-structure.md). Here we only do comments.
 
 ---
 
-## 1. Shared class — abstract over one subject
+## 1. Two tables, keyed by subject address
 
-Skill or agent, the only difference is "what the reputation attaches to." So the subject
-is one `{ kind, id }`:
+The subject's address *is* the table partition — no `subjectKind` field needed:
 
-```ts
-type Subject =
-  | { kind: "skill";  id: string }   // skillId
-  | { kind: "agent";  id: string };  // wallet(base58) — = the agent
+| Table | Key | Holds |
+|---|---|---|
+| `comments/[skillNFT]` | skill's Token-2022 mint address | comments on that skill |
+| `reputation/[agentWallet]` | agent wallet | comments on that agent |
 
-interface Reputation {
-  subject: Subject;
-  comments(): Promise<Comment[]>;            // comments on this subject
-  addComment(body: string): Promise<void>;   // owners only (permission below)
-  repos(): Promise<RepoLink[]>;              // source repos registered to this subject
-  addRepo(repo: RepoLink): Promise<void>;    // owners only
+A comment row (same shape in both tables):
+
+```jsonc
+{
+  "author": "<base58>",                 // signer
+  "body":   "Built X with this, worked great",
+  "attach": {                            // optional git link
+    "kind": "offchain-git",             // "offchain-git" | "onchain-git"
+    "url":  "https://github.com/..."    // or an on-chain IQ-GitHub repo ref
+  },
+  "ts": 1700000000
 }
 ```
 
-- **Skill reputation** = "how's this skill?" + "sources built with this skill"
-- **Agent reputation** = "how's this agent?" + "sources this agent built"
-
-Whether the UI shows an NFT (skill) view or an agent profile view, the **same component**
-just swaps the subject.
-
----
-
-## 2. Write permission — owners of that skill only
-
-> **Commenting and source-repo registration are limited to "owners of that skill".**
-
-Unlike sessions (`mysession`, owner-only), reputation is **written by many — but not just
-anyone.** Only someone who **actually bought** the skill (= holds its soulbound token)
-can write.
+- **Source code = an attachment on a comment**, not a separate feature: "I built this with
+  the skill, here's the repo" is just a comment with `attach`. Attachment rendering (preview,
+  link card) is the frontend's job.
+- Query = read the table for that subject address. Sort by `ts`.
 
 ```mermaid
 flowchart LR
-    W["wallet tries to write comment/repo"] --> Q{"wallet holds the<br/>skill's soulbound token?"}
-    Q -->|yes = owner| Y["✅ allow row write"]
+    Q["view a skill / agent"] --> READ["read comments/[addr] or reputation/[addr]"]
+    READ --> RENDER["frontend renders comments<br/>+ git attachments (link/preview)"]
+    style RENDER fill:#efe,stroke:#3a3
+```
+
+---
+
+## 2. Write permission
+
+- **`comments/[skillNFT]`** — only a wallet that **holds that skill's soulbound token**
+  (= actually bought it). Bots must buy in to spam → costs money; comments are from real users.
+- **`reputation/[agentWallet]`** — write gate is an open decision (§4): e.g. "anyone holding
+  ≥1 of that agent's skills" vs public.
+
+```mermaid
+flowchart LR
+    W["wallet writes a comment"] --> Q{"holds the skill's<br/>soulbound token?"}
+    Q -->|yes| Y["✅ allow"]
     Q -->|no| N["❌ reject"]
     style Y fill:#efe,stroke:#3a3
     style N fill:#fee,stroke:#c33
 ```
 
-What this gives:
-- **Spam resistance** — a bot must first *buy* the skill to spam comments (costs money).
-- **Trust** — "a comment from someone who actually bought it" is worth more.
-- **No star rating needed** — the buyer count (mint count) is the rating; their comments
-  are the qualitative review.
-
-> Write permission for *agent* reputation is an open decision (§5) — e.g. "anyone who
-> bought at least one of that agent's skills."
+The contract/gateway checks token holding on write. Self-attested: "was this repo really
+built with the skill?" isn't enforced on-chain — owner-only writes are the trust bar.
 
 ---
 
-## 3. Comments — public table, author-signed
+## 3. The shared class
 
-Comments are written by many, so they accumulate per-subject in a **public table**. Each
-row is signed by the author's wallet.
+Same logic for both subjects; only the table differs:
 
-```jsonc
-// writeRow("reputation-comments", …) — public, but author must be an owner (§2)
-{
-  "subjectKind": "skill",          // "skill" | "agent"
-  "subjectId":   "clean-code/solid", // skillId or wallet
-  "author":      "<base58>",        // author wallet (signer = ownership-checked)
-  "body":        "Built X with this skill, worked great",
-  "ts":          1700000000
+```ts
+type Subject =
+  | { kind: "skill"; addr: string }   // skill NFT mint address → comments/[addr]
+  | { kind: "agent"; addr: string };  // agent wallet → reputation/[addr]
+
+interface Reputation {
+  subject: Subject;
+  comments(): Promise<Comment[]>;
+  addComment(body: string, attach?: GitLink): Promise<void>;  // gated (§2)
 }
+// Comment = { author, body, attach?: { kind: "onchain-git"|"offchain-git", url }, ts }
 ```
 
-- Query: by `(subjectKind, subjectId)` to get all comments on that subject.
-- Sort: by `ts` (likes, if any, are off-chain — see §5).
-- **Write gate:** on write, the contract/gateway checks that
-  the author holds the skill's soulbound token (§2).
+The same UI component renders both — a skill NFT view or an agent profile view just swaps
+the subject.
 
 ---
 
-## 4. Source-repo registration — register a public path
+## 4. Open decisions
 
-Register "sources built with this skill/agent." It's uploading a **path to public source**:
-
-```jsonc
-// writeRow("reputation-repos", …) — public, author must be an owner
-{
-  "subjectKind": "skill",          // "skill"(built with this) | "agent"(built by this)
-  "subjectId":   "clean-code/solid",
-  "author":      "<base58>",
-  "repo":        "...",             // the path below
-  "pathType":    "onchain-git",     // "onchain-git" | "offchain-git"
-  "ts":          1700000000
-}
-```
-
-**Two path kinds (the route to public source):**
-
-| pathType | Points to | Example |
-|---|---|---|
-| `onchain-git` | **on-chain git** (IQ GitHub, git-sdk) | a repo in `git_repos_v2_<owner>` |
-| `offchain-git` | **off-chain git host** (GitHub, etc.) | `https://github.com/...` |
-
-```mermaid
-flowchart TB
-    A["owner registers a source repo"] --> T{"pathType?"}
-    T -->|onchain-git| On["on-chain git (IQ GitHub)<br/>git_repos_v2_owner"]
-    T -->|offchain-git| Off["off-chain git host<br/>github.com/..."]
-    On --> Show["'sources built with this' list on the subject's view"]
-    Off --> Show
-    style Show fill:#efe,stroke:#3a3
-```
-
-**Verification is self-attested:** "was this source really built with this skill/agent?" is
-attested by the registrant; the chain does not enforce it (auto-verification is an open
-decision, §5). But **only owners can register** (§2), so there's a minimal trust bar.
+- **Agent-reputation write permission** — public vs "holds ≥1 of that agent's skills".
+- **Attachment auto-verification** — currently self-attested; later, weak checks (e.g. is
+  the skill referenced in the repo?).
+- **Comment likes / sorting** — likes stay **off-chain or dropped** (high-frequency,
+  low-value; on-chain likes = slow/costly/contract changes). Default sort by `ts`.
+- **Delete / hide** — can't delete on-chain, but the gateway can hide (inverse of iqchan bump).
 
 ---
 
-## 5. Open decisions
+## 5. Build order (after skill soulbound)
 
-- **Agent-reputation write permission** — for skills, "owners of that skill" is clear. For
-  agents? "anyone who bought one of that agent's skills" vs "anyone holding any owned skill"
-  vs public.
-- **Source-repo auto-verification** — currently self-attested. Later, weak auto-checks like
-  "is the skillId stamped in the repo metadata?"
-- **Comment likes / sorting** — likes stay **off-chain, or are dropped**. An on-chain like
-  is high-frequency low-value data (a row per like + aggregation = slow, costly, needs
-  contract changes), so likes are an off-chain index (gateway counts) or omitted. On-chain
-  stays comments + repos only; default comment sort is by `ts`.
-- **Delete / hide** — malicious comments can't be deleted, but the gateway could hide them
-  (inverse of iqchan bump).
-- **DbRoot/tables** — put `reputation-comments` and `reputation-repos` under `agentnet-root`?
-
----
-
-## 6. Build order (after skill soulbound)
-
-1. ⬜ `Reputation` shared class + `Subject` type (skill | agent).
-2. ⬜ `reputation-comments` public table + owner write-gate (check token holding).
-3. ⬜ `reputation-repos` public table + path kinds (onchain-git / offchain-git).
-4. ⬜ UI: render comments + sources with the same component on the NFT (skill) view and the
-   agent profile.
+1. ⬜ `comments/[skillNFT]` table + token-holding write gate.
+2. ⬜ `reputation/[agentWallet]` table (write permission per §4).
+3. ⬜ Comment shape with optional git `attach` (onchain-git / offchain-git).
+4. ⬜ Frontend: render comments + git attachments on the skill NFT view and agent profile.

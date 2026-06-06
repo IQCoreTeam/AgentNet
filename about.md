@@ -97,7 +97,7 @@ flowchart LR
   1. When it needs an ability mid-work → **search** the hub (categories: clean-code / design / research / writing … not just coding, diverse like OpenClaw)
   2. **Fetch** the right skill → immediately work with that ability
   3. If it was good → **star**, which **soulbound-mints that skill into my agent's wallet** — *"equip as my own ability,"* non-transferable. A star isn't just a recommendation; it *is* the act of acquiring the skill (see the unified model in §6). When a UI bot stars some design technique, that becomes the bot's own knowledge. The mint count (number of owners) then feeds discovery and ranking.
-- Spam / low-quality skills? **The chain is the source of truth for writes; the gateway decides display order.** Sort by **mint count** (= number of owner records) and reuse `iqchan`'s bump (recent-activity float) feature. "We can't delete it, but we can make it invisible." Skills are also security-screened before/after publish (see §6.5). Ranking details: `plans/nft-ranking-structure.md`.
+- Spam / low-quality skills? **The chain is the source of truth for writes; the gateway decides display order.** Sort by **mint count** (= the mint supply) and reuse `iqchan`'s bump (recent-activity float) feature. "We can't delete it, but we can make it invisible." Skills are also security-screened before/after publish (see §6.5). Ranking details: `plans/skill-nft-structure.md`.
 
 **Core — the scenario of someone who knows nothing (this picture matters most):**
 Plug in a Solana RPC and a little money, and the agent pulls verified skills and works on its own.
@@ -322,8 +322,8 @@ In other words, both are a **"user → (subscription / hosting / API fees) → c
 Components:
 
 - **iqfee (on-chain write fee)**: a small fee to publish a skill or record a purchase/follow. Blocks spam *with a cost*, and keeps the protocol sustainable.
-- **star = soulbound purchase = payment = equip (one instruction)**: we don't build star, payment, and "equip" separately — they're **one `buy_skill`**. Pressing star soulbound-mints the skill to your wallet; if priced, the same transaction pays the creator + a thin iqfee. **A free skill is just a price-0 mint**, not a separate mechanism. One tap does discovery + acquisition + (optional) tipping + spam-prevention at once. (Details: `plans/skill-soulbound-structure.md`.)
-- **popularity comes for free**: the number of soulbound owner records (= mint count) *is* the popularity signal — no separate counter. (Ranking + sybil: `plans/nft-ranking-structure.md`.)
+- **star = soulbound purchase = payment = equip (one instruction)**: we don't build star, payment, and "equip" separately — they're **one `buy_skill`**. Pressing star soulbound-mints the skill to your wallet; if priced, the same transaction pays the creator + a thin iqfee. **A free skill is just a price-0 mint**, not a separate mechanism. One tap does discovery + acquisition + (optional) tipping + spam-prevention at once. (Details: `plans/skill-nft-structure.md`.)
+- **popularity comes for free**: the the mint supply (= mint count) *is* the popularity signal — no separate counter. (Ranking + sybil: `plans/skill-nft-structure.md`.)
 - **subscribe / hire a high-reputation agent**: subscribe to someone's hot agent (e.g. a famous `designer.sol`) to borrow its ability, or hand it a job. Reputation becomes revenue.
 
 **Why "the more you use it, the more it turns" — two markets feed each other:**
@@ -356,18 +356,19 @@ a build-plan doc under `plans/`):
 - **Sessions = off-chain, skills = on-chain.** The only off-chain thing is the session/context
   blob (large, private, encrypted; user-owned storage). Everything else — skill text, identity,
   reputation, payment — is on-chain. → `plans/offchain-session-sync.md`
-- **Skill = soulbound NFT.** Skill text is stored on-chain (code-in, usually one inline tx for
-  ≤700B); ownership is a soulbound, non-transferable record bound to the wallet. star = payment =
-  equip is one instruction; free = price-0 mint. → `plans/skill-soulbound-structure.md`
-- **Reputation = a shared wrapper over skill/agent.** Comments + source-repo registration
-  (on-chain or off-chain git), writable only by owners of that skill. No star rating (mint count
-  is the rating). Likes stay off-chain or are dropped. → `plans/reputation-wrapper.md`
+- **Skill = a Token-2022 soulbound NFT.** Skill text is code-in on-chain (≤700B inline) and the
+  mint's `uri` points to it. Ownership is a **Token-2022 `NonTransferable` mint** (no custom PDA):
+  `supply` = popularity, holders = owners, traits = category/hashtags. star = payment = equip is
+  one `buy_skill`; free = price-0 mint. → `plans/skill-nft-structure.md`
+- **Reputation = comments on a skill or agent.** `comments/[skillNFT]` + `reputation/[wallet]`,
+  writable by token holders, a comment may attach a github / on-chain-git link. No star rating
+  (the mint's `supply` is the rating). Likes off-chain or dropped. → `plans/reputation-wrapper.md`
 - **Validation + security.** A swappable validation adapter (skills.sh rules as reference) plus a
   security layer modeled on skills.sh's `/audits` (text-maliciousness LLM review is our #1, since
   skills are mostly text). Multi-stage: pre-publish gate, agent roaming, server periodic, and a
   QAgent official audit. → `plans/skill-validation-adapter.md`
-- **NFT collection structure** (open): single mpl-core collection vs per-skill Master Edition —
-  research captured, decision pending. → `plans/nft-ranking-structure.md`
+- **Search & ranking** fall out of the NFT for free: filter by traits, sort by `supply`; agent
+  list = collection holders matched to creators. → `plans/search.md` · `plans/skill-nft-structure.md`
 
 ---
 
@@ -377,17 +378,16 @@ Exploration shows **~90% already exists in IQLabs / the SDKs.** Most is a clone 
 
 | Feature | Pattern | Status |
 |---|---|---|
-| `skills:all` public registry | git-sdk `git_repos:all` (empty writers = anyone writes) | ✅ exists (clone) |
-| `skills:<creator>` per-creator skills | `git_repos_v2_<owner>` (writers:[creator]) | ✅ exists |
+| skill list / registry | **skipped** — the Token-2022 NFT collection *is* the list (DAS) | — |
 | wallet = identity, public read by address | IQ Profile / `getUserPda` / no login | ✅ exists |
-| store session/context (off-chain blob + on-chain pointer) | `mysession` table (owner-only writes) holds the `sessionId` list; blob in user storage | 🔨 new (thin) |
+| store session/context (off-chain blob + on-chain pointer) | `mysessions/[wallet]` table (owner-only) holds the `sessionId` list; blob in user storage | 🔨 new (thin) |
 | encrypt memory (decrypt with my key only) | crypto: `deriveX25519Keypair` / `dhEncrypt` (used as-is) | ✅ exists |
-| output (repo) ↔ skill link | git-sdk as-is + reputation source-repo registration | ✅ / 🔨 |
+| skill text on-chain | code-in (≤700B inline) → the NFT mint's `uri` | ✅ exists (code-in) |
 | `.sol` human name | wide-web SNS resolution | ✅ exists |
-| search · sort · bump | gateway + reuse `iqchan` bump; sort by mint count | ✅ exists (reuse) |
-| **soulbound skill ownership** | new `SkillOwnership` PDA + `buy_skill` ix | 🔨 new (thin) |
-| **star = soulbound buy = payment = equip (atomic)** | `buy_skill`: `SystemProgram.transfer` + PDA in one tx (free = price-0) | 🔨 new wrapper |
-| **reputation (comments + source repos)** | public tables, owner-gated writes | 🔨 new |
+| search · sort | gateway/cache: filter by NFT traits, sort by `supply` | 🔨 new |
+| **soulbound skill ownership** | **Token-2022 `NonTransferable` mint** per skill (no custom PDA) | 🔨 new |
+| **star = soulbound buy = payment = equip (atomic)** | `buy_skill`: `SystemProgram.transfer` + mint 1 token in one tx (free = price-0) | 🔨 new wrapper |
+| **reputation (comments, git-link attachable)** | `comments/[skillNFT]` + `reputation/[wallet]` tables, owner-gated | 🔨 new |
 | **skill validation + security audit** | adapter (skills.sh rules ref) + LLM maliciousness review | 🔨 new |
 | **one-way follow** | `follows:<owner>` plain table (Connection is bidirectional, unfit) | 🔨 new (simple) |
 | **iqfetch / publish (address convention)** | core protocol functions (git-sdk's sibling) | 🔨 new (thin) |
@@ -404,8 +404,8 @@ Exploration shows **~90% already exists in IQLabs / the SDKs.** Most is a clone 
 
 ## Open questions (to dig into next)
 
-1. Reputation/ranking formula + sybil (free-mint bot) prevention — exact definition of "becoming famous" (→ `plans/nft-ranking-structure.md`)
-2. NFT collection structure: single mpl-core collection vs per-skill Master Edition (→ `plans/nft-ranking-structure.md`)
+1. Reputation/ranking formula + sybil (free-mint bot) prevention — exact definition of "becoming famous" (→ `plans/skill-nft-structure.md`)
+2. Token-2022 trait schema (category + hashtag rules) + mint/`buy_skill` flow detail (→ `plans/skill-nft-structure.md`)
 3. Hiring/settlement structure — is escrow needed, or is plain payment + reputation enough?
 4. First runtime to demo: web (PoC) → then VSCode / Claude CLI / Codex (→ `plans/offchain-session-sync.md`)
 5. The GPT "memory import" path (action-injection is blocked, but a path to push in context)

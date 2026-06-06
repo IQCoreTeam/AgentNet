@@ -37,18 +37,19 @@ flowchart TB
 
     subgraph Chain["⛓️ On-chain — DbRoot: agentnet-root (IQLabs, tx = DB)"]
         direction TB
-        MYS["📁 mysessions table<br/>row key = sessionId · owner-only writes<br/>holds pointer, NOT the blob"]
+        MYS["📁 mysessions/[userWallet]<br/>row = sessionId · owner-only writes<br/>holds pointer, NOT the blob"]
         subgraph Skills["skills"]
             direction TB
-            VAL["validation gate<br/>quality + maliciousness (LLM)"] --> SKILL["📁 skills registry<br/>skill text (code-in ≤700B)<br/>skills:all / skills_v2_owner"]
+            VAL["validation gate<br/>quality + maliciousness (LLM)"] --> SKILL["skill text via code-in (≤700B)<br/>= NFT mint uri (the txid)"]
             SKILL --> OWN["🪙 skill = Token-2022 mint<br/>NonTransferable = soulbound<br/>supply = popularity · holders = owners"]
         end
         subgraph Social["reputation + audit"]
             direction TB
-            REP["📁 reputation tables<br/>💬 comments + 📦 source repos<br/>(owners only)"]
-            AUD["📁 audit table (agentnet-root/audit)<br/>🛡️ QAgent writes raw evals, read in one shot"]
+            CMT["📁 comments/[skillNFT]<br/>💬 comments on a skill (token addr key)"]
+            RPA["📁 reputation/[agentWallet]<br/>💬 comments on an agent<br/>(both allow github / on-chain-git attach)"]
+            AUD["📁 audit (agentnet-root/audit)<br/>🛡️ QAgent raw evals, read in one shot"]
         end
-        PROF["🤖 agent profile = a READ over the wallet's rows<br/>owned + written skills · repos · reputation · earnings"]
+        PROF["🤖 agent profile = a READ over the wallet's rows + tokens"]
     end
 
     %% ===================== BOTTOM: derived / economy =====================
@@ -66,12 +67,13 @@ flowchart TB
 
     %% ---- inside on-chain (kept local, no long crossings) ----
     MYS -. "sessionId → path rule" .-> STORE
-    OWN -->|owners may write| REP
+    OWN -->|owners may write| CMT
     MYS --> PROF
     OWN --> PROF
     SKILL --> PROF
-    REP --> PROF
-    AUD -. "re-scan finding" .-> REP
+    CMT --> PROF
+    RPA --> PROF
+    AUD -. "re-scan finding" .-> CMT
 
     %% ---- on-chain → derived (down) ----
     OWN -->|mint count| RANK
@@ -99,14 +101,20 @@ one DbRoot, **`agentnet-root`**, as tables:
 
 | Table (under `agentnet-root`) | Holds | Writers |
 |---|---|---|
-| `mysessions` (row key `sessionId`) | session **pointer** (not the blob) | owner only |
-| `skills` registry (`skills:all` / `skills_v2_owner`) | skill text (code-in) | publisher / anyone |
-| reputation tables | comments + source repos | owners of that skill |
+| `mysessions/[userWallet]` | session **pointer** (not the blob), keyed by sessionId | owner only |
+| `comments/[skillNFT]` | comments on a skill (token-address key); may attach a github / on-chain-git link | holders of that skill |
+| `reputation/[agentWallet]` | comments on an agent; may attach a github / on-chain-git link | (see reputation doc) |
 | `audit` | QAgent raw evals, read in one shot | QAgent (official) |
 
-**Skill ownership is not an IQLabs table** — it's a **Token-2022 mint per skill**
-(`NonTransferable` = soulbound, `supply` = popularity, holders = owners). The mint's `uri`
-holds the IQLabs code-in path to the skill text. See [`nft-ranking-structure.md`](nft-ranking-structure.md).
+**Skipped on purpose — these are NOT IQLabs tables:**
+- **Skill registry / list** — the **Token-2022 NFT collection** *is* the skill list
+  (enumerate via DAS). We do **not** build a `skills:all` / `skills_v2_owner` IQLabs table.
+- **Skill ownership** — the **Token-2022 mint per skill** is the soulbound record
+  (`NonTransferable` = soulbound, `supply` = popularity, holders = owners; mint `uri` =
+  code-in path to the text). No `SkillOwnership` PDA. See [`skill-nft-structure.md`](skill-nft-structure.md).
+
+> ⚠️ Don't let these get re-introduced as IQLabs tables — the NFT layer already covers
+> listing + ownership + count. Building a parallel table would make the NFT pointless.
 
 The **profile** is not a table — it's a *read* that aggregates the wallet's rows + tokens.
 Ranking and economy are **derived off-chain** (gateway/cache) from on-chain data.
@@ -126,9 +134,8 @@ The map above is the full picture; each row points to the doc that details that 
 |---|---|
 | wallet connect + session sync (off-chain blob + on-chain pointer) | [offchain-session-sync](offchain-session-sync.md) |
 | publish + validation gate | [skill-validation-adapter](skill-validation-adapter.md) |
-| skill text on-chain + soulbound `buy_skill` (= star = pay = equip) | [skill-soulbound-structure](skill-soulbound-structure.md) |
-| comments + source-repo registration (owner-gated) | [reputation-wrapper](reputation-wrapper.md) |
-| ranking by mint count | [nft-ranking-structure](nft-ranking-structure.md) |
+| skill NFT: on-chain text + soulbound `buy_skill` + ranking by `supply` | [skill-nft-structure](skill-nft-structure.md) |
+| comments on skills/agents (git link attachable, owner-gated) | [reputation-wrapper](reputation-wrapper.md) |
 | search (keyword + hashtag/category traits + semantic) | [search](search.md) |
 | usable layer: actions + per-env adapters, agent profile, my-page, explore | [actions-and-adapters](actions-and-adapters.md) |
 
@@ -145,10 +152,9 @@ The map above is the full picture; each row points to the doc that details that 
 | Plan | Doc | Design % | State | Biggest open item |
 |---|---|---|---|---|
 | Off-chain session sync | [offchain-session-sync](offchain-session-sync.md) | **85%** | 🟢 ready to build | CLI ↔ Phantom signature (deep-link), runtime format mapping |
-| Skill soulbound structure | [skill-soulbound-structure](skill-soulbound-structure.md) | **80%** | 🟢 ready to build | PDA vs Token-2022 mint as the soulbound record |
+| Skill NFT structure (model + soulbound + ranking) | [skill-nft-structure](skill-nft-structure.md) | **75%** | 🟢 ready to build | mint flow + trait schema + sybil |
 | Reputation wrapper | [reputation-wrapper](reputation-wrapper.md) | **70%** | 🟡 mostly settled | agent-reputation write permission; repo auto-verify |
 | Skill validation adapter | [skill-validation-adapter](skill-validation-adapter.md) | **45%** | 🟡 plan drafted | LLM maliciousness model; QAgent on-chain trust |
-| NFT structure & ranking | [nft-ranking-structure](nft-ranking-structure.md) | **60%** | 🟡 model chosen | Token-2022 semi-fungible; trait schema + sybil |
 | Actions & adapters (usable layer + profile) | [actions-and-adapters](actions-and-adapters.md) | **40%** | 🟡 plan drafted | `Action`/`AgentContext` shape; per-env wallet signing |
 | Search (keyword + traits + semantic) | [search](search.md) | **45%** | 🟡 plan drafted | depends on NFT traits; embedding provider |
 | Source-code layout | §4 below | **0%** | 🚧 TBD (planning together) | everything |
@@ -156,10 +162,9 @@ The map above is the full picture; each row points to the doc that details that 
 ```mermaid
 flowchart LR
     S1["session sync 85%"]:::g
-    S2["soulbound 80%"]:::g
+    S2["skill NFT 75%"]:::g
     S3["reputation 70%"]:::y
     S4["validation 45%"]:::y
-    S5["nft structure 60%"]:::y
     S6["actions+adapters 40%"]:::y
     S7["search 45%"]:::y
     S8["source layout 0%"]:::r
@@ -187,7 +192,7 @@ parallel. (Build sequence in §6.)
 **Our repos (the patterns to reuse):**
 - Contract: `/Users/sumin/RustroverProjects/IQLabsContract`
 - Solana SDK (crypto, writeRow, codeIn): `/Users/sumin/WebstormProjects/iqlabs-solana-sdk`
-- git-SDK (registry pattern to clone): `/Users/sumin/WebstormProjects/iqlabs-git-sdk`
+- git-SDK (on-chain git, for comment attachments): `/Users/sumin/WebstormProjects/iqlabs-git-sdk`
 - Front/resolver/profile (Phantom, getUserPda, SNS): `/Users/sumin/WebstormProjects/iq-wide-web`
 - Gateway (sort/cache, off-chain aggregation): `/Users/sumin/WebstormProjects/iq-gateway`
 - Bump pattern: `/Users/sumin/WebstormProjects/iqchan`

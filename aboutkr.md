@@ -96,7 +96,7 @@ flowchart LR
   1. 작업 중 필요한 능력이 생기면 → 허브를 **검색** (카테고리: 클린코드 / 디자인 / 리서치 / 글쓰기 … 코딩만이 아니라 OpenClaw처럼 다양하게)
   2. 맞는 스킬을 **fetch** → 즉시 그 능력으로 작업
   3. 좋았으면 **star** → 그 스킬이 **내 에이전트 지갑에 소울바운드로 민팅**된다 — *"내 능력으로 장착"*, 양도 불가. star는 단순 추천이 아니라 그 스킬을 *획득하는 행위 자체*다 (통합 모델은 §6). UI 봇이 어떤 디자인 기술에 star를 누르면, 그게 곧 그 봇의 놀리지(지식)가 된다. 그리고 발행수(소유자 수)가 발견·랭킹에 반영된다.
-- 스팸/저질 스킬은? **쓰기 진실은 체인, 보여주는 순서는 gateway**가 정한다. **발행수순**(= 소유 레코드 수)·`iqchan`의 bump(최근 활동 부상)을 재사용해 정렬한다. "삭제는 못 하지만 안 보이게는 한다." 스킬은 발행 전후로 보안 심사도 받는다 (§6.5). 랭킹 상세: `plans/nft-ranking-structure.md`.
+- 스팸/저질 스킬은? **쓰기 진실은 체인, 보여주는 순서는 gateway**가 정한다. **발행수순**(= 발행수 supply)·`iqchan`의 bump(최근 활동 부상)을 재사용해 정렬한다. "삭제는 못 하지만 안 보이게는 한다." 스킬은 발행 전후로 보안 심사도 받는다 (§6.5). 랭킹 상세: `plans/skill-nft-structure.md`.
 
 **핵심 — 아무것도 모르는 사람의 시나리오 (이 그림이 제일 중요):**
 솔라나 RPC와 약간의 돈만 넣으면, 에이전트가 알아서 검증된 스킬을 끌어와 일한다. 
@@ -321,8 +321,8 @@ flowchart TB
 구성 요소:
 
 - **iqfee (온체인 쓰기 수수료)**: 스킬을 올리거나 구매/팔로우를 기록할 때 드는 소액 수수료. 스팸을 *비용*으로 막고, 프로토콜이 지속되게 한다.
-- **star = 소울바운드 구매 = 결제 = 장착 (하나의 인스트럭션)**: star·결제·"장착"을 따로 만들지 않는다 — 전부 **하나의 `buy_skill`**이다. star를 누르면 그 스킬이 내 지갑에 소울바운드로 민팅되고, 유료면 같은 트랜잭션에 제작자 결제 + 얇은 iqfee가 함께 실린다. **무료 스킬은 가격 0원 민팅일 뿐** 별도 메커니즘이 아니다. 한 번의 탭으로 발견 + 획득 + (선택)후원 + 스팸방지가 동시에. (상세: `plans/skill-soulbound-structure.md`.)
-- **인기는 공짜로 따라온다**: 소울바운드 소유 레코드 수(= 발행수)가 곧 인기 신호다 — 별도 카운터 불필요. (랭킹 + sybil: `plans/nft-ranking-structure.md`.)
+- **star = 소울바운드 구매 = 결제 = 장착 (하나의 인스트럭션)**: star·결제·"장착"을 따로 만들지 않는다 — 전부 **하나의 `buy_skill`**이다. star를 누르면 그 스킬이 내 지갑에 소울바운드로 민팅되고, 유료면 같은 트랜잭션에 제작자 결제 + 얇은 iqfee가 함께 실린다. **무료 스킬은 가격 0원 민팅일 뿐** 별도 메커니즘이 아니다. 한 번의 탭으로 발견 + 획득 + (선택)후원 + 스팸방지가 동시에. (상세: `plans/skill-nft-structure.md`.)
+- **인기는 공짜로 따라온다**: 소울바운드 토큰 발행수(supply)가 곧 인기 신호다 — 별도 카운터 불필요. (랭킹 + sybil: `plans/skill-nft-structure.md`.)
 - **평판 좋은 에이전트 구독/고용**: 잘나가는 남의 에이전트(예: 유명한 `designer.sol`)를 구독해서 그 능력을 빌리거나, 일을 맡긴다. 평판이 곧 매출이 된다.
 
 **왜 "많이 쓸수록 돈다"인가 — 두 시장이 서로를 먹인다:**
@@ -355,17 +355,18 @@ flowchart LR
 - **세션 = 오프체인, 스킬 = 온체인.** 오프체인은 세션/컨텍스트 blob 하나뿐 (크고, 사적,
   암호화; 유저 소유 저장소). 나머지 — 스킬 텍스트·정체성·평판·결제 — 는 전부 온체인.
   → `plans/offchain-session-sync.md`
-- **스킬 = 소울바운드 NFT.** 스킬 텍스트는 온체인 저장(code-in, ≤700B면 인라인 1tx),
-  소유는 지갑에 묶인 양도불가 소울바운드 레코드. star = 결제 = 장착이 한 인스트럭션,
-  무료 = 가격 0원 민팅. → `plans/skill-soulbound-structure.md`
-- **평판 = 스킬/에이전트 공통 래퍼.** 댓글 + 소스레포 등록(온체인/오프체인 깃), 그 스킬
-  소유자만 쓰기. 별점 없음(발행수가 평점). 좋아요는 오프체인 또는 제외.
-  → `plans/reputation-wrapper.md`
+- **스킬 = Token-2022 소울바운드 NFT.** 스킬 텍스트는 code-in 온체인 저장(≤700B 인라인),
+  민트 `uri`가 그걸 가리킴. 소유는 **Token-2022 `NonTransferable` 민트**(커스텀 PDA 없음):
+  `supply` = 인기, 홀더 = 소유자, trait = 카테고리/해시태그. star = 결제 = 장착이 한
+  `buy_skill`, 무료 = 0원 민팅. → `plans/skill-nft-structure.md`
+- **평판 = 스킬/에이전트 댓글.** `comments/[skillNFT]` + `reputation/[지갑]`, 토큰 소유자만
+  쓰기, 댓글에 github / 온체인깃 링크 첨부 가능. 별점 없음(민트 `supply`가 평점). 좋아요는
+  오프체인 또는 제외. → `plans/reputation-wrapper.md`
 - **검증 + 보안.** 갈아끼우는 검증 어댑터(skills.sh 규칙 참고) + skills.sh `/audits`를 본뜬
   보안 층(텍스트 악의성 LLM 심사가 1순위 — 스킬은 대부분 텍스트라). 다단계: 발행 전 게이트,
   에이전트 순회, 서버 주기, QAgent 공식 감사. → `plans/skill-validation-adapter.md`
-- **NFT 컬렉션 구조** (미정): 단일 mpl-core 컬렉션 vs 스킬별 Master Edition — 리서치
-  완료, 결정 대기. → `plans/nft-ranking-structure.md`
+- **검색·랭킹**은 NFT에서 공짜로: trait 필터 + `supply` 정렬; 에이전트 목록 = 컬렉션
+  홀더를 발행자와 매칭. → `plans/search.md` · `plans/skill-nft-structure.md`
 
 ---
 
@@ -375,17 +376,16 @@ flowchart LR
 
 | 기능 | 패턴 | 상태 |
 |---|---|---|
-| `skills:all` 공개 레지스트리 | git-sdk `git_repos:all` (writers 빈 배열 = 누구나 쓰기) | ✅ 있음 (복제) |
-| `skills:<creator>` 제작자별 스킬 | `git_repos_v2_<owner>` (writers:[creator]) | ✅ 있음 |
+| 스킬 목록 / 레지스트리 | **스킵** — Token-2022 NFT 컬렉션이 곧 목록 (DAS) | — |
 | 지갑=신원, 주소만으로 공개 읽기 | IQ Profile / `getUserPda` / 로그인 불필요 | ✅ 있음 |
-| 세션/컨텍스트 저장 (오프체인 blob + 온체인 포인터) | `mysession` 테이블(본인만 쓰기)이 `sessionId` 목록 보관; blob은 유저 저장소 | 🔨 신규 (얇음) |
+| 세션/컨텍스트 저장 (오프체인 blob + 온체인 포인터) | `mysessions/[지갑]` 테이블(본인만)이 `sessionId` 목록 보관; blob은 유저 저장소 | 🔨 신규 (얇음) |
 | 기억 암호화 (내 키로만 복호화) | crypto: `deriveX25519Keypair` / `dhEncrypt` (그대로 사용) | ✅ 있음 |
-| 결과물(repo) ↔ 스킬 연결 | git-sdk 그대로 + 평판 소스레포 등록 | ✅ / 🔨 |
+| 스킬 텍스트 온체인 | code-in (≤700B 인라인) → NFT 민트 `uri` | ✅ 있음 (code-in) |
 | `.sol` 사람 이름 | wide-web SNS 해석 | ✅ 있음 |
-| 검색·정렬·bump | gateway + `iqchan` bump 재사용; 발행수순 정렬 | ✅ 있음 (재사용) |
-| **소울바운드 스킬 소유** | 신규 `SkillOwnership` PDA + `buy_skill` ix | 🔨 신규 (얇음) |
-| **star = 소울바운드 구매 = 결제 = 장착 (원자적)** | `buy_skill`: `SystemProgram.transfer` + PDA 한 tx (무료 = 0원) | 🔨 래퍼 신규 |
-| **평판 (댓글 + 소스레포)** | 공개 테이블, 소유자만 쓰기 | 🔨 신규 |
+| 검색·정렬 | gateway/캐시: NFT trait 필터, `supply` 정렬 | 🔨 신규 |
+| **소울바운드 스킬 소유** | **Token-2022 `NonTransferable` 민트** (커스텀 PDA 없음) | 🔨 신규 |
+| **star = 소울바운드 구매 = 결제 = 장착 (원자적)** | `buy_skill`: `SystemProgram.transfer` + 토큰 1개 민팅 한 tx (무료 = 0원) | 🔨 래퍼 신규 |
+| **평판 (댓글, git 링크 첨부 가능)** | `comments/[skillNFT]` + `reputation/[지갑]` 테이블, 소유자만 쓰기 | 🔨 신규 |
 | **스킬 검증 + 보안 감사** | 어댑터(skills.sh 규칙 참고) + LLM 악의성 심사 | 🔨 신규 |
 | **일방 follow** | `follows:<owner>` 일반 테이블 (Connection은 양방향이라 부적합) | 🔨 신규 (간단) |
 | **iqfetch / publish (주소규약)** | 코어 프로토콜 함수 (git-sdk의 형제) | 🔨 신규 (얇음) |
@@ -402,8 +402,8 @@ flowchart LR
 
 ## 다음에 더 팔 것 (미해결)
 
-1. 평판/랭킹 공식 + sybil(무료 민팅 봇) 방지 — "유명해진다"의 정확한 정의 (→ `plans/nft-ranking-structure.md`)
-2. NFT 컬렉션 구조: 단일 mpl-core 컬렉션 vs 스킬별 Master Edition (→ `plans/nft-ranking-structure.md`)
+1. 평판/랭킹 공식 + sybil(무료 민팅 봇) 방지 — "유명해진다"의 정확한 정의 (→ `plans/skill-nft-structure.md`)
+2. Token-2022 trait 스키마(카테고리 + 해시태그 규칙) + 민팅/`buy_skill` 흐름 디테일 (→ `plans/skill-nft-structure.md`)
 3. 고용/정산 구조 — 에스크로가 필요한가, 단순 송금+평판으로 충분한가
 4. 첫 런타임 데모: 웹(PoC) → 그다음 VSCode / Claude CLI / Codex (→ `plans/offchain-session-sync.md`)
 5. GPT "기억 import" 경로 (행동주입은 막혔지만 컨텍스트를 밀어넣는 길)

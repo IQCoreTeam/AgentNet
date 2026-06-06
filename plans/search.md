@@ -1,6 +1,6 @@
 # Skill & Agent Search
 
-> Sibling: [`00-overview.md`](00-overview.md) · [`nft-ranking-structure.md`](nft-ranking-structure.md)
+> Sibling: [`00-overview.md`](00-overview.md) · [`skill-nft-structure.md`](skill-nft-structure.md)
 > · [`actions-and-adapters.md`](actions-and-adapters.md) (`browseSkills` / `listAgents`).
 > How search works: exact/keyword + hashtags/categories (as NFT traits) + an optional
 > semantic layer that gives the "hotdog → 7-Eleven" leap.
@@ -11,26 +11,29 @@
 
 Plain **exact / substring matching is not enough**. Searching "hotdog" should still surface
 a 7-Eleven skill even though the word "hotdog" isn't in it — that's *semantic* match by
-meaning. But full semantic search sounds heavy. The good news (verified, §3): for our scale
-it's nearly free with **no always-on model**.
+meaning.
 
-So search is **layered** — start cheap, add the semantic leap only where it matters.
+The NFT structure makes this simple: search is a **short pipeline over on-chain fields**
+(traits + `supply`), with semantic doing only the light job of mapping a query onto an
+existing category/hashtag. No heavy ranking engine.
+
+Because the NFT structure already holds the signals, search is a **simple pipeline**, not a
+heavy ranking engine:
 
 ```mermaid
 flowchart LR
-    Q["query"] --> L1["1 exact / keyword<br/>(deterministic, $0)"]
-    Q --> L2["2 hashtags + category<br/>(NFT traits, on-chain)"]
-    Q --> L3["3 semantic embedding<br/>(meaning match, optional)"]
-    L1 --> M["merge / re-rank → results"]
-    L2 --> M
-    L3 --> M
-    style L1 fill:#cfc,stroke:#3a3
-    style L2 fill:#cfc,stroke:#3a3
-    style L3 fill:#ffd,stroke:#ca0
+    Q["query"] --> SEM["semantic: map query → category/hashtag<br/>(e.g. 'hotdog' → #convenience-store)<br/>+ keyword match on name"]
+    SEM --> FILT["filter the one collection<br/>by that category/trait"]
+    FILT --> SORT["sort by supply (mint count)<br/>= most-minted first"]
+    SORT --> R["results + Q-table (audit) shown alongside<br/>+ ⚠️ 'verify the source yourself' note"]
+    style SORT fill:#cfc,stroke:#3a3
+    style R fill:#ffd,stroke:#ca0
 ```
 
-This is **hybrid search** (keyword + vector), the recommended pattern — keyword keeps
-precision/determinism, embeddings add the vocabulary-mismatch leap.
+**The flow:** search the one collection → narrow by category/trait → sort by `supply`. The
+heavy lifting is just reading on-chain fields (traits + supply). Semantic only does the
+light job of mapping a vocabulary-mismatch query onto an existing category/hashtag — it does
+**not** vector-compare every skill. Keyword handles exact name lookups.
 
 ---
 
@@ -49,14 +52,15 @@ precision/determinism, embeddings add the vocabulary-mismatch leap.
 
 Because category + hashtags are **NFT traits** (Token-2022 `TokenMetadata`), they're
 on-chain, permanent, and filterable the same way the marketplace filters skills (see
-[`nft-ranking-structure.md`](nft-ranking-structure.md)). `browseSkills` (in
+[`skill-nft-structure.md`](skill-nft-structure.md)). `browseSkills` (in
 [`actions-and-adapters.md`](actions-and-adapters.md)) splits by these traits.
 
 ### category vs hashtag — they're complementary
 - **category** = a small fixed set, one big drawer per skill (also the NFT trait used for browsing).
 - **hashtags** = many free labels per skill, the fine-grained search signal.
-- Neither alone does "hotdog → 7-Eleven" unless someone tagged it — that gap is what the
-  embedding layer (§2) fills.
+- A raw query like "hotdog" might not match any tag directly — semantic bridges that by
+  mapping the query onto the nearest existing category/hashtag (§3), then we filter+sort
+  normally. So semantic is a thin **query→trait mapper**, not a full-corpus vector search.
 
 ---
 
@@ -81,11 +85,43 @@ on-chain, permanent, and filterable the same way the marketplace filters skills 
 
 ---
 
+## 2b. Agent search — same data, different read
+
+Searching *agents* (not skills) reuses the exact same on-chain data:
+
+```mermaid
+flowchart LR
+    A["agent query"] --> H["pull all holders of the collection<br/>(DAS getTokenAccounts)"]
+    H --> MATCH["match holders ↔ creator info<br/>(who minted which skills)"]
+    MATCH --> RANK["rank by their skills' total supply<br/>= creators of popular skills rise"]
+    style RANK fill:#cfc,stroke:#3a3
+```
+
+- **Holders of the collection** = the ecosystem user list (one DAS read).
+- A wallet that **created** skills with high total `supply` ranks higher → "famous agent."
+- No separate agent registry — agents emerge from "who minted skills that people minted."
+
+---
+
+## 2c. Result display — Q-table + a verify warning
+
+In the results view (per [`actions-and-adapters.md`](actions-and-adapters.md) adapters):
+- **Alongside each result, show the Q-table (audit) outcome** ([`skill-validation-adapter.md`](skill-validation-adapter.md) §0c) — the official QAgent eval, read from the `audit` table.
+- **Always show a ⚠️ "verify the source yourself" note.** The audit is a signal, not a
+  guarantee — the user (or their agent) should double-check the skill/source before trusting it.
+
+---
+
 ## 3. How to do embedding semantic — and the cost/ops reality
 
 > Does embedding semantic search cost more / require a model running 24/7? **No idle cost,
 > no always-on model.** It's pay-per-call (pennies) + a few MB of storage. (2025–2026
 > pricing; sources at bottom.)
+
+**Even lighter for us:** we mainly embed the *category/hashtag list* (a tiny fixed set) and
+match the query against it — not every skill. So the index is a handful of vectors, and the
+per-query cost is one tiny embedding call. Full-corpus embedding is optional, only if we
+later want skill-level semantic ranking beyond category mapping.
 
 **Two phases, neither needs a running model:**
 
@@ -145,13 +181,13 @@ flowchart LR
 
 ## 5. Build order
 
-1. ⬜ Keyword + substring over skill name/description (on-chain reads). $0, deterministic.
-2. ⬜ **category + hashtags as NFT traits** (Token-2022 `TokenMetadata`) — depends on the
-   NFT mint structure ([`nft-ranking-structure.md`](nft-ranking-structure.md)) landing first.
-3. ⬜ Trait filter in `browseSkills` (split by category, filter by hashtags).
-4. ⬜ Embedding index (start with the cheapest: 3-small or self-host MiniLM) + in-memory
-   cosine; wire as a hybrid fallback/re-rank.
-5. ⬜ Same search over **agents** (match agent by the meaning of their skills).
+1. ⬜ Skill search pipeline: keyword on name + **category/trait filter → sort by `supply`**
+   (the §0 flow). Depends on NFT traits ([`skill-nft-structure.md`](skill-nft-structure.md)).
+2. ⬜ Result view: show **Q-table (audit) alongside** + the ⚠️ "verify the source" note (§2c).
+3. ⬜ **Agent search** (§2b): collection holders → match creators → rank by their skills'
+   total `supply`.
+4. ⬜ Semantic query→category mapper (embed the small category/hashtag set; map the query
+   onto it). Optional full-corpus embedding only if needed later.
 
 ## 6. Open decisions
 

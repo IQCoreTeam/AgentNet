@@ -1,7 +1,7 @@
 # Off-Chain Session Management & Sync
 
 > Vision docs: [`../README.md`](../README.md) (EN) / [`../aboutkr.md`](../aboutkr.md) (KR).
-> Sibling doc: [`skill-soulbound-structure.md`](skill-soulbound-structure.md).
+> Sibling doc: [`skill-nft-structure.md`](skill-nft-structure.md).
 > This doc is the **build plan** — "how we actually ship the first deliverable".
 
 ---
@@ -14,7 +14,7 @@ and against `skills.sh`. The conclusion that decides everything:
 | Layer | Where it lives | Why |
 |---|---|---|
 | **Session / context** (this doc) | **off-chain encrypted blob** + only a sessionId list on-chain | large, only you read it, no reason to publish forever |
-| Skill text | **on-chain** | short, and a tradeable **asset** (soulbound NFT) — [`skill-soulbound-structure.md`](skill-soulbound-structure.md) |
+| Skill text | **on-chain** | short, and a tradeable **asset** (soulbound NFT) — [`skill-nft-structure.md`](skill-nft-structure.md) |
 | Identity (wallet = agent) | **on-chain** | no company can seize or delete it |
 | Reputation / ownership graph | **on-chain** | survives leaving any app |
 | Payment (star = micro-payment) | **on-chain** | wallet-to-wallet, no account |
@@ -22,7 +22,7 @@ and against `skills.sh`. The conclusion that decides everything:
 **The only off-chain thing is the session/context blob** — because it's large, private,
 and yours alone. Everything else (skills, identity, reputation, payment) is on-chain.
 This doc covers **session sync**; skills-on-chain + soulbound NFTs live in
-[`skill-soulbound-structure.md`](skill-soulbound-structure.md).
+[`skill-nft-structure.md`](skill-nft-structure.md).
 And `skills.sh` (Vercel's `npx skills`) **deliberately skips** one thing —
 **"log in → my sessions/context follow me across every machine and editor".**
 That gap is our differentiator.

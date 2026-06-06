@@ -1,6 +1,6 @@
 # Skill Validation Adapter — 🚧 Plan
 
-> Sibling: [`skill-soulbound-structure.md`](skill-soulbound-structure.md).
+> Sibling: [`skill-nft-structure.md`](skill-nft-structure.md).
 > Plan to build a **validation adapter** modeled on skills.sh's skill validation, gating
 > skills before they go on-chain.
 
@@ -129,7 +129,7 @@ strict mode (PR #509 rules), our on-chain mode (with size limits).
 - body < 50 chars = info
 
 **Ours (on-chain constraints):**
-- **Size**: ≤700B recommended to fit an inline 1tx (else chunk — `skill-soulbound-structure.md` §2)
+- **Size**: ≤700B recommended to fit an inline 1tx (else chunk — `skill-nft-structure.md` §2)
 - **skillId convention**: validate `iq://category/name@creator.sol` form (open decision)
 - **Terminal-escape sanitize**: reference skills.sh `sanitize.ts` (display safety, CWE-150)
 
@@ -181,7 +181,7 @@ interface ValidationResult {
 - [ ] (optional) Socket/Snyk-style external-tool adapter — for skills that ship code.
 - [ ] Adapters: `skills-sh-compat` / `strict` / `onchain` / **`security-llm`**.
 - [ ] Wire the validation gate into the publish pipeline (between steps in
-      `skill-soulbound-structure.md` §7 build order).
+      `skill-nft-structure.md` §7 build order).
 - [ ] **Implement the 4 scan times** (§0c): pre-registration gate / agent roaming → reputation
       comment / server periodic / QAgent official view.
 - [ ] **QAgent official audit view** — searching "qagent eval" surfaces our official audit
