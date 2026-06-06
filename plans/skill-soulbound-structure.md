@@ -11,36 +11,17 @@
 
 ---
 
-## 0. The split (corrected)
+## 0. Why skills go fully on-chain
 
-The only off-chain thing is the **session/context blob** (large, private, encrypted).
-**Skill text is on-chain** — it's short, and it's a tradeable asset:
-
-```mermaid
-flowchart LR
-    subgraph off["Off-chain"]
-        Sess["session blob (large, private)"]
-    end
-    subgraph on["On-chain"]
-        Skill["skill text (short)"]
-        Own["soulbound purchase<br/>= star = payment = equip<br/>(one instruction)"]
-        Rep["mint count = # of owner PDAs<br/>(ranking is a separate doc)"]
-    end
-    Skill --> Own
-    Own --> Rep
-    style off fill:#eef,stroke:#33c
-    style on fill:#efe,stroke:#3a3
-```
-
-> **Core unification (zo):** we don't build star, payment, and equip separately. All three
-> are **one soulbound purchase**. "Free" is not a separate mechanism — it's just a
-> **price-0 mint**. Details in §5.
-
-**Why skills go fully on-chain (not a pointer):**
+(For the overall off-chain/on-chain split, see [`00-overview.md`](00-overview.md) §1.)
+Skill text goes **fully on-chain** — not a pointer — because:
 - Short — fits on-chain cheaply (size limits below).
 - It's an **asset**. If the text lived off-chain, a "skill NFT" would point at our server —
   meaningless. On-chain text = the asset *itself* is the chain entry. Ownership becomes real.
 - Owned/sold as **soulbound** = "this ability is mine," non-transferable, proven by wallet.
+
+> **Core unification (zo):** star, payment, and equip are not built separately — all three
+> are **one soulbound purchase** (`buy_skill`); "free" is just a price-0 mint. Full flow in §5.
 
 ---
 

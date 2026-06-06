@@ -5,86 +5,115 @@
 
 ---
 
-## 1. The whole thing in one picture
+## 1. The grand unified map — everything connected
 
-How soulbound-NFT skills, the agent profile, comments, the VSCode/Claude adapters, and
-off-chain storage all interlock:
+The single map of the whole system: runtimes, the wallet identity, off-chain storage,
+on-chain skills/ownership/reputation, the agent profile, validation, ranking, and the
+economic loop — all in one.
 
 ```mermaid
 flowchart TB
-    subgraph Runtimes["Runtimes (rental — just a window)"]
+    %% ===== PEOPLE / RUNTIMES =====
+    subgraph Runtimes["🖥️ Runtimes — rental, just a window (own nothing)"]
+        direction LR
         VS["VSCode ext"]
         CL["Claude CLI"]
         CX["Codex CLI"]
         WEB["Web app (PoC)"]
+        HER["Hermes / OpenClaw (later)"]
     end
 
-    subgraph Identity["Agent = Solana wallet (designer.sol)"]
-        KEY["🔑 wallet / signMessage"]
+    %% ===== IDENTITY =====
+    subgraph Identity["🔑 Agent = Solana wallet (designer.sol)"]
+        KEY["secret key / Ledger<br/>signMessage → derive X25519 key"]
+        SNS[".sol name (SNS)"]
     end
 
-    subgraph Offchain["Off-chain (user-owned)"]
-        STORE["Encrypted session blob<br/>Google Drive / iCloud / custom"]
+    %% ===== OFF-CHAIN =====
+    subgraph Offchain["📦 Off-chain — user-owned, encrypted (only this blob)"]
+        STORE["Encrypted session blob<br/>Google Drive / iCloud / custom<br/>path = agentnet/sessions/{id}"]
     end
 
-    subgraph Chain["On-chain (IQLabs — tx = DB)"]
-        MYS["mysession table<br/>(sessionId list, owner-only)"]
-        SKILL["skill text (code-in)<br/>skills:all registry"]
-        OWN["SkillOwnership PDA<br/>(soulbound = equipped)"]
-        REP["reputation tables<br/>comments + source repos"]
-        PROF["agent profile<br/>= wallet + owned skills + repos"]
+    %% ===== ON-CHAIN: SESSION =====
+    subgraph ChainSession["⛓️ On-chain — session index"]
+        MYS["mysession table<br/>sessionId list · owner-only writes"]
     end
 
-    Runtimes -->|connect / sign| Identity
-    KEY -->|derive key| STORE
+    %% ===== ON-CHAIN: SKILLS =====
+    subgraph ChainSkill["⛓️ On-chain — skills & ownership"]
+        VAL["validation gate<br/>quality + text-maliciousness (LLM)"]
+        SKILL["skill text (code-in, ≤700B inline)<br/>skills:all / skills_v2_owner registry"]
+        OWN["SkillOwnership PDA<br/>soulbound = equipped, non-transferable"]
+    end
+
+    %% ===== ON-CHAIN: SOCIAL =====
+    subgraph ChainSocial["⛓️ On-chain — reputation & profile"]
+        REP["reputation tables<br/>💬 comments + 📦 source repos<br/>(owners only)"]
+        PROF["🤖 agent profile<br/>= owned skills + repos + reputation + followers"]
+    end
+
+    %% ===== RANKING / ECONOMY =====
+    subgraph Meta["📊 Gateway & economy"]
+        RANK["ranking by mint count<br/>(gateway / DAS, off-chain agg)"]
+        ECON["💰 economy<br/>creator earns · iqfee → IQ"]
+        AUDIT["🛡️ QAgent official audit<br/>+ agents roam & re-scan"]
+    end
+
+    %% ---- connections ----
+    Runtimes -->|connect & sign| KEY
+    KEY --- SNS
+    KEY -->|encrypt| STORE
     KEY -->|writeRow| MYS
     MYS -.->|sessionId → path rule| STORE
+    STORE -->|decrypt on any device| Runtimes
 
-    KEY -->|publish| SKILL
-    KEY -->|buy_skill = star = pay = equip| OWN
+    KEY -->|publish attempt| VAL
+    VAL -->|pass| SKILL
+    KEY -->|"buy_skill = star = pay = equip (1 tx)"| OWN
     SKILL --> OWN
-    OWN -->|mint count = popularity| PROF
-    OWN -->|owners only can write| REP
-    REP --> PROF
-    SKILL --> PROF
+    OWN -->|"price>0 → pay"| ECON
+    OWN -->|mint count| RANK
 
-    style Identity fill:#eef,stroke:#33c,stroke-width:2px
+    OWN -->|owners may write| REP
+    OWN --> PROF
+    SKILL --> PROF
+    REP --> PROF
+    MYS -.->|memory/context| PROF
+
+    RANK --> PROF
+    PROF -->|subscribe / hire| ECON
+    ECON -->|rewards| KEY
+    AUDIT -.->|re-scan → comment| REP
+    SKILL -.-> AUDIT
+
+    style Runtimes fill:#f4f4ff,stroke:#88a
+    style Identity fill:#eef,stroke:#33c,stroke-width:3px
     style Offchain fill:#eef,stroke:#33c
-    style Chain fill:#efe,stroke:#3a3
+    style ChainSession fill:#efe,stroke:#3a3
+    style ChainSkill fill:#efe,stroke:#3a3
+    style ChainSocial fill:#efe,stroke:#3a3
+    style Meta fill:#fff7e6,stroke:#ca0
 ```
 
-**Read it as three layers:**
-1. **Runtime** (top) — VSCode / Claude / Codex / web. Just rents the agent; owns nothing.
-2. **Identity** (middle) — the wallet. Signs, derives the encryption key, authors every write.
-3. **Data** (bottom) — *off-chain* = the big private session blob; *on-chain* = everything
-   else (skill text, soulbound ownership, reputation, and the profile that aggregates them).
+**The one rule that explains the whole map:** the *only* off-chain thing is the encrypted
+session blob (large + private, in user-owned storage). Everything else — identity, skill
+text, soulbound ownership, reputation, profile — is on-chain. Ranking and the economy sit on
+top via the gateway.
 
 ---
 
-## 2. How each piece connects to the next
+## 2. Which slice maps to which plan doc
 
-```mermaid
-flowchart LR
-    A["① wallet connects<br/>in any runtime"] --> B["② session syncs<br/>off-chain blob + on-chain pointer"]
-    A --> C["③ publish a skill<br/>text on-chain (code-in)"]
-    C --> D["④ buy_skill<br/>= star = pay = equip<br/>soulbound to wallet"]
-    D --> E["⑤ owners comment +<br/>register source repos"]
-    D --> F["⑥ mint count<br/>→ ranking"]
-    E --> G["⑦ profile<br/>= skills + repos + reputation"]
-    F --> G
-    B --> G
-    style G fill:#efe,stroke:#3a3
-```
+The map above is the full picture; each row points to the doc that details that slice.
 
-| Step | What | Plan doc |
-|---|---|---|
-| ① connect | wallet = identity in any runtime | [offchain-session-sync](offchain-session-sync.md) §5–6 |
-| ② session | encrypt → user storage → on-chain `sessionId` | [offchain-session-sync](offchain-session-sync.md) |
-| ③ publish | skill text on-chain, validated first | [skill-soulbound-structure](skill-soulbound-structure.md) · [skill-validation-adapter](skill-validation-adapter.md) |
-| ④ buy/star | soulbound mint = payment = equip (one ix) | [skill-soulbound-structure](skill-soulbound-structure.md) §5 |
-| ⑤ reputation | comments + source repos, owner-gated | [reputation-wrapper](reputation-wrapper.md) |
-| ⑥ ranking | mint count = popularity | [nft-ranking-structure](nft-ranking-structure.md) |
-| ⑦ profile | wallet aggregates all of the above | (emergent — no separate doc yet) |
+| Slice | Plan doc |
+|---|---|
+| wallet connect + session sync (off-chain blob + on-chain pointer) | [offchain-session-sync](offchain-session-sync.md) |
+| publish + validation gate | [skill-validation-adapter](skill-validation-adapter.md) |
+| skill text on-chain + soulbound `buy_skill` (= star = pay = equip) | [skill-soulbound-structure](skill-soulbound-structure.md) |
+| comments + source-repo registration (owner-gated) | [reputation-wrapper](reputation-wrapper.md) |
+| ranking by mint count | [nft-ranking-structure](nft-ranking-structure.md) |
+| agent profile (aggregates the above) | emergent — no separate doc yet |
 
 ---
 
@@ -100,7 +129,7 @@ flowchart LR
 | Reputation wrapper | [reputation-wrapper](reputation-wrapper.md) | **70%** | 🟡 mostly settled | agent-reputation write permission; repo auto-verify |
 | Skill validation adapter | [skill-validation-adapter](skill-validation-adapter.md) | **45%** | 🟡 plan drafted | LLM maliciousness model; QAgent on-chain trust |
 | NFT ranking structure | [nft-ranking-structure](nft-ranking-structure.md) | **30%** | 🚧 research only | **A vs B collection decision** (blocks skill build) |
-| Source-code layout | §4 below | **5%** | 🚧 planned only | everything |
+| Source-code layout | §4 below | **0%** | 🚧 TBD (planning together) | everything |
 | Agent profile (aggregation) | — | **20%** | 🚧 implied, no doc | what the profile view shows / queries |
 
 ```mermaid
@@ -110,55 +139,21 @@ flowchart LR
     S3["reputation 70%"]:::y
     S4["validation 45%"]:::y
     S5["nft ranking 30%"]:::r
-    S6["source layout 5%"]:::r
+    S6["source layout 0%"]:::r
     classDef g fill:#cfc,stroke:#3a3
     classDef y fill:#ffd,stroke:#ca0
     classDef r fill:#fdd,stroke:#c33
 ```
 
-**Critical path:** the **NFT collection decision (A vs B)** in nft-ranking gates the skill
-build, because soulbound minting and source-repo (`AppData`) depend on which standard. Decide
-that next, and session-sync can be built in parallel (it has no NFT dependency).
+**Critical path:** the **NFT collection decision (A vs B)** gates everything skill-related —
+soulbound minting and source-repo (`AppData`) depend on which standard. Session-sync has no
+NFT dependency, so it can proceed in parallel. (Build sequence in §6.)
 
 ---
 
-## 4. Source code structure — 🚧 planned only (not built)
+## 4. Source code structure — 🚧 TBD (planning together)
 
-> Just the intended layout. No code yet. Adjust when we start building.
-
-```
-agentnet/                          # the protocol (thin, git-sdk's sibling)
-├── core/
-│   ├── crypto.ts                  # re-export iqlabs crypto (deriveX25519Keypair, dhEncrypt)
-│   ├── session.ts                 # encrypt → adapter.put → writeRow(mysession)
-│   └── publish.ts                 # validate → code-in skill → registry
-├── storage/                       # StorageAdapter implementations
-│   ├── adapter.ts                 # interface (put/get by sessionId, path rule)
-│   ├── manual.ts                  # PoC (file up/download, 0 auth)
-│   ├── gdrive.ts                  # Google OAuth
-│   ├── s3.ts                      # custom
-│   └── icloud.ts                  # Apple
-├── validation/                    # ValidationAdapter implementations
-│   ├── adapter.ts                 # interface
-│   ├── skills-sh-compat.ts        # name+desc (ref: vercel-labs/skills)
-│   ├── strict.ts                  # PR #509 quality rules (reference-copied)
-│   ├── onchain.ts                 # + ≤700B, skillId convention
-│   └── security-llm.ts            # text-maliciousness review
-├── chain/                         # on-chain wrappers (use iqlabs-solana-sdk)
-│   ├── skill-ownership.ts         # SkillOwnership PDA + buy_skill ix
-│   ├── reputation.ts              # comments + source-repo tables (owner-gated)
-│   └── registry.ts               # skills:all / skills_v2_<owner> (clone git-sdk)
-├── runtime/                       # per-runtime adapters (get signature + inject session)
-│   ├── web/                       # PoC in iq-wide-web
-│   ├── vscode/                    # extension
-│   ├── claude-cli/                # localhost callback + deep-link
-│   └── codex-cli/
-└── contract/                      # 🔨 new on-chain program bits
-    └── skill_ownership.rs         # the one new soulbound PDA + buy_skill
-```
-
-The only genuinely **new on-chain code** is `skill_ownership.rs` (SkillOwnership PDA +
-`buy_skill`). Everything else wraps existing IQLabs SDK / git-sdk patterns.
+> To be planned together — placeholder.
 
 ---
 
@@ -186,8 +181,8 @@ The only genuinely **new on-chain code** is `skill_ownership.rs` (SkillOwnership
 
 ```mermaid
 flowchart TB
-    D["decide NFT collection A vs B<br/>(unblocks skill build)"] --> P1
-    SS["session-sync PoC (web, manual adapter)<br/>— no NFT dependency, build in parallel"]
+    D["decide NFT collection A vs B"] --> P1
+    SS["session-sync PoC (web, manual adapter)<br/>— parallel, no NFT dependency"]
     P1["skill registry + code-in publish"] --> P2["SkillOwnership PDA + buy_skill"]
     P2 --> P3["reputation (comments + repos)"]
     P2 --> P4["validation gate before publish"]
@@ -197,7 +192,6 @@ flowchart TB
     style SS fill:#cfc,stroke:#3a3
 ```
 
-1. **Now:** decide A vs B (`nft-ranking-structure`) — it blocks everything skill-related.
-2. **In parallel:** session-sync PoC (no NFT dependency, fastest visible win).
-3. Then: skill publish → soulbound → reputation → validation → ranking.
-4. Last: runtime adapters (VSCode / Claude / Codex) on top of the proven core.
+Two tracks run in parallel: the **A/B decision → skill chain** (red), and the
+**session-sync PoC → runtime adapters** (green). They converge once both the core and a
+runtime exist.
