@@ -145,54 +145,14 @@ The map above is the full picture; each row points to the doc that details that 
 
 ---
 
-## 3. Plan progress (how far each plan is — design completeness, not code)
-
-> % = how settled the *plan* is (decisions made vs open). Code is 0% everywhere; this is
-> about whether we know what to build.
-
-| Plan | Doc | Design % | State | Biggest open item |
-|---|---|---|---|---|
-| Off-chain session sync | [offchain-session-sync](offchain-session-sync.md) | **85%** | 🟢 ready to build | CLI ↔ Phantom signature (deep-link), runtime format mapping |
-| Skill NFT structure (model + soulbound + ranking) | [skill-nft-structure](skill-nft-structure.md) | **75%** | 🟢 ready to build | mint flow + trait schema + sybil |
-| Notes (write on-chain) | [notes](notes.md) | **70%** | 🟡 mostly settled | agent-note write permission; repo auto-verify |
-| Skill validation adapter | [skill-validation-adapter](skill-validation-adapter.md) | **45%** | 🟡 plan drafted | LLM maliciousness model; QAgent on-chain trust |
-| Actions & adapters (usable layer + profile) | [actions-and-adapters](actions-and-adapters.md) | **40%** | 🟡 plan drafted | `Action`/`AgentContext` shape; per-env wallet signing |
-| Search (keyword + traits + semantic) | [search](search.md) | **45%** | 🟡 plan drafted | depends on NFT traits; embedding provider |
-| Workflow NFT (recipe of skills, gated unlock) | [workflow-nft](workflow-nft.md) | **55%** | 🟡 plan drafted | requiredSkills granularity; recipe format |
-| Coding plan (modules → files) | [coding-info](coding-info.md) | **40%** | 🟡 modules done | source-file layout §B; conventions §C |
-
-```mermaid
-flowchart LR
-    S1["session sync 85%"]:::g
-    S2["skill NFT 75%"]:::g
-    S3["notes 70%"]:::y
-    S4["validation 45%"]:::y
-    S6["actions+adapters 40%"]:::y
-    S7["search 45%"]:::y
-    S9["workflow NFT 55%"]:::y
-    S8["coding plan 40%"]:::y
-    classDef g fill:#cfc,stroke:#3a3
-    classDef y fill:#ffd,stroke:#ca0
-    classDef r fill:#fdd,stroke:#c33
-```
-
-**Critical path:** the NFT model is now chosen — **Token-2022 semi-fungible** (`mint.supply`
-= popularity, `NonTransferable` = soulbound, traits on-chain), with the skill text via IQLabs
-code-in in the `uri` (no IQLabs/Token-2022 coupling). Remaining: trait schema + the
-PDA-vs-token soulbound-record question. Session-sync has no NFT dependency and runs in
-parallel. (Build sequence in §6.)
-
----
-
-## 4. Modules & source structure → [`coding-info.md`](coding-info.md)
+## 3. Modules & source structure → [`coding-info.md`](coding-info.md)
 
 The coding plan lives in [`coding-info.md`](coding-info.md): **§A** module breakdown
-(core/chain · account+session · nft · search · notes · backend), **§B** source-file
-layout (🚧 next), **§C** conventions (🚧 next).
+(core/chain · account+session · nft · search · notes · backend), §B source-file layout · §C libraries · §D build steps.
 
 ---
 
-## 5. Reference material (code + docs to consult)
+## 4. Reference material (code + docs to consult)
 
 **Our repos (the patterns to reuse):**
 - Contract: `/Users/sumin/RustroverProjects/IQLabsContract`
@@ -212,21 +172,7 @@ layout (🚧 next), **§C** conventions (🚧 next).
 
 ---
 
-## 6. Suggested build order
+## 5. Build steps → [`coding-info.md`](coding-info.md) §D
 
-```mermaid
-flowchart TB
-    D["NFT model: Token-2022 semi-fungible<br/>(chosen) → finalize traits"] --> P1
-    SS["session-sync PoC (web, manual adapter)<br/>— parallel, no NFT dependency"]
-    P1["skill registry + code-in publish"] --> P2["Token-2022 mint + buy_skill"]
-    P2 --> P3["notes (comments + self)"]
-    P2 --> P4["validation gate before publish"]
-    SS --> R1["runtime adapters: VSCode / Claude / Codex"]
-    P3 --> RANK["gateway ranking by mint count"]
-    style D fill:#fdd,stroke:#c33
-    style SS fill:#cfc,stroke:#3a3
-```
-
-Two tracks run in parallel: the **NFT model → skill chain** (red), and the
-**session-sync PoC → runtime adapters** (green). They converge once both the core and a
-runtime exist.
+Bottom-up build order (core first, then session/skill tracks, then surfaces) with per-module
+GitHub search terms and reference repos lives in [`coding-info.md`](coding-info.md) §D.
