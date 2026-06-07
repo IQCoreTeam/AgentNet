@@ -360,9 +360,9 @@ a build-plan doc under `plans/`):
   mint's `uri` points to it. Ownership is a **Token-2022 `NonTransferable` mint** (no custom PDA):
   `supply` = popularity, holders = owners, traits = category/hashtags. star = payment = equip is
   one `buy_skill`; free = price-0 mint. → `plans/skill-nft-structure.md`
-- **Reputation = comments on a skill or agent.** `comments/[skillNFT]` + `reputation/[wallet]`,
+- **Reputation = comments on a skill or agent.** `comments/[skillNFT]` + `notes/[agentWallet]`,
   writable by token holders, a comment may attach a github / on-chain-git link. No star rating
-  (the mint's `supply` is the rating). Likes off-chain or dropped. → `plans/reputation-wrapper.md`
+  (the mint's `supply` is the rating). Likes off-chain or dropped. → `plans/notes.md`
 - **Validation + security.** A swappable validation adapter (skills.sh rules as reference) plus a
   security layer modeled on skills.sh's `/audits` (text-maliciousness LLM review is our #1, since
   skills are mostly text). Multi-stage: pre-publish gate, agent roaming, server periodic, and a
@@ -387,7 +387,7 @@ Exploration shows **~90% already exists in IQLabs / the SDKs.** Most is a clone 
 | search · sort | gateway/cache: filter by NFT traits, sort by `supply` | 🔨 new |
 | **soulbound skill ownership** | **Token-2022 `NonTransferable` mint** per skill (no custom PDA) | 🔨 new |
 | **star = soulbound buy = payment = equip (atomic)** | `buy_skill`: `SystemProgram.transfer` + mint 1 token in one tx (free = price-0) | 🔨 new wrapper |
-| **reputation (comments, git-link attachable)** | `comments/[skillNFT]` + `reputation/[wallet]` tables, owner-gated | 🔨 new |
+| **reputation (comments, git-link attachable)** | `comments/[skillNFT]` + `notes/[agentWallet]` tables, owner-gated | 🔨 new |
 | **skill validation + security audit** | adapter (skills.sh rules ref) + LLM maliciousness review | 🔨 new |
 | **one-way follow** | `follows:<owner>` plain table (Connection is bidirectional, unfit) | 🔨 new (simple) |
 | **iqfetch / publish (address convention)** | core protocol functions (git-sdk's sibling) | 🔨 new (thin) |

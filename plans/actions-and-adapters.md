@@ -45,7 +45,7 @@ Grouped by intent. Each action names the **plan doc** it builds on.
 | Action | What it does | Builds on |
 |---|---|---|
 | `connectWallet` | connect a Solana wallet in this environment (Phantom in browser; deep-link/callback in CLI) | [offchain-session-sync](offchain-session-sync.md) §5–6 |
-| `init` | **runs on first connect when nothing is set up**: pick a session-storage OAuth, log in, create the `mysession` table | [offchain-session-sync](offchain-session-sync.md) §5.1 |
+| `init` | **runs on first connect when nothing is set up**: pick a session-storage OAuth, log in, create the `mysessions` table | [offchain-session-sync](offchain-session-sync.md) §5.1 |
 | `linkDevice` | connect this device separately (phone, PC) — same wallet, each device authorizes its own storage/session access | [offchain-session-sync](offchain-session-sync.md) §5.2 |
 | `setupLocalGit` | create the fixed local folder (per device — mobile/PC) used to `pull` repos linked in comments | notes attachments + IQ GitHub |
 

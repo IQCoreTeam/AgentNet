@@ -40,7 +40,7 @@ flowchart LR
         Blob["Encrypted session blob<br/>(large, private, only your wallet decrypts)"]
     end
     subgraph chain["On-chain — everything else"]
-        Idx["mysession table<br/>sessionId list (owner-only writes)"]
+        Idx["mysessions table<br/>sessionId list (owner-only writes)"]
         Sk["skill text (asset → NFT)"]
         Id["identity · reputation · payment"]
     end
@@ -58,7 +58,7 @@ flowchart TB
     S["Agent session (JSON)"]
     S -->|"① dhEncrypt(myPubKey, session)"| E["Encrypted blob"]
     E -->|"② put(sessionId)<br/>path = adapter/agentnet/sessions/uuid"| U["User-owned storage<br/>(Google Drive / iCloud / custom)"]
-    S -->|"③ writeRow('mysession',<br/>{sessionId, wallet})<br/>writer = owner wallet only"| C[("On-chain mysession table<br/>wallet → [sessionId…]")]
+    S -->|"③ writeRow('mysessions',<br/>{sessionId, wallet})<br/>writer = owner wallet only"| C[("On-chain mysessions table<br/>wallet → [sessionId…]")]
 
     C -->|"④ query by wallet"| L["sessionId list"]
     L -->|"⑤ get(sessionId)<br/>path computed by rule"| E2["Encrypted blob"]
@@ -136,11 +136,11 @@ Session content is never uploaded. **Nor are the pointer, hash, or storage type.
 On-chain holds only the **list** of "these sessionIds belong to this wallet":
 
 Sessions are stored as **rows keyed by the owner's wallet address** in AgentNet's
-**`mysession` table**. **Write permission is the owner wallet only** (writers = [owner]) —
+**`mysessions` table**. **Write permission is the owner wallet only** (writers = [owner]) —
 nobody can inject a row into my session list.
 
 ```jsonc
-// writeRow("mysession", …) — plaintext, harmless if public. Writer = owner wallet only
+// writeRow("mysessions", …) — plaintext, harmless if public. Writer = owner wallet only
 {
   "sessionId": "uuid",            // which session
   "wallet":    "<base58>",        // owner = query key (= the only wallet allowed to write)
@@ -173,7 +173,7 @@ it's automatic afterward. If several stores are enabled, the adapters are all sc
 the `sessionId`. → Even the storage type is never made public.
 
 - DbRoot: **`agentnet-root`** (separate from `iqprofile-root` for clean permissions).
-- Table **`mysession`**, id column `sessionId`, queried by `wallet`.
+- Table **`mysessions`**, id column `sessionId`, queried by `wallet`.
 - **Write permission = owner wallet only** (`writers = [owner]`). The contract's
   `require_writer_auth_if_set` only lets wallets in `writers` through — the opposite of
   empty writers (public); here we fill it so *only the owner* can write.
@@ -203,7 +203,7 @@ sequenceDiagram
     CLI->>ST: run that adapter's auth (e.g. Google OAuth in browser)
     ST-->>CLI: adapter ready (token local only, never on our server)
     CLI->>W: signMessage(fixed) → derive X25519 key
-    CLI->>CH: create mysession table (writers=[owner wallet])
+    CLI->>CH: create mysessions table (writers=[owner wallet])
     CLI-->>U: ✅ initialized — wallet = your agent
 ```
 
@@ -234,7 +234,7 @@ sequenceDiagram
     CLI->>BR: open deep-link "sign this message"
     U->>BR: approve in Phantom
     BR-->>CLI: signature → derive X25519 key (cache in keychain)
-    CLI->>CH: query mysession (wallet = me)
+    CLI->>CH: query mysessions (wallet = me)
     CH-->>CLI: session list [{sessionId, title, ts}]
     CLI->>U: "N sessions found. Which to open?"
     U->>CLI: pick a session
@@ -297,7 +297,7 @@ Across runtimes the **core never changes** — only "how we get the signature" a
 - [ ] `/sessions` page in `iq-wide-web`
 - [ ] `manual` storage adapter (file down/upload — 0 auth, path rule `agentnet/sessions/{id}`)
 - [ ] encrypt a dummy session with `dhEncrypt` → `adapter.put(sessionId)`
-- [ ] on `agentnet-root`, create `mysession` table (writers=[owner]) → `writeRow("mysession", {sessionId, wallet})`
+- [ ] on `agentnet-root`, create `mysessions` table (writers=[owner]) → `writeRow("mysessions", {sessionId, wallet})`
 - [ ] on reconnect: query sessionId list by wallet → `adapter.get(sessionId)` → `dhDecrypt` → render
 - [ ] then swap `manual` → `gdrive`
 

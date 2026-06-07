@@ -98,7 +98,7 @@ flowchart TB
 
 ## 1. What we build — the validation adapter
 
-A gate that a skill must pass **before** going on-chain (§ skill-soulbound). We reference
+A gate that a skill must pass **before** going on-chain (see skill-nft-structure). We reference
 skills.sh PR rules and add **our constraints** (on-chain ≤700B, etc.).
 
 ```mermaid

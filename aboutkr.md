@@ -359,9 +359,9 @@ flowchart LR
   민트 `uri`가 그걸 가리킴. 소유는 **Token-2022 `NonTransferable` 민트**(커스텀 PDA 없음):
   `supply` = 인기, 홀더 = 소유자, trait = 카테고리/해시태그. star = 결제 = 장착이 한
   `buy_skill`, 무료 = 0원 민팅. → `plans/skill-nft-structure.md`
-- **평판 = 스킬/에이전트 댓글.** `comments/[skillNFT]` + `reputation/[지갑]`, 토큰 소유자만
+- **평판 = 스킬/에이전트 댓글.** `comments/[skillNFT]` + `notes/[agentWallet]`, 토큰 소유자만
   쓰기, 댓글에 github / 온체인깃 링크 첨부 가능. 별점 없음(민트 `supply`가 평점). 좋아요는
-  오프체인 또는 제외. → `plans/reputation-wrapper.md`
+  오프체인 또는 제외. → `plans/notes.md`
 - **검증 + 보안.** 갈아끼우는 검증 어댑터(skills.sh 규칙 참고) + skills.sh `/audits`를 본뜬
   보안 층(텍스트 악의성 LLM 심사가 1순위 — 스킬은 대부분 텍스트라). 다단계: 발행 전 게이트,
   에이전트 순회, 서버 주기, QAgent 공식 감사. → `plans/skill-validation-adapter.md`
@@ -385,7 +385,7 @@ flowchart LR
 | 검색·정렬 | gateway/캐시: NFT trait 필터, `supply` 정렬 | 🔨 신규 |
 | **소울바운드 스킬 소유** | **Token-2022 `NonTransferable` 민트** (커스텀 PDA 없음) | 🔨 신규 |
 | **star = 소울바운드 구매 = 결제 = 장착 (원자적)** | `buy_skill`: `SystemProgram.transfer` + 토큰 1개 민팅 한 tx (무료 = 0원) | 🔨 래퍼 신규 |
-| **평판 (댓글, git 링크 첨부 가능)** | `comments/[skillNFT]` + `reputation/[지갑]` 테이블, 소유자만 쓰기 | 🔨 신규 |
+| **평판 (댓글, git 링크 첨부 가능)** | `comments/[skillNFT]` + `notes/[agentWallet]` 테이블, 소유자만 쓰기 | 🔨 신규 |
 | **스킬 검증 + 보안 감사** | 어댑터(skills.sh 규칙 참고) + LLM 악의성 심사 | 🔨 신규 |
 | **일방 follow** | `follows:<owner>` 일반 테이블 (Connection은 양방향이라 부적합) | 🔨 신규 (간단) |
 | **iqfetch / publish (주소규약)** | 코어 프로토콜 함수 (git-sdk의 형제) | 🔨 신규 (얇음) |
