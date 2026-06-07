@@ -3,6 +3,10 @@
 > Vision docs: [`../README.md`](../README.md) (EN) / [`../aboutkr.md`](../aboutkr.md) (KR).
 > Sibling doc: [`skill-nft-structure.md`](skill-nft-structure.md).
 > This doc is the **build plan** — "how we actually ship the first deliverable".
+>
+> 🔍 **Before coding, search OSS first:** `solana wallet signMessage derive encryption key`,
+> `phantom connect react wallet-adapter`, `google drive oauth token local store`. Read iq-locker
+> (live `deriveX25519Keypair`) + iq-wide-web (Phantom connect) before writing.
 
 ---
 
@@ -279,6 +283,10 @@ We reuse that convention and add a wallet-sync layer on top.
 
 Across runtimes the **core never changes** — only "how we get the signature" and
 "where we drop the session" swap out.
+
+> **CLI wrapping detail (subprocess, JSONL capture, canonical format, Codex↔Claude +
+> cross-device continuity)** lives in [`actions-and-adapters.md`](actions-and-adapters.md)
+> §5b. This doc owns the session/encryption model; that doc owns the runtime wrapping.
 
 ---
 

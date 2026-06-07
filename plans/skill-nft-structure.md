@@ -4,6 +4,10 @@
 > [`search.md`](search.md) (traits) · [`actions-and-adapters.md`](actions-and-adapters.md).
 > How a skill becomes an on-chain, soulbound, ownable, countable NFT — chosen so ranking,
 > holder lists, categories, and search all fall out of it for free.
+>
+> 🔍 **Before coding, search OSS first:** `solana token-2022 NonTransferable mint example`,
+> `token metadata extension additional_metadata`, `token group extension spl`, `IQ6900 code-in nft`.
+> Read IQ6900 (code-in → uri pattern) before writing the mint helpers.
 
 ---
 
@@ -94,7 +98,7 @@ flowchart LR
 **Division of labor:**
 - **NFT (Token-2022) does everything NFT-shaped** — ownership, supply/popularity, soulbound,
   traits, holder list. The NFT carries only a **txid** (the on-chain path), nothing else.
-- **code-in / inscription is for text data only** — skill text here; profiles, reputation,
+- **code-in / inscription is for text data only** — skill text here; profiles, notes,
   audit elsewhere. Not for ownership or counting (the NFT already does that for free).
 
 So we mint NFTs with Token-2022 ourselves (a sibling concern) and put the IQLabs code-in

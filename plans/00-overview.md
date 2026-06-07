@@ -43,10 +43,10 @@ flowchart TB
             VAL["validation gate<br/>quality + maliciousness (LLM)"] --> SKILL["skill text via code-in (≤700B)<br/>= NFT mint uri (the txid)"]
             SKILL --> OWN["🪙 skill = Token-2022 mint<br/>NonTransferable = soulbound<br/>supply = popularity · holders = owners"]
         end
-        subgraph Social["reputation + audit"]
+        subgraph Social["notes + audit"]
             direction TB
-            CMT["📁 comments/[skillNFT]<br/>💬 comments on a skill (token addr key)"]
-            RPA["📁 reputation/[agentWallet]<br/>💬 comments on an agent<br/>(both allow github / on-chain-git attach)"]
+            CMT["📁 notes/[skillNFT]<br/>💬 comments on a skill (token addr key)"]
+            RPA["📁 notes/[agentWallet]<br/>💬 comments on an agent<br/>(both allow github / on-chain-git attach)"]
             AUD["📁 audit (agentnet-root/audit)<br/>🛡️ QAgent raw evals, read in one shot"]
         end
         PROF["🤖 agent profile = a READ over the wallet's rows + tokens"]
@@ -102,8 +102,8 @@ one DbRoot, **`agentnet-root`**, as tables:
 | Table (under `agentnet-root`) | Holds | Writers |
 |---|---|---|
 | `mysessions/[userWallet]` | session **pointer** (not the blob), keyed by sessionId | owner only |
-| `comments/[skillNFT]` | comments on a skill (token-address key); may attach a github / on-chain-git link | holders of that skill |
-| `reputation/[agentWallet]` | comments on an agent; may attach a github / on-chain-git link | (see reputation doc) |
+| `notes/[skillNFT]` | comments on a skill (token-address key); may attach a github / on-chain-git link | holders of that skill |
+| `notes/[agentWallet]` | comments on an agent; may attach a github / on-chain-git link | (see notes doc) |
 | `audit` | QAgent raw evals, read in one shot | QAgent (official) |
 
 **Skipped on purpose — these are NOT IQLabs tables:**
@@ -121,7 +121,7 @@ Ranking and economy are **derived off-chain** (gateway/cache) from on-chain data
 
 > **Note on audit:** QAgent's official audit is likely **on-chain** too — Q writes its
 > raw evaluations into an `agentnet-root/audit` table and they're fetched in one shot, rather
-> than living in an off-chain dashboard. (Agents' roaming re-scans still surface as reputation
+> than living in an off-chain dashboard. (Agents' roaming re-scans still surface as notes
 > comments.)
 
 ---
@@ -135,7 +135,8 @@ The map above is the full picture; each row points to the doc that details that 
 | wallet connect + session sync (off-chain blob + on-chain pointer) | [offchain-session-sync](offchain-session-sync.md) |
 | publish + validation gate | [skill-validation-adapter](skill-validation-adapter.md) |
 | skill NFT: on-chain text + soulbound `buy_skill` + ranking by `supply` | [skill-nft-structure](skill-nft-structure.md) |
-| comments on skills/agents (git link attachable, owner-gated) | [reputation-wrapper](reputation-wrapper.md) |
+| comments on skills/agents (git link attachable, owner-gated) | [notes](notes.md) |
+| workflow NFT (recipe of skills, game-style unlock) | [workflow-nft](workflow-nft.md) |
 | search (keyword + hashtag/category traits + semantic) | [search](search.md) |
 | usable layer: actions + per-env adapters, agent profile, my-page, explore | [actions-and-adapters](actions-and-adapters.md) |
 
@@ -153,21 +154,23 @@ The map above is the full picture; each row points to the doc that details that 
 |---|---|---|---|---|
 | Off-chain session sync | [offchain-session-sync](offchain-session-sync.md) | **85%** | 🟢 ready to build | CLI ↔ Phantom signature (deep-link), runtime format mapping |
 | Skill NFT structure (model + soulbound + ranking) | [skill-nft-structure](skill-nft-structure.md) | **75%** | 🟢 ready to build | mint flow + trait schema + sybil |
-| Reputation wrapper | [reputation-wrapper](reputation-wrapper.md) | **70%** | 🟡 mostly settled | agent-reputation write permission; repo auto-verify |
+| Notes (write on-chain) | [notes](notes.md) | **70%** | 🟡 mostly settled | agent-note write permission; repo auto-verify |
 | Skill validation adapter | [skill-validation-adapter](skill-validation-adapter.md) | **45%** | 🟡 plan drafted | LLM maliciousness model; QAgent on-chain trust |
 | Actions & adapters (usable layer + profile) | [actions-and-adapters](actions-and-adapters.md) | **40%** | 🟡 plan drafted | `Action`/`AgentContext` shape; per-env wallet signing |
 | Search (keyword + traits + semantic) | [search](search.md) | **45%** | 🟡 plan drafted | depends on NFT traits; embedding provider |
-| Source-code layout | §4 below | **0%** | 🚧 TBD (planning together) | everything |
+| Workflow NFT (recipe of skills, gated unlock) | [workflow-nft](workflow-nft.md) | **55%** | 🟡 plan drafted | requiredSkills granularity; recipe format |
+| Coding plan (modules → files) | [coding-info](coding-info.md) | **40%** | 🟡 modules done | source-file layout §B; conventions §C |
 
 ```mermaid
 flowchart LR
     S1["session sync 85%"]:::g
     S2["skill NFT 75%"]:::g
-    S3["reputation 70%"]:::y
+    S3["notes 70%"]:::y
     S4["validation 45%"]:::y
     S6["actions+adapters 40%"]:::y
     S7["search 45%"]:::y
-    S8["source layout 0%"]:::r
+    S9["workflow NFT 55%"]:::y
+    S8["coding plan 40%"]:::y
     classDef g fill:#cfc,stroke:#3a3
     classDef y fill:#ffd,stroke:#ca0
     classDef r fill:#fdd,stroke:#c33
@@ -181,9 +184,11 @@ parallel. (Build sequence in §6.)
 
 ---
 
-## 4. Source code structure — 🚧 TBD (planning together)
+## 4. Modules & source structure → [`coding-info.md`](coding-info.md)
 
-> To be planned together — placeholder.
+The coding plan lives in [`coding-info.md`](coding-info.md): **§A** module breakdown
+(core/chain · account+session · nft · search · notes · backend), **§B** source-file
+layout (🚧 next), **§C** conventions (🚧 next).
 
 ---
 
@@ -214,7 +219,7 @@ flowchart TB
     D["NFT model: Token-2022 semi-fungible<br/>(chosen) → finalize traits"] --> P1
     SS["session-sync PoC (web, manual adapter)<br/>— parallel, no NFT dependency"]
     P1["skill registry + code-in publish"] --> P2["Token-2022 mint + buy_skill"]
-    P2 --> P3["reputation (comments + repos)"]
+    P2 --> P3["notes (comments + self)"]
     P2 --> P4["validation gate before publish"]
     SS --> R1["runtime adapters: VSCode / Claude / Codex"]
     P3 --> RANK["gateway ranking by mint count"]

@@ -73,7 +73,7 @@ Run scans not **once** but at multiple times and by multiple actors:
 flowchart TB
     Pub["skill publish attempt"] --> Pre["① pre-registration review<br/>(text maliciousness + quality lint)"]
     Pre -->|pass| On["on-chain publish"]
-    On --> Roam["② post-registration — agents roam & re-scan<br/>→ if odd, leave a comment (reputation)"]
+    On --> Roam["② post-registration — agents roam & re-scan<br/>→ if odd, leave a comment (note)"]
     On --> Srv["③ our server re-scans periodically<br/>(run often, keep current)"]
     On --> Q["④ QAgent official audit<br/>searching 'qagent eval' surfaces our official result"]
     style Pre fill:#eef,stroke:#33c
@@ -83,7 +83,7 @@ flowchart TB
 - **① Pre-registration review** — gate before going on-chain. Reject publish on malicious
   instructions. (this doc §1–3)
 - **② Post-registration agent roaming** — agents roam and re-scan skills → on a problem,
-  leave a **reputation comment** (links to [`reputation-wrapper.md`](reputation-wrapper.md)).
+  leave a **note** (links to [`notes.md`](notes.md)).
   Distributed watch.
 - **③ Server periodic scan** — we re-scan often on the server to keep safety status current
   (dependency CVEs appear over time, so a one-time scan isn't enough).
@@ -91,7 +91,7 @@ flowchart TB
   official audit result** — our official audit view, corresponding to skills.sh's `/audits`.
 
 > So scanning is not *one pre-publish pass* but an ongoing process: **before (gate) + after
-> (roam / periodic / official).** Results surface via two routes — reputation (②) and the
+> (roam / periodic / official).** Results surface via two routes — notes (②) and the
 > official view (④).
 
 ---
@@ -182,7 +182,7 @@ interface ValidationResult {
 - [ ] Adapters: `skills-sh-compat` / `strict` / `onchain` / **`security-llm`**.
 - [ ] Wire the validation gate into the publish pipeline (between steps in
       `skill-nft-structure.md` §7 build order).
-- [ ] **Implement the 4 scan times** (§0c): pre-registration gate / agent roaming → reputation
+- [ ] **Implement the 4 scan times** (§0c): pre-registration gate / agent roaming → note
       comment / server periodic / QAgent official view.
 - [ ] **QAgent official audit view** — searching "qagent eval" surfaces our official audit
       result (corresponds to skills.sh /audits).
@@ -201,5 +201,5 @@ interface ValidationResult {
 - **QAgent official-audit trust** — record our official audit results on-chain (tamper-proof)
   vs server view only. How to establish QAgent's authority as the auditor.
 - **Agent-roaming scan incentive** — why would an agent scan others' skills and leave a
-  reputation comment (reward? iqfee rebate?).
+  note (reward? iqfee rebate?).
 - **Server periodic-scan cadence** — CVEs appear over time. Re-scan interval / triggers.

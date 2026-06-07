@@ -47,19 +47,19 @@ Grouped by intent. Each action names the **plan doc** it builds on.
 | `connectWallet` | connect a Solana wallet in this environment (Phantom in browser; deep-link/callback in CLI) | [offchain-session-sync](offchain-session-sync.md) §5–6 |
 | `init` | **runs on first connect when nothing is set up**: pick a session-storage OAuth, log in, create the `mysession` table | [offchain-session-sync](offchain-session-sync.md) §5.1 |
 | `linkDevice` | connect this device separately (phone, PC) — same wallet, each device authorizes its own storage/session access | [offchain-session-sync](offchain-session-sync.md) §5.2 |
-| `setupLocalGit` | create the fixed local folder (per device — mobile/PC) used to `pull` repos linked in comments | reputation attachments + IQ GitHub |
+| `setupLocalGit` | create the fixed local folder (per device — mobile/PC) used to `pull` repos linked in comments | notes attachments + IQ GitHub |
 
 ### B. My page (my own stuff)
 
 | Action | What it does | Builds on |
 |---|---|---|
-| `myProfile` | the agent profile = this wallet (skills owned + written, repos, reputation, followers) | profile (this doc §3) |
+| `myProfile` | the agent profile = this wallet (skills owned + written, notes, followers) | profile (this doc §3) |
 | `myBoughtSkills` | skills this agent purchased (soulbound tokens it holds) | [skill-nft-structure](skill-nft-structure.md) |
 | `myWrittenSkills` | skills this agent authored | [skill-nft-structure](skill-nft-structure.md) |
 | `writeSkill` | author a new skill; **on publish, also mint one to yourself** (author gets their own copy) | [skill-nft-structure](skill-nft-structure.md) · [skill-validation-adapter](skill-validation-adapter.md) |
-| `myReputation` | comments received on me / my skills | [reputation-wrapper](reputation-wrapper.md) |
+| `myNotes` | comments received on me / my skills | [notes](notes.md) |
 | `myEarnings` | money earned from skills, aggregated | [skill-nft-structure](skill-nft-structure.md) §4 (payment) |
-| `connectGitHub` | attach a GitHub (or on-chain IQ GitHub) repo link to a comment | reputation attachments |
+| `connectGitHub` | attach a GitHub (or on-chain IQ GitHub) repo link to a comment | notes attachments |
 
 ### C. Explore (others' stuff)
 
@@ -111,8 +111,8 @@ flowchart TB
     W["wallet (designer.sol)"]
     W --> S1["owned skills (soulbound tokens held)"]
     W --> S2["written skills (authored + self-minted)"]
-    W --> S3["comments + git attachments (reputation)"]
-    W --> S4["reputation (comments received)"]
+    W --> S3["comments + git attachments (notes)"]
+    W --> S4["notes (comments received)"]
     W --> S5["followers"]
     W --> S6["earnings (from buy_skill payments)"]
     W -.->|"memory/context (off-chain, private)"| S7["sessions"]
@@ -170,11 +170,110 @@ The **first-connect flow** is identical everywhere (just rendered differently):
 ```mermaid
 flowchart LR
     C["connectWallet"] --> Q{"already set up?"}
-    Q -->|no| I["init: pick storage OAuth → log in → create mysession"]
+    Q -->|no| I["init: pick storage OAuth → log in → create mysessions"]
     Q -->|yes| H["home / profile"]
     I --> H
     style I fill:#cfc,stroke:#3a3
 ```
+
+---
+
+## 5b. CLI runtime adapter — the "shared session" experience
+
+The headline experience: **use Codex, switch to Claude, move to another device — the
+session continues.** We achieve it by wrapping the existing CLIs (proven pattern: Cline,
+Clauditor, claude-code-webstorm all spawn the CLI as a subprocess).
+
+### How the CLIs work (verified)
+Both store sessions as **JSONL, append-only** (one line = one message):
+- **Claude Code:** `~/.claude/projects/{pathHash}/{session}.jsonl`; resume reads it back.
+- **Codex CLI:** `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` (relocatable via `CODEX_HOME`).
+- Claude Code also emits `--output-format stream-json` → structured live stream (easier capture than tailing the file).
+
+### Two key choices this unlocks
+- **No API key needed** — we spawn the user's already-logged-in CLI as a subprocess, so it
+  runs on **their subscription**. (BYOK / our-own-chat is a separate, later path for users
+  with no CLI.)
+- **JSONL append-only** → sync only the *new lines* since last sync, not the whole file.
+
+### The flow
+
+```mermaid
+flowchart TB
+    DRIVE[("drive: canonical session<br/>(encrypted, CLI-neutral)")]
+    subgraph WRAP["our CLI runtime adapter"]
+        IN["① inject: drive → convert → write the CLI's jsonl → resume"]
+        RUN["② CLI runs on the user's subscription (subprocess)"]
+        CAP["③ capture: watch jsonl appends (or stream-json)<br/>→ convert new lines → canonical"]
+        SYNC["④ encrypt → overwrite drive (every N lines / on idle/exit)"]
+    end
+    DRIVE --> IN --> RUN --> CAP --> SYNC --> DRIVE
+    style DRIVE fill:#efe,stroke:#3a3,stroke-width:2px
+```
+
+1. **Inject** — pull the canonical session from drive, convert to the target CLI's JSONL,
+   write it where that CLI reads (`~/.claude/...` or `CODEX_HOME`), then `resume`.
+2. **Run** — the CLI talks to the model on the user's own login/subscription.
+3. **Capture** — watch the JSONL for appended lines (or read `stream-json`); convert the new
+   lines to our canonical format.
+4. **Sync** — encrypt and overwrite the drive blob **every N new lines / on idle / on exit**
+   (cheap; drive write only — **on-chain `mysessions` write is once per new session**, not per sync).
+
+### Canonical session format = the magic
+The drive holds **one CLI-neutral session** (JSONL is nearly identical across both, so the
+canonical format ≈ a normalized message list). Each CLI gets a thin **converter adapter**:
+
+```
+canonical (on drive) ⇄ Claude jsonl   (claude adapter)
+canonical (on drive) ⇄ Codex jsonl    (codex adapter)
+```
+
+- **Codex → Claude continuity:** open the same canonical session through the Claude adapter.
+- **Cross-device:** new device → connect wallet → pull canonical from drive → inject into
+  whatever CLI is there. Same conversation, anywhere.
+- We only build: the **canonical format** + **one converter per CLI** (Claude, Codex). The
+  wrapper/spawn machinery is shared.
+
+### Two paths (our role is the same: lend the agent's "outfit", collect the log)
+- **Path 1 — our wrapper (now):** the user types in a Codex/Claude chat we wrap; we capture
+  the jsonl → save locally → sync to drive. We drive it. ✅ (above)
+- **Path 2 — they wear our outfit (later):** OpenClaw/Hermes **fetch our skills**
+  (designer / marketer …), pick + act on their own, and call a **function we expose that
+  saves their log locally in the same format** → then the same Path-1 sync picks it up. We
+  don't control them; we just lend the identity+skills and collect the log.
+
+We are **not building autonomous agents** — we put an on-chain "outfit" (identity + skills +
+session) on whatever does the work (a human in a CLI, or an autonomous agent). The sync
+mechanism is identical; only *who is driving* differs. **Path 2 is later** — it needs the
+runtime to call our log-save function, so it ships after Path 1.
+
+> This realizes [`offchain-session-sync.md`](offchain-session-sync.md) §6's "plug into each
+> runtime" — that doc owns the session/encryption model; the CLI wrapping + JSONL converters
+> live here. Source location: [`coding-info.md`](coding-info.md) §B `runtime/`.
+
+### 5b.1 Reference repos — these already wrap codex/claude (study before building)
+
+The subprocess-wrap pattern is proven; we reuse it and add wallet identity + drive sync.
+
+| Repo / product | What it shows us |
+|---|---|
+| [opencode-claude-code-plugin](https://github.com/unixfox/opencode-claude-code-plugin) | spawns `claude` as subprocess with `--output-format stream-json`; wraps it as a model backend — **closest to our spawn.ts + capture.ts** |
+| [claude-code-webstorm](https://github.com/Iceman253/claude-code-webstorm) | chat-UI frontend over claude CLI subprocess, stream-json output — a surface example |
+| [claude-code-plus](https://github.com/touwaeriol/claude-code-plus) | wraps **Claude + Codex + Gemini** CLIs in one GUI — multi-CLI wrapper (our convert/claude + convert/codex) |
+| [Clauditor](https://plugins.jetbrains.com/plugin/30981-clauditor) | session browse/search/resume/fork over claude jsonl — closest to our session management (but local-only; we add chain + drive) |
+| [RunVSAgent (Codex-JetBrains)](https://github.com/Haleclipse/Codex-JetBrains) | runs VSCode agents inside JetBrains via an Extension-Host bridge — the "host a runtime" pattern |
+
+```mermaid
+flowchart LR
+    REF["reference wrappers<br/>(opencode-plugin · webstorm · claude-code-plus)"] -->|"same pattern"| RT["our runtime/<br/>spawn · capture · inject · convert"]
+    RT -->|"+ we add"| OURS["wallet = agent · encrypted drive sync · cross-device"]
+    style RT fill:#cfc,stroke:#3a3
+    style OURS fill:#efe,stroke:#3a3
+```
+
+**Our differentiator vs all of them:** they wrap the CLI *locally* (pretty UI, session resume
+on one machine). We add **wallet identity + encrypted session on the user's drive + on-chain
+pointer** → the same session follows you across CLIs and devices, owned by the wallet.
 
 ---
 
@@ -196,5 +295,11 @@ flowchart LR
 - **Local git folder** — fixed path convention per platform (mobile vs PC); pull-only or sync?
 - **`AgentContext` wallet abstraction** — one `WalletSigner` interface covering Phantom /
   Ledger / deep-link callback across all envs.
+- **Canonical session format** — how close to raw JSONL? (both CLIs are ~the same message
+  list, so likely a thin normalization, not a heavy schema.)
+- **Capture method** — watch the JSONL file for appends vs read `stream-json`; sync trigger
+  (every N lines vs on idle/exit).
+- **CLI must be installed/logged-in** — subprocess path assumes the user has codex/claude
+  CLI; for users without one, fall back to BYOK chat (separate, later).
 - **CacheLayer interface** — minimal read methods now (so `listAgents` compiles), concrete
   backend later (§4).
