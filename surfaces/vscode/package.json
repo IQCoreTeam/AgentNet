@@ -1,0 +1,37 @@
+{
+  "name": "agentnet-vscode",
+  "displayName": "AgentNet",
+  "description": "Wallet-synced claude/codex sessions in VSCode",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "agentnet.openChat",
+        "title": "AgentNet: Open Chat"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "tsup src/extension.ts --format cjs --external vscode --out-dir dist",
+    "watch": "tsup src/extension.ts --format cjs --external vscode --out-dir dist --watch"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.90.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.6.0"
+  },
+  "dependencies": {
+    "tweetnacl": "^1.0.3"
+  }
+}
