@@ -361,6 +361,13 @@ rules 1–5. Don't reinvent what a proven repo already solves.
 
 # §D — Steps (read this → build that)
 
+> **▶ Where we start now (decided):** the **session-preservation track (T1)** — keep an
+> agent's session in the wallet, shared across CLIs/devices. Order: **Step 0 `core/` →
+> Step 1 session save → Step 2 CLI wrapper (vscode/codex/claude)**. NFT track (T2, Step 3+)
+> is deferred. Code goes in **`AgentNet/src/`** (next to `plans/`); start as one repo.
+> First env target: **`core/` proven via a test script with a local keypair** (web/CLI come
+> after the core round-trips).
+
 **Philosophy: build bottom-up, not demo-first.** This isn't for a pitch — we stack from the
 most-shared base upward, so each layer is solid before the next sits on it. Order = **by how
 many things depend on it**, not by what looks impressive. `core/` first (everything uses it),
@@ -392,6 +399,11 @@ just compose `core/`, so neither is "the demo" — whichever, the base holds.
 
 Always prefer: **(1)** our own repos (iqlabs-*, iq-wide-web) → **(2)** a close OSS repo to copy
 → **(3)** only then write fresh.
+
+> **Reference repos go in `AgentNet/examples/` (git-ignored).** Shallow-clone the repos a
+> module needs (e.g. `opencode-claude-code-plugin`, `claude-code-webstorm` for runtime),
+> keep them open while coding to copy proven logic, and **delete them once that module is
+> done**. They're scratch references, never committed.
 
 ## Step 0 — `core/` (do this slowly + right; everything stands on it)
 
