@@ -12,6 +12,45 @@ export type {
   StorageAdapter,
 } from "./runtime/contract.js";
 
+export type {
+  SignerInput,
+  Session,
+  Skill,
+  Workflow,
+  Note,
+  Row,
+  ReadOptions,
+} from "./core/types.js";
+
+export {
+  init as initChain,
+  ensureDbRoot,
+  createTable,
+  writeRow,
+  readRows,
+  readRowsByPda,
+  codeIn,
+  readCodeIn,
+  tableExists,
+  getTablePdaRef,
+  signerAddress,
+} from "./core/chain.js";
+
+export {
+  AGENTNET_ROOT_ID,
+  mysessionsHint,
+  notesSkillHint,
+  notesAgentHint,
+  AUDIT_HINT,
+} from "./core/seed.js";
+
+export {
+  deriveSessionKey,
+  encryptForWallet,
+  decryptForWallet,
+  type SessionKey,
+} from "./core/crypto.js";
+
 export { createRuntime } from "./runtime/index.js";
 export { detectCli } from "./runtime/detect.js";
 export type { CliStatus, CliReport } from "./runtime/detect.js";
