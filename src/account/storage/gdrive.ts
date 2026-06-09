@@ -19,8 +19,12 @@ async function auth(): Promise<Record<string, string>> {
   return { Authorization: `Bearer ${await getAccessToken()}` };
 }
 
+// .txt so the file opens as text in Drive. The CONTENT is still encrypted JSONL
+// (one {senderPub,iv,ciphertext} line per message) — readable as text but not
+// decryptable without the wallet key. Privacy kept; the file is just openable.
+const EXT = ".txt";
 function name(sessionId: string): string {
-  return `${sessionId}.bin`;
+  return `${sessionId}${EXT}`;
 }
 
 // Find a folder by name under `parent` (or root), creating it if absent. Returns
@@ -136,8 +140,8 @@ export function gdriveStorage(): StorageAdapter {
       if (!res.ok) throw new Error(`drive list failed: ${res.status}`);
       const data = (await res.json()) as { files: { name: string }[] };
       return data.files
-        .filter((f) => f.name.endsWith(".bin"))
-        .map((f) => f.name.slice(0, -4));
+        .filter((f) => f.name.endsWith(EXT))
+        .map((f) => f.name.slice(0, -EXT.length));
     },
 
     async remove(sessionId) {

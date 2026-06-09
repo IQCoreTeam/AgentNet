@@ -7,13 +7,26 @@
 
 import type { StorageAdapter } from "../../runtime/contract.js";
 
-export function mirrorStorage(local: StorageAdapter, cloud?: StorageAdapter): StorageAdapter {
-  // cloud writes are best-effort; swallow errors so local stays the source of truth.
+// onCloudStatus (optional): notified after each cloud write attempt — "ok" on
+// success, "error" + message on failure. The UI uses it to show whether the drive
+// mirror is actually working (cloud writes are best-effort and otherwise silent, so
+// a misconfig looked like "nothing uploaded" with no signal).
+export type CloudStatus = { ok: true } | { ok: false; error: string };
+
+export function mirrorStorage(
+  local: StorageAdapter,
+  cloud?: StorageAdapter,
+  onCloudStatus?: (s: CloudStatus) => void,
+): StorageAdapter {
+  // cloud writes are best-effort; swallow errors so local stays the source of truth,
+  // but report the outcome so the UI can surface a broken mirror.
   const tryCloud = async (fn: () => Promise<void>) => {
     if (!cloud) return;
     try {
       await fn();
-    } catch {
+      onCloudStatus?.({ ok: true });
+    } catch (e) {
+      onCloudStatus?.({ ok: false, error: e instanceof Error ? e.message : String(e) });
       /* offline / not connected — local already succeeded */
     }
   };

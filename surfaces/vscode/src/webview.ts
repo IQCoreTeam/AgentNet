@@ -11,6 +11,8 @@
 //   partial:true  -> append the delta to the CURRENT bubble (streaming)
 //   partial:false -> that bubble is complete (start a new one next time)
 
+import { AVATAR_SVG, AVATAR_SCRIPT } from "./avatar.js";
+
 export function chatHtml(): string {
   return /* html */ `<!DOCTYPE html>
 <html lang="en">
@@ -30,9 +32,9 @@ export function chatHtml(): string {
   .card { background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border);
           border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
   .card.center { text-align: center; display: flex; flex-direction: column; gap: 8px; padding: 28px; align-items: center; }
-  #wAvatarBig { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center;
-                justify-content: center; font-size: 1.5em; color: #fff;
-                background: linear-gradient(135deg, #7c5cff, #3aa0ff); margin-bottom: 4px; }
+  #wAvatarBig { width: 44px; height: 44px; border-radius: 50%; overflow: hidden;
+                background: var(--vscode-editor-background); margin-bottom: 4px; }
+  #wAvatarBig svg { display: block; width: 100%; height: 100%; }
   .muted { opacity: 0.55; font-size: 0.85em; margin-bottom: 4px; }
   .small { font-size: 0.8em; margin-top: 8px; }
   #walletAddr { font-family: var(--vscode-editor-font-family); font-size: 0.9em; word-break: break-all; }
@@ -57,6 +59,9 @@ export function chatHtml(): string {
   #storagePill .link { background: none; border: none; padding: 0 2px; width: auto;
                        color: var(--vscode-textLink-foreground); cursor: pointer; font-size: 1em; }
   #storagePill .link:hover { text-decoration: underline; }
+  #cloudSync { font-size: 0.92em; }
+  #cloudSync.ok { color: var(--vscode-testing-iconPassed, #3a3); }
+  #cloudSync.err { color: var(--vscode-errorForeground, #e55); cursor: help; }
 
   #wrap { flex: 1; display: flex; min-height: 0; }
 
@@ -87,36 +92,42 @@ export function chatHtml(): string {
   #walletCard:hover { background: var(--vscode-list-hoverBackground); }
   #walletCard.active { border-top-color: var(--vscode-focusBorder);
                        box-shadow: inset 2px 0 0 var(--vscode-focusBorder); }
-  #wAvatar { width: 30px; height: 30px; border-radius: 50%; flex: none;
-             display: flex; align-items: center; justify-content: center;
-             font-size: 0.95em; font-weight: 600; color: #fff;
-             background: linear-gradient(135deg, #7c5cff, #3aa0ff); }
+  #wAvatar { width: 24px; height: 24px; border-radius: 50%; flex: none; overflow: hidden;
+             background: var(--vscode-editor-background); }
+  #wAvatar svg { display: block; width: 100%; height: 100%; }
   #wMeta { min-width: 0; flex: 1; }
   #wName { font-size: 0.86em; font-weight: 600; }
   #wAddr { font-size: 0.74em; opacity: 0.55; font-family: var(--vscode-editor-font-family);
            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #wCaret { opacity: 0.4; font-size: 0.7em; }
 
-  /* platform badge chip next to an assistant bubble */
-  .msgRow { display: flex; flex-direction: column; }
-  .msgRow.assistant, .msgRow.thinking, .msgRow.tool { align-items: flex-start; }
-  .msgRow.user { align-items: flex-end; }
-  .badge { font-size: 0.66em; opacity: 0.7; margin: 4px 2px 0; padding: 1px 7px;
+  /* right chat area */
+  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #log { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; }
+
+  /* a row = bubble (+ optional badge under it). The ROW owns left/right alignment;
+     the bubble just sizes to its content. (Was: bubble used align-self, which broke
+     once it got wrapped in a row.) */
+  .msgRow { display: flex; flex-direction: column; max-width: 85%; }
+  .msgRow.user { align-self: flex-end; align-items: flex-end; }
+  .msgRow.assistant, .msgRow.thinking, .msgRow.tool { align-self: flex-start; align-items: flex-start; }
+  .msg { margin: 6px 0; padding: 9px 13px; border-radius: 16px; white-space: pre-wrap; line-height: 1.45; }
+  /* chat-bubble feel: round, with the "tail" corner slightly tucked */
+  .msgRow.user .msg      { border-bottom-right-radius: 5px; }
+  .msgRow.assistant .msg { border-bottom-left-radius: 5px; }
+  .user      { background: var(--vscode-input-background); }
+  .assistant { background: var(--vscode-editorWidget-background); }
+  .thinking  { opacity: 0.55; font-style: italic; }
+  .tool      { opacity: 0.8; font-family: var(--vscode-editor-font-family); font-size: 0.9em; }
+  .cursor::after { content: "\\u258B"; opacity: 0.6; animation: blink 1s step-end infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* platform badge chip under an assistant bubble */
+  .badge { font-size: 0.66em; opacity: 0.7; margin: -2px 2px 4px; padding: 1px 7px;
            border-radius: 10px; font-weight: 600; letter-spacing: 0.02em;
            border: 1px solid transparent; }
   .badge.claude { color: #e9883a; border-color: #e9883a55; background: #e9883a18; }
   .badge.codex  { color: #3ac07a; border-color: #3ac07a55; background: #3ac07a18; }
-
-  /* right chat area */
-  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-  #log { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; }
-  .msg { margin: 6px 0; padding: 8px 10px; border-radius: 8px; white-space: pre-wrap; line-height: 1.4; max-width: 85%; }
-  .user      { background: var(--vscode-input-background); align-self: flex-end; }
-  .assistant { background: var(--vscode-editorWidget-background); align-self: flex-start; }
-  .thinking  { opacity: 0.55; font-style: italic; align-self: flex-start; }
-  .tool      { opacity: 0.8; font-family: var(--vscode-editor-font-family); font-size: 0.9em; align-self: flex-start; }
-  .cursor::after { content: "\\u258B"; opacity: 0.6; animation: blink 1s step-end infinite; }
-  @keyframes blink { 50% { opacity: 0; } }
 
   #controls { display: flex; gap: 8px; align-items: center; padding: 6px 10px;
               border-top: 1px solid var(--vscode-panel-border); font-size: 0.85em; }
@@ -144,6 +155,7 @@ export function chatHtml(): string {
       <span class="sep">·</span>
       <span id="cloudState"></span>
       <button id="cloudBtn" class="link"></button>
+      <span id="cloudSync" title="Drive sync status"></span>
     </div>
   </div>
   <div id="wrap">
@@ -157,7 +169,7 @@ export function chatHtml(): string {
       </div>
       <!-- wallet = agent: pinned bottom-left, always visible -->
       <div id="walletCard" title="My Wallet">
-        <div id="wAvatar">◆</div>
+        <div id="wAvatar"></div>
         <div id="wMeta">
           <div id="wName">My Wallet</div>
           <div id="wAddr">connecting…</div>
@@ -184,7 +196,7 @@ export function chatHtml(): string {
     <div class="page">
       <div id="backToChat" class="muted" style="cursor:pointer;margin-bottom:10px">‹ Back to chat</div>
       <div class="card center">
-        <div id="wAvatarBig">◆</div>
+        <div id="wAvatarBig"></div>
         <div class="addr" id="walletAddr">…</div>
         <div class="muted small" style="margin-top:0">This wallet is your agent.</div>
       </div>
@@ -207,6 +219,8 @@ export function chatHtml(): string {
     </div>
   </div>
 <script>
+  const AVATAR_SVG = ${JSON.stringify(AVATAR_SVG)};
+  ${AVATAR_SCRIPT}
   const vscode = acquireVsCodeApi();
   const log = document.getElementById('log');
   const input = document.getElementById('input');
@@ -300,9 +314,11 @@ export function chatHtml(): string {
     return el;
   }
   function onMessage(msg) {
-    // assistant replies get a badge for the CURRENT cli (the only one that paints
-    // into the active tab, so "current cli" == who actually answered).
-    const badge = msg.role === 'assistant' ? cli : undefined;
+    // Badge = the engine that ACTUALLY produced this message (msg.cli, stamped by
+    // the runtime). NO fallback to the current tab — if a message has no cli (old
+    // session saved before per-message cli), we show no badge rather than a wrong,
+    // tab-following one. So badges never flip when you switch tabs.
+    const badge = (msg.role === 'assistant' && msg.cli) ? msg.cli : undefined;
     if (msg.partial) {
       if (!streaming || streaming.dataset.role !== msg.role) {
         streaming = bubble(msg.role, false, badge);
@@ -435,9 +451,19 @@ export function chatHtml(): string {
     document.getElementById('walletAddr').textContent = full;
     document.getElementById('wAddr').textContent = address ? short(address) : 'not connected';
     document.getElementById('wName').textContent = address ? 'My Wallet (' + short(address) + ')' : 'My Wallet';
-    const av = address ? address.slice(0, 1).toUpperCase() : '◆';
-    document.getElementById('wAvatar').textContent = av;
-    document.getElementById('wAvatarBig').textContent = av;
+    // wallet-seeded character avatar (ported from solchat); same address = same face
+    const svg = address ? avatarSvg(address) : '';
+    document.getElementById('wAvatar').innerHTML = svg;
+    document.getElementById('wAvatarBig').innerHTML = svg;
+  }
+
+  // Drive sync indicator next to the pill: ✓ synced / ⚠ failed (hover = why).
+  function renderCloudSync(status) {
+    const el = document.getElementById('cloudSync');
+    if (!el) return;
+    if (!status || !cloudConnected) { el.textContent = ''; el.className = ''; el.title = ''; return; }
+    if (status.ok) { el.textContent = '✓'; el.className = 'ok'; el.title = 'Synced to Drive'; }
+    else { el.textContent = '⚠'; el.className = 'err'; el.title = 'Drive sync failed: ' + (status.error || 'unknown'); }
   }
 
   // My Wallet: storage summary mirrors the pill; address comes from the extension.
@@ -477,6 +503,7 @@ export function chatHtml(): string {
     else if (m.type === 'clear') { log.innerHTML = ''; streaming = null; resetPaging(); }
     else if (m.type === 'platform') setTab(m.cli); // extension switched CLI (e.g. on session open)
     else if (m.type === 'storage') { renderStorage(m.info, m.options); renderWalletStorage(); }
+    else if (m.type === 'cloudSync') renderCloudSync(m.status);
     else if (m.type === 'wallet') setWallet(m.address);
     else if (m.type === 'page') { hasMore = m.hasMore; pageCursor = m.cursor; }
     else if (m.type === 'older') {

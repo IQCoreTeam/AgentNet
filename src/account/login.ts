@@ -13,7 +13,7 @@ import { readFile, writeFile, rm } from "node:fs/promises";
 import { configFile, tokenFile, rootDir, ensureDir } from "../core/paths.js";
 import { buildStorage, type StorageConfig, type StorageKind } from "./storage/adapter.js";
 import { manualStorage } from "./storage/manual.js";
-import { mirrorStorage } from "./storage/mirror.js";
+import { mirrorStorage, type CloudStatus } from "./storage/mirror.js";
 import { googleLogin, isSignedIn, googleAccount } from "./storage/oauth.js";
 import type { StorageAdapter, Wallet } from "../runtime/contract.js";
 
@@ -56,11 +56,14 @@ export async function initialize(
 // Bind the wallet to storage. Local is ALWAYS on; a cloud backend mirrors it if
 // one was configured (config present). No cloud chosen yet → local-only, no error
 // (the "maybe later" path). Returns a MirrorStorage so the runtime is unchanged.
-export async function login(wallet: Wallet): Promise<Session> {
+export async function login(
+  wallet: Wallet,
+  onCloudStatus?: (s: CloudStatus) => void,
+): Promise<Session> {
   const local = manualStorage();
   const cfg = await readConfig();
   const cloud = cfg ? await buildStorage(cfg) : undefined;
-  return { wallet, storage: mirrorStorage(local, cloud) };
+  return { wallet, storage: mirrorStorage(local, cloud, onCloudStatus) };
 }
 
 // True if a CLOUD backend is connected (local is always on regardless).

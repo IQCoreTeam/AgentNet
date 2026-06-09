@@ -24,6 +24,15 @@ import { onboardingHtml } from "./onboarding";
 let wallet: Wallet | null = null;
 let runtime: AgentRuntime | null = null;
 
+// Latest drive-mirror sync result + a hook the chat panel sets so it can show it.
+// connect() reports per-write success/failure here (otherwise cloud writes are silent).
+let lastCloudStatus: { ok: boolean; error?: string } | null = null;
+let onCloudStatusChange: (() => void) | null = null;
+function cloudStatusCb(s: { ok: boolean; error?: string }) {
+  lastCloudStatus = s;
+  onCloudStatusChange?.();
+}
+
 export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand("agentnet.openChat", () => boot(context))
@@ -38,7 +47,7 @@ async function boot(context: vscode.ExtensionContext) {
   const seen = context.globalState.get<boolean>("onboarded");
   if (seen) {
     wallet = (await localWallet()).wallet;
-    runtime = await connect(wallet); // local always works; mirrors cloud if connected
+    runtime = await connect(wallet, cloudStatusCb); // local always works; mirrors cloud if connected
     openChat(context);
   } else {
     openOnboarding(context);
@@ -64,7 +73,7 @@ function openOnboarding(context: vscode.ExtensionContext) {
   async function finish(cfg?: StorageConfig) {
     if (cfg) await initialize(cfg, openExternal); // connect a cloud mirror (optional)
     await context.globalState.update("onboarded", true);
-    runtime = await connect(wallet!);
+    runtime = await connect(wallet!, cloudStatusCb);
     panel.dispose();
     openChat(context);
   }
@@ -118,13 +127,17 @@ async function openChat(context: vscode.ExtensionContext) {
   const slot = () => slots[cli];
 
   // A handle's output is only painted when ITS cli tab is the active one (so a
-  // background reply doesn't bleed into the other tab's log).
+  // background reply doesn't bleed into the other tab's log). The message already
+  // carries its own .cli (stamped by the runtime), so the webview badges the real
+  // engine per-message — correct even for a cross-CLI session.
   function wire(forCli: "claude" | "codex", h: SessionHandle) {
     h.onMessage((msg) => { if (cli === forCli) panel.webview.postMessage({ type: "message", msg }); });
     h.onTurnEnd(async () => { await pushSessions(); });
   }
 
   // Repaint the log for the current tab from its slot (history of pending session).
+  // Each stored message carries its own .cli, so badges reflect the engine that
+  // actually produced each turn — not the current tab.
   async function repaint() {
     panel.webview.postMessage({ type: "clear" });
     const id = slot().pendingId;
@@ -166,6 +179,13 @@ async function openChat(context: vscode.ExtensionContext) {
     const info = await getStorageInfo();
     panel.webview.postMessage({ type: "storage", info, options: STORAGE_OPTIONS });
   }
+
+  // Push the latest drive-mirror sync result to the pill (ok / error). Wired to the
+  // module-level callback so every cloud write updates the UI.
+  function pushCloudStatus() {
+    panel.webview.postMessage({ type: "cloudSync", status: lastCloudStatus });
+  }
+  onCloudStatusChange = pushCloudStatus;
 
   panel.webview.onDidReceiveMessage(async (m) => {
     switch (m?.type) {
@@ -222,7 +242,7 @@ async function openChat(context: vscode.ExtensionContext) {
         const cfg = await pickCloud();
         if (!cfg) break; // user dismissed
         await switchStorage(wallet!, cfg, openExternal);
-        runtime = await connect(wallet!);
+        runtime = await connect(wallet!, cloudStatusCb);
         await pushStorage();
         await pushSessions();
         break;
@@ -231,7 +251,7 @@ async function openChat(context: vscode.ExtensionContext) {
       case "connectCloud": {
         const cfg: StorageConfig = { kind: m.kind, location: m.location, authHeader: m.authHeader };
         await switchStorage(wallet!, cfg, openExternal);
-        runtime = await connect(wallet!);
+        runtime = await connect(wallet!, cloudStatusCb);
         await pushStorage();
         await pushSessions();
         break;
@@ -239,7 +259,7 @@ async function openChat(context: vscode.ExtensionContext) {
       // turn the cloud mirror OFF; local sessions stay
       case "disconnectCloud":
         await disconnectCloud();
-        runtime = await connect(wallet!);
+        runtime = await connect(wallet!, cloudStatusCb);
         await pushStorage();
         await pushSessions();
         break;
@@ -273,7 +293,10 @@ async function openChat(context: vscode.ExtensionContext) {
     }
   });
 
-  panel.onDidDispose(() => { slots.claude.handle?.stop(); slots.codex.handle?.stop(); });
+  panel.onDidDispose(() => {
+    slots.claude.handle?.stop(); slots.codex.handle?.stop();
+    if (onCloudStatusChange === pushCloudStatus) onCloudStatusChange = null;
+  });
 }
 
 // Native quick-pick for connecting a cloud from the chat header. Returns a

@@ -46,9 +46,12 @@ export function createRuntime(wallet: Wallet, storage: StorageAdapter): AgentRun
 
       const meta = () => ({ sessionId, cli: opts.cli, title, ts: Date.now() });
 
-      // Show the message to the UI, then append it to the encrypted log.
-      // Before sessionId is known, queue; flush() drains the queue once it is.
+      // Show the message to the UI, then append it to the encrypted log. Stamp the
+      // producing CLI on every message so the UI badges each turn with the right
+      // engine even in a cross-CLI session. Before sessionId is known, queue;
+      // flush() drains the queue once it is.
       const emit = (m: ChatMessage) => {
+        if (!m.cli) m.cli = opts.cli;
         if (!title && m.role === "user") title = m.text.slice(0, 60);
         for (const cb of msgCbs) cb(m);
         if (sessionId) void store.appendMessage(meta(), m);

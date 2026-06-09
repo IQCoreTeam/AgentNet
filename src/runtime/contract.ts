@@ -41,6 +41,10 @@ export interface ChatMessage {
   role: "user" | "assistant" | "thinking" | "tool";
   text: string;
   ts: number;
+  // which CLI produced this message. Stored per-message so a session continued
+  // across CLIs renders each turn with the RIGHT engine badge — independent of
+  // which tab is currently open. Optional for back-compat with older logs.
+  cli?: "claude" | "codex";
   partial?: boolean; // true = streaming delta (future); absent/false = complete
 }
 
