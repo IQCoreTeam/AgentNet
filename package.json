@@ -19,5 +19,8 @@
     "tsx": "^4.19.2",
     "tweetnacl": "^1.0.3",
     "typescript": "^5.6.0"
+  },
+  "dependencies": {
+    "@solana/spl-token": "^0.4.14"
   }
 }
