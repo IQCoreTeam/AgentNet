@@ -1,0 +1,197 @@
+// Skill NFT operations: publish (code-in → mint) and buy (atomic payment + mint).
+//
+// publishSkill: text → code-in txid → Token-2022 mint with uri=txid + traits
+// buySkill: star = atomic (transfer payment + mint token); price 0 = free equip
+
+import {
+  PublicKey,
+  SystemProgram,
+  Transaction,
+  type Connection,
+} from "@solana/web3.js";
+import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
+import {
+  codeIn,
+  writeRow,
+  signerAddress,
+  getTablePdaRef,
+  ensureDbRoot,
+  createTable,
+} from "../core/chain.js";
+import { AGENTNET_ROOT_ID, mysessionsHint } from "../core/seed.js";
+import type { Skill } from "../core/types.js";
+import { createSkillMint, mintSkillToken } from "./token2022.js";
+
+export interface PublishSkillInput {
+  name: string;
+  description: string;
+  text: string; // SKILL.md content (≤700B inline or chunked)
+  category?: string; // e.g. "clean-code"
+  hashtags?: string[]; // e.g. ["refactoring"]
+  price?: bigint; // lamports (0 = free)
+}
+
+/**
+ * Publish a skill to the on-chain skill hub.
+ *
+ * Steps:
+ * 1. code-in the skill text → get txid
+ * 2. create Token-2022 mint with uri=txid, NonTransferable, traits
+ * 3. write skill metadata to on-chain
+ *
+ * Returns: skill ID (mint address)
+ */
+export async function publishSkill(
+  conn: Connection,
+  signer: SignerInput,
+  input: PublishSkillInput,
+): Promise<string> {
+  // Ensure core structures exist.
+  await ensureDbRoot(signer);
+
+  // 1. code-in the skill text
+  const skillTextTxid = await codeIn(
+    signer,
+    input.text,
+    `${input.name}.md`,
+    "text/markdown",
+  );
+
+  // 2. create the Token-2022 mint
+  const creator = await signerAddress(signer);
+  const skillMintAddr = await createSkillMint(conn, signer, {
+    name: input.name,
+    symbol: input.name.substring(0, 8).toUpperCase(),
+    uri: skillTextTxid,
+    category: input.category,
+    hashtags: input.hashtags,
+  });
+
+  // 3. (optional) write skill metadata row for discovery
+  // This is for on-chain indexing if needed; the NFT collection is the source of truth.
+
+  return skillMintAddr.toBase58();
+}
+
+export interface BuySkillInput {
+  skillId: string; // skill mint address
+  buyerWallet: string; // wallet buying the skill (NOT always = signer)
+  price?: bigint; // price in lamports; 0 = free
+  creatorWallet: string; // for payment routing
+  iqFeePercent?: number; // IQ treasury fee (e.g. 0.05 = 5%)
+  iqTreasuryWallet?: string; // IQ fee recipient (default: protocol treasury)
+}
+
+const DEFAULT_IQ_TREASURY = "11111111111111111111111111111111"; // placeholder
+
+/**
+ * Buy a skill (star = soulbound purchase = equip).
+ *
+ * Atomic transaction:
+ * 1. If price > 0: transfer to creator + iqfee to treasury
+ * 2. Mint 1 skill token to buyer (supply++)
+ *
+ * The same function handles free (price=0) and paid purchases.
+ *
+ * Returns: tx signature
+ */
+export async function buySkill(
+  conn: Connection,
+  signer: SignerInput,
+  input: BuySkillInput,
+): Promise<string> {
+  const price = input.price ?? 0n;
+  const feePercent = input.iqFeePercent ?? 0.05; // 5% default
+  const buyer = new PublicKey(input.buyerWallet);
+  const creator = new PublicKey(input.creatorWallet);
+  const treasury = new PublicKey(input.iqTreasuryWallet ?? DEFAULT_IQ_TREASURY);
+  const skillMint = new PublicKey(input.skillId);
+  const payer = await signerAddress(signer);
+  const payerPk = new PublicKey(payer);
+
+  const tx = new Transaction();
+
+  // 1. If price > 0: transfer payment
+  if (price > 0n) {
+    const creatorShare = price - BigInt(Math.floor(Number(price) * feePercent));
+    const iqFee = price - creatorShare;
+
+    // Creator payment
+    tx.add(
+      SystemProgram.transfer({
+        fromPubkey: payerPk,
+        toPubkey: creator,
+        lamports: Number(creatorShare),
+      }),
+    );
+
+    // IQ fee
+    if (iqFee > 0n) {
+      tx.add(
+        SystemProgram.transfer({
+          fromPubkey: payerPk,
+          toPubkey: treasury,
+          lamports: Number(iqFee),
+        }),
+      );
+    }
+  }
+
+  // 2. Mint skill token to buyer (via mintSkillToken's internal logic)
+  // Note: This would normally be done via a separate instruction
+  // For now, we compose the mint instruction directly here
+  const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPvZeJ");
+
+  const {
+    createAssociatedTokenAccountInstruction,
+    getAssociatedTokenAddressSync,
+    createMintToInstruction,
+  } = await import("@solana/spl-token");
+
+  const ata = getAssociatedTokenAddressSync(skillMint, buyer, false, TOKEN_2022_PROGRAM_ID);
+
+  // Create ATA if needed
+  try {
+    await conn.getAccountInfo(ata);
+  } catch {
+    tx.add(
+      createAssociatedTokenAccountInstruction(
+        payerPk, // payer
+        ata, // associatedTokenAddress
+        buyer, // owner
+        skillMint, // mint
+        TOKEN_2022_PROGRAM_ID, // tokenProgramId
+      ),
+    );
+  }
+
+  // Mint 1 token
+  tx.add(
+    createMintToInstruction(
+      skillMint,
+      ata,
+      payerPk, // mint authority
+      1,
+      [],
+      TOKEN_2022_PROGRAM_ID,
+    ),
+  );
+
+  // Sign and send
+  const signerFull = signer as any;
+  const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash();
+  tx.recentBlockhash = blockhash;
+  tx.feePayer = payerPk;
+
+  if ("secretKey" in signerFull) {
+    tx.sign(signerFull);
+  } else if ("signTransaction" in signerFull) {
+    const signed = await signerFull.signTransaction(tx);
+    const sig = await conn.sendRawTransaction(signed.serialize());
+    return sig;
+  }
+
+  const sig = await conn.sendRawTransaction(tx.serialize());
+  await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
+  return sig;
+}

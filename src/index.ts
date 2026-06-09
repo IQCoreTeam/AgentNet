@@ -51,6 +51,14 @@ export {
   type SessionKey,
 } from "./core/crypto.js";
 
+export {
+  publishSkill,
+  buySkill,
+  createSkillMint,
+  mintSkillToken,
+} from "./nft/index.js";
+export type { PublishSkillInput, BuySkillInput } from "./nft/skill.js";
+
 export { createRuntime } from "./runtime/index.js";
 export { detectCli } from "./runtime/detect.js";
 export type { CliStatus, CliReport } from "./runtime/detect.js";
