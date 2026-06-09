@@ -9,6 +9,7 @@ import { parseClaudeLine } from "./convert/claude.js";
 import { parseCodexLine } from "./convert/codex.js";
 import type { LineParser } from "./convert/types.js";
 import { SessionStore } from "../account/store.js";
+import { prepareResume } from "./inject/index.js";
 import type {
   AgentRuntime,
   ChatMessage,
@@ -23,10 +24,21 @@ export function createRuntime(wallet: Wallet, storage: StorageAdapter): AgentRun
 
   return {
     async startSession(opts): Promise<SessionHandle> {
-      const cli = spawnCli(opts);
+      // RESUME: opts.sessionId is the CANONICAL id. Rewrite its history into the
+      // target cli's native jsonl and resume under the NATIVE id (claude/codex only
+      // accept their own ids) — this is what lets a session cross between CLIs.
+      // FRESH: no sessionId; the cli mints its own, which becomes the canonical id.
+      const resuming = !!opts.sessionId;
+      const nativeId = resuming
+        ? await prepareResume(store, opts.cli, opts.cwd, opts.sessionId!)
+        : undefined;
+
+      const cli = spawnCli({ ...opts, sessionId: nativeId });
       const parse: LineParser = opts.cli === "claude" ? parseClaudeLine : parseCodexLine;
 
-      let sessionId = opts.sessionId ?? ""; // "" until the CLI reveals its id
+      // Storage key stays the CANONICAL id while resuming; the cli's emitted (native)
+      // id must NOT overwrite it, or appended turns land in the wrong log.
+      let sessionId = opts.sessionId ?? ""; // canonical; "" until a fresh cli reveals it
       let title = "";
       const msgCbs: Array<(m: ChatMessage) => void> = [];
       const turnCbs: Array<() => void> = [];
@@ -49,6 +61,9 @@ export function createRuntime(wallet: Wallet, storage: StorageAdapter): AgentRun
 
       cli.lines.on("line", (line: string) => {
         const r = parse(line);
+        // Only a FRESH session adopts the cli's id as canonical. While resuming,
+        // sessionId is already the canonical id and the native threadId is already
+        // set in spawn (from nativeId), so we leave both untouched.
         if (r.sessionId && !sessionId) {
           sessionId = r.sessionId;
           cli.setSessionId?.(r.sessionId); // codex: resume this thread next turn
@@ -59,6 +74,32 @@ export function createRuntime(wallet: Wallet, storage: StorageAdapter): AgentRun
           void flush().then(() => {
             for (const cb of turnCbs) cb();
           });
+        }
+      });
+
+      // Surface failures instead of going silent: a crash / nonzero exit used to be
+      // swallowed (no "line", so the UI just waited forever). Show it as a tool
+      // message and end the turn so the UI unblocks. codex exits per turn with code
+      // 0 normally, so only a NONZERO exit is reported.
+      let sawError = false;
+      let stopped = false; // we asked it to stop (tab/model switch) → exit isn't an error
+      let stderr = "";     // collected so a real failure can show WHY
+      const fail = (text: string) => {
+        if (sawError) return;
+        sawError = true;
+        emit({ role: "tool", text, ts: Date.now() });
+        void flush().then(() => {
+          for (const cb of turnCbs) cb();
+        });
+      };
+      cli.lines.on("stderr", (s: string) => { stderr += s; });
+      cli.lines.on("error", (err: Error) => fail(`[${opts.cli} failed to start] ${err.message}`));
+      cli.lines.on("exit", (code: number | null, signal: string | null) => {
+        // 143/SIGTERM etc. from our own stop() is expected — don't report it.
+        if (stopped || signal === "SIGTERM" || signal === "SIGKILL") return;
+        if (code && code !== 0) {
+          const why = stderr.trim().split("\n").filter(Boolean).slice(-4).join("\n");
+          fail(`[${opts.cli} exited with code ${code}]\n${why || "(no stderr)"}`);
         }
       });
 
@@ -78,6 +119,7 @@ export function createRuntime(wallet: Wallet, storage: StorageAdapter): AgentRun
           turnCbs.push(cb);
         },
         stop() {
+          stopped = true; // mark so the resulting exit isn't reported as a failure
           cli.stop();
         },
       };
@@ -87,9 +129,12 @@ export function createRuntime(wallet: Wallet, storage: StorageAdapter): AgentRun
       return store.listMine();
     },
 
-    async loadSession(sessionId: string): Promise<ChatMessage[]> {
-      const s = await store.load(sessionId);
-      return s?.messages ?? [];
+    async loadSession(sessionId: string) {
+      return store.loadLatest(sessionId); // newest page + cursor to older
+    },
+
+    async loadMore(sessionId: string, cursor: number) {
+      return store.loadOlder(sessionId, cursor); // the page before `cursor`
     },
 
     async deleteSession(sessionId: string): Promise<void> {

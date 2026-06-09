@@ -136,7 +136,18 @@ pnpm test:run          # engine: claude+codex capture→encrypt→append→reloa
 ```
 
 - Tests use a temp AGENTNET_HOME, so they never pollute the real ~/.agentnet.
-- Only real gdrive needs GOOGLE_CLIENT_ID (Desktop-app). local/icloud/custom work with no config.
+- Only real gdrive needs Google OAuth creds (Desktop-app). local/icloud/custom work with no config.
+
+> ⚠️ **gdrive needs zo's Google OAuth client creds — ASK ZO.** Drive sync/sign-in
+> silently fails without them (cloud writes are best-effort and swallow errors, so a
+> missing client_id looks like "nothing uploaded"). The creds come from a Google Cloud
+> **Desktop-app** OAuth client (not secret for installed apps). Provide them via EITHER:
+> - env: `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, OR
+> - `~/.agentnet/config.json`: add `"google_client_id"` / `"google_client_secret"` keys
+>   (preferred — a VSCode-launched extension gets no shell env). See `oauth.ts` `configCreds()`.
+>
+> Sessions on Drive are PRIVATE (owner-only, we set no public/anyone permission) AND
+> AES-GCM encrypted with the wallet key — not public, unreadable even if seen.
 
 ---
 
@@ -181,7 +192,7 @@ flowchart LR
 | **T1-3** | **Make storage selection real** | Currently pinned to `manualStorage` → switch to the storage the user picked. gdrive needs `GOOGLE_CLIENT_ID`. | parts exist |
 | **T1-4** | **Multi-device verification** | Save on device A → `login` with same wallet on device B → confirm restore. (Same wallet = same key = decrypts; works by design, needs a real test.) | T1-1,2,3 |
 | **T1-5** | **Build other apps** | VSCode-like app for mobile / standalone CLI. All reuse the same `src/`; only the surface is new. | T1-1 |
-| **T1-6** | **Local↔cloud dedup** | Overlapping local + cloud records is bad. Source-of-truth policy: last-write-wins by file ts (v1) → smarter merge later. | T1-4 |
+| **T1-6** | **Local↔cloud dedup + cloud flush** | (a) Overlapping local + cloud records: last-write-wins by file ts (v1) → smarter merge later. (b) **Perf:** `mirror.ts` re-uploads the full session to append-less clouds (gdrive/custom) every turn → O(N²) for long sessions. Fix by batching cloud writes (flush every N turns/T sec; local stays per-turn). Low priority — correct today, only matters for long sessions. | T1-4 |
 
 **End state:** connect a wallet on your phone → yesterday's VSCode conversation is
 there, and the storage holds the encrypted session, neatly synced.

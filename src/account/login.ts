@@ -12,7 +12,9 @@
 import { readFile, writeFile, rm } from "node:fs/promises";
 import { configFile, tokenFile, rootDir, ensureDir } from "../core/paths.js";
 import { buildStorage, type StorageConfig, type StorageKind } from "./storage/adapter.js";
-import { googleLogin, isSignedIn } from "./storage/oauth.js";
+import { manualStorage } from "./storage/manual.js";
+import { mirrorStorage } from "./storage/mirror.js";
+import { googleLogin, isSignedIn, googleAccount } from "./storage/oauth.js";
 import type { StorageAdapter, Wallet } from "../runtime/contract.js";
 
 export interface Session {
@@ -51,13 +53,19 @@ export async function initialize(
   await writeConfig(cfg);
 }
 
-// Resume after initialize: rebuild the storage from saved config + bind the wallet.
-// Throws if not initialized yet (UI should call initialize first).
+// Bind the wallet to storage. Local is ALWAYS on; a cloud backend mirrors it if
+// one was configured (config present). No cloud chosen yet → local-only, no error
+// (the "maybe later" path). Returns a MirrorStorage so the runtime is unchanged.
 export async function login(wallet: Wallet): Promise<Session> {
+  const local = manualStorage();
   const cfg = await readConfig();
-  if (!cfg) throw new Error("not initialized — call initialize() with a storage choice first");
-  const storage = await buildStorage(cfg);
-  return { wallet, storage };
+  const cloud = cfg ? await buildStorage(cfg) : undefined;
+  return { wallet, storage: mirrorStorage(local, cloud) };
+}
+
+// True if a CLOUD backend is connected (local is always on regardless).
+export async function isCloudConnected(): Promise<boolean> {
+  return (await readConfig()) !== null;
 }
 
 // Which backend is configured right now (for the UI to show "Saving to: Google Drive").
@@ -71,13 +79,15 @@ export interface StorageInfo {
   kind: StorageKind;
   location?: string; // folder (icloud) or base URL (custom); undefined for gdrive/local
   connected: boolean; // gdrive: has a local token; others: always true once configured
+  account?: string;   // gdrive: the signed-in Google account (email), for display
 }
 
 export async function getStorageInfo(): Promise<StorageInfo | null> {
   const cfg = await readConfig();
   if (!cfg) return null;
   const connected = cfg.kind === "gdrive" ? await isSignedIn() : true;
-  return { kind: cfg.kind, location: cfg.location, connected };
+  const account = cfg.kind === "gdrive" && connected ? (await googleAccount()) ?? undefined : undefined;
+  return { kind: cfg.kind, location: cfg.location, connected, account };
 }
 
 // Change the storage backend later (the "use a different cloud?" UI). Same as
@@ -92,9 +102,13 @@ export async function switchStorage(
   return login(wallet);
 }
 
-// Disconnect: forget the storage choice and any OAuth token on THIS device.
-// Does not touch already-saved session blobs (they stay in the cloud/folder).
-export async function logout(): Promise<void> {
+// Turn the cloud mirror OFF: forget the cloud choice + OAuth token on THIS device.
+// Local sessions stay (login() falls back to local-only). You can reconnect later
+// with initialize() — this is the "add a cloud later / turn it off" toggle.
+export async function disconnectCloud(): Promise<void> {
   await rm(configFile(), { force: true });
   await rm(tokenFile("google"), { force: true });
 }
+
+/** @deprecated use disconnectCloud — kept for callers still importing logout. */
+export const logout = disconnectCloud;

@@ -13,11 +13,15 @@
 import { createServer } from "node:http";
 import { randomBytes, createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
-import { tokenFile, tokensDir, ensureDir } from "../../core/paths.js";
+import { readFileSync } from "node:fs";
+import { tokenFile, tokensDir, ensureDir, configFile } from "../../core/paths.js";
 
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
-const SCOPE = "https://www.googleapis.com/auth/drive.appdata";
+// drive.file = the app may only touch files IT created — but those files live in a
+// VISIBLE folder the user can open (unlike the old hidden drive.appdata). Changing
+// this scope INVALIDATES old tokens: the user must re-connect Google once.
+const SCOPE = "https://www.googleapis.com/auth/drive.file";
 const PROVIDER = "google";
 
 interface StoredToken {
@@ -26,13 +30,34 @@ interface StoredToken {
   expiry: number; // epoch ms
 }
 
+// OAuth client creds come from env (CI/dev) OR ~/.agentnet/config.json (so a
+// VSCode-launched extension, which gets no shell env, still has them). The
+// Desktop-app client_id/secret are not real secrets for installed apps, so keeping
+// them in the local config file is fine and avoids hardcoding them into the repo.
+function configCreds(): { id?: string; secret?: string } {
+  try {
+    const c = JSON.parse(readFileSync(configFile(), "utf8")) as {
+      google_client_id?: string;
+      google_client_secret?: string;
+    };
+    return { id: c.google_client_id, secret: c.google_client_secret };
+  } catch {
+    return {};
+  }
+}
+
 function clientId(): string {
-  const id = process.env.GOOGLE_CLIENT_ID;
-  if (!id) throw new Error("GOOGLE_CLIENT_ID not set (Desktop-app OAuth client)");
+  const id = process.env.GOOGLE_CLIENT_ID || configCreds().id;
+  if (!id) {
+    throw new Error(
+      "Google client id missing — set GOOGLE_CLIENT_ID or add \"google_client_id\" to ~/.agentnet/config.json",
+    );
+  }
   return id;
 }
 function clientSecret(): string {
-  return process.env.GOOGLE_CLIENT_SECRET || ""; // not secret for installed apps
+  // installed-app secret is not confidential; empty string is valid for pure PKCE
+  return process.env.GOOGLE_CLIENT_SECRET || configCreds().secret || "";
 }
 
 // PKCE: verifier + S256 challenge
@@ -139,6 +164,24 @@ export async function getAccessToken(): Promise<string> {
 
 export async function isSignedIn(): Promise<boolean> {
   return (await loadToken()) !== null;
+}
+
+// Best-effort: the email of the connected Google account, for the UI to show
+// "saving to Google Drive (you@gmail.com)". Returns null if not signed in or if
+// the Drive scope doesn't expose it (never throws, purely informational).
+export async function googleAccount(): Promise<string | null> {
+  try {
+    const token = await getAccessToken();
+    const res = await fetch(
+      "https://www.googleapis.com/drive/v3/about?fields=user(emailAddress,displayName)",
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as { user?: { emailAddress?: string; displayName?: string } };
+    return data.user?.emailAddress ?? data.user?.displayName ?? null;
+  } catch {
+    return null;
+  }
 }
 
 async function saveToken(tok: StoredToken): Promise<void> {

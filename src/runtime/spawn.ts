@@ -20,7 +20,9 @@ export interface SpawnedCli {
 export interface SpawnOpts {
   cli: "claude" | "codex";
   cwd: string;
-  sessionId?: string; // resume an existing session
+  // The NATIVE resume id for this cli (claude uuid / codex threadId), NOT the
+  // canonical id. runtime/index.ts resolves it via inject/prepareResume first.
+  sessionId?: string;
   model?: string;
 }
 
@@ -75,16 +77,20 @@ function spawnCodex(opts: SpawnOpts): SpawnedCli {
 
     const proc = spawn("codex", args, {
       cwd: opts.cwd,
-      stdio: ["ignore", "pipe", "pipe"],
+      // codex exec still probes stdin ("Reading additional input from stdin...");
+      // give it a real (empty) pipe and close it so it gets a clean EOF instead of
+      // hanging/erroring on an ignored fd (which exits 1 in some environments).
+      stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env },
     });
+    proc.stdin?.end(); // signal "no stdin input" right away
     current = proc;
 
     const rl = createInterface({ input: proc.stdout! });
     rl.on("line", (line) => lines.emit("line", line));
     proc.stderr?.on("data", (d: Buffer) => lines.emit("stderr", d.toString()));
     proc.on("error", (err) => lines.emit("error", err));
-    proc.on("exit", (code) => lines.emit("exit", code));
+    proc.on("exit", (code, signal) => lines.emit("exit", code, signal));
   };
 
   return {
@@ -109,6 +115,6 @@ function pipeLines(proc: ChildProcess): EventEmitter {
   rl.on("close", () => lines.emit("close"));
   proc.stderr?.on("data", (d: Buffer) => lines.emit("stderr", d.toString()));
   proc.on("error", (err) => lines.emit("error", err));
-  proc.on("exit", (code) => lines.emit("exit", code));
+  proc.on("exit", (code, signal) => lines.emit("exit", code, signal));
   return lines;
 }

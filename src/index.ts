@@ -16,10 +16,19 @@ export { createRuntime } from "./runtime/index.js";
 export { detectCli } from "./runtime/detect.js";
 export type { CliStatus, CliReport } from "./runtime/detect.js";
 export {
+  solanaDefaultKeypairPath,
+  inspectKeypair,
+  loadOrCreateWallet,
+  localWallet,
+} from "./account/localWallet.js";
+export type { WalletFileState, LoadResult } from "./account/localWallet.js";
+export {
   initialize,
   isInitialized,
+  isCloudConnected,
   login,
   logout,
+  disconnectCloud,
   switchStorage,
   currentStorageKind,
   getStorageInfo,
@@ -27,6 +36,7 @@ export {
 export { STORAGE_OPTIONS } from "./account/storage/adapter.js";
 export type { StorageConfig, StorageKind } from "./account/storage/adapter.js";
 export { manualStorage } from "./account/storage/manual.js";
+export { agentnetFolderLink } from "./account/storage/gdrive.js";
 
 import type { AgentRuntime, Wallet } from "./runtime/contract.js";
 import { createRuntime } from "./runtime/index.js";

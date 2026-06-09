@@ -1,16 +1,19 @@
-// Google Drive StorageAdapter — stores each session blob as one file in the
-// app-private appDataFolder (the user's other Drive files are never touched).
-// Docs: https://developers.google.com/workspace/drive/api/guides/appdata
+// Google Drive StorageAdapter — stores each session blob as one file inside a
+// VISIBLE folder "AgentNet/sessions" in the user's Drive, so the signed-in user
+// can actually open and see their own session files (the old appDataFolder was
+// hidden by Google and unviewable). With the drive.file scope we can still only
+// touch files THIS app created — the user's other Drive files are never seen.
 //
-// Filename = "<sessionId>.bin". To avoid duplicates we look up the file id by
-// name first: exists → PATCH (overwrite), else → POST (create). No append API on
-// Drive, so put() uploads the whole blob — fine because the blob is a small log.
+// Filename = "<sessionId>.bin". Look up by name within the folder first: exists →
+// PATCH (overwrite), else → POST (create). No append API, so put() uploads the
+// whole blob — fine because the blob is a small log.
 
 import { getAccessToken } from "./oauth.js";
 import type { StorageAdapter } from "../../runtime/contract.js";
 
 const UPLOAD = "https://www.googleapis.com/upload/drive/v3/files";
 const FILES = "https://www.googleapis.com/drive/v3/files";
+const FOLDER_MIME = "application/vnd.google-apps.folder";
 
 async function auth(): Promise<Record<string, string>> {
   return { Authorization: `Bearer ${await getAccessToken()}` };
@@ -20,11 +23,67 @@ function name(sessionId: string): string {
   return `${sessionId}.bin`;
 }
 
-// Find the Drive file id for a sessionId in appDataFolder, or null.
+// Find a folder by name under `parent` (or root), creating it if absent. Returns
+// its id. Cached per-process so we don't re-resolve the folder every call.
+const folderCache = new Map<string, string>();
+async function ensureFolder(folderName: string, parent?: string): Promise<string> {
+  const cacheKey = `${parent ?? "root"}/${folderName}`;
+  const cached = folderCache.get(cacheKey);
+  if (cached) return cached;
+
+  const parentClause = parent ? ` and '${parent}' in parents` : "";
+  const q = encodeURIComponent(
+    `name='${folderName}' and mimeType='${FOLDER_MIME}' and trashed=false${parentClause}`,
+  );
+  const res = await fetch(`${FILES}?q=${q}&fields=files(id)`, { headers: await auth() });
+  if (!res.ok) throw new Error(`drive folder lookup failed: ${res.status}`);
+  const found = ((await res.json()) as { files: { id: string }[] }).files[0]?.id;
+  if (found) {
+    folderCache.set(cacheKey, found);
+    return found;
+  }
+
+  const meta: Record<string, unknown> = { name: folderName, mimeType: FOLDER_MIME };
+  if (parent) meta.parents = [parent];
+  const create = await fetch(`${FILES}?fields=id`, {
+    method: "POST",
+    headers: { ...(await auth()), "Content-Type": "application/json" },
+    body: JSON.stringify(meta),
+  });
+  if (!create.ok) throw new Error(`drive folder create failed: ${create.status}`);
+  const id = ((await create.json()) as { id: string }).id;
+  folderCache.set(cacheKey, id);
+  return id;
+}
+
+// The "AgentNet/sessions" folder id (created on first use).
+async function sessionsFolder(): Promise<string> {
+  const agentnet = await ensureFolder("AgentNet");
+  return ensureFolder("sessions", agentnet);
+}
+
+// The user-openable URL of the visible "AgentNet" folder (only they can see it).
+// Returned to the UI so "open cloud" jumps straight to the folder instead of a
+// search that may not match. null if not signed in / folder not created yet.
+export async function agentnetFolderLink(): Promise<string | null> {
+  try {
+    const q = encodeURIComponent(
+      `name='AgentNet' and mimeType='${FOLDER_MIME}' and trashed=false`,
+    );
+    const res = await fetch(`${FILES}?q=${q}&fields=files(webViewLink)`, { headers: await auth() });
+    if (!res.ok) return null;
+    const f = ((await res.json()) as { files: { webViewLink?: string }[] }).files[0];
+    return f?.webViewLink ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Find the Drive file id for a sessionId inside the sessions folder, or null.
 async function findId(sessionId: string): Promise<string | null> {
-  const q = encodeURIComponent(`name='${name(sessionId)}'`);
-  const url = `${FILES}?spaces=appDataFolder&q=${q}&fields=files(id)`;
-  const res = await fetch(url, { headers: await auth() });
+  const folder = await sessionsFolder();
+  const q = encodeURIComponent(`name='${name(sessionId)}' and '${folder}' in parents and trashed=false`);
+  const res = await fetch(`${FILES}?q=${q}&fields=files(id)`, { headers: await auth() });
   if (!res.ok) throw new Error(`drive list failed: ${res.status}`);
   const data = (await res.json()) as { files: { id: string }[] };
   return data.files[0]?.id ?? null;
@@ -43,9 +102,10 @@ export function gdriveStorage(): StorageAdapter {
         });
         if (!res.ok) throw new Error(`drive update failed: ${res.status}`);
       } else {
-        // create new file in appDataFolder (multipart: metadata + content)
+        // create the file inside the visible AgentNet/sessions folder
+        const folder = await sessionsFolder();
         const boundary = "agentnet" + Math.random().toString(36).slice(2);
-        const meta = JSON.stringify({ name: name(sessionId), parents: ["appDataFolder"] });
+        const meta = JSON.stringify({ name: name(sessionId), parents: [folder] });
         const body = buildMultipart(boundary, meta, blob);
         const res = await fetch(`${UPLOAD}?uploadType=multipart`, {
           method: "POST",
@@ -69,7 +129,9 @@ export function gdriveStorage(): StorageAdapter {
     },
 
     async list() {
-      const url = `${FILES}?spaces=appDataFolder&fields=files(name)&pageSize=1000`;
+      const folder = await sessionsFolder();
+      const q = encodeURIComponent(`'${folder}' in parents and trashed=false`);
+      const url = `${FILES}?q=${q}&fields=files(name)&pageSize=1000`;
       const res = await fetch(url, { headers: await auth() });
       if (!res.ok) throw new Error(`drive list failed: ${res.status}`);
       const data = (await res.json()) as { files: { name: string }[] };

@@ -21,12 +21,42 @@ export function chatHtml(): string {
   body { font-family: var(--vscode-font-family); margin: 0; color: var(--vscode-foreground);
          background: var(--vscode-editor-background); display: flex; flex-direction: column; height: 100vh; }
 
-  /* top platform tabs (claude code | codex) */
-  #tabs { display: flex; border-bottom: 1px solid var(--vscode-panel-border); }
+  /* chat / wallet panels (wallet entered via the bottom-left card, not a top tab) */
+  .panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+  /* wallet/skills pages */
+  .page { max-width: 520px; margin: 0 auto; padding: 28px 20px; width: 100%; box-sizing: border-box; }
+  .page h2 { margin: 0 0 16px; font-size: 1.25em; }
+  .card { background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border);
+          border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+  .card.center { text-align: center; display: flex; flex-direction: column; gap: 8px; padding: 28px; align-items: center; }
+  #wAvatarBig { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center;
+                justify-content: center; font-size: 1.5em; color: #fff;
+                background: linear-gradient(135deg, #7c5cff, #3aa0ff); margin-bottom: 4px; }
+  .muted { opacity: 0.55; font-size: 0.85em; margin-bottom: 4px; }
+  .small { font-size: 0.8em; margin-top: 8px; }
+  #walletAddr { font-family: var(--vscode-editor-font-family); font-size: 0.9em; word-break: break-all; }
+  .danger { width: 100%; margin-top: 4px; background: var(--vscode-inputValidation-errorBackground, #5a1d1d);
+            color: var(--vscode-foreground); border: 1px solid var(--vscode-inputValidation-errorBorder, #be1100); }
+  .danger:hover { filter: brightness(1.15); }
+
+  /* top platform tabs (claude code | codex) + storage pill on the right */
+  #tabs { display: flex; align-items: center; border-bottom: 1px solid var(--vscode-panel-border); }
   .tab { padding: 10px 16px; cursor: pointer; font-size: 0.9em; opacity: 0.6;
          border-bottom: 2px solid transparent; user-select: none; }
   .tab:hover { opacity: 0.85; }
   .tab.active { opacity: 1; border-bottom-color: var(--vscode-focusBorder); }
+  #storagePill { margin-left: auto; padding: 0 12px; display: flex; align-items: center; gap: 5px;
+                 font-size: 0.8em; opacity: 0.85; }
+  #storagePill .dot { font-size: 0.7em; }
+  #storagePill .dot.local { color: var(--vscode-testing-iconPassed, #3a3); }
+  #storagePill .dot.cloud-on { color: var(--vscode-testing-iconPassed, #3a3); }
+  #storagePill .dot.cloud-off { color: var(--vscode-disabledForeground, #888); }
+  #storagePill .sep { opacity: 0.4; }
+  #storagePill .acct { opacity: 0.5; }
+  #storagePill .link { background: none; border: none; padding: 0 2px; width: auto;
+                       color: var(--vscode-textLink-foreground); cursor: pointer; font-size: 1em; }
+  #storagePill .link:hover { text-decoration: underline; }
 
   #wrap { flex: 1; display: flex; min-height: 0; }
 
@@ -47,6 +77,35 @@ export function chatHtml(): string {
   #showAll:hover { opacity: 1; }
   #empty { opacity: 0.4; text-align: center; padding: 24px 12px; font-size: 0.85em; }
   #newBtn { margin: 8px 12px; }
+
+  /* sessions scroll; wallet card pinned to the BOTTOM of the sidebar */
+  #sessScroll { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+  /* the wallet = the agent. always visible, bottom-left, "this is mine" */
+  #walletCard { border-top: 1px solid var(--vscode-panel-border); padding: 10px 12px;
+                display: flex; align-items: center; gap: 9px; cursor: pointer;
+                background: var(--vscode-editorWidget-background); user-select: none; }
+  #walletCard:hover { background: var(--vscode-list-hoverBackground); }
+  #walletCard.active { border-top-color: var(--vscode-focusBorder);
+                       box-shadow: inset 2px 0 0 var(--vscode-focusBorder); }
+  #wAvatar { width: 30px; height: 30px; border-radius: 50%; flex: none;
+             display: flex; align-items: center; justify-content: center;
+             font-size: 0.95em; font-weight: 600; color: #fff;
+             background: linear-gradient(135deg, #7c5cff, #3aa0ff); }
+  #wMeta { min-width: 0; flex: 1; }
+  #wName { font-size: 0.86em; font-weight: 600; }
+  #wAddr { font-size: 0.74em; opacity: 0.55; font-family: var(--vscode-editor-font-family);
+           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #wCaret { opacity: 0.4; font-size: 0.7em; }
+
+  /* platform badge chip next to an assistant bubble */
+  .msgRow { display: flex; flex-direction: column; }
+  .msgRow.assistant, .msgRow.thinking, .msgRow.tool { align-items: flex-start; }
+  .msgRow.user { align-items: flex-end; }
+  .badge { font-size: 0.66em; opacity: 0.7; margin: 4px 2px 0; padding: 1px 7px;
+           border-radius: 10px; font-weight: 600; letter-spacing: 0.02em;
+           border: 1px solid transparent; }
+  .badge.claude { color: #e9883a; border-color: #e9883a55; background: #e9883a18; }
+  .badge.codex  { color: #3ac07a; border-color: #3ac07a55; background: #3ac07a18; }
 
   /* right chat area */
   #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
@@ -73,17 +132,38 @@ export function chatHtml(): string {
 </style>
 </head>
 <body>
+  <!-- No top tab bar: the wallet card (bottom-left) is the entry to My Wallet. -->
+
+  <!-- CHAT view -->
+  <div id="chatView" class="panel">
   <div id="tabs">
     <div class="tab active" data-cli="claude">claude code</div>
     <div class="tab" data-cli="codex">codex</div>
+    <div id="storagePill" title="Where sessions are saved">
+      <span class="dot local">●</span><span>Local</span>
+      <span class="sep">·</span>
+      <span id="cloudState"></span>
+      <button id="cloudBtn" class="link"></button>
+    </div>
   </div>
   <div id="wrap">
     <div id="sidebar">
-      <h3>Sessions</h3>
-      <div id="sessList"></div>
-      <div id="showAll" style="display:none"></div>
-      <div id="empty" style="display:none">No sessions yet.<br/>Start a chat below.</div>
-      <button id="newBtn">+ New</button>
+      <div id="sessScroll">
+        <h3>Sessions</h3>
+        <div id="sessList"></div>
+        <div id="showAll" style="display:none"></div>
+        <div id="empty" style="display:none">No sessions yet.<br/>Start a chat below.</div>
+        <button id="newBtn">+ New</button>
+      </div>
+      <!-- wallet = agent: pinned bottom-left, always visible -->
+      <div id="walletCard" title="My Wallet">
+        <div id="wAvatar">◆</div>
+        <div id="wMeta">
+          <div id="wName">My Wallet</div>
+          <div id="wAddr">connecting…</div>
+        </div>
+        <span id="wCaret">▸</span>
+      </div>
     </div>
     <div id="main">
       <div id="log"></div>
@@ -95,6 +175,35 @@ export function chatHtml(): string {
         <textarea id="input" rows="1" placeholder="Message claude/codex... (Enter to send)"></textarea>
         <button id="send">Send</button>
       </div>
+    </div>
+  </div>
+  </div><!-- /chatView -->
+
+  <!-- MY WALLET view (Skills now lives INSIDE here) -->
+  <div id="walletView" class="panel" style="display:none">
+    <div class="page">
+      <div id="backToChat" class="muted" style="cursor:pointer;margin-bottom:10px">‹ Back to chat</div>
+      <div class="card center">
+        <div id="wAvatarBig">◆</div>
+        <div class="addr" id="walletAddr">…</div>
+        <div class="muted small" style="margin-top:0">This wallet is your agent.</div>
+      </div>
+      <div class="card">
+        <div class="muted">Storage</div>
+        <div id="walletStorage">…</div>
+      </div>
+      <div class="card">
+        <div class="muted">Skills</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+          <div style="font-size:1.6em">🧩</div>
+          <div>
+            <div>On-chain skills are coming soon.</div>
+            <div class="muted small" style="margin-top:2px">Buy, equip, and collect agent skills (Token-2022, soulbound). Not live yet.</div>
+          </div>
+        </div>
+      </div>
+      <button class="danger" id="disconnectWalletBtn">Disconnect wallet</button>
+      <div class="muted small">Disconnecting returns you to the connect screen. Your encrypted local sessions stay on this device.</div>
     </div>
   </div>
 <script>
@@ -142,11 +251,15 @@ export function chatHtml(): string {
       modelSel.appendChild(o);
     }
   }
-  function selectTab(next) {
-    if (next === cli) return;
+  function setTab(next) {
+    if (next !== 'claude' && next !== 'codex') return;
     cli = next;
     tabs.forEach(t => t.classList.toggle('active', t.dataset.cli === cli));
     fillModels();
+  }
+  function selectTab(next) {
+    if (next === cli) return;
+    setTab(next);
     vscode.postMessage({ type: 'platform', cli });
     vscode.postMessage({ type: 'model', model: modelSel.value });
   }
@@ -166,17 +279,33 @@ export function chatHtml(): string {
   }
 
   // ---- chat bubbles ----
-  function bubble(role) {
+  // Each message is a row (bubble + optional platform badge). prepend=true inserts
+  // at the TOP (older messages on scroll-up) and does NOT auto-scroll.
+  // badgeCli (claude|codex) shows a chip under assistant replies so you can tell
+  // WHICH engine answered — essential once a session is continued across CLIs.
+  function bubble(role, prepend, badgeCli) {
+    const row = document.createElement('div');
+    row.className = 'msgRow ' + role;
     const el = document.createElement('div');
     el.className = 'msg ' + role;
-    log.appendChild(el);
-    log.scrollTop = log.scrollHeight;
+    row.appendChild(el);
+    if (badgeCli && (role === 'assistant')) {
+      const b = document.createElement('div');
+      b.className = 'badge ' + badgeCli;
+      b.textContent = badgeCli === 'codex' ? 'codex · gpt' : 'claude';
+      row.appendChild(b);
+    }
+    if (prepend) log.insertBefore(row, log.firstChild);
+    else { log.appendChild(row); log.scrollTop = log.scrollHeight; }
     return el;
   }
   function onMessage(msg) {
+    // assistant replies get a badge for the CURRENT cli (the only one that paints
+    // into the active tab, so "current cli" == who actually answered).
+    const badge = msg.role === 'assistant' ? cli : undefined;
     if (msg.partial) {
       if (!streaming || streaming.dataset.role !== msg.role) {
-        streaming = bubble(msg.role);
+        streaming = bubble(msg.role, false, badge);
         streaming.dataset.role = msg.role;
         streaming.classList.add('cursor');
       }
@@ -187,7 +316,7 @@ export function chatHtml(): string {
         streaming.classList.remove('cursor');
         streaming = null;
       } else {
-        bubble(msg.role).textContent = msg.text;
+        bubble(msg.role, false, badge).textContent = msg.text;
       }
     }
     log.scrollTop = log.scrollHeight;
@@ -216,6 +345,8 @@ export function chatHtml(): string {
         vscode.postMessage({ type: 'delete', sessionId: s.sessionId });
       };
       el.appendChild(title); el.appendChild(time); el.appendChild(del);
+      // cross-CLI: clicking opens the session in the CURRENT tab's cli, so we no
+      // longer send the session's own cli (the extension ignores it).
       el.onclick = () => vscode.postMessage({ type: 'open', sessionId: s.sessionId });
       sessList.appendChild(el);
     }
@@ -244,14 +375,118 @@ export function chatHtml(): string {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   });
 
+  // ---- storage pill (Local always on; Cloud optional mirror) ----
+  const cloudState = document.getElementById('cloudState');
+  const cloudBtn = document.getElementById('cloudBtn');
+  let storageOptions = [];
+  let cloudConnected = false;
+
+  function renderStorage(info, options) {
+    storageOptions = options || storageOptions;
+    cloudConnected = !!(info && info.connected);
+    if (cloudConnected) {
+      const label = (info.kind === 'gdrive' ? 'Google Drive'
+                  : info.kind === 'icloud' ? 'iCloud'
+                  : info.kind === 'custom' ? 'Cloud' : info.kind);
+      // label links to the provider (gdrive opens drive.google.com); account
+      // (the signed-in email) shows in muted text after it.
+      const linkable = info.kind === 'gdrive';
+      const acct = info.account ? ' <span class="acct">(' + info.account + ')</span>' : '';
+      cloudState.innerHTML = '<span class="dot cloud-on">●</span>'
+        + (linkable ? '<a href="#" id="cloudLink" class="link">' + label + '</a>' : label)
+        + acct;
+      const link = document.getElementById('cloudLink');
+      if (link) link.addEventListener('click', (e) => {
+        e.preventDefault();
+        vscode.postMessage({ type: 'openCloud', kind: info.kind });
+      });
+      cloudBtn.textContent = 'disconnect';
+    } else {
+      cloudState.innerHTML = '<span class="dot cloud-off">●</span>No cloud';
+      cloudBtn.textContent = 'connect';
+    }
+  }
+
+  // connect = pick from a tiny prompt list; disconnect = turn the mirror off.
+  cloudBtn.addEventListener('click', () => {
+    if (cloudConnected) { vscode.postMessage({ type: 'disconnectCloud' }); return; }
+    vscode.postMessage({ type: 'pickCloud' }); // extension shows a native quick-pick
+  });
+
+  // ---- view switcher: Chat <-> My Wallet (the wallet card is the entry) ----
+  const panels = {
+    chat: document.getElementById('chatView'),
+    wallet: document.getElementById('walletView'),
+  };
+  const walletCard = document.getElementById('walletCard');
+  function showView(name) {
+    for (const k in panels) panels[k].style.display = (k === name) ? 'flex' : 'none';
+    walletCard.classList.toggle('active', name === 'wallet');
+    if (name === 'wallet') vscode.postMessage({ type: 'wallet' }); // refresh address
+  }
+  walletCard.addEventListener('click', () => showView('wallet'));
+  document.getElementById('backToChat').addEventListener('click', () => showView('chat'));
+
+  // Fill BOTH the bottom-left card and the full wallet page from one address.
+  // Card shows "My Wallet (wdf..ere)"; the page shows the full address.
+  function short(a) { return a && a.length > 10 ? a.slice(0, 4) + '..' + a.slice(-3) : a; }
+  function setWallet(address) {
+    const full = address || '(not connected)';
+    document.getElementById('walletAddr').textContent = full;
+    document.getElementById('wAddr').textContent = address ? short(address) : 'not connected';
+    document.getElementById('wName').textContent = address ? 'My Wallet (' + short(address) + ')' : 'My Wallet';
+    const av = address ? address.slice(0, 1).toUpperCase() : '◆';
+    document.getElementById('wAvatar').textContent = av;
+    document.getElementById('wAvatarBig').textContent = av;
+  }
+
+  // My Wallet: storage summary mirrors the pill; address comes from the extension.
+  function renderWalletStorage() {
+    const el = document.getElementById('walletStorage');
+    el.textContent = cloudConnected ? 'Local + cloud mirror (connected)' : 'Local only (no cloud)';
+  }
+  document.getElementById('disconnectWalletBtn').addEventListener('click', () => {
+    vscode.postMessage({ type: 'disconnectWallet' });
+  });
+
+  // ---- scroll-to-top → load older page ----
+  let pageCursor = null;   // cursor for the NEXT older page (null = none / at start)
+  let hasMore = false;     // older pages exist?
+  let loadingOlder = false;
+  function resetPaging() { pageCursor = null; hasMore = false; loadingOlder = false; }
+
+  // Prepend older messages while keeping the viewport pinned (no jump): measure
+  // scroll height before/after and restore the offset.
+  function prependOlder(messages) {
+    const before = log.scrollHeight;
+    for (let i = messages.length - 1; i >= 0; i--) bubble(messages[i].role, true).textContent = messages[i].text;
+    log.scrollTop += log.scrollHeight - before;
+  }
+
+  log.addEventListener('scroll', () => {
+    if (log.scrollTop <= 8 && hasMore && !loadingOlder && pageCursor !== null) {
+      loadingOlder = true;
+      vscode.postMessage({ type: 'loadMore', cursor: pageCursor });
+    }
+  });
+
   window.addEventListener('message', (event) => {
     const m = event.data;
     if (m.type === 'message') onMessage(m.msg);
     else if (m.type === 'sessions') { allSessions = m.list || []; activeId = m.activeId; renderSessions(); }
-    else if (m.type === 'clear') { log.innerHTML = ''; streaming = null; }
+    else if (m.type === 'clear') { log.innerHTML = ''; streaming = null; resetPaging(); }
+    else if (m.type === 'platform') setTab(m.cli); // extension switched CLI (e.g. on session open)
+    else if (m.type === 'storage') { renderStorage(m.info, m.options); renderWalletStorage(); }
+    else if (m.type === 'wallet') setWallet(m.address);
+    else if (m.type === 'page') { hasMore = m.hasMore; pageCursor = m.cursor; }
+    else if (m.type === 'older') {
+      prependOlder(m.messages || []);
+      hasMore = m.hasMore; pageCursor = m.cursor; loadingOlder = false;
+    }
   });
 
   vscode.postMessage({ type: 'ready' });
+  vscode.postMessage({ type: 'wallet' }); // fill the bottom-left wallet card on load
 </script>
 </body>
 </html>`;
