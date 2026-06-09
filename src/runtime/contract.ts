@@ -41,6 +41,10 @@ export interface ChatMessage {
   role: "user" | "assistant" | "thinking" | "tool";
   text: string;
   ts: number;
+  // which CLI produced this message. Stored per-message so a session continued
+  // across CLIs renders each turn with the RIGHT engine badge — independent of
+  // which tab is currently open. Optional for back-compat with older logs.
+  cli?: "claude" | "codex";
   partial?: boolean; // true = streaming delta (future); absent/false = complete
 }
 
@@ -68,12 +72,24 @@ export interface AgentRuntime {
   // list the wallet's saved sessions (for the UI's session list)
   listSessions(): Promise<SessionMeta[]>;
 
-  // load a saved session's past messages (so a resumed session shows its history).
-  // Returns [] if not found. Call this on resume BEFORE startSession to repaint.
-  loadSession(sessionId: string): Promise<ChatMessage[]>;
+  // load a saved session's NEWEST page (paginated). Returns the latest messages +
+  // whether older pages exist + an opaque cursor for loadMore. Call on resume to
+  // repaint the recent history; scroll-to-top → loadMore.
+  loadSession(sessionId: string): Promise<PageResult>;
 
-  // delete a saved session (storage blob). The UI removes it from the list.
+  // load the page BEFORE `cursor` (older messages, for scroll-up). Prepend its
+  // messages; use the returned cursor/hasMore for the next step.
+  loadMore(sessionId: string, cursor: number): Promise<PageResult>;
+
+  // delete a saved session (all its pages). The UI removes it from the list.
   deleteSession(sessionId: string): Promise<void>;
+}
+
+// paginated read result (newest-first; cursor walks toward older pages)
+export interface PageResult {
+  messages: ChatMessage[]; // one page, oldest→newest within the page
+  hasMore: boolean; // older pages exist
+  cursor: number | null; // pass to loadMore for the previous page; null = no older
 }
 
 // ── persisted forms ─────────────────────────────────────

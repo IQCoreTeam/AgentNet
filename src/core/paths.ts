@@ -44,6 +44,35 @@ export function gitDir(): string {
   return join(rootDir(), "git");
 }
 
+/** canonicalId -> per-CLI native id map (resume injection). Local, never synced. */
+export function cliMapFile(): string {
+  return join(rootDir(), "cli-map.json");
+}
+
+// ── the CLIs' own homes (we inject native session files INTO these) ──
+// Cross-CLI resume rewrites a canonical session into claude/codex's native
+// jsonl at the exact path that CLI reads, so `--resume` continues it.
+
+/** Claude Code config home. Override: CLAUDE_CONFIG_DIR. */
+export function claudeHome(): string {
+  return process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+}
+
+/** Claude stores a session per cwd: projects/{cwd with "/" -> "-"}/{uuid}.jsonl */
+export function claudeProjectDir(cwd: string): string {
+  return join(claudeHome(), "projects", cwd.replaceAll("/", "-"));
+}
+
+/** Codex config home. Override: CODEX_HOME. */
+export function codexHome(): string {
+  return process.env.CODEX_HOME || join(homedir(), ".codex");
+}
+
+/** Codex stores sessions under sessions/YYYY/MM/DD/rollout-<iso>-<threadId>.jsonl */
+export function codexSessionsDir(): string {
+  return join(codexHome(), "sessions");
+}
+
 /** Ensure a directory exists (mkdir -p). Call before writing into it. */
 export async function ensureDir(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });
