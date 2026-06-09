@@ -5,22 +5,16 @@
 //   handle.onMessage → webview "message" (CLI output → panel)
 
 import * as vscode from "vscode";
-import type { AgentRuntime, SessionHandle, Wallet } from "../../../src/runtime/contract";
+import type { AgentRuntime, SessionHandle } from "../../../src/runtime/contract";
 import { createRuntime } from "../../../src/runtime/index";
 import { manualStorage } from "../../../src/account/storage/manual";
+import { testWallet } from "../../../src/account/keypairWallet";
 import { chatHtml } from "./webview";
-import nacl from "tweetnacl";
 
 // TEMP wallet — a fixed local keypair stands in for Phantom until wallet-connect
-// is wired. signMessage must be deterministic (same key → same session crypto).
-// Replaced later by: const { wallet, storage } = await login(phantom).
-const kp = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(7));
-const wallet: Wallet = {
-  address: "TESTWALLET",
-  async signMessage(msg) {
-    return nacl.sign.detached(msg, kp.secretKey);
-  },
-};
+// is wired. testWallet provides the full Wallet (signMessage + signTransaction),
+// so on-chain code can run against it too. Replaced later by a real Phantom adapter.
+const wallet = testWallet();
 
 // Real runtime over local storage (swap manualStorage → login() result for cloud).
 const runtime: AgentRuntime = createRuntime(wallet, manualStorage());

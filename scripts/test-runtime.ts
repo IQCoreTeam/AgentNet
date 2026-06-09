@@ -10,20 +10,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 process.env.AGENTNET_HOME = join(tmpdir(), "agentnet-test-" + process.pid);
 
-import nacl from "tweetnacl";
 import { createRuntime } from "../src/runtime/index.js";
 import { manualStorage } from "../src/account/storage/manual.js";
 import { SessionStore } from "../src/account/store.js";
-import type { Wallet } from "../src/runtime/contract.js";
+import { testWallet } from "../src/account/keypairWallet.js";
 
-const kp = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(7));
-const wallet: Wallet = {
-  address: "TESTWALLET",
-  async signMessage(msg) {
-    return nacl.sign.detached(msg, kp.secretKey);
-  },
-};
-
+const wallet = testWallet();
 const storage = manualStorage();
 const runtime = createRuntime(wallet, storage);
 
