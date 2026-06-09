@@ -115,8 +115,12 @@ the parts above.
 
 ## 4. What genuinely doesn't exist yet
 
-1. **Real Phantom wallet** — the only thing without even a part. Currently a fake nacl keypair (seed=7).
-   - Note: sessions saved now are encrypted with the fake key. Once a real wallet is attached they won't decrypt (different key). Discard test sessions at that switch.
+1. **Real Phantom wallet (UI)** — currently a local keypair (`testWallet()` in
+   `src/account/keypairWallet.ts`). The `Wallet` interface now includes on-chain
+   signing (publicKey + signTransaction + signAllTransactions, via iqlabs
+   `WalletSigner`), so on-chain code can already run against `testWallet`. What's
+   missing is only the *interactive* front-end (Phantom deep-link / mobile wallet).
+   - Note: sessions saved now are encrypted with the test key. Once a real wallet is attached they won't decrypt (different key). Discard test sessions at that switch.
 2. **On-chain layer** — skill NFT, reputation (notes), mysessions on-chain index. Only design docs (plans/), zero code.
 3. **Other apps** — mobile / standalone CLI / web. Only VSCode exists.
 4. **Local↔cloud session dedup** — only one storage at a time today. No conflict policy for parallel use yet.
@@ -134,4 +138,103 @@ pnpm test:run          # engine: claude+codex capture→encrypt→append→reloa
 - Tests use a temp AGENTNET_HOME, so they never pollute the real ~/.agentnet.
 - Only real gdrive needs GOOGLE_CLIENT_ID (Desktop-app). local/icloud/custom work with no config.
 
-For what's next, see [`roadmap-2tracks.md`](roadmap-2tracks.md).
+---
+
+## 6. What's next — Two Tracks
+
+Everything above is the **shared foundation** both tracks stand on (engine +
+encryption + storage). From here the work forks into two independent tracks that
+**converge on one wallet**.
+
+```mermaid
+flowchart TB
+    BASE["foundation (this repo so far)<br/>runtime engine · session encryption · 4 storage backends · VSCode chat · wallet w/ on-chain signing"]
+    BASE --> T1["Track 1 — identity & multi-device sessions<br/>(off-chain, wallet-based)"]
+    BASE --> T2["Track 2 — on-chain AgentNet<br/>(skill NFT · reputation)"]
+    T1 --> CONV["converge: wallet = agent<br/>sessions + skills + reputation on one wallet"]
+    T2 --> CONV
+    style BASE fill:#e6ffe6,stroke:#3a3
+    style T1 fill:#e6f0ff,stroke:#36c
+    style T2 fill:#f0e6ff,stroke:#93c
+    style CONV fill:#fff8e0,stroke:#cc3
+```
+
+### Track 1 — Wallet identity & multi-device session sync (off-chain)
+
+Connect a wallet, and the **same session syncs (encrypted) from your cloud** on any
+device or app. "Wallet = identity; sessions follow the wallet."
+
+```mermaid
+flowchart LR
+    W["connect Phantom wallet"] --> KEY["signature → encryption key<br/>(done: core/crypto)"]
+    KEY --> SESS["encrypt / decrypt session<br/>(done)"]
+    SESS --> CLOUD["sync to your cloud<br/>(gdrive/icloud, done)"]
+    CLOUD --> MULTI["another device, same wallet → restore"]
+    style W fill:#ffe6e6,stroke:#c33
+    style MULTI fill:#e6f0ff,stroke:#36c
+```
+
+| # | Task | Why / What | Depends on |
+|---|---|---|---|
+| **T1-1** | **Real Phantom wallet UI** | Replace `testWallet()` with interactive wallet signing. VSCode via deep-link / external-browser callback; mobile via wallet-app. Only needs to satisfy the `Wallet` interface — engine doesn't change. *(On-chain signing is already in the interface; this is just the interactive front-end.)* | parts: interface ready |
+| **T1-2** | **Wire the onboarding screen** | Plug already-built `login()` / `detectCli()` / `STORAGE_OPTIONS` into the UI: connect wallet → CLI check → storage picker (Apple/Google/local/custom) → save config. | parts exist |
+| **T1-3** | **Make storage selection real** | Currently pinned to `manualStorage` → switch to the storage the user picked. gdrive needs `GOOGLE_CLIENT_ID`. | parts exist |
+| **T1-4** | **Multi-device verification** | Save on device A → `login` with same wallet on device B → confirm restore. (Same wallet = same key = decrypts; works by design, needs a real test.) | T1-1,2,3 |
+| **T1-5** | **Build other apps** | VSCode-like app for mobile / standalone CLI. All reuse the same `src/`; only the surface is new. | T1-1 |
+| **T1-6** | **Local↔cloud dedup** | Overlapping local + cloud records is bad. Source-of-truth policy: last-write-wins by file ts (v1) → smarter merge later. | T1-4 |
+
+**End state:** connect a wallet on your phone → yesterday's VSCode conversation is
+there, and the storage holds the encrypted session, neatly synced.
+
+### Track 2 — On-chain AgentNet (skill NFT · reputation)
+
+The wallet (= an agent) **publishes / searches / buys skill NFTs** and leaves
+**reputation notes** on-chain. **Unblocked now:** the `Wallet` interface has
+on-chain signing, and `testWallet()` signs real Solana txs — so Track 2 can start
+on devnet without waiting for the real Phantom UI (Track 1).
+
+```mermaid
+flowchart LR
+    AG["wallet = agent"] --> SK["skill NFT<br/>(Token-2022 soulbound)"]
+    SK --> PUB["publish: code-in text + mint"]
+    SK --> BUY["buy: pay + mint, supply++ = popularity"]
+    SK --> SEARCH["search: category/hashtag + sort by supply"]
+    AG --> NOTE["reputation notes<br/>(on-chain write, skill-holder gated)"]
+    style AG fill:#f0e6ff,stroke:#93c
+    style SK fill:#f0e6ff,stroke:#93c
+```
+
+| # | Task | Reference doc | Status |
+|---|---|---|---|
+| **T2-1** | core/ on-chain part — table seeds (mysessions, etc.) + IQLabs chain wrapper | [`coding-info.md`](coding-info.md) | no code |
+| **T2-2** | **Publish skill NFT** — code-in text + Token-2022 mint (soulbound) | [`skill-nft-structure.md`](skill-nft-structure.md) | no code |
+| **T2-3** | **Buy skill** — pay + mint + supply++ (popularity) | 〃 | no code |
+| **T2-4** | **Search** — category/hashtag (trait) filter + sort by supply | [`search.md`](search.md) | no code |
+| **T2-5** | **Reputation notes** — on-chain write, skill-holder gate | [`notes.md`](notes.md) | no code |
+| **T2-6** | **Validation gate** — quality / maliciousness check before publish | [`skill-validation-adapter.md`](skill-validation-adapter.md) | no code |
+| **T2-7** | **Workflow NFT** — skill-bundle recipe, requiredSkills gate | [`workflow-nft.md`](workflow-nft.md) | no code |
+| **T2-8** | (later) Expose as MCP tools — agent autonomous buy | coding-info Step 7 | no code |
+
+**End state:** the designer agent (wallet) buys and equips skills, leaves reputation
+on the good ones, popular skills sort by supply — all on the same wallet as sessions.
+
+### Why two tracks
+
+```mermaid
+flowchart TB
+    subgraph WALLET["one wallet = one agent"]
+        S["sessions (Track 1, off-chain encrypted)"]
+        K["skills (Track 2, on-chain NFT)"]
+        R["reputation (Track 2, on-chain notes)"]
+    end
+    style WALLET fill:#fff8e0,stroke:#cc3
+```
+
+- **Track 1** (sessions) is **off-chain** — conversations encrypted, only the wallet reads them.
+- **Track 2** (skills · reputation) is **on-chain** — public, buy/sell/sort.
+- Both hang off the **same wallet**: connect your wallet → your whole agent (sessions + skills + reputation) comes with it.
+- The tracks are **independent** (on-chain code never touches the session pipeline), so they run in parallel.
+
+**Immediate next moves:**
+- **Track 2** is unblocked — start on-chain (T2-1/T2-2) against `testWallet` on devnet now.
+- **Track 1** — wire the onboarding/storage picker (T1-2/T1-3, parts exist); real Phantom UI (T1-1) when ready.
