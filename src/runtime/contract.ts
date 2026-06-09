@@ -6,8 +6,16 @@
 // CODE-RULES: keep this the one source of these types. Don't redefine elsewhere.
 
 // ── wallet ──────────────────────────────────────────────
-export interface Wallet {
-  address: string; // base58
+// Two capabilities, one wallet:
+//   signMessage      → derive the session encryption key (Track 1, off-chain)
+//   WalletSigner     → sign Solana txs for the on-chain layer (Track 2)
+// WalletSigner is iqlabs-sdk's own type (publicKey + signTransaction +
+// signAllTransactions) — the SAME shape Phantom exposes, so any front-end
+// (Phantom, Ledger, a local Keypair, mobile wallet) can satisfy it.
+import type { WalletSigner } from "@iqlabs-official/solana-sdk/utils";
+
+export interface Wallet extends WalletSigner {
+  address: string; // base58 (== publicKey.toBase58())
   // used to derive the encryption key (iqlabs deriveX25519Keypair)
   signMessage(msg: Uint8Array): Promise<Uint8Array>;
 }

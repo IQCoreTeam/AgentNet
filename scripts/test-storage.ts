@@ -9,20 +9,13 @@ import { createServer } from "node:http";
 import { rm, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import nacl from "tweetnacl";
 import { SessionStore } from "../src/account/store.js";
 import { icloudStorage } from "../src/account/storage/icloud.js";
 import { customStorage } from "../src/account/storage/custom.js";
 import { initialize, login } from "../src/account/login.js";
-import type { Wallet } from "../src/runtime/contract.js";
+import { testWallet } from "../src/account/keypairWallet.js";
 
-const kp = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(9));
-const wallet: Wallet = {
-  address: "TESTWALLET",
-  async signMessage(msg) {
-    return nacl.sign.detached(msg, kp.secretKey);
-  },
-};
+const wallet = testWallet(9);
 
 const meta = (id: string) => ({ sessionId: id, cli: "claude" as const, title: "test", ts: Date.now() });
 const msg = (text: string) => ({ role: "user" as const, text, ts: Date.now() });
