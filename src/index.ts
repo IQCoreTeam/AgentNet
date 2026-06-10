@@ -59,6 +59,19 @@ export {
 } from "./nft/index.js";
 export type { PublishSkillInput, BuySkillInput } from "./nft/skill.js";
 
+export {
+  postNote,
+  readNotes,
+  deleteNote,
+  getBalance,
+} from "./notes/index.js";
+export type { PostNoteInput, ReadNotesOptions } from "./notes/index.js";
+
+export {
+  searchSkills,
+} from "./search/index.js";
+export type { SearchFilters, SortBy, SearchOptions } from "./search/index.js";
+
 export { createRuntime } from "./runtime/index.js";
 export { detectCli } from "./runtime/detect.js";
 export type { CliStatus, CliReport } from "./runtime/detect.js";
