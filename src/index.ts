@@ -42,6 +42,7 @@ export {
   notesSkillHint,
   notesAgentHint,
   AUDIT_HINT,
+  reputationHint,
 } from "./core/seed.js";
 
 export {
@@ -71,6 +72,13 @@ export {
   searchSkills,
 } from "./search/index.js";
 export type { SearchFilters, SortBy, SearchOptions } from "./search/index.js";
+
+export {
+  getReputation,
+  updateReputation,
+  getLeaderboard,
+} from "./reputation/index.js";
+export type { Reputation } from "./core/types.js";
 
 export { createRuntime } from "./runtime/index.js";
 export { detectCli } from "./runtime/detect.js";

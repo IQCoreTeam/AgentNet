@@ -1,0 +1,102 @@
+// Agent reputation: derived from skills published, buyers (supply), notes received.
+//
+// getReputation: reads chain tables, computes + returns score snapshot
+// updateReputation: writes snapshot row on-chain (called post-publish/post-buy)
+
+import type { Connection } from "@solana/web3.js";
+import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
+import {
+  readRows,
+  writeRow,
+  signerAddress,
+} from "../core/chain.js";
+import { AUDIT_HINT, notesSkillHint, reputationHint } from "../core/seed.js";
+import type { Reputation, Skill, Row } from "../core/types.js";
+
+function computeScore(
+  skillsPublished: number,
+  totalSupply: number,
+  notesReceived: number,
+): number {
+  return totalSupply * 3 + skillsPublished * 10 + notesReceived;
+}
+
+export async function getReputation(
+  conn: Connection,
+  wallet: string,
+): Promise<Reputation> {
+  // Read all skills from audit table, filter by creator
+  const allSkillRows = await readRows(AUDIT_HINT, { limit: 1000 });
+  const mySkills = (allSkillRows as unknown as Skill[]).filter(
+    (s) => s.creator === wallet,
+  );
+
+  const skillsPublished = mySkills.length;
+  const totalSupply = mySkills.reduce((acc, s) => acc + (s.supply ?? 0), 0);
+
+  // Count notes across all creator's skills
+  let notesReceived = 0;
+  for (const skill of mySkills) {
+    const notes = await readRows(notesSkillHint(skill.id), { limit: 1000 });
+    notesReceived += notes.length;
+  }
+
+  const score = computeScore(skillsPublished, totalSupply, notesReceived);
+
+  return {
+    wallet,
+    skillsPublished,
+    totalSupply,
+    notesReceived,
+    score,
+    updatedAt: Date.now(),
+  };
+}
+
+export async function updateReputation(
+  conn: Connection,
+  signer: SignerInput,
+  wallet: string,
+): Promise<Reputation> {
+  const rep = await getReputation(conn, wallet);
+  const hint = reputationHint(wallet);
+  await writeRow(signer, hint, JSON.stringify(rep));
+  return rep;
+}
+
+export async function getLeaderboard(
+  conn: Connection,
+  limit = 20,
+): Promise<Reputation[]> {
+  // Read all skills, group by creator, compute scores
+  const allSkillRows = await readRows(AUDIT_HINT, { limit: 1000 });
+  const skills = allSkillRows as unknown as Skill[];
+
+  // Group by creator
+  const creatorMap = new Map<string, Skill[]>();
+  for (const skill of skills) {
+    if (!creatorMap.has(skill.creator)) {
+      creatorMap.set(skill.creator, []);
+    }
+    creatorMap.get(skill.creator)!.push(skill);
+  }
+
+  // Build reputation entries (no notes count for leaderboard — avoid N+1)
+  const entries: Reputation[] = [];
+  for (const [wallet, creatorSkills] of creatorMap.entries()) {
+    const skillsPublished = creatorSkills.length;
+    const totalSupply = creatorSkills.reduce((acc, s) => acc + (s.supply ?? 0), 0);
+    entries.push({
+      wallet,
+      skillsPublished,
+      totalSupply,
+      notesReceived: 0, // omitted for leaderboard performance
+      score: computeScore(skillsPublished, totalSupply, 0),
+      updatedAt: Date.now(),
+    });
+  }
+
+  return entries
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+}

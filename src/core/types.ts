@@ -49,6 +49,16 @@ export interface Note {
   timestamp: number;
 }
 
+/** Agent reputation snapshot stored in `reputation:<wallet>` table. */
+export interface Reputation {
+  wallet: string;
+  skillsPublished: number;
+  totalSupply: number; // sum of all buyer counts across agent's skills
+  notesReceived: number;
+  score: number; // derived: (totalSupply * 3) + (skillsPublished * 10) + notesReceived
+  updatedAt: number;
+}
+
 /** Generic row type for table reads. */
 export type Row = Record<string, unknown>;
 

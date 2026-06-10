@@ -40,3 +40,12 @@ export function notesAgentHint(agentWallet: string): string {
  * Stores results of skill security checks (pre-publish + periodic).
  */
 export const AUDIT_HINT = "audit:skills";
+
+/**
+ * Hint for per-wallet reputation snapshot.
+ * input:  wallet address (base58)
+ * output: "reputation:<wallet>"
+ */
+export function reputationHint(wallet: string): string {
+  return `reputation:${wallet}`;
+}
