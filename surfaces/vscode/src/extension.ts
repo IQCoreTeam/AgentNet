@@ -4,7 +4,7 @@
 //   handle.onMessage -> webview "message" (CLI output -> panel)
 
 import * as vscode from "vscode";
-import type { AgentRuntime, SessionHandle, Wallet } from "../../../src/runtime/contract";
+import type { AgentRuntime, SessionHandle, Wallet } from "@iqlabs-official/agent-sdk/runtime/contract";
 import {
   connect,
   initialize,
@@ -16,8 +16,8 @@ import {
   agentnetFolderLink,
   STORAGE_OPTIONS,
   type StorageConfig,
-} from "../../../src/index";
-import { localWallet, solanaDefaultKeypairPath } from "../../../src/account/localWallet";
+} from "@iqlabs-official/agent-sdk";
+import { localWallet, solanaDefaultKeypairPath } from "@iqlabs-official/agent-sdk/account/localWallet";
 import { chatHtml } from "./webview";
 import { onboardingHtml } from "./onboarding";
 import { WebviewApprovalChannel } from "./approval";
@@ -395,12 +395,14 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
 // the user dismissed. "local" isn't offered here — local is always on.
 async function pickCloud(): Promise<StorageConfig | undefined> {
   const clouds = STORAGE_OPTIONS.filter((o) => o.kind !== "local");
+  // NOTE: QuickPickItem reserves `kind` (QuickPickItemKind), so stash our storage
+  // kind under a different field (`k`) to avoid the type clash.
   const choice = await vscode.window.showQuickPick(
-    clouds.map((o) => ({ label: o.label, detail: o.needs, kind: o.kind })),
+    clouds.map((o) => ({ label: o.label, detail: o.needs, k: o.kind })),
     { placeHolder: "Connect a cloud to mirror your sessions (local stays on)" }
   );
   if (!choice) return undefined;
-  if (choice.kind === "custom") {
+  if (choice.k === "custom") {
     const location = await vscode.window.showInputBox({
       prompt: "Endpoint base URL (S3 / WebDAV / HTTP)",
       placeHolder: "https://...",
@@ -411,7 +413,7 @@ async function pickCloud(): Promise<StorageConfig | undefined> {
     });
     return { kind: "custom", location, authHeader: authHeader || undefined };
   }
-  return { kind: choice.kind };
+  return { kind: choice.k };
 }
 
 function getCwd(): string {

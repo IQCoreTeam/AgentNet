@@ -10,6 +10,11 @@ export default defineConfig({
   format: ["cjs"],
   outDir: "dist",
   external: ["vscode"],
+  // our core is a workspace package, not a real npm dep — it must be INLINED into the
+  // single extension bundle (the runtime has no node_modules at the link target).
+  // (The claude/codex SDKs stay external: the SDK code is dynamically resolved at
+  // runtime and spawns the user's installed CLI, so it shouldn't be inlined.)
+  noExternal: [/@iqlabs-official\/agent-sdk/],
   // map import.meta.url → the running file's URL so SDK path resolution works in CJS
   define: { "import.meta.url": "importMetaUrl" },
   banner: {

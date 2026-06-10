@@ -1,14 +1,14 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
+    "module": "ESNext",
     "target": "ES2022",
     "lib": ["ES2022", "DOM"],
     "outDir": "dist",
-    "rootDir": "..",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "moduleResolution": "node"
+    "resolveJsonModule": true,
+    "moduleResolution": "Bundler"
   },
-  "include": ["src/**/*", "../../src/runtime/contract.ts"]
+  "include": ["src/**/*"]
 }

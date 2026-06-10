@@ -7,7 +7,7 @@
 // same channel survives panel re-creation — and could later forward to a phone push.
 
 import * as vscode from "vscode";
-import type { ApprovalChannel, ApprovalRequest, ApprovalDecision } from "../../../src/index";
+import type { ApprovalChannel, ApprovalRequest, ApprovalDecision } from "@iqlabs-official/agent-sdk";
 
 export class WebviewApprovalChannel implements ApprovalChannel {
   private panel: vscode.WebviewPanel | null = null;
