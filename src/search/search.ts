@@ -4,6 +4,7 @@ import type { Connection } from "@solana/web3.js";
 import { readRows } from "../core/chain.js";
 import { AUDIT_HINT } from "../core/seed.js";
 import type { Skill, Row } from "../core/types.js";
+import { getMintSupply } from "../nft/token2022.js";
 
 export interface SearchFilters {
   keyword?: string;
@@ -62,6 +63,16 @@ export async function searchSkills(
       const t = s.type ?? "skill";
       return t === filters.type;
     });
+  }
+
+  // Hydrate live supply from the mint (indexed supply is stale — always 0).
+  // Done after filtering so we only fetch for the matched set.
+  if (sortBy === "supply") {
+    await Promise.all(
+      skills.map(async (s) => {
+        s.supply = await getMintSupply(conn, s.id);
+      }),
+    );
   }
 
   // Sort

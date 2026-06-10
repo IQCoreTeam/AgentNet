@@ -15,6 +15,7 @@ import {
   createMintToInstruction,
   createAssociatedTokenAccountInstruction,
   getAssociatedTokenAddressSync,
+  getMint,
   ExtensionType,
   getMintLen,
   getMinimumBalanceForRentExemptMint,
@@ -164,4 +165,28 @@ export async function mintSkillToken(
   const sig = await conn.sendRawTransaction(tx.serialize());
   await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
   return sig;
+}
+
+/**
+ * Read live supply (popularity) from the on-chain mint account.
+ *
+ * The mint is the single source of truth — the indexed `supply` field in the
+ * AUDIT table is written as 0 on publish and never updated, so search/reputation
+ * must hydrate from here for accurate popularity ranking.
+ */
+export async function getMintSupply(
+  conn: Connection,
+  skillMintAddr: string,
+): Promise<number> {
+  try {
+    const mint = await getMint(
+      conn,
+      new PublicKey(skillMintAddr),
+      "confirmed",
+      TOKEN_2022_PROGRAM_ID,
+    );
+    return Number(mint.supply);
+  } catch {
+    return 0;
+  }
 }

@@ -11,7 +11,8 @@ import {
   createMintToInstruction,
 } from "@solana/spl-token";
 
-import { codeIn, signerAddress, ensureDbRoot } from "../core/chain.js";
+import { codeIn, signerAddress, ensureDbRoot, writeRow } from "../core/chain.js";
+import { AUDIT_HINT } from "../core/seed.js";
 import { createSkillMint } from "./token2022.js";
 import { getBalance } from "../notes/balance.js";
 import {
@@ -74,7 +75,26 @@ export async function publishWorkflow(
     hashtags: input.hashtags,
   });
 
-  return workflowMintAddr.toBase58();
+  // Index workflow for search + reputation
+  const workflowId = workflowMintAddr.toBase58();
+  const creator = await signerAddress(signer);
+  const row = {
+    id: workflowId,
+    name: input.name,
+    description: input.description,
+    creator,
+    category: input.category ?? "",
+    hashtags: input.hashtags,
+    type: "workflow",
+    requiredSkills: input.requiredSkills,
+    price: input.price?.toString(),
+    supply: 0,
+    uriTxid: workflowTxid,
+    createdAt: Date.now(),
+  };
+  await writeRow(signer, AUDIT_HINT, JSON.stringify(row));
+
+  return workflowId;
 }
 
 export interface UnlockWorkflowInput {

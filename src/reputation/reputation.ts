@@ -12,6 +12,7 @@ import {
 } from "../core/chain.js";
 import { AUDIT_HINT, notesSkillHint, reputationHint } from "../core/seed.js";
 import type { Reputation, Skill, Row } from "../core/types.js";
+import { getMintSupply } from "../nft/token2022.js";
 
 function computeScore(
   skillsPublished: number,
@@ -32,7 +33,11 @@ export async function getReputation(
   );
 
   const skillsPublished = mySkills.length;
-  const totalSupply = mySkills.reduce((acc, s) => acc + (s.supply ?? 0), 0);
+  // Hydrate live supply from each mint (indexed supply is stale — always 0).
+  const supplies = await Promise.all(
+    mySkills.map((s) => getMintSupply(conn, s.id)),
+  );
+  const totalSupply = supplies.reduce((acc, n) => acc + n, 0);
 
   // Count notes across all creator's skills
   let notesReceived = 0;
@@ -85,7 +90,11 @@ export async function getLeaderboard(
   const entries: Reputation[] = [];
   for (const [wallet, creatorSkills] of creatorMap.entries()) {
     const skillsPublished = creatorSkills.length;
-    const totalSupply = creatorSkills.reduce((acc, s) => acc + (s.supply ?? 0), 0);
+    // Hydrate live supply from each mint (indexed supply is stale — always 0).
+    const supplies = await Promise.all(
+      creatorSkills.map((s) => getMintSupply(conn, s.id)),
+    );
+    const totalSupply = supplies.reduce((acc, n) => acc + n, 0);
     entries.push({
       wallet,
       skillsPublished,

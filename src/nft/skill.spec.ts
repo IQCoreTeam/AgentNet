@@ -10,6 +10,11 @@ vi.mock("../core/chain.js", () => ({
   ensureDbRoot: vi.fn().mockResolvedValue("mockDbRootSig"),
   codeIn: vi.fn().mockResolvedValue("mockCodeInSig"),
   signerAddress: vi.fn().mockImplementation((signer) => Promise.resolve(signer.publicKey?.toBase58() || "mockSigner")),
+  writeRow: vi.fn().mockResolvedValue("mockWriteRowSig"),
+}));
+
+vi.mock("../core/seed.js", () => ({
+  AUDIT_HINT: "audit:skills",
 }));
 
 vi.mock("./token2022.js", async () => {

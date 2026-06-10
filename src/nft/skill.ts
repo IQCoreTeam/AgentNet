@@ -19,7 +19,9 @@ import {
   codeIn,
   signerAddress,
   ensureDbRoot,
+  writeRow,
 } from "../core/chain.js";
+import { AUDIT_HINT } from "../core/seed.js";
 import type { Skill } from "../core/types.js";
 import { createSkillMint, mintSkillToken } from "./token2022.js";
 import { defaultValidator, ValidationError } from "./validation/index.js";
@@ -79,10 +81,24 @@ export async function publishSkill(
     hashtags: input.hashtags,
   });
 
-  // 3. (optional) write skill metadata row for discovery
-  // This is for on-chain indexing if needed; the NFT collection is the source of truth.
+  // 3. Index skill metadata for search + reputation
+  const skillId = skillMintAddr.toBase58();
+  const row: Skill = {
+    id: skillId,
+    name: input.name,
+    description: input.description,
+    creator,
+    category: input.category ?? "",
+    hashtags: input.hashtags,
+    type: "skill",
+    price: input.price,
+    supply: 0,
+    uriTxid: skillTextTxid,
+    createdAt: Date.now(),
+  };
+  await writeRow(signer, AUDIT_HINT, JSON.stringify(row));
 
-  return skillMintAddr.toBase58();
+  return skillId;
 }
 
 export interface BuySkillInput {

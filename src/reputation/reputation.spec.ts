@@ -2,11 +2,23 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Keypair } from "@solana/web3.js";
 import { getReputation, updateReputation, getLeaderboard } from "./reputation.js";
 import * as chain from "../core/chain.js";
+import { getMintSupply } from "../nft/token2022.js";
 
 vi.mock("../core/chain.js", () => ({
   readRows: vi.fn(),
   writeRow: vi.fn().mockResolvedValue("mockWriteSig"),
 }));
+
+// Live supply is hydrated from the mint; each test sets its own id→supply map.
+vi.mock("../nft/token2022.js", () => ({
+  getMintSupply: vi.fn(),
+}));
+
+function mockSupply(map: Record<string, number>) {
+  vi.mocked(getMintSupply).mockImplementation((_conn: any, id: string) =>
+    Promise.resolve(map[id] ?? 0),
+  );
+}
 
 describe("reputation/reputation", () => {
   let mockConn: any;
@@ -31,6 +43,7 @@ describe("reputation/reputation", () => {
       if (hint === "notes:skill:skill2") return [{ id: "note3" }] as any;
       return [];
     });
+    mockSupply({ skill1: 5, skill2: 2, skill3: 10 });
 
     const rep = await getReputation(mockConn, "walletA");
 
@@ -47,6 +60,7 @@ describe("reputation/reputation", () => {
 
   it("should update reputation and write row to chain", async () => {
     vi.mocked(chain.readRows).mockResolvedValue([]); // empty skills
+    mockSupply({});
 
     const rep = await updateReputation(mockConn, signer, "walletC");
     
@@ -60,6 +74,7 @@ describe("reputation/reputation", () => {
       { id: "skill2", creator: "walletB", supply: 10 }, // walletB score: (10*3) + (1*10) = 40
     ];
     vi.mocked(chain.readRows).mockResolvedValue(mockSkills as any);
+    mockSupply({ skill1: 5, skill2: 10 });
 
     const leaderboard = await getLeaderboard(mockConn, 10);
     

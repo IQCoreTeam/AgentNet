@@ -6,6 +6,14 @@ vi.mock("../core/chain.js", () => ({
   readRows: vi.fn(),
 }));
 
+// Live supply is hydrated from the mint; echo the per-id supply set below.
+const SUPPLY_BY_ID: Record<string, number> = { A: 10, B: 50, C: 5 };
+vi.mock("../nft/token2022.js", () => ({
+  getMintSupply: vi.fn((_conn: any, id: string) =>
+    Promise.resolve(SUPPLY_BY_ID[id] ?? 0),
+  ),
+}));
+
 describe("search/search", () => {
   let mockConn: any;
 
