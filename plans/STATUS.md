@@ -217,14 +217,29 @@ flowchart LR
 
 | # | Task | Reference doc | Status |
 |---|---|---|---|
-| **T2-1** | core/ on-chain part — table seeds (mysessions, etc.) + IQLabs chain wrapper | [`coding-info.md`](coding-info.md) | no code |
-| **T2-2** | **Publish skill NFT** — code-in text + Token-2022 mint (soulbound) | [`skill-nft-structure.md`](skill-nft-structure.md) | no code |
-| **T2-3** | **Buy skill** — pay + mint + supply++ (popularity) | 〃 | no code |
-| **T2-4** | **Search** — category/hashtag (trait) filter + sort by supply | [`search.md`](search.md) | no code |
-| **T2-5** | **Reputation notes** — on-chain write, skill-holder gate | [`notes.md`](notes.md) | no code |
-| **T2-6** | **Validation gate** — quality / maliciousness check before publish | [`skill-validation-adapter.md`](skill-validation-adapter.md) | no code |
-| **T2-7** | **Workflow NFT** — skill-bundle recipe, requiredSkills gate | [`workflow-nft.md`](workflow-nft.md) | no code |
-| **T2-8** | (later) Expose as MCP tools — agent autonomous buy | coding-info Step 7 | no code |
+| **T2-1** | core/ on-chain part — table seeds (mysessions, etc.) + IQLabs chain wrapper | [`coding-info.md`](coding-info.md) | ✅ `src/core/` (types, seed, chain) |
+| **T2-2** | **Publish skill NFT** — code-in text + Token-2022 mint (soulbound) | [`skill-nft-structure.md`](skill-nft-structure.md) | ✅ `nft/skill.publishSkill` + indexes to AUDIT |
+| **T2-3** | **Buy skill** — pay + mint + supply++ (popularity) | 〃 | ⚠️ partial — payment + ATA built; **mint step blocked** (see limitation) |
+| **T2-4** | **Search** — category/hashtag (trait) filter + sort by supply | [`search.md`](search.md) | ✅ `search/search` (supply hydrated live from mint) |
+| **T2-5** | **Reputation notes** — on-chain write, skill-holder gate | [`notes.md`](notes.md) | ✅ `notes/` + `reputation/` (gated by token balance) |
+| **T2-6** | **Validation gate** — quality / maliciousness check before publish | [`skill-validation-adapter.md`](skill-validation-adapter.md) | ✅ `nft/validation/` (compat/strict/onchain/security) |
+| **T2-7** | **Workflow NFT** — skill-bundle recipe, requiredSkills gate | [`workflow-nft.md`](workflow-nft.md) | ✅ `nft/workflow` (prereq gate; same mint limitation) |
+| **T2-8** | Expose as MCP tools — agent autonomous buy | coding-info Step 7 | ✅ `mcp/server` (search_skills, buy_skill) |
+
+> ⚠️ **Known limitation — buy mint step (T2-3 / T2-7).** Each skill mint is created
+> with the **creator** as mint authority, but `buySkill`/`unlockWorkflow` have the
+> **buyer** sign the `mintTo`. On-chain, `mintTo` requires the mint authority's
+> signature → a buyer cannot self-mint a creator-authored mint, so the mint step of
+> buy fails on devnet. Everything *around* it works: payment routing, ATA creation,
+> prerequisite gate, publish, indexing, search, reputation, validation, MCP.
+> **Canonical fix** (plan [`skill-nft-structure.md`](skill-nft-structure.md) §4,
+> "P = Program"): an on-chain program whose **PDA is the mint authority** mints via
+> CPI atomically with payment. That program is **not built yet** — tracked as the
+> next T2 task. A protocol-minter keypair is a faster interim alternative.
+>
+> Other guards added: `getAccountInfo === null` for ATA existence (not try/catch);
+> IQ fee skipped when treasury is the System-Program sentinel (else funds burn);
+> `supply` hydrated live from the mint (indexed copy is always 0).
 
 **End state:** the designer agent (wallet) buys and equips skills, leaves reputation
 on the good ones, popular skills sort by supply — all on the same wallet as sessions.

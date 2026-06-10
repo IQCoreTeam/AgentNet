@@ -8,9 +8,10 @@ import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
 import {
   readRows,
   writeRow,
+  ensureTable,
   signerAddress,
 } from "../core/chain.js";
-import { notesSkillHint } from "../core/seed.js";
+import { notesSkillHint, NOTE_COLUMNS } from "../core/seed.js";
 import type { Note, Row } from "../core/types.js";
 import { getBalance } from "./balance.js";
 
@@ -50,6 +51,7 @@ export async function postNote(
     timestamp: Date.now(),
   };
 
+  await ensureTable(signer, hint, NOTE_COLUMNS, "id");
   await writeRow(signer, hint, JSON.stringify(note));
   return noteId;
 }
@@ -67,7 +69,8 @@ export async function readNotes(
   const rows = await readRows(hint, {
     limit: options?.limit ?? 100,
   });
-  return rows as unknown as Note[];
+  // Drop non-row entries (metadata shapes from readTableRows have no `id`).
+  return (rows as unknown as Note[]).filter((n) => typeof n.id === "string");
 }
 
 export async function deleteNote(

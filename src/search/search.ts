@@ -29,9 +29,14 @@ export async function searchSkills(
   const sortBy = options?.sortBy ?? "supply";
   const filters = options?.filters ?? {};
 
-  // Read all skills from audit table
+  // Read all skills from audit table. readTableRows also returns non-row
+  // entries ({signature, metadata, data} shapes for txs whose payload isn't a
+  // JSON row), so keep only rows that look like an indexed skill — otherwise
+  // `.toLowerCase()` / sorts crash on undefined fields.
   const rows = await readRows(AUDIT_HINT, { limit: 1000 });
-  let skills = rows as unknown as Skill[];
+  let skills = (rows as unknown as Skill[]).filter(
+    (s) => typeof s.id === "string" && typeof s.name === "string",
+  );
 
   // Filter by keyword (name + description)
   if (filters.keyword) {

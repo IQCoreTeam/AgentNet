@@ -125,6 +125,24 @@ export async function createTable(
   );
 }
 
+/**
+ * Create the table for `hint` if it doesn't exist yet. No-op if already created.
+ *
+ * `writeRow` requires the table PDA to be initialized first (createTable is a
+ * separate on-chain instruction), so every writer must ensure its table exists
+ * before the first row — same lazy pattern as `ensureDbRoot`.
+ */
+export async function ensureTable(
+  signer: DomainSignerInput,
+  hint: string,
+  columns: string[],
+  idColumn: string,
+  options?: { writers?: string[] },
+): Promise<string | null> {
+  if (await accountExists(tablePda(hint))) return null;
+  return createTable(signer, hint, columns, idColumn, options);
+}
+
 export async function writeRow(
   signer: DomainSignerInput,
   hint: string,

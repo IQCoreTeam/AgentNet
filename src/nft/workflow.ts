@@ -11,8 +11,8 @@ import {
   createMintToInstruction,
 } from "@solana/spl-token";
 
-import { codeIn, signerAddress, ensureDbRoot, writeRow } from "../core/chain.js";
-import { AUDIT_HINT } from "../core/seed.js";
+import { codeIn, signerAddress, ensureDbRoot, ensureTable, writeRow } from "../core/chain.js";
+import { AUDIT_HINT, AUDIT_COLUMNS } from "../core/seed.js";
 import { createSkillMint } from "./token2022.js";
 import { getBalance } from "../notes/balance.js";
 import {
@@ -92,6 +92,7 @@ export async function publishWorkflow(
     uriTxid: workflowTxid,
     createdAt: Date.now(),
   };
+  await ensureTable(signer, AUDIT_HINT, AUDIT_COLUMNS, "id");
   await writeRow(signer, AUDIT_HINT, JSON.stringify(row));
 
   return workflowId;
@@ -107,7 +108,10 @@ export interface UnlockWorkflowInput {
   iqTreasuryWallet?: string;
 }
 
-const DEFAULT_IQ_TREASURY = "11111111111111111111111111111111"; // placeholder
+// Sentinel: the all-1s address is the System Program, NOT a real wallet. When the
+// treasury is unset we must NOT route fee here (transfer to System Program fails /
+// burns) — instead the fee is skipped and the full price goes to the creator.
+const DEFAULT_IQ_TREASURY = "11111111111111111111111111111111";
 
 /**
  * Unlock a workflow (mint workflow token).
@@ -137,7 +141,8 @@ export async function unlockWorkflow(
   const price = input.price ?? 0n;
   const feePercent = input.iqFeePercent ?? 0.05;
   const creator = new PublicKey(input.creatorWallet);
-  const treasury = new PublicKey(input.iqTreasuryWallet ?? DEFAULT_IQ_TREASURY);
+  const treasuryAddr = input.iqTreasuryWallet ?? DEFAULT_IQ_TREASURY;
+  const hasTreasury = treasuryAddr !== DEFAULT_IQ_TREASURY;
   const workflowMint = new PublicKey(input.workflowId);
   const payer = await signerAddress(signer);
   const payerPk = new PublicKey(payer);
@@ -145,8 +150,11 @@ export async function unlockWorkflow(
   const tx = new Transaction();
 
   if (price > 0n) {
-    const creatorShare = price - BigInt(Math.floor(Number(price) * feePercent));
-    const iqFee = price - creatorShare;
+    // Fee only applies when a real treasury is set; otherwise full price → creator.
+    const iqFee = hasTreasury
+      ? BigInt(Math.floor(Number(price) * feePercent))
+      : 0n;
+    const creatorShare = price - iqFee;
 
     tx.add(
       SystemProgram.transfer({
@@ -160,7 +168,7 @@ export async function unlockWorkflow(
       tx.add(
         SystemProgram.transfer({
           fromPubkey: payerPk,
-          toPubkey: treasury,
+          toPubkey: new PublicKey(treasuryAddr),
           lamports: Number(iqFee),
         }),
       );

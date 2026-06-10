@@ -19,10 +19,10 @@ import {
   codeIn,
   signerAddress,
   ensureDbRoot,
+  ensureTable,
   writeRow,
 } from "../core/chain.js";
-import { AUDIT_HINT } from "../core/seed.js";
-import type { Skill } from "../core/types.js";
+import { AUDIT_HINT, AUDIT_COLUMNS } from "../core/seed.js";
 import { createSkillMint, mintSkillToken } from "./token2022.js";
 import { defaultValidator, ValidationError } from "./validation/index.js";
 import type { ValidationAdapter } from "./validation/index.js";
@@ -81,9 +81,10 @@ export async function publishSkill(
     hashtags: input.hashtags,
   });
 
-  // 3. Index skill metadata for search + reputation
+  // 3. Index skill metadata for search + reputation.
+  // price is bigint → serialize to string (JSON.stringify throws on BigInt).
   const skillId = skillMintAddr.toBase58();
-  const row: Skill = {
+  const row = {
     id: skillId,
     name: input.name,
     description: input.description,
@@ -91,11 +92,12 @@ export async function publishSkill(
     category: input.category ?? "",
     hashtags: input.hashtags,
     type: "skill",
-    price: input.price,
+    price: input.price?.toString(),
     supply: 0,
     uriTxid: skillTextTxid,
     createdAt: Date.now(),
   };
+  await ensureTable(signer, AUDIT_HINT, AUDIT_COLUMNS, "id");
   await writeRow(signer, AUDIT_HINT, JSON.stringify(row));
 
   return skillId;
@@ -110,7 +112,10 @@ export interface BuySkillInput {
   iqTreasuryWallet?: string; // IQ fee recipient (default: protocol treasury)
 }
 
-const DEFAULT_IQ_TREASURY = "11111111111111111111111111111111"; // placeholder
+// Sentinel: the all-1s address is the System Program, NOT a real wallet. When the
+// treasury is unset we must NOT route fee here (transfer to System Program fails /
+// burns) — instead the fee is skipped and the full price goes to the creator.
+const DEFAULT_IQ_TREASURY = "11111111111111111111111111111111";
 
 /**
  * Buy a skill (star = soulbound purchase = equip).
@@ -132,7 +137,8 @@ export async function buySkill(
   const feePercent = input.iqFeePercent ?? 0.05; // 5% default
   const buyer = new PublicKey(input.buyerWallet);
   const creator = new PublicKey(input.creatorWallet);
-  const treasury = new PublicKey(input.iqTreasuryWallet ?? DEFAULT_IQ_TREASURY);
+  const treasuryAddr = input.iqTreasuryWallet ?? DEFAULT_IQ_TREASURY;
+  const hasTreasury = treasuryAddr !== DEFAULT_IQ_TREASURY;
   const skillMint = new PublicKey(input.skillId);
   const payer = await signerAddress(signer);
   const payerPk = new PublicKey(payer);
@@ -141,8 +147,11 @@ export async function buySkill(
 
   // 1. If price > 0: transfer payment
   if (price > 0n) {
-    const creatorShare = price - BigInt(Math.floor(Number(price) * feePercent));
-    const iqFee = price - creatorShare;
+    // Fee only applies when a real treasury is set; otherwise full price → creator.
+    const iqFee = hasTreasury
+      ? BigInt(Math.floor(Number(price) * feePercent))
+      : 0n;
+    const creatorShare = price - iqFee;
 
     // Creator payment
     tx.add(
@@ -153,12 +162,12 @@ export async function buySkill(
       }),
     );
 
-    // IQ fee
+    // IQ fee (only when treasury is real)
     if (iqFee > 0n) {
       tx.add(
         SystemProgram.transfer({
           fromPubkey: payerPk,
-          toPubkey: treasury,
+          toPubkey: new PublicKey(treasuryAddr),
           lamports: Number(iqFee),
         }),
       );
@@ -166,6 +175,10 @@ export async function buySkill(
   }
 
   // 2. Mint skill token to buyer (atomic with payment transfer above)
+  // ⚠️ KNOWN LIMITATION: mint authority below is `payerPk` (buyer), but the mint
+  // was created with the creator as authority (see createSkillMint). On-chain
+  // mintTo needs the real authority's signature, so this step fails until an
+  // on-chain program (PDA authority) mints via CPI per plan §4. See token2022.ts.
   const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPvZeJ");
   const ata = getAssociatedTokenAddressSync(skillMint, buyer, false, TOKEN_2022_PROGRAM_ID);
 

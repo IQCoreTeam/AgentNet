@@ -41,6 +41,16 @@ interface MintConfig {
  * The mint is NonTransferable (soulbound). Metadata (uri, category, hashtags)
  * are stored in the NFT collection metadata off-chain or via code-in.
  * Caller must sign. Mint authority is the caller (creator).
+ *
+ * ⚠️ KNOWN LIMITATION (buy flow): mint authority = creator here, but `buySkill`
+ * has the buyer sign the mintTo. On-chain mintTo requires the mint authority's
+ * signature, so a buyer cannot self-mint a creator-authored mint — the buy tx
+ * fails unless the creator co-signs. The canonical fix per the plan
+ * (plans/skill-nft-structure.md §4, "P = Program") is an on-chain program whose
+ * PDA is the mint authority and mints via CPI atomically with payment. That
+ * program is not built yet — publish/index/search/reputation all work, but the
+ * on-chain mint step of buy is blocked until the program (or a protocol minter)
+ * lands. Tracked as T2 follow-up.
  */
 export async function createSkillMint(
   conn: Connection,

@@ -7,6 +7,7 @@ import * as balance from "./balance.js";
 vi.mock("../core/chain.js", () => ({
   readRows: vi.fn().mockResolvedValue([{ id: "note1" }]),
   writeRow: vi.fn().mockResolvedValue("mockWriteSig"),
+  ensureTable: vi.fn().mockResolvedValue(null),
   signerAddress: vi.fn().mockResolvedValue("11111111111111111111111111111111"),
 }));
 

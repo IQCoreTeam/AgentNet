@@ -8,9 +8,10 @@ import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
 import {
   readRows,
   writeRow,
+  ensureTable,
   signerAddress,
 } from "../core/chain.js";
-import { AUDIT_HINT, notesSkillHint, reputationHint } from "../core/seed.js";
+import { AUDIT_HINT, notesSkillHint, reputationHint, REPUTATION_COLUMNS } from "../core/seed.js";
 import type { Reputation, Skill, Row } from "../core/types.js";
 import { getMintSupply } from "../nft/token2022.js";
 
@@ -26,10 +27,11 @@ export async function getReputation(
   conn: Connection,
   wallet: string,
 ): Promise<Reputation> {
-  // Read all skills from audit table, filter by creator
+  // Read all skills from audit table, filter by creator. Non-row entries
+  // (metadata shapes from readTableRows) are dropped by the id/creator check.
   const allSkillRows = await readRows(AUDIT_HINT, { limit: 1000 });
   const mySkills = (allSkillRows as unknown as Skill[]).filter(
-    (s) => s.creator === wallet,
+    (s) => typeof s.id === "string" && s.creator === wallet,
   );
 
   const skillsPublished = mySkills.length;
@@ -39,11 +41,11 @@ export async function getReputation(
   );
   const totalSupply = supplies.reduce((acc, n) => acc + n, 0);
 
-  // Count notes across all creator's skills
+  // Count notes across all creator's skills (only real note rows).
   let notesReceived = 0;
   for (const skill of mySkills) {
     const notes = await readRows(notesSkillHint(skill.id), { limit: 1000 });
-    notesReceived += notes.length;
+    notesReceived += notes.filter((n) => typeof n.id === "string").length;
   }
 
   const score = computeScore(skillsPublished, totalSupply, notesReceived);
@@ -65,6 +67,7 @@ export async function updateReputation(
 ): Promise<Reputation> {
   const rep = await getReputation(conn, wallet);
   const hint = reputationHint(wallet);
+  await ensureTable(signer, hint, REPUTATION_COLUMNS, "wallet");
   await writeRow(signer, hint, JSON.stringify(rep));
   return rep;
 }
@@ -73,9 +76,12 @@ export async function getLeaderboard(
   conn: Connection,
   limit = 20,
 ): Promise<Reputation[]> {
-  // Read all skills, group by creator, compute scores
+  // Read all skills, group by creator, compute scores. Drop non-row entries
+  // (metadata shapes from readTableRows) so we don't group under undefined.
   const allSkillRows = await readRows(AUDIT_HINT, { limit: 1000 });
-  const skills = allSkillRows as unknown as Skill[];
+  const skills = (allSkillRows as unknown as Skill[]).filter(
+    (s) => typeof s.id === "string" && typeof s.creator === "string",
+  );
 
   // Group by creator
   const creatorMap = new Map<string, Skill[]>();

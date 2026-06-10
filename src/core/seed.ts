@@ -49,3 +49,45 @@ export const AUDIT_HINT = "audit:skills";
 export function reputationHint(wallet: string): string {
   return `reputation:${wallet}`;
 }
+
+// ===== Table column declarations =====
+//
+// The SDK's writeRow validates every row key against the table's declared
+// columns (`unknown key: <k>` otherwise), so these MUST be the full superset of
+// every key any writer puts in a row. Skills and workflows share AUDIT_HINT, so
+// AUDIT_COLUMNS is the union of both row shapes — whoever publishes first creates
+// the table, and the other type's keys must still be allowed.
+
+export const AUDIT_COLUMNS = [
+  "id",
+  "name",
+  "description",
+  "creator",
+  "category",
+  "hashtags",
+  "type",
+  "requiredSkills", // workflow-only
+  "price",
+  "supply",
+  "uriTxid",
+  "createdAt",
+];
+
+export const NOTE_COLUMNS = [
+  "id",
+  "author",
+  "subject",
+  "text",
+  "gitLink",
+  "isSelfNote",
+  "timestamp",
+];
+
+export const REPUTATION_COLUMNS = [
+  "wallet",
+  "skillsPublished",
+  "totalSupply",
+  "notesReceived",
+  "score",
+  "updatedAt",
+];

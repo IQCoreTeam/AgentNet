@@ -7,6 +7,7 @@ import { getMintSupply } from "../nft/token2022.js";
 vi.mock("../core/chain.js", () => ({
   readRows: vi.fn(),
   writeRow: vi.fn().mockResolvedValue("mockWriteSig"),
+  ensureTable: vi.fn().mockResolvedValue(null),
 }));
 
 // Live supply is hydrated from the mint; each test sets its own id→supply map.
