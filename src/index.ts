@@ -68,9 +68,11 @@ export {
   postNote,
   readNotes,
   deleteNote,
+  postAgentNote,
+  readAgentNotes,
   getBalance,
 } from "./notes/index.js";
-export type { PostNoteInput, ReadNotesOptions } from "./notes/index.js";
+export type { PostNoteInput, ReadNotesOptions, PostAgentNoteInput } from "./notes/index.js";
 
 export {
   searchSkills,

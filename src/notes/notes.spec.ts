@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Connection, Keypair } from "@solana/web3.js";
-import { postNote, readNotes, deleteNote } from "./notes.js";
+import { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes } from "./notes.js";
 import * as chain from "../core/chain.js";
 import * as balance from "./balance.js";
+
+const AUTHOR = "11111111111111111111111111111111";
 
 vi.mock("../core/chain.js", () => ({
   readRows: vi.fn().mockResolvedValue([{ id: "note1" }]),
@@ -59,5 +61,67 @@ describe("notes/notes", () => {
 
   it("should throw on deleteNote for now", async () => {
     await expect(deleteNote(mockConn as any, signer, "note1")).rejects.toThrow("not yet implemented");
+  });
+
+  // ===== agent notes =====
+
+  it("self-note: author == agentWallet writes without a balance check", async () => {
+    const noteId = await postAgentNote(mockConn as any, signer, {
+      agentWallet: AUTHOR, // signer is the owner → self-note
+      text: "I built these",
+    });
+
+    expect(noteId).toContain(`note:${AUTHOR}:`);
+    expect(chain.writeRow).toHaveBeenCalled();
+    expect(balance.getBalance).not.toHaveBeenCalled(); // owner skips the gate
+  });
+
+  it("comment on agent: allowed when author holds one of the agent's skills", async () => {
+    vi.mocked(balance.getBalance).mockResolvedValue(1n);
+    const source = {
+      listSkills: vi.fn().mockResolvedValue([
+        { id: AUTHOR, creator: "agentWalletX" },
+      ]),
+    };
+
+    const noteId = await postAgentNote(mockConn as any, signer, {
+      agentWallet: "agentWalletX",
+      text: "great agent",
+      source,
+    });
+
+    expect(noteId).toContain(`note:${AUTHOR}:`);
+    expect(chain.writeRow).toHaveBeenCalled();
+  });
+
+  it("comment on agent: rejected when author holds none of the agent's skills", async () => {
+    vi.mocked(balance.getBalance).mockResolvedValue(0n);
+    const source = {
+      listSkills: vi.fn().mockResolvedValue([
+        { id: AUTHOR, creator: "agentWalletX" },
+      ]),
+    };
+
+    await expect(
+      postAgentNote(mockConn as any, signer, {
+        agentWallet: "agentWalletX",
+        text: "spam",
+        source,
+      }),
+    ).rejects.toThrow(/Must hold ≥1 of agentWalletX's skills/);
+  });
+
+  it("readAgentNotes selfOnly returns only the owner's posts, newest first", async () => {
+    vi.mocked(chain.readRows).mockResolvedValue([
+      { id: "n1", author: "agentX", timestamp: 100 },
+      { id: "n2", author: "someoneElse", timestamp: 200 },
+      { id: "n3", author: "agentX", timestamp: 300 },
+    ] as any);
+
+    const all = await readAgentNotes(mockConn as any, "agentX");
+    expect(all.map((n) => n.id)).toEqual(["n3", "n2", "n1"]); // sorted desc
+
+    const self = await readAgentNotes(mockConn as any, "agentX", { selfOnly: true });
+    expect(self.map((n) => n.id)).toEqual(["n3", "n1"]);
   });
 });
