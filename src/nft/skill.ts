@@ -153,17 +153,16 @@ export async function buySkill(
   const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPvZeJ");
   const ata = getAssociatedTokenAddressSync(skillMint, buyer, false, TOKEN_2022_PROGRAM_ID);
 
-  // Create ATA if needed
-  try {
-    await conn.getAccountInfo(ata);
-  } catch {
+  // Create ATA if needed (getAccountInfo returns null for missing accounts, never throws)
+  const ataInfo = await conn.getAccountInfo(ata);
+  if (ataInfo === null) {
     tx.add(
       createAssociatedTokenAccountInstruction(
-        payerPk, // payer
-        ata, // associatedTokenAddress
-        buyer, // owner
-        skillMint, // mint
-        TOKEN_2022_PROGRAM_ID, // tokenProgramId
+        payerPk,
+        ata,
+        buyer,
+        skillMint,
+        TOKEN_2022_PROGRAM_ID,
       ),
     );
   }

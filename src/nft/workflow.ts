@@ -150,9 +150,8 @@ export async function unlockWorkflow(
   const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPvZeJ");
   const ata = getAssociatedTokenAddressSync(workflowMint, buyer, false, TOKEN_2022_PROGRAM_ID);
 
-  try {
-    await conn.getAccountInfo(ata);
-  } catch {
+  const ataInfo = await conn.getAccountInfo(ata);
+  if (ataInfo === null) {
     tx.add(
       createAssociatedTokenAccountInstruction(
         payerPk,

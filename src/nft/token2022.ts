@@ -122,17 +122,16 @@ export async function mintSkillToken(
 
   const tx = new Transaction();
 
-  // Create ATA if it doesn't exist
-  try {
-    await conn.getAccountInfo(ata);
-  } catch {
+  // Create ATA if it doesn't exist (returns null for missing accounts, never throws)
+  const ataInfo = await conn.getAccountInfo(ata);
+  if (ataInfo === null) {
     tx.add(
       createAssociatedTokenAccountInstruction(
-        creatorPk, // payer
-        ata, // associatedTokenAddress
-        recipientPk, // owner
-        mintPk, // mint
-        TOKEN_2022_PROGRAM_ID, // tokenProgramId
+        creatorPk,
+        ata,
+        recipientPk,
+        mintPk,
+        TOKEN_2022_PROGRAM_ID,
       ),
     );
   }

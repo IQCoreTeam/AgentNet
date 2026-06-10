@@ -58,8 +58,8 @@ describe("nft/token2022", () => {
   });
 
   it("should create ATA if it does not exist before minting", async () => {
-    // getAccountInfo throws or returns null (here we simulate throw)
-    mockConn.getAccountInfo.mockRejectedValueOnce(new Error("No account"));
+    // getAccountInfo returns null for missing accounts (does not throw)
+    mockConn.getAccountInfo.mockResolvedValueOnce(null);
 
     const sig = await mintSkillToken(mockConn as any, signer, "11111111111111111111111111111111", "11111111111111111111111111111111");
     
