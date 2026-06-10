@@ -23,6 +23,7 @@
     "vitest": "^4.1.8"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@solana/spl-token": "^0.4.14"
   }
 }

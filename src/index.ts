@@ -80,6 +80,12 @@ export {
 } from "./reputation/index.js";
 export type { Reputation } from "./core/types.js";
 
+export {
+  createAgentMcpServer,
+  getAgentNetTools,
+  handleToolCall,
+} from "./mcp/server.js";
+
 export { createRuntime } from "./runtime/index.js";
 export { detectCli } from "./runtime/detect.js";
 export type { CliStatus, CliReport } from "./runtime/detect.js";
