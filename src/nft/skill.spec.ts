@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import { publishSkill, buySkill } from "./skill.js";
+import { ValidationError } from "./validation/index.js";
+import type { ValidationAdapter } from "./validation/index.js";
 import * as chain from "../core/chain.js";
 import * as token2022 from "./token2022.js";
 
@@ -44,18 +46,29 @@ describe("nft/skill", () => {
     vi.clearAllMocks();
   });
 
+  // Use a valid SKILL.md that passes the default onchain validator
+  const VALID_SKILL = `---
+name: super-skill
+description: A useful skill that teaches agents to reason step by step
+category: ai
+hashtags: [reasoning]
+---
+
+This skill teaches agents to reason clearly and break down complex problems.
+`;
+
   it("should publish a skill successfully", async () => {
     const mintAddr = await publishSkill(mockConn as any, signer, {
-      name: "SuperSkill",
-      description: "Does things",
-      text: "Skill content",
+      name: "super-skill",
+      description: "A useful skill that teaches agents to reason step by step",
+      text: VALID_SKILL,
       category: "ai",
-      hashtags: ["cool"],
+      hashtags: ["reasoning"],
     });
 
     expect(mintAddr).toBe("11111111111111111111111111111111");
     expect(chain.ensureDbRoot).toHaveBeenCalled();
-    expect(chain.codeIn).toHaveBeenCalledWith(signer, "Skill content", "SuperSkill.md", "text/markdown");
+    expect(chain.codeIn).toHaveBeenCalledWith(signer, VALID_SKILL, "super-skill.md", "text/markdown");
     expect(token2022.createSkillMint).toHaveBeenCalled();
   });
 
@@ -84,5 +97,34 @@ describe("nft/skill", () => {
     // Verify that the tx includes transfers (we can't easily assert on the SystemProgram inner workings without deep mocking,
     // but we can ensure the transaction was sent successfully).
     expect(mockConn.sendRawTransaction).toHaveBeenCalled();
+  });
+
+  it("should throw ValidationError when default validator rejects", async () => {
+    // Missing name and description — will fail compat check
+    const invalidSkill = "Just some text with no frontmatter.";
+    await expect(
+      publishSkill(mockConn as any, signer, {
+        name: "test",
+        description: "test",
+        text: invalidSkill,
+      })
+    ).rejects.toThrow(ValidationError);
+    // Should NOT have called chain functions
+    expect(chain.ensureDbRoot).not.toHaveBeenCalled();
+  });
+
+  it("should use a custom validator when provided", async () => {
+    const alwaysPass: ValidationAdapter = {
+      id: "always-pass",
+      validate: async () => ({ ok: true, errors: [], warnings: [], infos: [] }),
+    };
+    // Even an invalid skill passes with a custom always-pass validator
+    const mintAddr = await publishSkill(mockConn as any, signer, {
+      name: "whatever",
+      description: "whatever",
+      text: "no frontmatter",
+      validator: alwaysPass,
+    });
+    expect(mintAddr).toBe("11111111111111111111111111111111");
   });
 });

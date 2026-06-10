@@ -22,6 +22,8 @@ import {
 } from "../core/chain.js";
 import type { Skill } from "../core/types.js";
 import { createSkillMint, mintSkillToken } from "./token2022.js";
+import { defaultValidator, ValidationError } from "./validation/index.js";
+import type { ValidationAdapter } from "./validation/index.js";
 
 export interface PublishSkillInput {
   name: string;
@@ -30,6 +32,8 @@ export interface PublishSkillInput {
   category?: string; // e.g. "clean-code"
   hashtags?: string[]; // e.g. ["refactoring"]
   price?: bigint; // lamports (0 = free)
+  /** Validation adapter to run before publishing. Defaults to OnchainAdapter. */
+  validator?: ValidationAdapter;
 }
 
 /**
@@ -47,6 +51,13 @@ export async function publishSkill(
   signer: SignerInput,
   input: PublishSkillInput,
 ): Promise<string> {
+  // 0. Validate skill before touching the chain
+  const validator = input.validator ?? defaultValidator;
+  const validation = await validator.validate(input.text);
+  if (!validation.ok) {
+    throw new ValidationError(validation.errors);
+  }
+
   // Ensure core structures exist.
   await ensureDbRoot(signer);
 
