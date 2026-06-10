@@ -18,19 +18,20 @@ export interface StorageConfig {
 }
 
 // Lazy builders so importing the registry doesn't pull every backend's deps.
-type Builder = (cfg: StorageConfig) => Promise<StorageAdapter>;
+// walletAddress scopes per-agent storage (sessions live under the wallet's folder).
+type Builder = (cfg: StorageConfig, walletAddress: string) => Promise<StorageAdapter>;
 
 const builders: Record<StorageKind, Builder> = {
-  local: async () => (await import("./manual.js")).manualStorage(),
-  gdrive: async () => (await import("./gdrive.js")).gdriveStorage(),
+  local: async (_cfg, addr) => (await import("./manual.js")).manualStorage(addr),
+  gdrive: async (_cfg, addr) => (await import("./gdrive.js")).gdriveStorage(addr),
   icloud: async (cfg) => (await import("./icloud.js")).icloudStorage(cfg.location),
   custom: async (cfg) => (await import("./custom.js")).customStorage(cfg),
 };
 
-export async function buildStorage(cfg: StorageConfig): Promise<StorageAdapter> {
+export async function buildStorage(cfg: StorageConfig, walletAddress = ""): Promise<StorageAdapter> {
   const make = builders[cfg.kind];
   if (!make) throw new Error(`unknown storage kind: ${cfg.kind}`);
-  return make(cfg);
+  return make(cfg, walletAddress);
 }
 
 // What the UI shows in the "where to save?" picker.

@@ -31,7 +31,7 @@ async function main() {
   }
 
   const wallet = testWallet(7);
-  const storage = gdriveStorage();
+  const storage = gdriveStorage(wallet.address);
   const store = new SessionStore(wallet, storage);
   const id = "gdrive-real-check";
 

@@ -55,6 +55,14 @@ export function onboardingHtml(): string {
   .custom input { width: 100%; box-sizing: border-box; padding: 8px; margin-bottom: 6px;
                   background: var(--vscode-input-background); color: var(--vscode-input-foreground);
                   border: 1px solid var(--vscode-input-border); border-radius: 6px; }
+  .fieldLabel { display: block; font-size: 0.8em; opacity: 0.6; margin-bottom: 5px; }
+  #walletPath { width: 100%; box-sizing: border-box; padding: 9px 10px; margin-bottom: 6px;
+                font-family: var(--vscode-editor-font-family); font-size: 0.85em;
+                background: var(--vscode-input-background); color: var(--vscode-input-foreground);
+                border: 1px solid var(--vscode-input-border); border-radius: 6px; }
+  #walletPath.bad { border-color: var(--vscode-inputValidation-errorBorder, #be1100); }
+  .hint { font-size: 0.78em; opacity: 0.55; margin-bottom: 12px; line-height: 1.4; }
+  .opt.selected { border-color: var(--vscode-focusBorder); }
 </style>
 </head>
 <body>
@@ -62,17 +70,19 @@ export function onboardingHtml(): string {
   <h1>AgentNet</h1>
   <div class="sub">Connect a wallet — your sessions are encrypted to it.</div>
 
-  <!-- STEP 1: wallet -->
+  <!-- STEP 1: wallet (choose / create a local Solana keypair by path) -->
   <div class="step active" id="step-wallet">
     <div class="row" id="walletRow" style="display:none">
       <span class="ok">●</span>
       <div class="grow"><div class="addr" id="walletAddr"></div></div>
     </div>
-    <button class="primary" id="connectBtn">Connect Wallet</button>
+    <label class="fieldLabel">Solana keypair file</label>
+    <input id="walletPath" spellcheck="false" placeholder="/path/to/id.json" />
+    <div class="hint" id="walletHint">If no keypair exists here, a new one is created at this path.</div>
+    <button class="primary" id="connectBtn">Use this wallet</button>
     <div class="note">
-      A local Solana keypair on this device acts as your wallet for now
-      (a real Phantom connection comes later). The same wallet = the same
-      key that decrypts your sessions on any device.
+      This keypair is your wallet (a real Phantom connection comes later). The same
+      wallet = the same key that decrypts your sessions on any device.
     </div>
   </div>
 
@@ -119,23 +129,38 @@ export function onboardingHtml(): string {
     $('step-' + step).classList.add('active');
   }
 
-  $('connectBtn').addEventListener('click', () => vscode.postMessage({ type: 'connectWallet' }));
+  // A keypair path must be absolute and end in .json (we never overwrite an existing
+  // valid one — the extension loads it, or creates a new keypair only if missing).
+  function validPath(p) { return /^(\\/|[A-Za-z]:\\\\|~\\/).*\\.json$/.test(p.trim()); }
+  $('connectBtn').addEventListener('click', () => {
+    const p = $('walletPath').value.trim();
+    if (!validPath(p)) {
+      $('walletPath').classList.add('bad');
+      vscode.postMessage({ type: 'toast', text: 'Enter an absolute path to a .json keypair file.' });
+      return;
+    }
+    $('walletPath').classList.remove('bad');
+    vscode.postMessage({ type: 'connectWallet', path: p });
+  });
+  $('walletPath').addEventListener('input', () => $('walletPath').classList.remove('bad'));
 
-  // storage option list (from extension via {type:'storageOptions'})
-  function renderOptions(opts) {
+  function pickOption(el, kind) {
+    chosenKind = kind;
+    document.querySelectorAll('.opt').forEach(x => x.classList.remove('selected'));
+    el.classList.add('selected');
+    $('customFields').classList.toggle('show', !!NEEDS_LOCATION[kind]);
+  }
+  // storage option list; preselect = a kind to mark chosen up front (already-connected cloud)
+  function renderOptions(opts, preselect) {
     const box = $('storageOpts');
     box.innerHTML = '';
     for (const o of opts) {
       const el = document.createElement('div');
       el.className = 'opt';
       el.innerHTML = '<b>' + o.label + '</b><small>' + o.needs + '</small>';
-      el.onclick = () => {
-        chosenKind = o.kind;
-        document.querySelectorAll('.opt').forEach(x => x.style.borderColor = 'transparent');
-        el.style.borderColor = 'var(--vscode-focusBorder)';
-        $('customFields').classList.toggle('show', !!NEEDS_LOCATION[o.kind]);
-      };
+      el.onclick = () => pickOption(el, o.kind);
       box.appendChild(el);
+      if (preselect && o.kind === preselect) pickOption(el, o.kind);
     }
   }
 
@@ -150,13 +175,17 @@ export function onboardingHtml(): string {
   });
   $('skipBtn').addEventListener('click', () => vscode.postMessage({ type: 'skipStorage' }));
 
+  let cloudPreselect = null; // a cloud kind to mark chosen if one was already connected
   window.addEventListener('message', (e) => {
     const m = e.data;
-    if (m.type === 'walletConnected') {
+    if (m.type === 'init') {
+      if (m.defaultPath) $('walletPath').value = m.defaultPath;
+      cloudPreselect = m.cloudKind || null; // e.g. "gdrive" if already connected
+    } else if (m.type === 'walletConnected') {
       $('walletRow').style.display = 'flex';
       $('walletAddr').textContent = m.address;
       $('walletAddr2').textContent = m.address;
-      renderOptions(m.storageOptions || []);
+      renderOptions(m.storageOptions || [], cloudPreselect);
       show('storage');
     }
   });

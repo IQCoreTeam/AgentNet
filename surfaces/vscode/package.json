@@ -22,8 +22,8 @@
     ]
   },
   "scripts": {
-    "build": "tsup src/extension.ts --format cjs --external vscode --out-dir dist",
-    "watch": "tsup src/extension.ts --format cjs --external vscode --out-dir dist --watch"
+    "build": "tsup",
+    "watch": "tsup --watch"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

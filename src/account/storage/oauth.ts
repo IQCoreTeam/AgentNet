@@ -92,20 +92,28 @@ export async function googleLogin(openBrowser: (url: string) => void): Promise<v
       });
       let redirect = "";
       server.listen(0, "127.0.0.1", () => {
-        const port = (server.address() as { port: number }).port;
-        redirect = `http://127.0.0.1:${port}`;
-        const auth = `${AUTH_URL}?${new URLSearchParams({
-          client_id: clientId(),
-          redirect_uri: redirect,
-          response_type: "code",
-          scope: SCOPE,
-          code_challenge: challenge,
-          code_challenge_method: "S256",
-          state,
-          access_type: "offline", // ensures a refresh_token
-          prompt: "consent",
-        })}`;
-        openBrowser(auth);
+        // Anything thrown HERE (e.g. clientId() with no creds) would otherwise be
+        // swallowed by the async callback and leave the promise pending forever —
+        // the "connect did nothing, no popup" bug. Catch and reject so it surfaces.
+        try {
+          const port = (server.address() as { port: number }).port;
+          redirect = `http://127.0.0.1:${port}`;
+          const auth = `${AUTH_URL}?${new URLSearchParams({
+            client_id: clientId(),
+            redirect_uri: redirect,
+            response_type: "code",
+            scope: SCOPE,
+            code_challenge: challenge,
+            code_challenge_method: "S256",
+            state,
+            access_type: "offline", // ensures a refresh_token
+            prompt: "consent",
+          })}`;
+          openBrowser(auth);
+        } catch (e) {
+          server.close();
+          reject(e);
+        }
       });
     },
   );

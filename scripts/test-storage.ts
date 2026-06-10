@@ -45,8 +45,11 @@ async function testIcloud() {
   const files = await readdir(dir);
   check("no duplicate file (one .bin)", files.filter((f) => f.endsWith(".bin")).length === 1);
 
+  // adapters return raw PAGE keys ("{id}__p{N}"); SessionStore.listMine() is what
+  // collapses them back to one entry per session. So the adapter contract is "a key
+  // for this session exists", not "the bare id is present".
   const ids = await storage.list();
-  check("list() finds the session", ids.includes(id));
+  check("list() finds the session", ids.some((k) => k === id || k.startsWith(id + "__p")));
 
   await rm(dir, { recursive: true, force: true });
 }
@@ -85,7 +88,7 @@ async function testCustom() {
   check("save + reload over HTTP", a?.messages.length === 1);
 
   const ids = await storage.list();
-  check("list() over HTTP finds it", ids.includes(id));
+  check("list() over HTTP finds it", ids.some((k) => k === id || k.startsWith(id + "__p")));
 
   server.close();
 }

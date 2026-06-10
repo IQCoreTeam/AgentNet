@@ -1,10 +1,10 @@
 // Google Drive StorageAdapter — stores each session blob as one file inside a
-// VISIBLE folder "AgentNet/sessions" in the user's Drive, so the signed-in user
-// can actually open and see their own session files (the old appDataFolder was
-// hidden by Google and unviewable). With the drive.file scope we can still only
-// touch files THIS app created — the user's other Drive files are never seen.
+// VISIBLE, PER-WALLET folder "AgentNet/{walletAddress}/sessions" in the user's
+// Drive, so different agents (= wallets) keep separate session sets and the
+// signed-in user can open their own files (the old appDataFolder was hidden).
+// With the drive.file scope we still only touch files THIS app created.
 //
-// Filename = "<sessionId>.bin". Look up by name within the folder first: exists →
+// Filename = "<sessionId>.txt". Look up by name within the folder first: exists →
 // PATCH (overwrite), else → POST (create). No append API, so put() uploads the
 // whole blob — fine because the blob is a small log.
 
@@ -60,32 +60,31 @@ async function ensureFolder(folderName: string, parent?: string): Promise<string
   return id;
 }
 
-// The "AgentNet/sessions" folder id (created on first use).
-async function sessionsFolder(): Promise<string> {
+// The "AgentNet/{wallet}/sessions" folder id (created on first use). Per-wallet so
+// each agent's sessions live apart. Pass "" only for the legacy flat layout lookup.
+async function sessionsFolder(walletAddress: string): Promise<string> {
   const agentnet = await ensureFolder("AgentNet");
-  return ensureFolder("sessions", agentnet);
+  const wallet = await ensureFolder(walletAddress, agentnet);
+  return ensureFolder("sessions", wallet);
 }
 
-// The user-openable URL of the visible "AgentNet" folder (only they can see it).
-// Returned to the UI so "open cloud" jumps straight to the folder instead of a
-// search that may not match. null if not signed in / folder not created yet.
-export async function agentnetFolderLink(): Promise<string | null> {
+// The user-openable URL of the visible "AgentNet/{wallet}" folder (only they can
+// see it). Returned to the UI so "open cloud" jumps straight to the agent's folder.
+export async function agentnetFolderLink(walletAddress: string): Promise<string | null> {
   try {
-    const q = encodeURIComponent(
-      `name='AgentNet' and mimeType='${FOLDER_MIME}' and trashed=false`,
-    );
-    const res = await fetch(`${FILES}?q=${q}&fields=files(webViewLink)`, { headers: await auth() });
+    const agentnet = await ensureFolder("AgentNet");
+    const wallet = await ensureFolder(walletAddress, agentnet);
+    const res = await fetch(`${FILES}/${wallet}?fields=webViewLink`, { headers: await auth() });
     if (!res.ok) return null;
-    const f = ((await res.json()) as { files: { webViewLink?: string }[] }).files[0];
-    return f?.webViewLink ?? null;
+    return ((await res.json()) as { webViewLink?: string }).webViewLink ?? null;
   } catch {
     return null;
   }
 }
 
-// Find the Drive file id for a sessionId inside the sessions folder, or null.
-async function findId(sessionId: string): Promise<string | null> {
-  const folder = await sessionsFolder();
+// Find the Drive file id for a sessionId inside the wallet's sessions folder.
+async function findId(walletAddress: string, sessionId: string): Promise<string | null> {
+  const folder = await sessionsFolder(walletAddress);
   const q = encodeURIComponent(`name='${name(sessionId)}' and '${folder}' in parents and trashed=false`);
   const res = await fetch(`${FILES}?q=${q}&fields=files(id)`, { headers: await auth() });
   if (!res.ok) throw new Error(`drive list failed: ${res.status}`);
@@ -93,10 +92,10 @@ async function findId(sessionId: string): Promise<string | null> {
   return data.files[0]?.id ?? null;
 }
 
-export function gdriveStorage(): StorageAdapter {
+export function gdriveStorage(walletAddress: string): StorageAdapter {
   return {
     async put(sessionId, blob) {
-      const id = await findId(sessionId);
+      const id = await findId(walletAddress, sessionId);
       if (id) {
         // overwrite existing file content (media-only PATCH)
         const res = await fetch(`${UPLOAD}/${id}?uploadType=media`, {
@@ -106,8 +105,8 @@ export function gdriveStorage(): StorageAdapter {
         });
         if (!res.ok) throw new Error(`drive update failed: ${res.status}`);
       } else {
-        // create the file inside the visible AgentNet/sessions folder
-        const folder = await sessionsFolder();
+        // create the file inside the visible AgentNet/{wallet}/sessions folder
+        const folder = await sessionsFolder(walletAddress);
         const boundary = "agentnet" + Math.random().toString(36).slice(2);
         const meta = JSON.stringify({ name: name(sessionId), parents: [folder] });
         const body = buildMultipart(boundary, meta, blob);
@@ -124,7 +123,7 @@ export function gdriveStorage(): StorageAdapter {
     },
 
     async get(sessionId) {
-      const id = await findId(sessionId);
+      const id = await findId(walletAddress, sessionId);
       if (!id) return null;
       const res = await fetch(`${FILES}/${id}?alt=media`, { headers: await auth() });
       if (res.status === 404) return null;
@@ -133,7 +132,7 @@ export function gdriveStorage(): StorageAdapter {
     },
 
     async list() {
-      const folder = await sessionsFolder();
+      const folder = await sessionsFolder(walletAddress);
       const q = encodeURIComponent(`'${folder}' in parents and trashed=false`);
       const url = `${FILES}?q=${q}&fields=files(name)&pageSize=1000`;
       const res = await fetch(url, { headers: await auth() });
@@ -145,12 +144,46 @@ export function gdriveStorage(): StorageAdapter {
     },
 
     async remove(sessionId) {
-      const id = await findId(sessionId);
+      const id = await findId(walletAddress, sessionId);
       if (!id) return; // already gone
       const res = await fetch(`${FILES}/${id}`, { method: "DELETE", headers: await auth() });
       if (!res.ok && res.status !== 404) throw new Error(`drive remove failed: ${res.status}`);
     },
   };
+}
+
+// One-time: move pre-wallet-folder sessions (the old flat AgentNet/sessions/) INTO
+// the wallet's folder, by reparenting each file (no re-upload). Best-effort; safe to
+// call every connect. No-op when there's no legacy folder or it's already empty.
+export async function migrateLegacyDriveSessions(walletAddress: string): Promise<void> {
+  try {
+    const agentnet = await ensureFolder("AgentNet");
+    // the OLD layout was AgentNet/sessions (directly under AgentNet, no wallet level)
+    const q = encodeURIComponent(
+      `name='sessions' and mimeType='${FOLDER_MIME}' and '${agentnet}' in parents and trashed=false`,
+    );
+    const res = await fetch(`${FILES}?q=${q}&fields=files(id)`, { headers: await auth() });
+    if (!res.ok) return;
+    const legacy = ((await res.json()) as { files: { id: string }[] }).files[0]?.id;
+    if (!legacy) return; // nothing to migrate
+
+    const dest = await sessionsFolder(walletAddress);
+    if (dest === legacy) return; // somehow the same — skip
+
+    const lq = encodeURIComponent(`'${legacy}' in parents and trashed=false`);
+    const lres = await fetch(`${FILES}?q=${lq}&fields=files(id,name)&pageSize=1000`, { headers: await auth() });
+    if (!lres.ok) return;
+    const files = ((await lres.json()) as { files: { id: string; name: string }[] }).files;
+    for (const f of files) {
+      if (!f.name.endsWith(EXT)) continue;
+      await fetch(`${FILES}/${f.id}?addParents=${dest}&removeParents=${legacy}&fields=id`, {
+        method: "PATCH",
+        headers: await auth(),
+      }).catch(() => {});
+    }
+  } catch {
+    /* best-effort */
+  }
 }
 
 // metadata part + binary part as a single multipart/related body

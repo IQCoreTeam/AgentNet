@@ -8,6 +8,8 @@ import type { AgentRuntime, SessionHandle, Wallet } from "../../../src/runtime/c
 import {
   connect,
   initialize,
+  isCloudConnected,
+  currentStorageKind,
   getStorageInfo,
   switchStorage,
   disconnectCloud,
@@ -15,14 +17,19 @@ import {
   STORAGE_OPTIONS,
   type StorageConfig,
 } from "../../../src/index";
-import { localWallet } from "../../../src/account/localWallet";
+import { localWallet, solanaDefaultKeypairPath } from "../../../src/account/localWallet";
 import { chatHtml } from "./webview";
 import { onboardingHtml } from "./onboarding";
+import { WebviewApprovalChannel } from "./approval";
 
 // Built during onboarding (or restored on a configured device), then handed to chat.
 // Local keypair stands in for Phantom for now.
 let wallet: Wallet | null = null;
 let runtime: AgentRuntime | null = null;
+
+// One approval channel for the extension's lifetime — bound to the active chat panel
+// so claude's tool-approval requests surface as buttons in whatever panel is open.
+const approvalChannel = new WebviewApprovalChannel();
 
 // Latest drive-mirror sync result + a hook the chat panel sets so it can show it.
 // connect() reports per-write success/failure here (otherwise cloud writes are silent).
@@ -47,7 +54,7 @@ async function boot(context: vscode.ExtensionContext) {
   const seen = context.globalState.get<boolean>("onboarded");
   if (seen) {
     wallet = (await localWallet()).wallet;
-    runtime = await connect(wallet, cloudStatusCb); // local always works; mirrors cloud if connected
+    runtime = await connect(wallet, cloudStatusCb, approvalChannel); // local always works; mirrors cloud if connected
     openChat(context);
   } else {
     openOnboarding(context);
@@ -73,21 +80,34 @@ function openOnboarding(context: vscode.ExtensionContext) {
   async function finish(cfg?: StorageConfig) {
     if (cfg) await initialize(cfg, openExternal); // connect a cloud mirror (optional)
     await context.globalState.update("onboarded", true);
-    runtime = await connect(wallet!, cloudStatusCb);
+    runtime = await connect(wallet!, cloudStatusCb, approvalChannel);
     panel.dispose();
     openChat(context);
   }
 
   panel.webview.onDidReceiveMessage(async (m) => {
     switch (m?.type) {
-      case "connectWallet": {
-        const r = await localWallet(); // load ~/.config/solana/id.json or generate
-        wallet = r.wallet;
+      case "ready":
         panel.webview.postMessage({
-          type: "walletConnected",
-          address: r.address,
-          storageOptions: STORAGE_OPTIONS,
+          type: "init",
+          defaultPath: solanaDefaultKeypairPath(),
+          cloudKind: (await isCloudConnected()) ? await currentStorageKind() : null,
         });
+        break;
+      case "connectWallet": {
+        try {
+          const r = await localWallet(m.path); // load AT path; create only if missing
+          wallet = r.wallet;
+          panel.webview.postMessage({
+            type: "walletConnected",
+            address: r.address,
+            storageOptions: STORAGE_OPTIONS,
+          });
+        } catch (e) {
+          vscode.window.showErrorMessage(
+            "Couldn't use that keypair: " + (e instanceof Error ? e.message : String(e)),
+          );
+        }
         break;
       }
       case "chooseStorage":
@@ -112,6 +132,11 @@ async function openChat(context: vscode.ExtensionContext) {
   );
   panel.webview.html = chatHtml();
 
+  // Route this panel's webview to the approval channel so tool-approval requests
+  // render as buttons here; unbind on close so a stale panel never gets messages.
+  approvalChannel.bind(panel);
+  panel.onDidDispose(() => approvalChannel.bind(null));
+
   const rt = runtime!; // boot/onboarding guarantee a runtime before chat opens
 
   // Both CLIs stay "on" at once: each has its OWN slot (handle + which session +
@@ -132,7 +157,10 @@ async function openChat(context: vscode.ExtensionContext) {
   // engine per-message — correct even for a cross-CLI session.
   function wire(forCli: "claude" | "codex", h: SessionHandle) {
     h.onMessage((msg) => { if (cli === forCli) panel.webview.postMessage({ type: "message", msg }); });
-    h.onTurnEnd(async () => { await pushSessions(); });
+    h.onTurnEnd(async () => {
+      if (cli === forCli) panel.webview.postMessage({ type: "turnEnd" }); // stop the typing dots
+      await pushSessions();
+    });
   }
 
   // Repaint the log for the current tab from its slot (history of pending session).
@@ -211,6 +239,12 @@ async function openChat(context: vscode.ExtensionContext) {
       case "send":
         if (typeof m.text === "string") (await ensureHandle()).send(m.text);
         break;
+      // user clicked Approve/Deny on a tool-approval card → resolve the pending
+      // request so the waiting engine (claude canUseTool) continues.
+      case "approvalDecision":
+        if (typeof m.id === "string" && m.outcome)
+          approvalChannel.resolve(m.id, { outcome: m.outcome, reason: m.reason });
+        break;
       // scroll-to-top: fetch the page older than `cursor`, prepend in the webview
       case "loadMore":
         if (slot().pendingId && typeof m.cursor === "number") {
@@ -241,17 +275,24 @@ async function openChat(context: vscode.ExtensionContext) {
       case "pickCloud": {
         const cfg = await pickCloud();
         if (!cfg) break; // user dismissed
-        await switchStorage(wallet!, cfg, openExternal);
-        runtime = await connect(wallet!, cloudStatusCb);
-        await pushStorage();
-        await pushSessions();
+        try {
+          await switchStorage(wallet!, cfg, openExternal);
+          runtime = await connect(wallet!, cloudStatusCb, approvalChannel);
+          await pushStorage();
+          await pushSessions();
+        } catch (e) {
+          // surface the failure instead of silently doing nothing (e.g. missing creds)
+          vscode.window.showErrorMessage(
+            "Cloud connect failed: " + (e instanceof Error ? e.message : String(e)),
+          );
+        }
         break;
       }
       // connect / change the cloud mirror (local stays on regardless)
       case "connectCloud": {
         const cfg: StorageConfig = { kind: m.kind, location: m.location, authHeader: m.authHeader };
         await switchStorage(wallet!, cfg, openExternal);
-        runtime = await connect(wallet!, cloudStatusCb);
+        runtime = await connect(wallet!, cloudStatusCb, approvalChannel);
         await pushStorage();
         await pushSessions();
         break;
@@ -259,7 +300,7 @@ async function openChat(context: vscode.ExtensionContext) {
       // turn the cloud mirror OFF; local sessions stay
       case "disconnectCloud":
         await disconnectCloud();
-        runtime = await connect(wallet!, cloudStatusCb);
+        runtime = await connect(wallet!, cloudStatusCb, approvalChannel);
         await pushStorage();
         await pushSessions();
         break;
@@ -268,8 +309,8 @@ async function openChat(context: vscode.ExtensionContext) {
       // can see it) — a direct folder URL, not a search that may not match. Falls
       // back to Drive home if the folder isn't created yet.
       case "openCloud":
-        if (m.kind === "gdrive") {
-          const link = await agentnetFolderLink();
+        if (m.kind === "gdrive" && wallet) {
+          const link = await agentnetFolderLink(wallet.address);
           openExternal(link ?? "https://drive.google.com/drive/my-drive");
         } else if (m.kind === "custom" && typeof m.location === "string") {
           openExternal(m.location);

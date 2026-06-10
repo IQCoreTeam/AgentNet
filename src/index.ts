@@ -41,17 +41,24 @@ export type { CloudStatus } from "./account/storage/mirror.js";
 
 import type { AgentRuntime, Wallet } from "./runtime/contract.js";
 import type { CloudStatus } from "./account/storage/mirror.js";
+import type { ApprovalChannel } from "./runtime/approval/channel.js";
 import { createRuntime } from "./runtime/index.js";
 import { login } from "./account/login.js";
+
+export type { ApprovalChannel, ApprovalRequest, ApprovalDecision } from "./runtime/approval/channel.js";
+export { autoApprove } from "./runtime/approval/channel.js";
 
 // Connect a wallet, restore its configured storage, return a ready runtime.
 // (Assumes initialize() was already run once to pick a storage backend.)
 // onCloudStatus (optional): reports whether each drive-mirror write succeeded, so
 // the UI can show the sync state instead of failing silently.
+// approval (optional): how tool-use approvals get decided (webview buttons / auto /
+// push). Omit → tool use auto-allows.
 export async function connect(
   wallet: Wallet,
   onCloudStatus?: (s: CloudStatus) => void,
+  approval?: ApprovalChannel,
 ): Promise<AgentRuntime> {
   const session = await login(wallet, onCloudStatus);
-  return createRuntime(session.wallet, session.storage);
+  return createRuntime(session.wallet, session.storage, approval);
 }

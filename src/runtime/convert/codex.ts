@@ -1,46 +1,64 @@
-// Parse codex `exec --json` JSONL lines into our neutral ChatMessage.
-// Real events (verified by running codex exec --json):
-//   {"type":"thread.started","thread_id":"<uuid>"}          → sessionId
-//   {"type":"item.completed","item":{"type":"agent_message","text":"..."}} → assistant
-//   {"type":"item.completed","item":{"type":"reasoning","text":"..."}}      → thinking
-//   {"type":"turn.completed","usage":{...}}                 → turn end
-// Same ParseResult shape as claude.ts so runtime treats both uniformly.
+// Map codex Agent SDK (@openai/codex-sdk) ThreadEvents into neutral ChatMessages.
+//   {type:"thread.started", thread_id}                                     → sessionId
+//   {type:"item.completed", item:{type:"agent_message", text}}             → assistant
+//   {type:"item.completed", item:{type:"reasoning", text}}                 → thinking
+//   {type:"item.completed", item:{type:"command_execution", command, …}}   → tool (bash)
+//   {type:"item.completed", item:{type:"file_change", changes[]}}          → tool (file op)
+//   {type:"turn.completed" | "turn.failed"}                                → turn end
 
 import type { ParseResult } from "./types.js";
 
-interface CodexLine {
-  type: string;
-  thread_id?: string;
-  item?: { type?: string; text?: string };
-}
+const OUTPUT_CAP = 4000;
 
-export function parseCodexLine(line: string): ParseResult {
+// We accept `unknown` and narrow so the runtime needn't import SDK types.
+// One ThreadEvent → 0+ ChatMessages.
+export function mapCodexEvent(ev: unknown): ParseResult {
   const out: ParseResult = { messages: [], turnEnded: false };
-  const trimmed = line.trim();
-  if (!trimmed) return out;
+  if (!ev || typeof ev !== "object") return out;
+  const e = ev as {
+    type?: string;
+    thread_id?: string;
+    item?: {
+      type?: string;
+      text?: string;
+      command?: string;
+      aggregated_output?: string;
+      exit_code?: number;
+      changes?: { path: string; kind: string }[];
+    };
+  };
 
-  let msg: CodexLine;
-  try {
-    msg = JSON.parse(trimmed);
-  } catch {
-    return out; // non-JSON line — ignore
-  }
+  if (e.type === "thread.started" && e.thread_id) out.sessionId = e.thread_id;
 
-  if (msg.type === "thread.started" && msg.thread_id) {
-    out.sessionId = msg.thread_id;
-  }
-
-  if (msg.type === "item.completed" && msg.item?.text) {
-    if (msg.item.type === "agent_message") {
-      out.messages.push({ role: "assistant", text: msg.item.text, ts: Date.now() });
-    } else if (msg.item.type === "reasoning") {
-      out.messages.push({ role: "thinking", text: msg.item.text, ts: Date.now() });
+  // we surface each item ONCE, on completion (item.completed), to avoid duplicating
+  // the in-progress/updated frames of the same item.
+  if (e.type === "item.completed" && e.item) {
+    const it = e.item;
+    if (it.type === "agent_message" && it.text) {
+      out.messages.push({ role: "assistant", text: it.text, ts: Date.now() });
+    } else if (it.type === "reasoning" && it.text) {
+      out.messages.push({ role: "thinking", text: it.text, ts: Date.now() });
+    } else if (it.type === "command_execution" && it.command) {
+      out.messages.push({
+        role: "tool",
+        text: it.command.split("\n")[0]?.slice(0, 80) || "bash",
+        ts: Date.now(),
+        tool: { name: "Bash", command: it.command, output: (it.aggregated_output ?? "").slice(0, OUTPUT_CAP), exitCode: it.exit_code },
+      });
+    } else if (it.type === "file_change" && Array.isArray(it.changes)) {
+      // codex reports WHICH files changed (add/update/delete) but not a line diff;
+      // surface each as a file-op tool card.
+      for (const c of it.changes) {
+        out.messages.push({
+          role: "tool",
+          text: c.kind + " " + (c.path.split("/").pop() || c.path),
+          ts: Date.now(),
+          tool: { name: c.kind === "delete" ? "Delete" : "Write", file: c.path },
+        });
+      }
     }
   }
 
-  if (msg.type === "turn.completed") {
-    out.turnEnded = true;
-  }
-
+  if (e.type === "turn.completed" || e.type === "turn.failed") out.turnEnded = true;
   return out;
 }

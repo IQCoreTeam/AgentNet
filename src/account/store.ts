@@ -169,8 +169,15 @@ export class SessionStore {
     }
     const metas: SessionMeta[] = [];
     for (const [sessionId, page] of latestPage) {
-      const s = await this.loadPage(sessionId, page);
-      if (s) metas.push({ sessionId, title: s.title, cli: s.cli, ts: s.ts });
+      // A page encrypted with a DIFFERENT wallet key (e.g. after reconnecting a
+      // new keypair) can't be decrypted — skip it instead of failing the whole
+      // list, so one unreadable session never hides all the readable ones.
+      try {
+        const s = await this.loadPage(sessionId, page);
+        if (s) metas.push({ sessionId, title: s.title, cli: s.cli, ts: s.ts });
+      } catch {
+        /* undecryptable (foreign key / corrupt) — omit from the list */
+      }
     }
     return metas.sort((a, b) => b.ts - a.ts);
   }

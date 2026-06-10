@@ -38,14 +38,37 @@ export interface StorageAdapter {
 // later WITHOUT changing the UI contract: today emit one message (partial:false);
 // later emit many (partial:true) then a final (partial:false).
 export interface ChatMessage {
-  role: "user" | "assistant" | "thinking" | "tool";
+  // "summary" = a compaction record: its `text` REPLACES the prior turns for context
+  // purposes. Every CLI compacts its own way (claude writes an isCompactSummary user
+  // line; codex writes a `compacted` record) but we normalize all of them to this one
+  // neutral shape — a plain text summary — so any engine (and any future platform) can
+  // read it. See plans/compact-and-state-sync.md.
+  role: "user" | "assistant" | "thinking" | "tool" | "summary";
   text: string;
   ts: number;
   // which CLI produced this message. Stored per-message so a session continued
   // across CLIs renders each turn with the RIGHT engine badge — independent of
   // which tab is currently open. Optional for back-compat with older logs.
   cli?: "claude" | "codex";
+  // For role:"tool" — structured action so the UI can render it nicely (a bash
+  // block, a diff, a file op) instead of opaque text. `text` still holds a short
+  // human summary for fallback/older readers. All fields optional per tool kind.
+  tool?: ToolAction;
+  // For role:"summary" — ts of the last turn this summary subsumes; inject drops
+  // turns at/before it and folds the summary in as leading context. Absent = the
+  // summary subsumes everything before its own ts.
+  replacesUpTo?: number;
   partial?: boolean; // true = streaming delta (future); absent/false = complete
+}
+
+// One tool/agent action surfaced in the transcript (bash run, file edit, read…).
+export interface ToolAction {
+  name: string; // "Bash" | "Edit" | "Write" | "Read" | "Agent" | command kind…
+  command?: string; // shell command (Bash / codex command_execution)
+  output?: string; // command stdout/stderr or result text
+  exitCode?: number; // process exit code, when known
+  file?: string; // target file (Edit / Write / Read)
+  diff?: string; // unified-ish diff for edits ("-old" / "+new" lines)
 }
 
 // ── a running session (the handle the UI drives) ────────
