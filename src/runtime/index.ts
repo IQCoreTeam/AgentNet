@@ -37,7 +37,9 @@ export function createRuntime(
         ? await prepareResume(store, opts.cli, opts.cwd, opts.sessionId!)
         : undefined;
 
-      const cli = spawnCli({ ...opts, sessionId: nativeId, approval });
+      // per-session approval channel (each panel passes its own) wins; fall back to
+      // the runtime-level default channel.
+      const cli = spawnCli({ ...opts, sessionId: nativeId, approval: opts.approval ?? approval });
 
       // Storage key stays the CANONICAL id while resuming; the cli's emitted (native)
       // id must NOT overwrite it, or appended turns land in the wrong log.

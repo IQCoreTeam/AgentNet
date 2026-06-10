@@ -18,6 +18,10 @@
       {
         "command": "agentnet.openChat",
         "title": "AgentNet: Open Chat"
+      },
+      {
+        "command": "agentnet.newChat",
+        "title": "AgentNet: New Chat (new tab)"
       }
     ]
   },
@@ -32,6 +36,8 @@
     "typescript": "^5.6.0"
   },
   "dependencies": {
+    "dompurify": "^3.4.9",
+    "marked": "^18.0.5",
     "tweetnacl": "^1.0.3"
   }
 }

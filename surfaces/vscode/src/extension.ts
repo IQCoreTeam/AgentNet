@@ -23,13 +23,11 @@ import { onboardingHtml } from "./onboarding";
 import { WebviewApprovalChannel } from "./approval";
 
 // Built during onboarding (or restored on a configured device), then handed to chat.
-// Local keypair stands in for Phantom for now.
+// The wallet + runtime are SHARED across all chat panels (one wallet = one session
+// store), so every tab sees the same session list. Each panel gets its OWN approval
+// channel + slots (created inside openChat) so approvals/handles never cross panels.
 let wallet: Wallet | null = null;
 let runtime: AgentRuntime | null = null;
-
-// One approval channel for the extension's lifetime — bound to the active chat panel
-// so claude's tool-approval requests surface as buttons in whatever panel is open.
-const approvalChannel = new WebviewApprovalChannel();
 
 // Latest drive-mirror sync result + a hook the chat panel sets so it can show it.
 // connect() reports per-write success/failure here (otherwise cloud writes are silent).
@@ -42,7 +40,14 @@ function cloudStatusCb(s: { ok: boolean; error?: string }) {
 
 export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
-    vscode.commands.registerCommand("agentnet.openChat", () => boot(context))
+    vscode.commands.registerCommand("agentnet.openChat", () => boot(context)),
+    // open ANOTHER chat panel (a new tab). VSCode handles the tab/split/drag; each
+    // panel is an independent chat sharing the one wallet+runtime. Needs the runtime
+    // ready (onboarded) — otherwise route through boot so onboarding runs first.
+    vscode.commands.registerCommand("agentnet.newChat", () => {
+      if (runtime) openChat(context, vscode.ViewColumn.Beside);
+      else boot(context);
+    }),
   );
   boot(context);
 }
@@ -54,7 +59,7 @@ async function boot(context: vscode.ExtensionContext) {
   const seen = context.globalState.get<boolean>("onboarded");
   if (seen) {
     wallet = (await localWallet()).wallet;
-    runtime = await connect(wallet, cloudStatusCb, approvalChannel); // local always works; mirrors cloud if connected
+    runtime = await connect(wallet, cloudStatusCb); // local always works; mirrors cloud if connected
     openChat(context);
   } else {
     openOnboarding(context);
@@ -80,7 +85,7 @@ function openOnboarding(context: vscode.ExtensionContext) {
   async function finish(cfg?: StorageConfig) {
     if (cfg) await initialize(cfg, openExternal); // connect a cloud mirror (optional)
     await context.globalState.update("onboarded", true);
-    runtime = await connect(wallet!, cloudStatusCb, approvalChannel);
+    runtime = await connect(wallet!, cloudStatusCb);
     panel.dispose();
     openChat(context);
   }
@@ -123,17 +128,37 @@ function openOnboarding(context: vscode.ExtensionContext) {
   });
 }
 
-async function openChat(context: vscode.ExtensionContext) {
+// Which panel currently has each session open (canonical id → panel). Lets us focus
+// an existing tab instead of opening the same session twice (which would mean two
+// panels appending to one log). Module-global so it spans all panels.
+const openSessions = new Map<string, vscode.WebviewPanel>();
+// EVERY open chat panel (across all tabs). On wallet disconnect we close them ALL —
+// they share one runtime tied to one wallet, so leaving stragglers open would mean
+// zombie panels pointing at a now-null runtime (the now-disconnected wallet).
+const chatPanels = new Set<vscode.WebviewPanel>();
+
+// Close every chat panel (used when the wallet disconnects — the whole runtime goes
+// away, so no panel may keep running against it).
+function closeAllChatPanels() {
+  for (const p of [...chatPanels]) p.dispose();
+}
+
+async function openChat(context: vscode.ExtensionContext, column = vscode.ViewColumn.One) {
   const panel = vscode.window.createWebviewPanel(
     "agentnetChat",
     "AgentNet Chat",
-    vscode.ViewColumn.One,
+    column,
     { enableScripts: true, retainContextWhenHidden: true }
   );
+  chatPanels.add(panel);
+  panel.onDidDispose(() => chatPanels.delete(panel));
+  // IQ logo as the tab icon (media/iq-logo.svg, shipped with the extension)
+  panel.iconPath = vscode.Uri.joinPath(context.extensionUri, "media", "iq-logo.svg");
   panel.webview.html = chatHtml();
 
-  // Route this panel's webview to the approval channel so tool-approval requests
-  // render as buttons here; unbind on close so a stale panel never gets messages.
+  // This panel's OWN approval channel — tool approvals from sessions started here
+  // dock in THIS panel, never another tab. Bound for the panel's lifetime.
+  const approvalChannel = new WebviewApprovalChannel();
   approvalChannel.bind(panel);
   panel.onDidDispose(() => approvalChannel.bind(null));
 
@@ -178,20 +203,34 @@ async function openChat(context: vscode.ExtensionContext) {
 
   // Open a session into the CURRENT tab's slot — cross-CLI: clicking a session
   // continues that canonical conversation in WHATEVER cli the tab is on (the runtime
-  // re-injects its history into that cli on resume). We do NOT switch tabs to the
-  // session's birth cli anymore. A fresh handle is spawned lazily on the next send.
+  // re-injects its history into that cli on resume). A fresh handle is spawned lazily
+  // on the next send.
+  //
+  // Multi-tab guard: if the session is already open in ANOTHER panel, focus that one
+  // instead of opening a duplicate (two panels writing one log races). We track which
+  // session THIS panel holds in openSessions so we can hand it back on close.
+  let heldSession: string | undefined; // the session id this panel currently owns
   async function open(sessionId?: string) {
+    if (sessionId) {
+      const other = openSessions.get(sessionId);
+      if (other && other !== panel) { other.reveal(); return; } // already open elsewhere
+    }
+    if (heldSession) openSessions.delete(heldSession);
     slot().handle?.stop();
     slot().handle = null;
     slot().pendingId = sessionId;
+    heldSession = sessionId;
+    if (sessionId) openSessions.set(sessionId, panel);
     await repaint();
   }
+  panel.onDidDispose(() => { if (heldSession) openSessions.delete(heldSession); });
 
   async function ensureHandle() {
     const s = slot();
     if (s.handle) return s.handle;
     const spawnCli = cli; // capture: cli must not change across the await
-    s.handle = await rt.startSession({ cli: spawnCli, model: s.model, cwd: getCwd(), sessionId: s.pendingId });
+    // pass THIS panel's approval channel so its tool approvals dock here.
+    s.handle = await rt.startSession({ cli: spawnCli, model: s.model, cwd: getCwd(), sessionId: s.pendingId, approval: approvalChannel });
     wire(spawnCli, s.handle);
     return s.handle;
   }
@@ -219,16 +258,26 @@ async function openChat(context: vscode.ExtensionContext) {
     switch (m?.type) {
       case "ready": await pushSessions(); await pushStorage(); await open(); break;
       case "new":   await open(); await pushSessions(); break;
+      case "newTab": vscode.commands.executeCommand("agentnet.newChat"); break; // open another panel
       // Clicking a session resumes it in the CURRENT tab's cli (cross-CLI). The
       // session's own cli is ignored — that's the whole point of cross-CLI resume.
       case "open":  await open(m.sessionId); await pushSessions(); break;
       case "platform":
-        // Just switch which slot is showing — DON'T kill anything. The other CLI
-        // keeps its handle/session alive in the background.
+        // Switching engine CARRIES the current session over (cross-CLI resume): the
+        // session you're working on follows you to the other CLI instead of dropping
+        // you on an empty screen. We show a loading flash, hand the session to the new
+        // slot, and repaint — the next send resumes it (history re-injected into the
+        // new cli). If nothing was open, just switch to a blank chat as before.
         if ((m.cli === "claude" || m.cli === "codex") && m.cli !== cli) {
+          const carry = slot().pendingId; // the session the OLD engine was showing
           cli = m.cli;
-          await repaint();     // show this tab's own session/history
-          await pushSessions(); // highlight this tab's active session
+          if (carry && slot().pendingId !== carry) {
+            panel.webview.postMessage({ type: "loading" });
+            await open(carry); // resume the same canonical session in the new cli
+          } else {
+            await repaint();
+          }
+          await pushSessions();
         }
         break;
       case "model":
@@ -277,7 +326,7 @@ async function openChat(context: vscode.ExtensionContext) {
         if (!cfg) break; // user dismissed
         try {
           await switchStorage(wallet!, cfg, openExternal);
-          runtime = await connect(wallet!, cloudStatusCb, approvalChannel);
+          runtime = await connect(wallet!, cloudStatusCb);
           await pushStorage();
           await pushSessions();
         } catch (e) {
@@ -292,7 +341,7 @@ async function openChat(context: vscode.ExtensionContext) {
       case "connectCloud": {
         const cfg: StorageConfig = { kind: m.kind, location: m.location, authHeader: m.authHeader };
         await switchStorage(wallet!, cfg, openExternal);
-        runtime = await connect(wallet!, cloudStatusCb, approvalChannel);
+        runtime = await connect(wallet!, cloudStatusCb);
         await pushStorage();
         await pushSessions();
         break;
@@ -300,7 +349,7 @@ async function openChat(context: vscode.ExtensionContext) {
       // turn the cloud mirror OFF; local sessions stay
       case "disconnectCloud":
         await disconnectCloud();
-        runtime = await connect(wallet!, cloudStatusCb, approvalChannel);
+        runtime = await connect(wallet!, cloudStatusCb);
         await pushStorage();
         await pushSessions();
         break;
@@ -322,13 +371,14 @@ async function openChat(context: vscode.ExtensionContext) {
         break;
       // Disconnect the wallet entirely: drop the cloud, forget onboarding, and go
       // back to the pre-connect (onboarding) screen. Local session files stay on disk.
+      // The runtime (tied to this wallet) goes away, so EVERY open chat tab must close —
+      // otherwise other tabs become zombies pointing at a null runtime / stale wallet.
       case "disconnectWallet":
         await disconnectCloud();
         await context.globalState.update("onboarded", false);
         wallet = null;
         runtime = null;
-        slots.claude.handle?.stop(); slots.codex.handle?.stop();
-        panel.dispose();
+        closeAllChatPanels(); // dispose all tabs (each tab's onDidDispose stops its handles)
         openOnboarding(context);
         break;
     }

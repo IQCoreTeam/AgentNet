@@ -13,6 +13,7 @@
 // signAllTransactions) — the SAME shape Phantom exposes, so any front-end
 // (Phantom, Ledger, a local Keypair, mobile wallet) can satisfy it.
 import type { WalletSigner } from "@iqlabs-official/solana-sdk/utils";
+import type { ApprovalChannel } from "./approval/channel.js";
 
 export interface Wallet extends WalletSigner {
   address: string; // base58 (== publicKey.toBase58())
@@ -90,6 +91,10 @@ export interface AgentRuntime {
     cwd: string;
     sessionId?: string; // present = resume, absent = new
     model?: string;
+    // who decides tool approvals for THIS session. Per-session (not per-runtime) so
+    // multiple chat panels sharing one runtime each route approvals to their OWN
+    // panel. Omit → the runtime's default channel (or auto-allow).
+    approval?: ApprovalChannel;
   }): Promise<SessionHandle>;
 
   // list the wallet's saved sessions (for the UI's session list)

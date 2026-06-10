@@ -11,7 +11,43 @@
 //   partial:true  -> append the delta to the CURRENT bubble (streaming)
 //   partial:false -> that bubble is complete (start a new one next time)
 
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { AVATAR_SVG, AVATAR_SCRIPT } from "./avatar.js";
+import { IQ_LOGO_SVG } from "./iqlogo.js";
+
+// marked (md → html) + dompurify (XSS sanitize) inlined into the webview <script>.
+// The webview is an isolated browser context, so we ship the libraries' browser
+// builds as text and run them there. Read once (node/extension-host side) and cache.
+// marked.umd.js exposes `marked`; purify.min.js exposes `DOMPurify`.
+//
+// Strict `exports` maps block both ./package.json and ./lib/* subpaths, so we resolve
+// each package's MAIN entry (always allowed), walk up to the package root (the path
+// segment ending in "/<name>/"), then read the browser build by relative path.
+function pkgRoot(req: NodeJS.Require, name: string): string {
+  const main = req.resolve(name); // e.g. .../node_modules/marked/lib/marked.esm.js
+  const marker = `${name}${"/"}`;
+  const i = main.lastIndexOf(marker);
+  return i >= 0 ? main.slice(0, i + marker.length) : dirname(main);
+}
+let mdLibs: string | undefined;
+function markdownLibs(): string {
+  if (mdLibs !== undefined) return mdLibs;
+  try {
+    const req = createRequire(__filename);
+    const marked = readFileSync(join(pkgRoot(req, "marked"), "lib", "marked.umd.js"), "utf8");
+    const purify = readFileSync(join(pkgRoot(req, "dompurify"), "dist", "purify.min.js"), "utf8");
+    mdLibs = marked + "\n" + purify;
+  } catch {
+    mdLibs = ""; // graceful fallback: webview renders plain text if libs missing
+  }
+  return mdLibs;
+}
+
+// A small magic-wand glyph (line art, currentColor) — the skills affordance. Drawn
+// as SVG instead of an emoji so it matches the UI weight and themes cleanly.
+const WAND_SVG = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l7-7"/><path d="M9.5 4.5l2 2"/><path d="M12.5 2v2M14.5 3.5h-2M13 6.2l1 .4M12.6 1.2l.4 1"/></svg>';
 
 export function chatHtml(): string {
   return /* html */ `<!DOCTYPE html>
@@ -64,73 +100,122 @@ export function chatHtml(): string {
 
   /* thin top bar: just the storage pill on the right (engine choice moved to the
      composer's folder tabs at the bottom) */
-  #tabs { display: flex; align-items: center; padding: 6px 4px;
+  #tabs { display: flex; align-items: center; padding: 6px 8px;
           border-bottom: 1px solid var(--vscode-panel-border); }
-  #storagePill { margin: 0 10px 0 auto; padding: 3px 11px; display: flex; align-items: center; gap: 5px;
-                 font-size: 0.78em; opacity: 0.85; background: var(--an-bg-1); border-radius: 999px; }
-  #storagePill .dot { font-size: 0.7em; }
-  #storagePill .dot.local { color: var(--an-green); }
-  #storagePill .dot.cloud-on { color: var(--an-green); }
-  #storagePill .dot.cloud-off { color: var(--vscode-disabledForeground, #888); }
-  #storagePill .sep { opacity: 0.3; }
-  #storagePill .acct { opacity: 0.5; }
-  #storagePill .link { background: none; border: none; padding: 0 2px; width: auto;
-                       color: var(--an-green); cursor: pointer; font-size: 1em; }
-  #storagePill .link:hover { text-decoration: underline; }
+  #newTabBtn { background: transparent; color: var(--vscode-foreground); opacity: 0.65;
+               border: 1px solid var(--an-line); border-radius: 999px; padding: 3px 12px;
+               font-size: 0.78em; cursor: pointer; transition: all 0.12s; }
+  #newTabBtn:hover { opacity: 1; color: var(--an-green); border-color: var(--an-green-line);
+                     background: var(--an-green-dim); }
+  /* storage block inside the wallet dropdown (moved from the top bar) */
+  .wmSection { padding: 4px 8px 8px; border-bottom: 1px solid var(--an-line-soft); margin-bottom: 4px; }
+  .wmLabel { font-size: 0.68em; opacity: 0.5; text-transform: uppercase; letter-spacing: 0.06em;
+             font-weight: 700; padding: 4px 2px 6px; display: flex; align-items: center; gap: 6px; }
+  .wmStorage { display: flex; align-items: center; gap: 5px; font-size: 0.82em; opacity: 0.9;
+               flex-wrap: wrap; padding: 0 2px; }
+  .wmStorage .dot { font-size: 0.7em; }
+  .wmStorage .dot.local { color: var(--an-green); }
+  .wmStorage .dot.cloud-on { color: var(--an-green); }
+  .wmStorage .dot.cloud-off { color: var(--vscode-disabledForeground, #888); }
+  .wmStorage .sep { opacity: 0.3; }
+  .wmStorage .acct { opacity: 0.5; }
+  .wmStorage .link { background: none; border: none; padding: 0 2px; width: auto;
+                     color: var(--an-green); cursor: pointer; font-size: 1em; }
+  .wmStorage .link:hover { text-decoration: underline; }
   #cloudSync { font-size: 0.92em; }
   #cloudSync.ok { color: var(--an-green); }
   #cloudSync.err { color: var(--vscode-errorForeground, #e55); cursor: help; }
 
   #wrap { flex: 1; display: flex; min-height: 0; }
 
-  /* left session list */
-  #sidebar { width: 230px; border-right: 1px solid var(--vscode-panel-border);
-             display: flex; flex-direction: column; overflow-y: auto; }
-  #sidebar h3 { font-size: 0.68em; opacity: 0.5; padding: 12px 14px 6px; margin: 0;
-                text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
+  /* ── top-bar buttons (wallet pill, history, new tab) ─────────────────────── */
+  #tabs .spacer { flex: 1; }
+  #tabs button { display: inline-flex; align-items: center; gap: 6px; background: transparent;
+                 color: var(--vscode-foreground); border: 1px solid var(--an-line);
+                 border-radius: 999px; padding: 4px 11px; font-size: 0.8em; cursor: pointer;
+                 opacity: 0.8; transition: all 0.12s; }
+  #tabs button:hover { opacity: 1; border-color: var(--an-green-line); background: var(--an-bg-1); }
+  #tabs .caret { opacity: 0.5; font-size: 0.8em; }
+  #walletPill #wAvatar { width: 18px; height: 18px; border-radius: 50%; overflow: hidden;
+                         background: var(--an-bg-2); flex: none; }
+  #walletPill #wAvatar svg { display: block; width: 100%; height: 100%; }
+  #newTabBtn { padding: 4px 10px; font-weight: 700; }
+
+  /* ── dropdowns (history / wallet), anchored under the top bar ─────────────── */
+  /* SOLID background (an opaque widget bg, not the translucent --an-bg-2) so the
+     chat behind doesn't bleed through. */
+  .dropdown { position: absolute; top: 42px; z-index: 50; min-width: 260px; max-width: 340px;
+              max-height: 60vh; overflow-y: auto;
+              background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+              border: 1px solid var(--an-line); border-radius: var(--an-radius);
+              box-shadow: 0 8px 28px rgba(0,0,0,0.4); padding: 6px; }
+  #histMenu { right: 8px; }
+  #walletMenu { left: 8px; }
+  .ddHead { display: flex; align-items: center; justify-content: space-between;
+            font-size: 0.7em; opacity: 0.55; text-transform: uppercase; letter-spacing: 0.06em;
+            font-weight: 700; padding: 6px 8px 8px; }
+  .ddNew { background: transparent; color: var(--an-green); border: 1px solid var(--an-green-line);
+           border-radius: 999px; padding: 2px 10px; font-size: 1em; cursor: pointer; text-transform: none; }
+  .ddNew:hover { background: var(--an-green-dim); }
+
   .sess { display: flex; justify-content: space-between; gap: 8px; align-items: baseline;
-          padding: 7px 11px; cursor: pointer; font-size: 0.9em; border-left: 2px solid transparent;
-          border-radius: var(--an-radius-sm); margin: 1px 6px; transition: background 0.12s; }
+          padding: 8px 10px; cursor: pointer; font-size: 0.88em; border-radius: var(--an-radius-sm);
+          transition: background 0.12s; }
   .sess:hover { background: var(--an-bg-1); }
-  .sess.active { background: var(--an-green-dim); border-left-color: var(--an-green); }
+  .sess.active { background: var(--an-green-dim); }
   .sess.active .title { color: var(--an-green); }
   .sess .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
   .sess .time { opacity: 0.45; font-size: 0.8em; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .sess .del { opacity: 0; font-size: 0.9em; padding: 0 2px; border-radius: 3px; }
   .sess:hover .del { opacity: 0.5; }
   .sess .del:hover { opacity: 1; background: var(--vscode-inputValidation-errorBackground); }
-  #showAll { padding: 8px 12px; cursor: pointer; font-size: 0.85em; opacity: 0.6; }
-  #showAll:hover { opacity: 1; }
-  #empty { opacity: 0.4; text-align: center; padding: 24px 12px; font-size: 0.85em; }
-  /* a quiet ghost "+ New" that lights up green on hover — not a heavy primary button */
-  #newBtn { margin: 6px 10px 10px; background: transparent; color: var(--vscode-foreground);
-            border: 1px dashed var(--an-line); border-radius: var(--an-radius-sm);
-            opacity: 0.75; font-size: 0.85em; padding: 7px; transition: all 0.12s; }
-  #newBtn:hover { opacity: 1; color: var(--an-green); border-color: var(--an-green-line);
-                  background: var(--an-green-dim); }
+  #showAll { padding: 8px 10px; cursor: pointer; font-size: 0.82em; opacity: 0.6; }
+  #showAll:hover { opacity: 1; color: var(--an-green); }
+  #empty { opacity: 0.4; text-align: center; padding: 20px 12px; font-size: 0.85em; }
 
-  /* sessions scroll; wallet card pinned to the BOTTOM of the sidebar */
-  #sessScroll { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
-  /* the wallet = the agent. always visible, bottom-left, "this is mine" */
-  #walletCard { border-top: 1px solid var(--vscode-panel-border); padding: 10px 12px;
-                display: flex; align-items: center; gap: 9px; cursor: pointer;
-                background: var(--vscode-editorWidget-background); user-select: none; }
-  #walletCard:hover { background: var(--vscode-list-hoverBackground); }
-  #walletCard.active { border-top-color: var(--an-green-line);
-                       box-shadow: inset 2px 0 0 var(--an-green); }
-  #wAvatar { width: 24px; height: 24px; border-radius: 50%; flex: none; overflow: hidden;
-             background: var(--vscode-editor-background); }
-  #wAvatar svg { display: block; width: 100%; height: 100%; }
-  #wMeta { min-width: 0; flex: 1; }
-  #wName { font-size: 0.86em; font-weight: 600; }
+  /* wallet menu */
+  .wmHead { display: flex; align-items: center; gap: 9px; padding: 8px; }
+  .wmHead #wAvatar2 { width: 32px; height: 32px; border-radius: 50%; overflow: hidden;
+                      background: var(--an-bg-1); flex: none; }
+  .wmHead #wAvatar2 svg { display: block; width: 100%; height: 100%; }
+  .wmHead .grow { min-width: 0; flex: 1; }
+  #wName, #wName2 { font-size: 0.9em; font-weight: 600; }
   #wAddr { font-size: 0.74em; opacity: 0.55; font-family: var(--vscode-editor-font-family);
            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #wCaret { opacity: 0.4; font-size: 0.7em; }
+  .wmItem { padding: 9px 10px; border-radius: var(--an-radius-sm); cursor: pointer; font-size: 0.88em;
+            display: flex; align-items: center; gap: 8px; }
+  .wmItem:hover:not(.disabled) { background: var(--an-bg-1); }
+  .wmItem.disabled { opacity: 0.4; cursor: default; }
+  .wmItem .soon { margin-left: auto; font-size: 0.72em; opacity: 0.6; border: 1px solid var(--an-line);
+                  border-radius: 999px; padding: 0 7px; }
 
   /* right chat area */
-  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
   #log { flex: 1; overflow-y: auto; padding: 0 0 24px; display: flex; flex-direction: column;
-         scroll-behavior: smooth; }
+         scroll-behavior: smooth; position: relative; z-index: 1; }
+
+  /* IQ watermark on an empty chat: centered, faint, theme-grey. The logo's fill is
+     currentColor, so we just set color to a muted foreground that reads as grey in
+     both dark and light themes. Hidden once the log has any content (.hasMsgs). */
+  #watermark { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+               pointer-events: none; z-index: 0; transition: opacity 0.3s;
+               padding-bottom: 18vh; box-sizing: border-box; } /* nudge up — composer sits below */
+  #watermark svg { width: 160px; height: auto; }
+  /* dark theme → light grey; light theme → dark grey. Both kept faint. */
+  body.vscode-dark  #watermark { color: #ffffff; opacity: 0.05; }
+  body.vscode-light #watermark { color: #000000; opacity: 0.06; }
+  body.vscode-high-contrast #watermark { opacity: 0.12; }
+  #main.hasMsgs #watermark { opacity: 0; }
+
+  /* loading veil while a session is carried to the other engine */
+  #loading { position: absolute; inset: 0; z-index: 8; display: flex; gap: 12px;
+             align-items: center; justify-content: center; flex-direction: column;
+             background: color-mix(in srgb, var(--vscode-editor-background) 70%, transparent);
+             backdrop-filter: blur(2px); font-size: 0.9em; opacity: 0.85; }
+  #loading .spin { width: 26px; height: 26px; border-radius: 50%;
+                   border: 2.5px solid var(--an-line); border-top-color: var(--an-green);
+                   animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 
   /* ── TURN-THREAD layout (Claude-Code style) ──────────────────────────────
      Each user command opens a TURN: the command becomes a STICKY header that
@@ -162,6 +247,42 @@ export function chatHtml(): string {
                                    box-shadow: 0 0 0 3px rgba(233,136,58,0.16); }
   .node.thinking::before  { background: transparent; }
   .msg { white-space: pre-wrap; line-height: 1.55; font-size: 0.95em; overflow-wrap: anywhere; }
+  /* rendered markdown inside an assistant message: tame the default browser margins
+     and theme code/tables/quotes to match. (assistant .msg holds sanitized HTML.) */
+  .node.assistant .msg { white-space: normal; }
+  .msg > :first-child { margin-top: 0; }
+  .msg > :last-child { margin-bottom: 0; }
+  .msg p { margin: 0 0 8px; }
+  .msg h1, .msg h2, .msg h3, .msg h4 { margin: 14px 0 6px; line-height: 1.3; font-weight: 700; }
+  .msg h1 { font-size: 1.3em; } .msg h2 { font-size: 1.18em; } .msg h3 { font-size: 1.06em; } .msg h4 { font-size: 1em; }
+  .msg ul, .msg ol { margin: 4px 0 8px; padding-left: 1.4em; }
+  .msg li { margin: 2px 0; }
+  .msg a { color: var(--an-green); text-decoration: none; }
+  .msg a:hover { text-decoration: underline; }
+  .msg code { font-family: var(--vscode-editor-font-family); font-size: 0.88em;
+              background: var(--an-bg-1); border: 1px solid var(--an-line-soft);
+              border-radius: 4px; padding: 1px 5px; }
+  .msg pre { background: var(--an-bg-1); border: 1px solid var(--an-line-soft);
+             border-radius: var(--an-radius-sm); padding: 10px 12px; overflow-x: auto; margin: 8px 0; }
+  .msg pre code { background: none; border: none; padding: 0; font-size: 0.86em; line-height: 1.5; }
+  .msg blockquote { margin: 8px 0; padding: 2px 12px; border-left: 3px solid var(--an-line);
+                    opacity: 0.85; }
+  .msg table { border-collapse: collapse; margin: 8px 0; font-size: 0.92em; display: block; overflow-x: auto; }
+  .msg th, .msg td { border: 1px solid var(--an-line); padding: 5px 10px; text-align: left; }
+  .msg th { background: var(--an-bg-1); font-weight: 600; }
+  .msg hr { border: none; border-top: 1px solid var(--an-line); margin: 12px 0; }
+  .msg strong { font-weight: 700; }
+  .msg img { max-width: 100%; border-radius: var(--an-radius-sm); }
+
+  /* per-message copy button: appears on hover at the node's top-right (Claude-style) */
+  .copyBtn { position: absolute; top: 2px; right: 4px; width: 24px; height: 24px; padding: 0;
+             display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+             background: var(--an-bg-2); border: 1px solid var(--an-line-soft); border-radius: 6px;
+             color: var(--vscode-foreground); opacity: 0; transition: opacity 0.12s, color 0.12s; }
+  .node:hover .copyBtn { opacity: 0.7; }
+  .copyBtn:hover { opacity: 1; color: var(--an-green); border-color: var(--an-green-line); }
+  .copyBtn svg { width: 13px; height: 13px; }
+  .copyBtn.done { color: var(--an-green); opacity: 1; }
   .node.assistant .msg { }
   .node.thinking .msg { opacity: 0.5; font-style: italic; font-size: 0.9em; }
   .tool { font-family: var(--vscode-editor-font-family); font-size: 0.9em; }
@@ -252,13 +373,19 @@ export function chatHtml(): string {
             font-size: 0.8em; white-space: pre-wrap; word-break: break-all; opacity: 0.9;
             border-top: 1px solid var(--an-green-dim); max-height: 240px; overflow: auto; }
   .apActions { display: flex; gap: 8px; padding: 9px 12px; border-top: 1px solid var(--an-green-dim); }
-  .apBtn { width: auto; padding: 6px 16px; font-size: 0.85em; font-weight: 600; border-radius: 6px; }
+  .apBtn { width: auto; padding: 6px 16px; font-size: 0.85em; font-weight: 600; border-radius: 6px;
+           outline: none; transition: box-shadow 0.12s, filter 0.12s; }
   .apBtn.ok { background: var(--an-green); color: #06231a; }
   .apBtn.ok:hover { filter: brightness(1.08); }
   .apBtn.always { background: transparent; color: var(--an-green); border: 1px solid var(--an-green-line); }
   .apBtn.always:hover { background: var(--an-green-dim); }
   .apBtn.no { background: transparent; color: #e07a7a; border: 1px solid rgba(224,108,108,0.4); }
   .apBtn.no:hover { background: rgba(224,108,108,0.12); }
+  /* keyboard focus ring (← → to move, Enter to confirm) */
+  .apBtn:focus-visible, .apBtn:focus { box-shadow: 0 0 0 2px var(--vscode-editor-background),
+                                                    0 0 0 4px var(--an-green); }
+  .apBtn.no:focus-visible, .apBtn.no:focus { box-shadow: 0 0 0 2px var(--vscode-editor-background),
+                                                          0 0 0 4px #e07a7a; }
   .apResolved { padding: 8px 12px; font-size: 0.82em; border-top: 1px solid var(--an-green-dim); }
   .apResolved.allowed { color: var(--an-green); }
   .apResolved.denied { color: #e07a7a; }
@@ -296,7 +423,76 @@ export function chatHtml(): string {
   #composer { --eng: var(--an-green); --engSoft: var(--an-green-dim); --engLine: var(--an-green-line); }
   #composer[data-cli="claude"] { --eng: var(--claude); --engSoft: rgba(233,136,58,0.12); --engLine: rgba(233,136,58,0.45); }
 
-  #engineTabs { display: flex; gap: 3px; align-self: flex-end; margin-right: 4px; padding-left: 40%; }
+  /* composer top row: skills (left) ←→ engine tabs (right) */
+  #composerTop { display: flex; align-items: flex-end; justify-content: space-between; }
+  #skillsBtn { display: inline-flex; align-items: center; gap: 6px; background: var(--an-bg-1);
+               color: var(--vscode-foreground); border: 1px solid var(--an-line-soft); border-bottom: none;
+               border-radius: var(--an-radius-sm) var(--an-radius-sm) 0 0; padding: 5px 12px 7px;
+               font-size: 0.8em; cursor: pointer; opacity: 0.7; position: relative; top: 1px;
+               transition: opacity 0.12s, color 0.12s; }
+  #skillsBtn:hover { opacity: 1; color: var(--an-green); }
+  #skillsBtn.on { opacity: 1; color: var(--an-green); background: var(--an-bg-2); border-color: var(--an-green-line); }
+  #skillsBtn .wand { display: inline-flex; width: 14px; height: 14px; }
+  .wand { display: inline-flex; width: 13px; height: 13px; vertical-align: -2px; }
+
+  /* equipped-skills panel (above the composer) */
+  #skillsPanel { margin: 8px 12px 0; border: 1px solid var(--an-line); border-radius: var(--an-radius);
+                 background: var(--vscode-editorWidget-background, var(--an-bg-2)); padding: 10px 12px; }
+  #skillsPanel .skHead { display: flex; align-items: center; gap: 7px; font-size: 0.78em;
+                         font-weight: 600; opacity: 0.85; margin-bottom: 9px; }
+  #skillsPanel .skHead .wand { width: 14px; height: 14px; color: var(--an-green); }
+  #skillsPanel .skMuted { margin-left: auto; font-weight: 400; opacity: 0.5; font-size: 0.92em; }
+  #skillGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  /* a skill slot: an item card. empty = a quiet dashed "coming soon" placeholder. */
+  .skSlot { aspect-ratio: 1; border-radius: var(--an-radius-sm); display: flex; align-items: center;
+            justify-content: center; }
+  .skSlot.empty { border: 1.5px dashed var(--an-line-soft); background: var(--an-bg-1); opacity: 0.5; }
+  .skSlot.empty::after { content: ''; width: 16px; height: 16px; border-radius: 4px;
+                         background: var(--an-line-soft); }
+  /* an ACTIVE skill = a live item card: green-edged, gently breathing glow (not neon) */
+  .skSlot.item { flex-direction: column; gap: 5px; padding: 8px 6px; aspect-ratio: auto;
+                 border: 1px solid var(--an-green-line); background: var(--an-green-dim);
+                 color: var(--an-green); position: relative; overflow: hidden;
+                 animation: skBreath 3.2s ease-in-out infinite; }
+  .skSlot.item .skWand { width: 18px; height: 18px; display: inline-flex; filter: drop-shadow(0 0 4px var(--an-green)); }
+  .skSlot.item .skName { font-size: 0.72em; color: var(--vscode-foreground); opacity: 0.92;
+                         text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                         max-width: 100%; }
+  @keyframes skBreath {
+    0%, 100% { box-shadow: 0 0 0 0 transparent; border-color: var(--an-green-line); }
+    50%      { box-shadow: 0 0 10px -2px var(--an-green); border-color: var(--an-green); }
+  }
+  /* header "Casting: …" glows softly when something is active */
+  #skillsPanel.casting .skMuted { color: var(--an-green); opacity: 0.95; font-weight: 600;
+                                  text-shadow: 0 0 8px color-mix(in srgb, var(--an-green) 55%, transparent); }
+  /* the skills BUTTON also hints when casting (badge already shows the count) */
+  #skillsBtn.casting { color: var(--an-green); }
+  .skNote { margin-top: 10px; font-size: 0.76em; opacity: 0.5; line-height: 1.5; }
+
+  /* skill marquee — ONLY shows when an equipped skill fires ("Casting <skill>").
+     Plain tool work isn't shown here (it's already in the chat timeline). Green with
+     a breathing glow so a skill firing feels like the agent wielding its power. */
+  #activityBar { margin: 6px 12px 0; padding: 6px 12px; border-radius: 999px;
+                 background: var(--an-green-dim); border: 1px solid var(--an-green-line);
+                 color: var(--an-green); font-size: 0.8em;
+                 display: flex; align-items: center; gap: 8px; overflow: hidden; white-space: nowrap;
+                 animation: actBreath 2.6s ease-in-out infinite, actIn 0.25s ease-out; }
+  #activityBar .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--an-green); flex: none;
+                      box-shadow: 0 0 6px var(--an-green); animation: actPulse 1.4s ease-in-out infinite; }
+  #activityText { overflow: hidden; text-overflow: ellipsis; }
+  #activityText .verb { font-weight: 700; text-shadow: 0 0 8px color-mix(in srgb, var(--an-green) 50%, transparent); }
+  #activityText .obj { opacity: 0.85; color: var(--vscode-foreground); font-family: var(--vscode-editor-font-family); font-size: 0.94em; }
+  @keyframes actBreath { 0%,100% { box-shadow: 0 0 0 0 transparent; }
+                         50% { box-shadow: 0 0 12px -3px var(--an-green); } }
+  @keyframes actPulse  { 0%,100% { opacity: 0.4; transform: scale(0.85); }
+                         50% { opacity: 1; transform: scale(1.1); } }
+  @keyframes actIn     { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  #activityBar.out { animation: actOut 0.25s ease-in forwards; }
+  @keyframes actOut    { to { opacity: 0; transform: translateY(4px); } }
+  .skNote code { font-family: var(--vscode-editor-font-family); font-size: 0.95em;
+                 background: var(--an-bg-1); padding: 0 4px; border-radius: 3px; }
+
+  #engineTabs { display: flex; gap: 3px; align-self: flex-end; }
   .etab { display: flex; align-items: center; gap: 6px; padding: 5px 14px 7px;
           font-size: 0.8em; cursor: pointer; user-select: none; opacity: 0.5;
           background: var(--an-bg-1); border: 1px solid var(--an-line-soft); border-bottom: none;
@@ -337,44 +533,94 @@ export function chatHtml(): string {
 
   <!-- CHAT view -->
   <div id="chatView" class="panel">
+  <!-- top bar: wallet menu (left) · history + new-tab + storage (right). No left
+       sidebar — sessions live in the History dropdown now. -->
   <div id="tabs">
-    <div id="storagePill" title="Where sessions are saved">
-      <span class="dot local">●</span><span>Local</span>
-      <span class="sep">·</span>
-      <span id="cloudState"></span>
-      <button id="cloudBtn" class="link"></button>
-      <span id="cloudSync" title="Drive sync status"></span>
-    </div>
+    <!-- wallet pill: shows the agent; click → a menu (skills etc., grows later) -->
+    <button id="walletPill" title="My Wallet">
+      <span id="wAvatar"></span>
+      <span id="wName">My Wallet</span>
+      <span class="caret">▾</span>
+    </button>
+    <div class="spacer"></div>
+    <button id="histBtn" title="Recent chats">↻ History <span class="caret">▾</span></button>
+    <button id="newTabBtn" title="Open another chat in a new tab">+</button>
   </div>
-  <div id="wrap">
-    <div id="sidebar">
-      <div id="sessScroll">
-        <h3>Sessions</h3>
-        <div id="sessList"></div>
-        <div id="showAll" style="display:none"></div>
-        <div id="empty" style="display:none">No sessions yet.<br/>Start a chat below.</div>
-        <button id="newBtn">+ New</button>
-      </div>
-      <!-- wallet = agent: pinned bottom-left, always visible -->
-      <div id="walletCard" title="My Wallet">
-        <div id="wAvatar"></div>
-        <div id="wMeta">
-          <div id="wName">My Wallet</div>
-          <div id="wAddr">connecting…</div>
-        </div>
-        <span id="wCaret">▸</span>
+
+  <!-- History dropdown (session list), anchored under the History button -->
+  <div id="histMenu" class="dropdown" style="display:none">
+    <div class="ddHead">Recent chats <button id="newBtn" class="ddNew">+ New</button></div>
+    <div id="sessList"></div>
+    <div id="showAll" style="display:none"></div>
+    <div id="empty" style="display:none">No chats yet. Start one below.</div>
+  </div>
+
+  <!-- Wallet dropdown (agent menu — storage, skills, grows later) -->
+  <div id="walletMenu" class="dropdown" style="display:none">
+    <div class="wmHead">
+      <span id="wAvatar2"></span>
+      <div class="grow">
+        <div id="wName2">My Wallet</div>
+        <div id="wAddr" class="muted">connecting…</div>
       </div>
     </div>
+    <!-- storage / Google Drive info, moved here from the top bar -->
+    <div class="wmSection">
+      <div class="wmLabel">Storage <span id="cloudSync" title="Drive sync status"></span></div>
+      <div class="wmStorage">
+        <span class="dot local">●</span><span>Local</span>
+        <span class="sep">·</span>
+        <span id="cloudState"></span>
+        <button id="cloudBtn" class="link"></button>
+      </div>
+    </div>
+    <div class="wmItem" id="openWalletPage">Wallet page</div>
+    <div class="wmItem disabled"><span class="wand">${WAND_SVG}</span> Skills <span class="soon">soon</span></div>
+  </div>
+
+  <div id="wrap">
     <div id="main">
+      <!-- faint IQ watermark, shown only on an empty (new) chat -->
+      <div id="watermark">${IQ_LOGO_SVG}</div>
+      <!-- loading veil shown while a session is being carried to the other engine -->
+      <div id="loading" style="display:none"><div class="spin"></div><span>Resuming…</span></div>
       <div id="log"></div>
       <!-- pending tool approvals dock just above the composer (Claude-Code style:
            "the thing you must answer" sits right where you'd reply) -->
       <div id="approvalDock"></div>
-      <!-- composer: engine folder-tabs (top-right) + input + controls (bottom-left) -->
+      <!-- equipped-skills panel (toggled by #skillsBtn) — the agent's "magic items".
+           Real now: a header + empty grey slots that say drops aren't live yet. -->
+      <div id="skillsPanel" style="display:none">
+        <div class="skHead">
+          <span class="wand">${WAND_SVG}</span>
+          <span>Equipped skills</span>
+          <span class="skMuted" id="skillStatus">none active</span>
+        </div>
+        <div id="skillGrid">
+          <!-- coming-soon grey slots (no lie: nothing equipped yet) -->
+          <div class="skSlot empty"></div>
+          <div class="skSlot empty"></div>
+          <div class="skSlot empty"></div>
+        </div>
+        <div class="skNote">On-chain skills (Token-2022, soulbound) aren't live yet. When a
+          <code>skill.md</code> is equipped, it appears here as your agent's item.</div>
+      </div>
+      <!-- activity marquee: a thin status bar that flashes what the agent is doing
+           right now ("Casting cleancode", "Reading auth.ts") with a breathing glow,
+           then fades. Empty/hidden when idle. -->
+      <div id="activityBar" style="display:none"><span class="dot"></span><span id="activityText"></span></div>
+      <!-- composer: skills (top-left) + engine folder-tabs (top-right), input, controls -->
       <div id="composer" data-cli="claude">
-        <div id="engineTabs">
-          <div class="etab active" data-cli="claude"><span class="ed"></span>claude</div>
-          <div class="etab" data-cli="codex"><span class="ed"></span>codex</div>
+        <div id="composerTop">
+          <!-- equipped-skills button: a wand glyph + count badge. Click → skill dock. -->
+          <button id="skillsBtn" title="Equipped skills">
+            <span class="wand">${WAND_SVG}</span>
+            <span>Skills</span>
+          </button>
+          <div id="engineTabs">
+            <div class="etab active" data-cli="claude"><span class="ed"></span>claude</div>
+            <div class="etab" data-cli="codex"><span class="ed"></span>codex</div>
+          </div>
         </div>
         <div id="inputWrap">
           <textarea id="input" rows="1" placeholder="Message claude... (Enter to send)"></textarea>
@@ -418,11 +664,33 @@ export function chatHtml(): string {
       <div class="muted small">Disconnecting returns you to the connect screen. Your encrypted local sessions stay on this device.</div>
     </div>
   </div>
+<!-- markdown libs (marked + dompurify), inlined; expose window.marked / window.DOMPurify -->
+<script>${markdownLibs()}</script>
 <script>
   const AVATAR_SVG = ${JSON.stringify(AVATAR_SVG)};
   ${AVATAR_SCRIPT}
   const vscode = acquireVsCodeApi();
+
+  // ---- markdown rendering (marked + dompurify), with a plain-text fallback ----
+  const MD_OK = !!(window.marked && window.DOMPurify);
+  if (MD_OK) window.marked.setOptions({ breaks: true, gfm: true });
+  // Render md text into el's innerHTML (sanitized). Falls back to textContent if the
+  // libs didn't load. We keep the raw md on el.dataset.md so copy yields the source.
+  function renderMd(el, text) {
+    el.dataset.md = text;
+    if (!MD_OK) { el.textContent = text; return; }
+    try { el.innerHTML = window.DOMPurify.sanitize(window.marked.parse(text)); }
+    catch (e) { el.textContent = text; }
+  }
+
   const log = document.getElementById('log');
+  const mainEl = document.getElementById('main');
+  const loadingEl = document.getElementById('loading');
+  // hide the IQ watermark once the chat has any content; show it on an empty log
+  function syncWatermark() { mainEl.classList.toggle('hasMsgs', log.childElementCount > 0); }
+  // loading veil while a session is carried to the other engine (cross-CLI switch)
+  function showLoading() { loadingEl.style.display = 'flex'; }
+  function hideLoading() { loadingEl.style.display = 'none'; }
   const input = document.getElementById('input');
   const sessList = document.getElementById('sessList');
   const showAll = document.getElementById('showAll');
@@ -518,6 +786,7 @@ export function chatHtml(): string {
     log.appendChild(turn);
     turn._body = body; tailTurn = turn;
     log.scrollTop = log.scrollHeight;
+    syncWatermark();
     return body;
   }
   // Open a turn at the TOP (prepended older history). Same shape, inserted first.
@@ -543,6 +812,7 @@ export function chatHtml(): string {
     const turn = document.createElement('div'); turn.className = 'turn';
     const body = document.createElement('div'); body.className = 'turnBody';
     turn.appendChild(body); log.appendChild(turn); turn._body = body; tailTurn = turn;
+    syncWatermark();
     return body;
   }
 
@@ -565,9 +835,30 @@ export function chatHtml(): string {
     const el = document.createElement('div');
     el.className = 'msg ' + role;
     node.appendChild(el);
+    // a hover copy button — copies THIS message's text (el is the live target, so it
+    // reflects the final streamed text at click time)
+    if (role === 'assistant' || role === 'thinking') addCopy(node, el);
     appendNode(node, prepend ? 'head' : 'tail');
     el._row = node; // node element, so callers can attach a footer / clamp toggle
     return el;
+  }
+
+  // SVG copy/check glyphs + the button that copies an element's text on click.
+  const COPY_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>';
+  const CHECK_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.5 3.5L13 5"/></svg>';
+  function addCopy(node, textEl) {
+    const btn = document.createElement('button');
+    btn.className = 'copyBtn'; btn.title = 'Copy'; btn.innerHTML = COPY_ICON;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const text = textEl.dataset.md || textEl.textContent || ''; // copy raw md source
+      const done = () => { btn.classList.add('done'); btn.innerHTML = CHECK_ICON;
+        setTimeout(() => { btn.classList.remove('done'); btn.innerHTML = COPY_ICON; }, 1200); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, () => {});
+      else { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
+        ta.select(); try { document.execCommand('copy'); done(); } catch (e2) {} document.body.removeChild(ta); }
+    });
+    node.appendChild(btn);
   }
 
   // Clamp a long body element behind a fade with a "show more / less" toggle.
@@ -773,13 +1064,21 @@ export function chatHtml(): string {
       const b = document.createElement('button'); b.className = 'apBtn ' + cls; b.textContent = label;
       b.addEventListener('click', () => decide(outcome)); return b;
     };
-    actions.appendChild(mk('Approve', 'once', 'ok'));
-    actions.appendChild(mk('Always', 'always', 'always'));
-    actions.appendChild(mk('Deny', 'deny', 'no'));
+    const btns = [mk('Approve', 'once', 'ok'), mk('Always', 'always', 'always'), mk('Deny', 'deny', 'no')];
+    for (const b of btns) actions.appendChild(b);
     card.appendChild(actions);
+
+    // keyboard: ← → move focus between buttons, Enter/Space activates the focused one
+    // (a native button does that for Enter/Space). Default focus = Approve, like claude.
+    card.addEventListener('keydown', (e) => {
+      const i = btns.indexOf(document.activeElement);
+      if (e.key === 'ArrowRight') { e.preventDefault(); btns[(Math.max(0, i) + 1) % btns.length].focus(); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); btns[(Math.max(0, i) + btns.length - 1) % btns.length].focus(); }
+    });
 
     // dock it just above the composer (newest on top), not inside the scrolling log
     approvalDock.insertBefore(card, approvalDock.firstChild);
+    btns[0].focus(); // default focus on Approve so Enter approves right away
   }
 
   function onMessage(msg) {
@@ -799,21 +1098,27 @@ export function chatHtml(): string {
     // assistant / thinking reply nodes (badge only on assistant). The turn was
     // already opened by the preceding user message.
     const badge = (msg.role === 'assistant' && msg.cli) ? msg.cli : undefined;
+    // assistant text is markdown; user/thinking stay plain. While streaming we show
+    // raw accumulating text (cheap), then render md once the turn's text is complete.
+    const asMd = (el, raw) => { if (msg.role === 'assistant') renderMd(el, raw); else { el.textContent = raw; el.dataset.md = raw; } };
     if (msg.partial) {
       if (!streaming || streaming.dataset.role !== msg.role) {
         streaming = bubble(msg.role, false, badge);
         streaming.dataset.role = msg.role;
+        streaming.dataset.acc = '';
         streaming.classList.add('cursor');
       }
-      streaming.textContent += msg.text;
+      streaming.dataset.acc += msg.text;
+      streaming.textContent = streaming.dataset.acc; // raw during stream
     } else {
       if (streaming && streaming.dataset.role === msg.role) {
-        streaming.textContent += msg.text;
+        const raw = (streaming.dataset.acc || '') + msg.text;
         streaming.classList.remove('cursor');
+        asMd(streaming, raw);
         streaming = null;
       } else {
         const el = bubble(msg.role, false, badge);
-        el.textContent = msg.text;
+        asMd(el, msg.text);
         if (msg.role === 'assistant') addFooter(el._row, msg.durationMs, msg.model); // time + model
       }
     }
@@ -846,7 +1151,7 @@ export function chatHtml(): string {
       el.appendChild(title); el.appendChild(time); el.appendChild(del);
       // cross-CLI: clicking opens the session in the CURRENT tab's cli, so we no
       // longer send the session's own cli (the extension ignores it).
-      el.onclick = () => vscode.postMessage({ type: 'open', sessionId: s.sessionId });
+      el.onclick = () => { vscode.postMessage({ type: 'open', sessionId: s.sessionId }); closeMenus(); };
       sessList.appendChild(el);
     }
     if (allSessions.length > COLLAPSED) {
@@ -876,12 +1181,28 @@ export function chatHtml(): string {
   function send() {
     const text = input.value.trim();
     if (!text) return;
+    // local slash commands handled in the webview (not sent to the agent).
+    // /mockupskills [name ...]  → demo the "Casting" UI with the given skills (none = idle).
+    if (text === '/mockupskills' || text.startsWith('/mockupskills ')) {
+      const names = text.slice('/mockupskills'.length).trim().split(/\\s+/).filter(Boolean);
+      setSkills(names);
+      if (skillsPanel.style.display === 'none') { skillsPanel.style.display = 'block'; skillsBtn.classList.add('on'); }
+      input.value = '';
+      return;
+    }
+    // /mockskill <name>  → demo the skill marquee (green glowing "Casting <name>")
+    if (text === '/mockskill' || text.startsWith('/mockskill ')) {
+      flashSkill(text.slice('/mockskill'.length).trim() || 'cleancode');
+      input.value = '';
+      return;
+    }
     vscode.postMessage({ type: 'send', text });
     input.value = '';
     showTyping();
   }
   document.getElementById('send').addEventListener('click', send);
-  document.getElementById('newBtn').addEventListener('click', () => vscode.postMessage({ type: 'new' }));
+  document.getElementById('newBtn').addEventListener('click', () => { vscode.postMessage({ type: 'new' }); closeMenus(); });
+  document.getElementById('newTabBtn').addEventListener('click', () => vscode.postMessage({ type: 'newTab' }));
   input.addEventListener('keydown', (e) => {
     // e.isComposing = IME (Korean/Japanese/Chinese) mid-composition; don't send
     // a half-formed syllable. keyCode 229 is the legacy IME-in-progress signal.
@@ -927,31 +1248,111 @@ export function chatHtml(): string {
     vscode.postMessage({ type: 'pickCloud' }); // extension shows a native quick-pick
   });
 
-  // ---- view switcher: Chat <-> My Wallet (the wallet card is the entry) ----
+  // ---- view switcher: Chat <-> My Wallet (full page) ----
   const panels = {
     chat: document.getElementById('chatView'),
     wallet: document.getElementById('walletView'),
   };
-  const walletCard = document.getElementById('walletCard');
   function showView(name) {
     for (const k in panels) panels[k].style.display = (k === name) ? 'flex' : 'none';
-    walletCard.classList.toggle('active', name === 'wallet');
     if (name === 'wallet') vscode.postMessage({ type: 'wallet' }); // refresh address
   }
-  walletCard.addEventListener('click', () => showView('wallet'));
   document.getElementById('backToChat').addEventListener('click', () => showView('chat'));
 
-  // Fill BOTH the bottom-left card and the full wallet page from one address.
-  // Card shows "My Wallet (wdf..ere)"; the page shows the full address.
+  // ---- top-bar dropdowns: History (sessions) + Wallet (agent menu) ----
+  const histMenu = document.getElementById('histMenu');
+  const walletMenu = document.getElementById('walletMenu');
+  function closeMenus(except) {
+    if (except !== 'hist') histMenu.style.display = 'none';
+    if (except !== 'wallet') walletMenu.style.display = 'none';
+  }
+  function toggleMenu(el, which) {
+    const open = el.style.display !== 'none';
+    closeMenus(open ? null : which);
+    el.style.display = open ? 'none' : 'block';
+  }
+  document.getElementById('histBtn').addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(histMenu, 'hist'); });
+  document.getElementById('walletPill').addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(walletMenu, 'wallet'); });
+  document.getElementById('openWalletPage').addEventListener('click', () => { closeMenus(); showView('wallet'); });
+  // click outside closes any open menu
+  document.addEventListener('click', () => closeMenus());
+  histMenu.addEventListener('click', (e) => e.stopPropagation());
+  walletMenu.addEventListener('click', (e) => e.stopPropagation());
+
+  // equipped-skills panel: inline toggle above the composer (not an absolute dropdown)
+  const skillsBtn = document.getElementById('skillsBtn');
+  const skillsPanel = document.getElementById('skillsPanel');
+  skillsBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = skillsPanel.style.display !== 'none';
+    skillsPanel.style.display = open ? 'none' : 'block';
+    skillsBtn.classList.toggle('on', !open);
+  });
+  // The agent's OWNED skills (array of names) — everything owned is "active" (no
+  // separate active state). Renders each as an item card in the panel; empty slots
+  // fill the rest. No count badge (ownership is the whole point, not a number).
+  function setSkills(names) {
+    names = names || [];
+    const grid = document.getElementById('skillGrid');
+    const status = document.getElementById('skillStatus');
+    const n = names.length;
+    document.getElementById('skillsPanel').classList.toggle('casting', n > 0);
+    document.getElementById('skillsBtn').classList.toggle('casting', n > 0);
+    status.textContent = n ? (n === 1 ? '1 skill' : n + ' skills') : 'none yet';
+    grid.innerHTML = '';
+    for (const name of names) {
+      const slot = document.createElement('div'); slot.className = 'skSlot item';
+      slot.innerHTML = '<span class="skWand">' + ${JSON.stringify(WAND_SVG)} + '</span>';
+      const lbl = document.createElement('div'); lbl.className = 'skName'; lbl.textContent = name;
+      slot.appendChild(lbl); slot.title = name; grid.appendChild(slot);
+    }
+    const fill = Math.max(0, 3 - n);
+    for (let i = 0; i < fill; i++) { const s = document.createElement('div'); s.className = 'skSlot empty'; grid.appendChild(s); }
+    ownedSkills = names;
+  }
+  let ownedSkills = [];
+  setSkills([]); // idle: grey coming-soon slots
+
+  // ---- activity marquee: advertise what the agent is doing RIGHT NOW ----
+  // Map a tool action to a flashy game-verb + object. The verb is picked from a small
+  // pool (varied per call so it feels alive); the object is the skill name.
+  const activityBar = document.getElementById('activityBar');
+  const activityText = document.getElementById('activityText');
+  const VERBS = { skill: ['Casting', 'Channeling', 'Wielding', 'Invoking'] };
+  let pick = 0; // rotate so the verb feels alive
+  let actTimer = null;
+  // SKILL-ONLY marquee: only an equipped skill firing lights this up (a green, glowing
+  // "Casting <skill>"). Plain tool work (read/bash/edit) is NOT shown here — it already
+  // appears as cards in the chat timeline, so duplicating it would just be noise.
+  function flashSkill(name) {
+    const v = VERBS.skill[(pick++) % VERBS.skill.length];
+    activityText.innerHTML = '<span class="verb">' + v + '</span> '
+      + (name ? '<span class="obj">' + escapeHtml(name) + '</span>' : '');
+    activityBar.classList.remove('out');
+    activityBar.style.display = 'flex';
+    clearTimeout(actTimer);
+    const dwell = Math.min(4000, 1600 + (name || '').length * 35);
+    actTimer = setTimeout(() => {
+      activityBar.classList.add('out');
+      setTimeout(() => { activityBar.style.display = 'none'; activityBar.classList.remove('out'); }, 250);
+    }, dwell);
+  }
+  function hideActivity() { clearTimeout(actTimer); activityBar.classList.remove('out'); activityBar.style.display = 'none'; }
+  function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+  // Fill the wallet pill, the wallet dropdown, and the full wallet page from one address.
   function short(a) { return a && a.length > 10 ? a.slice(0, 4) + '..' + a.slice(-3) : a; }
   function setWallet(address) {
     const full = address || '(not connected)';
     document.getElementById('walletAddr').textContent = full;
     document.getElementById('wAddr').textContent = address ? short(address) : 'not connected';
-    document.getElementById('wName').textContent = address ? 'My Wallet (' + short(address) + ')' : 'My Wallet';
+    const label = address ? short(address) : 'My Wallet';
+    document.getElementById('wName').textContent = label;
+    document.getElementById('wName2').textContent = address ? 'My Wallet' : 'My Wallet';
     // wallet-seeded character avatar (ported from solchat); same address = same face
     const svg = address ? avatarSvg(address) : '';
     document.getElementById('wAvatar').innerHTML = svg;
+    document.getElementById('wAvatar2').innerHTML = svg;
     document.getElementById('wAvatarBig').innerHTML = svg;
   }
 
@@ -1013,7 +1414,9 @@ export function chatHtml(): string {
       }
       const n = node(m.role + (m.role === 'assistant' && m.cli ? ' ' + m.cli : ''));
       const el = document.createElement('div'); el.className = 'msg ' + m.role;
-      el.textContent = m.text; n.appendChild(el);
+      if (m.role === 'assistant') renderMd(el, m.text); else { el.textContent = m.text; el.dataset.md = m.text; }
+      n.appendChild(el);
+      if (m.role === 'assistant' || m.role === 'thinking') addCopy(n, el);
       if (m.role === 'assistant') addFooter(n, m.durationMs, m.model);
     }
     realLog.insertBefore(frag, realLog.firstChild);
@@ -1031,8 +1434,9 @@ export function chatHtml(): string {
     const m = event.data;
     if (m.type === 'message') onMessage(m.msg);
     else if (m.type === 'sessions') { allSessions = m.list || []; activeId = m.activeId; renderSessions(); }
-    else if (m.type === 'clear') { log.innerHTML = ''; approvalDock.innerHTML = ''; streaming = null; openBash = null; tailTurn = null; headTurn = null; hideTyping(); resetPaging(); }
-    else if (m.type === 'turnEnd') hideTyping();
+    else if (m.type === 'loading') showLoading();
+    else if (m.type === 'clear') { log.innerHTML = ''; approvalDock.innerHTML = ''; streaming = null; openBash = null; tailTurn = null; headTurn = null; hideTyping(); hideActivity(); resetPaging(); syncWatermark(); hideLoading(); }
+    else if (m.type === 'turnEnd') { hideTyping(); hideActivity(); }
     else if (m.type === 'platform') setTab(m.cli); // extension switched CLI (e.g. on session open)
     else if (m.type === 'storage') { renderStorage(m.info, m.options); renderWalletStorage(); }
     else if (m.type === 'cloudSync') renderCloudSync(m.status);
