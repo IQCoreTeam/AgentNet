@@ -13,19 +13,19 @@ import {
   ensureTable,
   signerAddress,
 } from "../core/chain.js";
-import { SKILLS_INDEX_HINT, notesSkillHint, reputationHint, REPUTATION_COLUMNS } from "../core/seed.js";
-import type { Reputation, Skill, Row } from "../core/types.js";
+import { notesSkillHint, reputationHint, REPUTATION_COLUMNS } from "../core/seed.js";
+import { indexTableSource, type SkillSource } from "../core/skillSource.js";
+import type { Reputation, Skill } from "../core/types.js";
 import { getMintSupply } from "../nft/token2022.js";
 
 export async function getReputation(
   conn: Connection,
   wallet: string,
+  source: SkillSource = indexTableSource,
 ): Promise<Reputation> {
-  // Read the skill index, filter by creator. Non-row entries (metadata shapes
-  // from readTableRows) are dropped by the id/creator check.
-  const allSkillRows = await readRows(SKILLS_INDEX_HINT, { limit: 1000 });
-  const mySkills = (allSkillRows as unknown as Skill[]).filter(
-    (s) => typeof s.id === "string" && s.creator === wallet,
+  // Enumerate skills via the CacheLayer source, filter by creator.
+  const mySkills = (await source.listSkills()).filter(
+    (s) => s.creator === wallet,
   );
 
   const skillsPublished = mySkills.length;
@@ -67,12 +67,12 @@ export async function updateReputation(
 export async function getLeaderboard(
   conn: Connection,
   limit = 20,
+  source: SkillSource = indexTableSource,
 ): Promise<Reputation[]> {
-  // Read the skill index, group by creator. Drop non-row entries (metadata
-  // shapes from readTableRows) so we don't group under undefined.
-  const allSkillRows = await readRows(SKILLS_INDEX_HINT, { limit: 1000 });
-  const skills = (allSkillRows as unknown as Skill[]).filter(
-    (s) => typeof s.id === "string" && typeof s.creator === "string",
+  // Enumerate skills via the CacheLayer source, group by creator. Drop entries
+  // with no creator so we don't group under undefined.
+  const skills = (await source.listSkills()).filter(
+    (s) => typeof s.creator === "string",
   );
 
   // Group by creator

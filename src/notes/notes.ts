@@ -29,9 +29,19 @@ export async function postNote(
 ): Promise<string> {
   const author = await signerAddress(signer);
 
-  // Fast client-side pre-check for a friendly error. The REAL enforcement is the
-  // on-chain Token gate on the notes table below (gate_opt) — the IQ contract
-  // rejects writes from non-holders, so gating doesn't rely on this check.
+  // Write gate: caller must hold ≥1 of the skill's Token-2022 soulbound token
+  // (notes.md §2 — "wallets that hold that skill's token").
+  //
+  // ⚠️ Enforced CLIENT-SIDE only. coding-info §B3 assumed the IQ contract's
+  // native `gate_opt` would enforce this on-chain for free, but that path is
+  // structurally incompatible with Token-2022: the SDK derives the gate ATA with
+  // the LEGACY token program id in the seeds (utils/ata.js), while skill mints
+  // live under the Token-2022 program. The holder's real (2022) ATA address
+  // never matches → resolveSignerAta throws "missing signer_ata" on EVERY write,
+  // even for legit holders, making a natively-gated table unusable. Until the
+  // SDK/contract resolves a Token-2022 ATA (or gates by collection metadata),
+  // the table is open and this check is the guard. An attacker calling writeRow
+  // directly bypasses it — real enforcement needs SDK Token-2022 support.
   const balance = await getBalance(
     conn,
     new PublicKey(input.skillId),
@@ -53,11 +63,8 @@ export async function postNote(
     timestamp: Date.now(),
   };
 
-  // Create the notes table gated by holding the skill token (Token gate, ≥1).
-  // The contract enforces this on every subsequent write — native, not manual.
-  await ensureTable(signer, hint, NOTE_COLUMNS, "id", {
-    gate: { mint: input.skillId, amount: 1 },
-  });
+  // Open table (no native gate — see the Token-2022 incompatibility above).
+  await ensureTable(signer, hint, NOTE_COLUMNS, "id");
   await writeRow(signer, hint, JSON.stringify(note));
   return noteId;
 }

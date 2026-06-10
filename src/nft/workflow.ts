@@ -2,6 +2,7 @@ import {
   PublicKey,
   SystemProgram,
   Transaction,
+  type Keypair,
   type Connection,
 } from "@solana/web3.js";
 import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
@@ -14,6 +15,7 @@ import {
 import { codeIn, signerAddress, ensureDbRoot, ensureTable, writeRow } from "../core/chain.js";
 import { SKILLS_INDEX_HINT, SKILLS_INDEX_COLUMNS } from "../core/seed.js";
 import { createSkillMint } from "./token2022.js";
+import { resolveMinter } from "./minter.js";
 import { getBalance } from "../notes/balance.js";
 import {
   defaultWorkflowValidator,
@@ -106,6 +108,8 @@ export interface UnlockWorkflowInput {
   price?: bigint;
   iqFeePercent?: number;
   iqTreasuryWallet?: string;
+  /** Protocol minter (mint authority). Defaults to env AGENTNET_MINTER_SECRET. */
+  minter?: Keypair;
 }
 
 // Sentinel: the all-1s address is the System Program, NOT a real wallet. When the
@@ -178,6 +182,9 @@ export async function unlockWorkflow(
     }
   }
 
+  // Path A: workflow mint authority is the protocol minter (handed over at
+  // publish in createSkillMint), so the minter co-signs the mintTo. Buyer pays.
+  const minter = resolveMinter(input.minter);
   const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPvZeJ");
   const ata = getAssociatedTokenAddressSync(workflowMint, buyer, false, TOKEN_2022_PROGRAM_ID);
 
@@ -194,11 +201,12 @@ export async function unlockWorkflow(
     );
   }
 
+  // Mint 1 token — authority = protocol minter (co-signs below).
   tx.add(
     createMintToInstruction(
       workflowMint,
       ata,
-      payerPk,
+      minter.publicKey,
       1,
       [],
       TOKEN_2022_PROGRAM_ID,
@@ -209,12 +217,14 @@ export async function unlockWorkflow(
   const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash();
   tx.recentBlockhash = blockhash;
   tx.feePayer = payerPk;
+  tx.partialSign(minter);
 
   if ("secretKey" in signerFull) {
-    tx.sign(signerFull);
+    tx.partialSign(signerFull);
   } else if ("signTransaction" in signerFull) {
     const signed = await signerFull.signTransaction(tx);
     const sig = await conn.sendRawTransaction(signed.serialize());
+    await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
     return sig;
   }
 

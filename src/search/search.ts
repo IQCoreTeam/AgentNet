@@ -1,5 +1,11 @@
 // Search skills by keyword, category, hashtags; sort by supply or recency.
 //
+// Enumeration goes through a SkillSource (core/skillSource.ts) — by default the
+// `skills:index` CacheLayer, swappable for a DAS/gateway enumerator later. The
+// mint stays the source of truth: `supply` is always hydrated from the mint, and
+// with `verifyTraits` category/hashtags are re-read from on-chain metadata
+// instead of the cached table copy.
+//
 // Per search.md the full design also has a SEMANTIC layer that maps a
 // vocabulary-mismatch query onto an existing category/hashtag (e.g. "hotdog" →
 // #convenience-store) via an off-chain embedding index (search.md §3). That
@@ -8,10 +14,9 @@
 // below is literal substring, not semantic.
 
 import type { Connection } from "@solana/web3.js";
-import { readRows } from "../core/chain.js";
-import { SKILLS_INDEX_HINT } from "../core/seed.js";
-import type { Skill, Row } from "../core/types.js";
-import { getMintSupply } from "../nft/token2022.js";
+import type { Skill } from "../core/types.js";
+import { indexTableSource, type SkillSource } from "../core/skillSource.js";
+import { getMintSupply, readSkillMintMetadata } from "../nft/token2022.js";
 
 export interface SearchFilters {
   keyword?: string;
@@ -26,6 +31,14 @@ export interface SearchOptions {
   filters?: SearchFilters;
   sortBy?: SortBy;
   limit?: number;
+  /** Enumeration source. Defaults to the `skills:index` CacheLayer. */
+  source?: SkillSource;
+  /**
+   * Re-read category/hashtags from each mint's on-chain TokenMetadata before
+   * filtering, instead of trusting the cached index copy. Costs one extra RPC
+   * per candidate; use when the table may be stale relative to the chain.
+   */
+  verifyTraits?: boolean;
 }
 
 export async function searchSkills(
@@ -35,23 +48,31 @@ export async function searchSkills(
   const limit = options?.limit ?? 50;
   const sortBy = options?.sortBy ?? "supply";
   const filters = options?.filters ?? {};
+  const source = options?.source ?? indexTableSource;
 
-  // Read the skill index. readTableRows also returns non-row entries
-  // ({signature, metadata, data} shapes for txs whose payload isn't a JSON row),
-  // so keep only rows that look like an indexed skill — otherwise `.toLowerCase()`
-  // / sorts crash on undefined fields.
-  const rows = await readRows(SKILLS_INDEX_HINT, { limit: 1000 });
-  let skills = (rows as unknown as Skill[]).filter(
-    (s) => typeof s.id === "string" && typeof s.name === "string",
-  );
+  let skills = await source.listSkills();
 
-  // Filter by keyword (name + description)
+  // Optionally trust the chain over the cache for traits (category/hashtags).
+  if (options?.verifyTraits) {
+    await Promise.all(
+      skills.map(async (s) => {
+        const md = await readSkillMintMetadata(conn, s.id);
+        if (md) {
+          s.category = md.category ?? s.category;
+          s.hashtags = md.hashtags ?? s.hashtags;
+        }
+      }),
+    );
+  }
+
+  // Filter by keyword (name + description). Fields may be absent on a sparse
+  // row, so coalesce before lowercasing.
   if (filters.keyword) {
     const kw = filters.keyword.toLowerCase();
     skills = skills.filter(
       (s) =>
-        s.name.toLowerCase().includes(kw) ||
-        s.description.toLowerCase().includes(kw),
+        (s.name ?? "").toLowerCase().includes(kw) ||
+        (s.description ?? "").toLowerCase().includes(kw),
     );
   }
 
@@ -91,7 +112,7 @@ export async function searchSkills(
   if (sortBy === "supply") {
     skills.sort((a, b) => Number(b.supply) - Number(a.supply));
   } else if (sortBy === "name") {
-    skills.sort((a, b) => a.name.localeCompare(b.name));
+    skills.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
   } else if (sortBy === "recent") {
     skills.sort((a, b) => b.createdAt - a.createdAt);
   }

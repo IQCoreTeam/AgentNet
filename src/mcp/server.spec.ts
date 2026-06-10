@@ -41,7 +41,7 @@ describe("mcp/server", () => {
 
   it("should handle search_skills with results", async () => {
     vi.mocked(searchSkills).mockResolvedValue([
-      { id: "skill1", name: "React", description: "desc", creator: "creator", category: "frontend", type: "skill", supply: 10, createdAt: 100 }
+      { id: "skill1", name: "React", description: "desc", creator: "creator", category: "frontend", type: "skill", supply: 10, uriTxid: "tx1", createdAt: 100 }
     ]);
     const result = await handleToolCall(mockConn, signer, "defaultCreator", "search_skills", { keyword: "React", type: "skill" });
     expect(result.content[0].text).toContain("Found 1 results");

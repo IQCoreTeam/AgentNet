@@ -57,8 +57,12 @@ export {
   buySkill,
   createSkillMint,
   mintSkillToken,
+  getMintSupply,
+  readSkillMintMetadata,
 } from "./nft/index.js";
 export type { PublishSkillInput, BuySkillInput } from "./nft/skill.js";
+export type { SkillMintMetadata } from "./nft/token2022.js";
+export { resolveMinter, tryMinterPubkey, resetMinterCache } from "./nft/minter.js";
 
 export {
   postNote,
@@ -72,6 +76,9 @@ export {
   searchSkills,
 } from "./search/index.js";
 export type { SearchFilters, SortBy, SearchOptions } from "./search/index.js";
+
+export { indexTableSource } from "./core/skillSource.js";
+export type { SkillSource } from "./core/skillSource.js";
 
 export {
   getReputation,

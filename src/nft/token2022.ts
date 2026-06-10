@@ -12,46 +12,82 @@ import {
 import {
   createInitializeMint2Instruction,
   createInitializeNonTransferableMintInstruction,
+  createInitializeMetadataPointerInstruction,
   createMintToInstruction,
+  createSetAuthorityInstruction,
   createAssociatedTokenAccountInstruction,
   getAssociatedTokenAddressSync,
   getMint,
+  getTokenMetadata,
+  AuthorityType,
   ExtensionType,
   getMintLen,
-  getMinimumBalanceForRentExemptMint,
+  LENGTH_SIZE,
+  TYPE_SIZE,
 } from "@solana/spl-token";
+import {
+  pack,
+  createInitializeInstruction as createInitializeMetadataInstruction,
+  createUpdateFieldInstruction,
+  type TokenMetadata,
+} from "@solana/spl-token-metadata";
 import { type SignerInput, type WalletSigner } from "@iqlabs-official/solana-sdk/utils";
 import { signerAddress } from "../core/chain.js";
+import { resolveMinter, tryMinterPubkey } from "./minter.js";
 
 const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPvZeJ");
+
+// additional_metadata field keys (skill-nft-structure.md §1 traits → search.md).
+// Stored on-chain in the TokenMetadata extension so search can filter by trait
+// and a skill's text resolves from the mint's `uri` (no registry table needed).
+const FIELD_CATEGORY = "category";
+const FIELD_HASHTAGS = "hashtags";
 
 interface MintConfig {
   name: string;
   symbol: string;
-  uri: string; // code-in txid (IQLabs on-chain path)
-  category?: string; // e.g. "clean-code", "design"
-  hashtags?: string[]; // e.g. ["refactoring", "testing"]
+  uri: string; // code-in txid (IQLabs on-chain path) — TokenMetadata.uri
+  category?: string; // e.g. "clean-code", "design" — additional_metadata trait
+  hashtags?: string[]; // e.g. ["refactoring", "testing"] — additional_metadata trait
+  /**
+   * Protocol minter to receive mint authority (Path A). Defaults to the env
+   * minter (AGENTNET_MINTER_PUBKEY / _SECRET). When null/unset, authority stays
+   * with the creator and buy/unlock remain blocked.
+   */
+  minterAuthority?: PublicKey;
+}
+
+/** On-chain skill traits read back from the mint's TokenMetadata extension. */
+export interface SkillMintMetadata {
+  name: string;
+  symbol: string;
+  uri: string; // code-in txid → resolve skill text via readCodeIn
+  category?: string;
+  hashtags?: string[];
 }
 
 /**
- * Create a Token-2022 mint for a skill.
+ * Create a Token-2022 mint for a skill (skill-nft-structure.md §1/§2).
  *
  * Returns: mint address
  *
- * The mint is NonTransferable (soulbound). Metadata (uri, category, hashtags)
- * are stored in the NFT collection metadata off-chain or via code-in.
- * Caller must sign. Mint authority is the caller (creator).
+ * Extensions, all native Token-2022:
+ *   - NonTransferable   → soulbound (§1)
+ *   - MetadataPointer   → points at the mint itself (self-hosted metadata)
+ *   - TokenMetadata     → uri = code-in txid (§2 "NFT uri = IQLabs on-chain
+ *                         path"); category + hashtags as additional_metadata
+ *                         traits (§1 → search.md trait filter)
+ *
+ * So the mint is self-describing: a reader resolves the skill text from
+ * `uri` and filters by on-chain traits — no off-chain registry table (§2
+ * "No skills registry table"). Caller signs; mint authority = creator.
  *
  * ⚠️ KNOWN LIMITATION (buy flow): mint authority = creator here, but `buySkill`
  * has the buyer sign the mintTo. On-chain mintTo requires the mint authority's
  * signature, so a buyer cannot self-mint a creator-authored mint — the buy tx
- * fails unless the creator co-signs. The plans never resolved this: README/about
- * frame buy as a client-side "wrapper" (transfer + mintTo in one tx — exactly this
- * code, exactly what can't work), and §4's "P = Program" reads as the Token-2022
- * program, not a bespoke contract. It's an open design decision — custom program
- * with a PDA mint authority, a protocol minter keypair, or creator co-sign. See
- * plans/STATUS.md for the full writeup. Everything else (publish/index/search/
- * reputation/notes/validation/MCP) works; only the mint step of buy is blocked.
+ * fails unless the creator co-signs. Open design decision (custom program with a
+ * PDA mint authority, a protocol minter keypair, or creator co-sign). Only the
+ * mint step of buy is blocked; publish/search/reputation/notes/validation work.
  */
 export async function createSkillMint(
   conn: Connection,
@@ -61,32 +97,99 @@ export async function createSkillMint(
   const creator = await signerAddress(signer);
   const creatorPk = new PublicKey(creator);
   const mintKeypair = Keypair.generate();
+  const mint = mintKeypair.publicKey;
 
-  // Extensions: NonTransferable only (metadata handled separately via code-in)
-  const extensions = [ExtensionType.NonTransferable];
+  // Build the TokenMetadata payload. uri = code-in txid; traits go in
+  // additional_metadata so search can filter on-chain (added via updateField
+  // below — additionalMetadata in the initialize ix is ignored by the program).
+  const additionalMetadata: [string, string][] = [];
+  if (config.category) additionalMetadata.push([FIELD_CATEGORY, config.category]);
+  if (config.hashtags && config.hashtags.length > 0) {
+    additionalMetadata.push([FIELD_HASHTAGS, JSON.stringify(config.hashtags)]);
+  }
+  const metadata: TokenMetadata = {
+    mint,
+    name: config.name,
+    symbol: config.symbol,
+    uri: config.uri,
+    additionalMetadata,
+  };
+
+  // Rent must cover the base mint (with pointer + soulbound exts) AND the
+  // variable-length metadata the program reallocs into the account.
+  const extensions = [ExtensionType.NonTransferable, ExtensionType.MetadataPointer];
   const mintLen = getMintLen(extensions);
-  const lamports = await conn.getMinimumBalanceForRentExemption(mintLen);
+  const metadataLen = TYPE_SIZE + LENGTH_SIZE + pack(metadata).length;
+  const lamports = await conn.getMinimumBalanceForRentExemption(mintLen + metadataLen);
 
   const tx = new Transaction().add(
-    // 1. Create the mint account with extension space
+    // 1. Create the mint account (only base extension space; metadata reallocs in)
     SystemProgram.createAccount({
       fromPubkey: creatorPk,
-      newAccountPubkey: mintKeypair.publicKey,
+      newAccountPubkey: mint,
       lamports,
       space: mintLen,
       programId: TOKEN_2022_PROGRAM_ID,
     }),
-    // 2. Initialize NonTransferable extension (soulbound)
-    createInitializeNonTransferableMintInstruction(mintKeypair.publicKey, TOKEN_2022_PROGRAM_ID),
-    // 3. Initialize Mint (0 decimals for soulbound items)
+    // 2. MetadataPointer → the mint itself holds its metadata
+    createInitializeMetadataPointerInstruction(mint, creatorPk, mint, TOKEN_2022_PROGRAM_ID),
+    // 3. NonTransferable extension (soulbound)
+    createInitializeNonTransferableMintInstruction(mint, TOKEN_2022_PROGRAM_ID),
+    // 4. Initialize the mint (0 decimals for soulbound items). MUST come before
+    //    metadata init (the metadata program requires an initialized mint).
     createInitializeMint2Instruction(
-      mintKeypair.publicKey,
+      mint,
       0, // decimals
       creatorPk, // mint authority
       creatorPk, // freeze authority
       TOKEN_2022_PROGRAM_ID,
     ),
+    // 5. TokenMetadata: name/symbol/uri (uri = code-in txid)
+    createInitializeMetadataInstruction({
+      programId: TOKEN_2022_PROGRAM_ID,
+      metadata: mint,
+      updateAuthority: creatorPk,
+      mint,
+      mintAuthority: creatorPk,
+      name: config.name,
+      symbol: config.symbol,
+      uri: config.uri,
+    }),
   );
+
+  // 6. Write each trait (category, hashtags) as an additional_metadata field.
+  for (const [field, value] of additionalMetadata) {
+    tx.add(
+      createUpdateFieldInstruction({
+        programId: TOKEN_2022_PROGRAM_ID,
+        metadata: mint,
+        updateAuthority: creatorPk,
+        field,
+        value,
+      }),
+    );
+  }
+
+  // 7. Path A authority handoff: give MINT authority to the protocol minter so
+  //    buyers can later mint via the minter's co-signature (Token-2022 mintTo
+  //    needs the authority's sig). The creator — current authority — signs this
+  //    handoff alone, so publish stays a single-signer flow; the minter is NOT
+  //    pulled into publish. Metadata updateAuthority stays the creator (they can
+  //    still edit traits). When no minter is configured, authority stays with the
+  //    creator and buy/unlock remain blocked (documented).
+  const minterPk = config.minterAuthority ?? tryMinterPubkey();
+  if (minterPk && !minterPk.equals(creatorPk)) {
+    tx.add(
+      createSetAuthorityInstruction(
+        mint,
+        creatorPk, // current mint authority
+        AuthorityType.MintTokens,
+        minterPk, // new mint authority = protocol minter
+        [],
+        TOKEN_2022_PROGRAM_ID,
+      ),
+    );
+  }
 
   // Sign and send
   const signerFull = signer as any; // cast to access signing
@@ -103,31 +206,74 @@ export async function createSkillMint(
     const signed = await (signerFull as WalletSigner).signTransaction(tx);
     const sig = await conn.sendRawTransaction(signed.serialize());
     await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
-    return mintKeypair.publicKey;
+    return mint;
   }
 
   const sig = await conn.sendRawTransaction(tx.serialize());
   await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
 
-  return mintKeypair.publicKey;
+  return mint;
 }
 
 /**
- * Mint one skill token to a wallet (for purchase/equip).
+ * Read a skill's on-chain metadata (uri + traits) from the mint's TokenMetadata
+ * extension — the §2 path back from NFT → content. `uri` is the code-in txid;
+ * pass it to `readCodeIn` to get the skill text. category/hashtags are the
+ * search traits. Returns null if the mint has no metadata.
+ */
+export async function readSkillMintMetadata(
+  conn: Connection,
+  skillMintAddr: string,
+): Promise<SkillMintMetadata | null> {
+  const md = await getTokenMetadata(
+    conn,
+    new PublicKey(skillMintAddr),
+    "confirmed",
+    TOKEN_2022_PROGRAM_ID,
+  );
+  if (!md) return null;
+
+  const fields = new Map(md.additionalMetadata);
+  const rawHashtags = fields.get(FIELD_HASHTAGS);
+  let hashtags: string[] | undefined;
+  if (rawHashtags) {
+    try {
+      const parsed = JSON.parse(rawHashtags);
+      if (Array.isArray(parsed)) hashtags = parsed;
+    } catch {
+      // Stored malformed — surface nothing rather than crash the reader.
+    }
+  }
+
+  return {
+    name: md.name,
+    symbol: md.symbol,
+    uri: md.uri,
+    category: fields.get(FIELD_CATEGORY),
+    hashtags,
+  };
+}
+
+/**
+ * Free-issue one skill token to a wallet (admin / airdrop path — no payment).
+ * `buySkill` is the paid equivalent; this exists for issuing without a charge.
  *
- * Increments supply by 1. Non-transferable — once minted, stays in that wallet forever.
- * Returns tx signature.
+ * Path A: mint authority is the protocol minter, so the minter co-signs the
+ * mintTo. `signer` pays fees (and creates the recipient ATA). Increments supply
+ * by 1; the token is NonTransferable so it stays in the recipient forever.
  */
 export async function mintSkillToken(
   conn: Connection,
   signer: SignerInput,
   skillMintAddr: string,
   recipientWallet: string,
+  minterOverride?: Keypair,
 ): Promise<string> {
-  const creator = await signerAddress(signer);
-  const creatorPk = new PublicKey(creator);
+  const payer = await signerAddress(signer);
+  const payerPk = new PublicKey(payer);
   const mintPk = new PublicKey(skillMintAddr);
   const recipientPk = new PublicKey(recipientWallet);
+  const minter = resolveMinter(minterOverride);
 
   // Get or create ATA for recipient
   const ata = getAssociatedTokenAddressSync(mintPk, recipientPk, false, TOKEN_2022_PROGRAM_ID);
@@ -139,7 +285,7 @@ export async function mintSkillToken(
   if (ataInfo === null) {
     tx.add(
       createAssociatedTokenAccountInstruction(
-        creatorPk,
+        payerPk,
         ata,
         recipientPk,
         mintPk,
@@ -148,12 +294,12 @@ export async function mintSkillToken(
     );
   }
 
-  // Mint 1 token to the ATA
+  // Mint 1 token to the ATA — authority = protocol minter (co-signs below).
   tx.add(
     createMintToInstruction(
       mintPk,
       ata,
-      creatorPk, // mint authority
+      minter.publicKey, // mint authority
       1, // amount (1 token for soulbound)
       [],
       TOKEN_2022_PROGRAM_ID,
@@ -163,13 +309,15 @@ export async function mintSkillToken(
   const signerFull = signer as any;
   const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash();
   tx.recentBlockhash = blockhash;
-  tx.feePayer = creatorPk;
+  tx.feePayer = payerPk;
+  tx.partialSign(minter);
 
   if ("secretKey" in signerFull) {
-    tx.sign(signerFull);
+    tx.partialSign(signerFull);
   } else if ("signTransaction" in signerFull) {
     const signed = await (signerFull as WalletSigner).signTransaction(tx);
     const sig = await conn.sendRawTransaction(signed.serialize());
+    await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
     return sig;
   }
 

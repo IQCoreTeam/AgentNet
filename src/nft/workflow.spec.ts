@@ -36,7 +36,7 @@ vi.mock("@solana/spl-token", async (importOriginal) => {
   const { PublicKey } = await import("@solana/web3.js");
   return {
     ...actual,
-    createMintToInstruction: vi.fn().mockReturnValue(new (require("@solana/web3.js").TransactionInstruction)({ keys: [], programId: new PublicKey("11111111111111111111111111111111"), data: Buffer.alloc(0) })),
+    createMintToInstruction: vi.fn().mockImplementation((_mint, _ata, authority) => new (require("@solana/web3.js").TransactionInstruction)({ keys: [{ pubkey: authority, isSigner: true, isWritable: false }], programId: new PublicKey("11111111111111111111111111111111"), data: Buffer.alloc(0) })),
     createAssociatedTokenAccountInstruction: vi.fn().mockReturnValue(new (require("@solana/web3.js").TransactionInstruction)({ keys: [], programId: new PublicKey("11111111111111111111111111111111"), data: Buffer.alloc(0) })),
     getAssociatedTokenAddressSync: vi.fn().mockReturnValue(new PublicKey("11111111111111111111111111111111")),
   };
@@ -104,6 +104,7 @@ Workflow body here.`;
       creatorWallet: "11111111111111111111111111111111",
       requiredSkills: ["11111111111111111111111111111111"],
       price: 100n,
+      minter: Keypair.generate(), // protocol minter co-signs the mintTo (Path A)
     });
 
     expect(sig).toBe("mockTxSig");

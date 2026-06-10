@@ -10,7 +10,8 @@ vi.mock("@solana/spl-token", async (importOriginal) => {
     ...actual,
     createInitializeMint2Instruction: vi.fn().mockReturnValue(new (require("@solana/web3.js").TransactionInstruction)({ keys: [], programId: new PublicKey("11111111111111111111111111111111"), data: Buffer.alloc(0) })),
     createInitializeNonTransferableMintInstruction: vi.fn().mockReturnValue(new (require("@solana/web3.js").TransactionInstruction)({ keys: [], programId: new PublicKey("11111111111111111111111111111111"), data: Buffer.alloc(0) })),
-    createMintToInstruction: vi.fn().mockReturnValue(new (require("@solana/web3.js").TransactionInstruction)({ keys: [], programId: new PublicKey("11111111111111111111111111111111"), data: Buffer.alloc(0) })),
+    createInitializeMetadataPointerInstruction: vi.fn().mockReturnValue(new (require("@solana/web3.js").TransactionInstruction)({ keys: [], programId: new PublicKey("11111111111111111111111111111111"), data: Buffer.alloc(0) })),
+    createMintToInstruction: vi.fn().mockImplementation((_mint, _ata, authority) => new (require("@solana/web3.js").TransactionInstruction)({ keys: [{ pubkey: authority, isSigner: true, isWritable: false }], programId: new PublicKey("11111111111111111111111111111111"), data: Buffer.alloc(0) })),
     createAssociatedTokenAccountInstruction: vi.fn().mockReturnValue(new (require("@solana/web3.js").TransactionInstruction)({ keys: [], programId: new PublicKey("11111111111111111111111111111111"), data: Buffer.alloc(0) })),
     getAssociatedTokenAddressSync: vi.fn().mockReturnValue(new PublicKey("11111111111111111111111111111111")),
     getMintLen: vi.fn().mockReturnValue(170),
@@ -49,8 +50,8 @@ describe("nft/token2022", () => {
     // Simulate ATA already exists
     mockConn.getAccountInfo.mockResolvedValueOnce({ data: new Uint8Array() });
     
-    const sig = await mintSkillToken(mockConn as any, signer, "11111111111111111111111111111111", "11111111111111111111111111111111");
-    
+    const sig = await mintSkillToken(mockConn as any, signer, "11111111111111111111111111111111", "11111111111111111111111111111111", Keypair.generate());
+
     expect(sig).toBe("mockMintSig");
     expect(splToken.createMintToInstruction).toHaveBeenCalled();
     // ATA creation should not be called since it exists
@@ -61,8 +62,8 @@ describe("nft/token2022", () => {
     // getAccountInfo returns null for missing accounts (does not throw)
     mockConn.getAccountInfo.mockResolvedValueOnce(null);
 
-    const sig = await mintSkillToken(mockConn as any, signer, "11111111111111111111111111111111", "11111111111111111111111111111111");
-    
+    const sig = await mintSkillToken(mockConn as any, signer, "11111111111111111111111111111111", "11111111111111111111111111111111", Keypair.generate());
+
     expect(sig).toBe("mockMintSig");
     expect(splToken.createAssociatedTokenAccountInstruction).toHaveBeenCalled();
     expect(splToken.createMintToInstruction).toHaveBeenCalled();

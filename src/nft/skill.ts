@@ -7,6 +7,7 @@ import {
   PublicKey,
   SystemProgram,
   Transaction,
+  type Keypair,
   type Connection,
 } from "@solana/web3.js";
 import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
@@ -24,6 +25,7 @@ import {
 } from "../core/chain.js";
 import { SKILLS_INDEX_HINT, SKILLS_INDEX_COLUMNS } from "../core/seed.js";
 import { createSkillMint, mintSkillToken } from "./token2022.js";
+import { resolveMinter } from "./minter.js";
 import { defaultValidator, ValidationError } from "./validation/index.js";
 import type { ValidationAdapter } from "./validation/index.js";
 
@@ -110,6 +112,8 @@ export interface BuySkillInput {
   creatorWallet: string; // for payment routing
   iqFeePercent?: number; // IQ treasury fee (e.g. 0.05 = 5%)
   iqTreasuryWallet?: string; // IQ fee recipient (default: protocol treasury)
+  /** Protocol minter (mint authority). Defaults to env AGENTNET_MINTER_SECRET. */
+  minter?: Keypair;
 }
 
 // Sentinel: the all-1s address is the System Program, NOT a real wallet. When the
@@ -174,11 +178,11 @@ export async function buySkill(
     }
   }
 
-  // 2. Mint skill token to buyer (atomic with payment transfer above)
-  // ⚠️ KNOWN LIMITATION: mint authority below is `payerPk` (buyer), but the mint
-  // was created with the creator as authority (see createSkillMint). On-chain
-  // mintTo needs the real authority's signature, so this step fails until an
-  // on-chain program (PDA authority) mints via CPI per plan §4. See token2022.ts.
+  // 2. Mint skill token to buyer (atomic with payment transfer above).
+  // Path A: the mint authority is the protocol minter (handed over at publish in
+  // createSkillMint), so the minter co-signs the mintTo below. The buyer pays +
+  // is fee payer; the minter authorizes issuance. See nft/minter.ts.
+  const minter = resolveMinter(input.minter);
   const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPvZeJ");
   const ata = getAssociatedTokenAddressSync(skillMint, buyer, false, TOKEN_2022_PROGRAM_ID);
 
@@ -196,29 +200,31 @@ export async function buySkill(
     );
   }
 
-  // Mint 1 token
+  // Mint 1 token — authority = protocol minter (co-signs below).
   tx.add(
     createMintToInstruction(
       skillMint,
       ata,
-      payerPk, // mint authority
+      minter.publicKey, // mint authority
       1,
       [],
       TOKEN_2022_PROGRAM_ID,
     ),
   );
 
-  // Sign and send
+  // Sign and send. Buyer pays/feePayer; the minter co-signs the mintTo authority.
   const signerFull = signer as any;
   const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash();
   tx.recentBlockhash = blockhash;
   tx.feePayer = payerPk;
+  tx.partialSign(minter);
 
   if ("secretKey" in signerFull) {
-    tx.sign(signerFull);
+    tx.partialSign(signerFull);
   } else if ("signTransaction" in signerFull) {
     const signed = await signerFull.signTransaction(tx);
     const sig = await conn.sendRawTransaction(signed.serialize());
+    await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
     return sig;
   }
 
