@@ -100,15 +100,38 @@ export async function ensureDbRoot(signer: DomainSignerInput): Promise<string | 
   return signature;
 }
 
+/**
+ * Token/collection gate enforced on writes by the IQ contract. `gateType`
+ * defaults to a Token gate (hold ≥ `amount` of `mint`); use the SDK's
+ * GateType.Collection value for NFT-collection membership.
+ */
+export interface TableGate {
+  mint: string; // token mint / collection the writer must hold
+  amount?: number; // min amount (default 1)
+  gateType?: number; // GateType.Token (0) | GateType.Collection (1)
+}
+
+interface TableOptions {
+  writers?: string[];
+  gate?: TableGate;
+}
+
 export async function createTable(
   signer: DomainSignerInput,
   hint: string,
   columns: string[],
   idColumn: string,
-  options?: { writers?: string[] },
+  options?: TableOptions,
 ): Promise<string | null> {
   const s = asSolana(signer);
   const writers = options?.writers?.map((w) => new PublicKey(w));
+  const gate = options?.gate
+    ? {
+        mint: new PublicKey(options.gate.mint),
+        amount: options.gate.amount ?? 1,
+        gateType: options.gate.gateType,
+      }
+    : undefined;
 
   return sdkCreateTable(
     conn(),
@@ -119,7 +142,7 @@ export async function createTable(
     columns,
     idColumn,
     [],
-    undefined,
+    gate as any,
     writers,
     hint,
   );
@@ -131,13 +154,16 @@ export async function createTable(
  * `writeRow` requires the table PDA to be initialized first (createTable is a
  * separate on-chain instruction), so every writer must ensure its table exists
  * before the first row — same lazy pattern as `ensureDbRoot`.
+ *
+ * Pass `options.gate` to have the IQ contract enforce token/collection holding
+ * on every write (set at creation; the gate is fixed for the table's life).
  */
 export async function ensureTable(
   signer: DomainSignerInput,
   hint: string,
   columns: string[],
   idColumn: string,
-  options?: { writers?: string[] },
+  options?: TableOptions,
 ): Promise<string | null> {
   if (await accountExists(tablePda(hint))) return null;
   return createTable(signer, hint, columns, idColumn, options);

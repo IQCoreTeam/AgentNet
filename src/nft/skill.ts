@@ -22,7 +22,7 @@ import {
   ensureTable,
   writeRow,
 } from "../core/chain.js";
-import { AUDIT_HINT, AUDIT_COLUMNS } from "../core/seed.js";
+import { SKILLS_INDEX_HINT, SKILLS_INDEX_COLUMNS } from "../core/seed.js";
 import { createSkillMint, mintSkillToken } from "./token2022.js";
 import { defaultValidator, ValidationError } from "./validation/index.js";
 import type { ValidationAdapter } from "./validation/index.js";
@@ -97,8 +97,8 @@ export async function publishSkill(
     uriTxid: skillTextTxid,
     createdAt: Date.now(),
   };
-  await ensureTable(signer, AUDIT_HINT, AUDIT_COLUMNS, "id");
-  await writeRow(signer, AUDIT_HINT, JSON.stringify(row));
+  await ensureTable(signer, SKILLS_INDEX_HINT, SKILLS_INDEX_COLUMNS, "id");
+  await writeRow(signer, SKILLS_INDEX_HINT, JSON.stringify(row));
 
   return skillId;
 }

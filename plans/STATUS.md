@@ -218,10 +218,10 @@ flowchart LR
 | # | Task | Reference doc | Status |
 |---|---|---|---|
 | **T2-1** | core/ on-chain part — table seeds (mysessions, etc.) + IQLabs chain wrapper | [`coding-info.md`](coding-info.md) | ✅ `src/core/` (types, seed, chain) |
-| **T2-2** | **Publish skill NFT** — code-in text + Token-2022 mint (soulbound) | [`skill-nft-structure.md`](skill-nft-structure.md) | ✅ `nft/skill.publishSkill` + indexes to AUDIT |
+| **T2-2** | **Publish skill NFT** — code-in text + Token-2022 mint (soulbound) | [`skill-nft-structure.md`](skill-nft-structure.md) | ✅ `nft/skill.publishSkill` + indexes to `skills:index` |
 | **T2-3** | **Buy skill** — pay + mint + supply++ (popularity) | 〃 | ⚠️ partial — payment + ATA built; **mint step blocked** (see limitation) |
-| **T2-4** | **Search** — category/hashtag (trait) filter + sort by supply | [`search.md`](search.md) | ✅ `search/search` (supply hydrated live from mint) |
-| **T2-5** | **Reputation notes** — on-chain write, skill-holder gate | [`notes.md`](notes.md) | ✅ `notes/` + `reputation/` (gated by token balance) |
+| **T2-4** | **Search** — category/hashtag (trait) filter + sort by supply | [`search.md`](search.md) | ✅ trait filter + live-supply sort; **semantic layer (§3) not built** |
+| **T2-5** | **Reputation notes** — on-chain write, skill-holder gate | [`notes.md`](notes.md) | ✅ notes (native Token-gate on table) + reputation = totalSupply (no invented score) |
 | **T2-6** | **Validation gate** — quality / maliciousness check before publish | [`skill-validation-adapter.md`](skill-validation-adapter.md) | ✅ `nft/validation/` (compat/strict/onchain/security) |
 | **T2-7** | **Workflow NFT** — skill-bundle recipe, requiredSkills gate | [`workflow-nft.md`](workflow-nft.md) | ✅ `nft/workflow` (prereq gate; same mint limitation) |
 | **T2-8** | Expose as MCP tools — agent autonomous buy | coding-info Step 7 | ✅ `mcp/server` (search_skills, buy_skill) |
@@ -256,6 +256,24 @@ flowchart LR
 > non-row reads filtered out (readTableRows also returns metadata-shaped entries);
 > IQ fee skipped when treasury is the System-Program sentinel (else funds burn);
 > `supply` hydrated live from the mint (indexed copy is always 0).
+
+> 📐 **Alignment fixes (brought code back to the spec).**
+> - **Reputation is not a score.** notes.md says "Not a rating/score"; an agent's
+>   standing = `totalSupply` ("famous agent = sum of supply"). Removed the invented
+>   `totalSupply*3 + skillsPublished*10 + notesReceived` formula; leaderboard ranks
+>   by `totalSupply`; `notesReceived` is informational only.
+> - **Skill registry split from the audit table.** Publish/search/reputation now use
+>   `skills:index`, not `audit:skills` — the audit/"Q-table" (search.md) is a separate
+>   thing (security results shown alongside), not the discovery index. *(The truly
+>   canonical source is the skill **collection** scanned by trait; the index table is
+>   the interim until DAS/collection-scan lands.)*
+> - **Note gating is now IQ-native.** The notes table is created with a Token
+>   `gate_opt` (hold ≥1 of the skill mint); the contract enforces it on every write.
+>   The old client-side `getBalance` stays only as a fast friendly pre-check. *(Workflow
+>   prereq stays a manual multi-mint AND-check — the single-mint table gate can't
+>   express "hold all of X, Y, Z".)*
+> - **Still open:** search's **semantic** query→trait mapping (search.md §3) is an
+>   off-chain embedding index — not built; current keyword match is literal substring.
 
 **End state:** the designer agent (wallet) buys and equips skills, leaves reputation
 on the good ones, popular skills sort by supply — all on the same wallet as sessions.

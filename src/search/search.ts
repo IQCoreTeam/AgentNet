@@ -1,8 +1,15 @@
 // Search skills by keyword, category, hashtags; sort by supply or recency.
+//
+// Per search.md the full design also has a SEMANTIC layer that maps a
+// vocabulary-mismatch query onto an existing category/hashtag (e.g. "hotdog" →
+// #convenience-store) via an off-chain embedding index (search.md §3). That
+// embedding index is a separate off-chain component and is NOT built here — this
+// module implements the on-chain half: trait filter + supply sort. Keyword match
+// below is literal substring, not semantic.
 
 import type { Connection } from "@solana/web3.js";
 import { readRows } from "../core/chain.js";
-import { AUDIT_HINT } from "../core/seed.js";
+import { SKILLS_INDEX_HINT } from "../core/seed.js";
 import type { Skill, Row } from "../core/types.js";
 import { getMintSupply } from "../nft/token2022.js";
 
@@ -29,11 +36,11 @@ export async function searchSkills(
   const sortBy = options?.sortBy ?? "supply";
   const filters = options?.filters ?? {};
 
-  // Read all skills from audit table. readTableRows also returns non-row
-  // entries ({signature, metadata, data} shapes for txs whose payload isn't a
-  // JSON row), so keep only rows that look like an indexed skill — otherwise
-  // `.toLowerCase()` / sorts crash on undefined fields.
-  const rows = await readRows(AUDIT_HINT, { limit: 1000 });
+  // Read the skill index. readTableRows also returns non-row entries
+  // ({signature, metadata, data} shapes for txs whose payload isn't a JSON row),
+  // so keep only rows that look like an indexed skill — otherwise `.toLowerCase()`
+  // / sorts crash on undefined fields.
+  const rows = await readRows(SKILLS_INDEX_HINT, { limit: 1000 });
   let skills = (rows as unknown as Skill[]).filter(
     (s) => typeof s.id === "string" && typeof s.name === "string",
   );

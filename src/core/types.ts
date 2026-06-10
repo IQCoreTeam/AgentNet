@@ -52,13 +52,18 @@ export interface Note {
   timestamp: number;
 }
 
-/** Agent reputation snapshot stored in `reputation:<wallet>` table. */
+/**
+ * Agent reputation snapshot stored in `reputation:<wallet>` table.
+ *
+ * NOT a computed score (notes.md: "Not a rating/score"). Standing = `totalSupply`
+ * — "famous agent = sum of supply across the skills that agent created"
+ * (skill-nft-structure.md). `notesReceived` is informational only.
+ */
 export interface Reputation {
   wallet: string;
   skillsPublished: number;
-  totalSupply: number; // sum of all buyer counts across agent's skills
-  notesReceived: number;
-  score: number; // derived: (totalSupply * 3) + (skillsPublished * 10) + notesReceived
+  totalSupply: number; // sum of on-chain supply across agent's skills = fame
+  notesReceived: number; // informational count, never a score
   updatedAt: number;
 }
 

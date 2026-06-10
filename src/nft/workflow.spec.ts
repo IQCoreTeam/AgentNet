@@ -15,8 +15,8 @@ vi.mock("../core/chain.js", () => ({
 }));
 
 vi.mock("../core/seed.js", () => ({
-  AUDIT_HINT: "audit:skills",
-  AUDIT_COLUMNS: ["id", "name", "type", "supply", "createdAt"],
+  SKILLS_INDEX_HINT: "skills:index",
+  SKILLS_INDEX_COLUMNS: ["id", "name", "type", "supply", "createdAt"],
 }));
 
 vi.mock("./token2022.js", async () => {

@@ -39,7 +39,7 @@ describe("reputation/reputation", () => {
     ];
     
     vi.mocked(chain.readRows).mockImplementation(async (hint: string) => {
-      if (hint === "audit:skills") return mockSkills as any;
+      if (hint === "skills:index") return mockSkills as any;
       if (hint === "notes:skill:skill1") return [{ id: "note1" }, { id: "note2" }] as any;
       if (hint === "notes:skill:skill2") return [{ id: "note3" }] as any;
       return [];
@@ -48,15 +48,13 @@ describe("reputation/reputation", () => {
 
     const rep = await getReputation(mockConn, "walletA");
 
-    // skillsPublished = 2
-    // totalSupply = 7
-    // notesReceived = 3
-    // score = (7 * 3) + (2 * 10) + 3 = 21 + 20 + 3 = 44
+    // Reputation is NOT a score. Standing = totalSupply (fame); notes informational.
+    // skillsPublished = 2, totalSupply = 5 + 2 = 7, notesReceived = 3
     expect(rep.wallet).toBe("walletA");
     expect(rep.skillsPublished).toBe(2);
     expect(rep.totalSupply).toBe(7);
     expect(rep.notesReceived).toBe(3);
-    expect(rep.score).toBe(44);
+    expect(rep).not.toHaveProperty("score");
   });
 
   it("should update reputation and write row to chain", async () => {
@@ -64,15 +62,15 @@ describe("reputation/reputation", () => {
     mockSupply({});
 
     const rep = await updateReputation(mockConn, signer, "walletC");
-    
-    expect(rep.score).toBe(0);
+
+    expect(rep.totalSupply).toBe(0);
     expect(chain.writeRow).toHaveBeenCalledWith(signer, "reputation:walletC", expect.any(String));
   });
 
   it("should generate leaderboard correctly", async () => {
     const mockSkills = [
-      { id: "skill1", creator: "walletA", supply: 5 }, // walletA score: (5*3) + (1*10) = 25
-      { id: "skill2", creator: "walletB", supply: 10 }, // walletB score: (10*3) + (1*10) = 40
+      { id: "skill1", creator: "walletA", supply: 5 }, // walletA totalSupply: 5
+      { id: "skill2", creator: "walletB", supply: 10 }, // walletB totalSupply: 10
     ];
     vi.mocked(chain.readRows).mockResolvedValue(mockSkills as any);
     mockSupply({ skill1: 5, skill2: 10 });
@@ -80,7 +78,7 @@ describe("reputation/reputation", () => {
     const leaderboard = await getLeaderboard(mockConn, 10);
     
     expect(leaderboard.length).toBe(2);
-    expect(leaderboard[0].wallet).toBe("walletB"); // 40
-    expect(leaderboard[1].wallet).toBe("walletA"); // 25
+    expect(leaderboard[0].wallet).toBe("walletB"); // totalSupply 10
+    expect(leaderboard[1].wallet).toBe("walletA"); // totalSupply 5
   });
 });

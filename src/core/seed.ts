@@ -36,8 +36,16 @@ export function notesAgentHint(agentWallet: string): string {
 }
 
 /**
- * Table for audit/validation records.
- * Stores results of skill security checks (pre-publish + periodic).
+ * Skill/workflow discovery index. Per search.md the canonical source is the
+ * skill *collection* (scan the NFTs by trait), but until DAS/collection-scan is
+ * wired this table is the registry that publish writes to and search/reputation
+ * read from. Kept SEPARATE from the audit table — they hold different things.
+ */
+export const SKILLS_INDEX_HINT = "skills:index";
+
+/**
+ * Table for audit/validation records (the "Q-table" in search.md) — security
+ * check results shown ALONGSIDE search results. NOT the skill registry.
  */
 export const AUDIT_HINT = "audit:skills";
 
@@ -54,11 +62,11 @@ export function reputationHint(wallet: string): string {
 //
 // The SDK's writeRow validates every row key against the table's declared
 // columns (`unknown key: <k>` otherwise), so these MUST be the full superset of
-// every key any writer puts in a row. Skills and workflows share AUDIT_HINT, so
-// AUDIT_COLUMNS is the union of both row shapes — whoever publishes first creates
-// the table, and the other type's keys must still be allowed.
+// every key any writer puts in a row. Skills and workflows share the index
+// table, so SKILLS_INDEX_COLUMNS is the union of both row shapes — whoever
+// publishes first creates the table, and the other type's keys must still pass.
 
-export const AUDIT_COLUMNS = [
+export const SKILLS_INDEX_COLUMNS = [
   "id",
   "name",
   "description",
@@ -83,11 +91,13 @@ export const NOTE_COLUMNS = [
   "timestamp",
 ];
 
+// Reputation is NOT a score (notes.md: "Not a rating/score"). An agent's
+// standing = totalSupply (skill-nft-structure.md: "famous agent = sum of supply
+// across the skills that agent created"). notesReceived is informational only.
 export const REPUTATION_COLUMNS = [
   "wallet",
   "skillsPublished",
   "totalSupply",
   "notesReceived",
-  "score",
   "updatedAt",
 ];

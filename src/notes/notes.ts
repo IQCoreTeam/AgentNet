@@ -29,7 +29,9 @@ export async function postNote(
 ): Promise<string> {
   const author = await signerAddress(signer);
 
-  // Verify author owns ≥1 skill token
+  // Fast client-side pre-check for a friendly error. The REAL enforcement is the
+  // on-chain Token gate on the notes table below (gate_opt) — the IQ contract
+  // rejects writes from non-holders, so gating doesn't rely on this check.
   const balance = await getBalance(
     conn,
     new PublicKey(input.skillId),
@@ -51,7 +53,11 @@ export async function postNote(
     timestamp: Date.now(),
   };
 
-  await ensureTable(signer, hint, NOTE_COLUMNS, "id");
+  // Create the notes table gated by holding the skill token (Token gate, ≥1).
+  // The contract enforces this on every subsequent write — native, not manual.
+  await ensureTable(signer, hint, NOTE_COLUMNS, "id", {
+    gate: { mint: input.skillId, amount: 1 },
+  });
   await writeRow(signer, hint, JSON.stringify(note));
   return noteId;
 }

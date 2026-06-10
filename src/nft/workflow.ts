@@ -12,7 +12,7 @@ import {
 } from "@solana/spl-token";
 
 import { codeIn, signerAddress, ensureDbRoot, ensureTable, writeRow } from "../core/chain.js";
-import { AUDIT_HINT, AUDIT_COLUMNS } from "../core/seed.js";
+import { SKILLS_INDEX_HINT, SKILLS_INDEX_COLUMNS } from "../core/seed.js";
 import { createSkillMint } from "./token2022.js";
 import { getBalance } from "../notes/balance.js";
 import {
@@ -92,8 +92,8 @@ export async function publishWorkflow(
     uriTxid: workflowTxid,
     createdAt: Date.now(),
   };
-  await ensureTable(signer, AUDIT_HINT, AUDIT_COLUMNS, "id");
-  await writeRow(signer, AUDIT_HINT, JSON.stringify(row));
+  await ensureTable(signer, SKILLS_INDEX_HINT, SKILLS_INDEX_COLUMNS, "id");
+  await writeRow(signer, SKILLS_INDEX_HINT, JSON.stringify(row));
 
   return workflowId;
 }
@@ -116,8 +116,11 @@ const DEFAULT_IQ_TREASURY = "11111111111111111111111111111111";
 /**
  * Unlock a workflow (mint workflow token).
  *
- * Checks that the buyer holds all required skills (balance >= 1).
- * If passes, proceeds atomically: transfer payment (if price > 0) and mint token.
+ * Checks that the buyer holds ALL required skills (balance >= 1 each). This stays
+ * a manual multi-mint check (not the SDK's single-mint table gate) because the
+ * gate is an AND over N skill mints at mint time, not a per-table write gate —
+ * the native gate_opt can express "hold mint X", not "hold all of X, Y, Z".
+ * If it passes, proceeds atomically: transfer payment (if price > 0) and mint.
  */
 export async function unlockWorkflow(
   conn: Connection,
