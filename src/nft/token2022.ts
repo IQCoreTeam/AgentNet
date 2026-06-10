@@ -86,11 +86,11 @@ export async function createSkillMint(
     // Keypair-like
     tx.sign(signerFull, mintKeypair);
   } else if ("signTransaction" in signerFull) {
-    // WalletSigner
-    tx.sign(mintKeypair);
+    // WalletSigner: mintKeypair partial-signs first, then wallet signs
+    tx.partialSign(mintKeypair);
     const signed = await (signerFull as WalletSigner).signTransaction(tx);
     const sig = await conn.sendRawTransaction(signed.serialize());
-    await conn.confirmTransaction(sig);
+    await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
     return mintKeypair.publicKey;
   }
 

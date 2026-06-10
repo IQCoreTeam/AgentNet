@@ -50,7 +50,7 @@ export async function searchSkills(
   // Filter by hashtags (any match)
   if (filters.hashtags && filters.hashtags.length > 0) {
     skills = skills.filter((s) => {
-      const skillHashtags = (s as any).hashtags ?? [];
+      const skillHashtags = s.hashtags ?? [];
       return filters.hashtags!.some((tag) => skillHashtags.includes(tag));
     });
   }

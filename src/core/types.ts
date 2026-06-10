@@ -22,7 +22,8 @@ export interface Skill {
   name: string;
   description: string;
   creator: string; // wallet address
-  category: string; // category/hashtag trait
+  category: string;
+  hashtags?: string[];
   price?: bigint; // lamports (0 = free)
   supply: number; // mint supply = popularity
   uriTxid: string; // codeIn txid holding the skill text
