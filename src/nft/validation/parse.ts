@@ -10,6 +10,8 @@
 export interface SkillFrontmatter {
   name?: string;
   description?: string;
+  type?: "skill" | "workflow";
+  requiredSkills?: string[];
   author?: string;
   license?: string;
   repository?: string;

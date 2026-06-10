@@ -11,6 +11,7 @@ export { defaultValidator } from "./adapters/onchain.js";
 export { SkillsShCompatAdapter } from "./adapters/compat.js";
 export { StrictAdapter } from "./adapters/strict.js";
 export { OnchainAdapter, INLINE_MAX_BYTES } from "./adapters/onchain.js";
+export { WorkflowAdapter, defaultWorkflowValidator } from "./adapters/workflow.js";
 export { createSecurityLlmAdapter } from "./adapters/security.js";
 export type { ReviewFn } from "./adapters/security.js";
 export { compose } from "./compose.js";

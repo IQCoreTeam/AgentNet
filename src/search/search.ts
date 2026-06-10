@@ -9,6 +9,7 @@ export interface SearchFilters {
   keyword?: string;
   category?: string;
   hashtags?: string[];
+  type?: "skill" | "workflow";
 }
 
 export type SortBy = "supply" | "name" | "recent";
@@ -51,6 +52,15 @@ export async function searchSkills(
     skills = skills.filter((s) => {
       const skillHashtags = (s as any).hashtags ?? [];
       return filters.hashtags!.some((tag) => skillHashtags.includes(tag));
+    });
+  }
+
+  // Filter by type
+  if (filters.type) {
+    skills = skills.filter((s) => {
+      // If type is not explicitly set in frontmatter, we treat it as a "skill"
+      const t = s.type ?? "skill";
+      return t === filters.type;
     });
   }
 

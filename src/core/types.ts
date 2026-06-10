@@ -18,6 +18,7 @@ export interface Session {
 /** Skill NFT metadata. */
 export interface Skill {
   id: string; // NFT mint address
+  type?: "skill" | "workflow"; // distinguishes between skills and workflows in search
   name: string;
   description: string;
   creator: string; // wallet address
@@ -31,6 +32,7 @@ export interface Skill {
 /** Workflow NFT metadata — a skill bundle with gates. */
 export interface Workflow {
   id: string; // NFT mint address
+  type?: "skill" | "workflow";
   name: string;
   description: string;
   creator: string;
