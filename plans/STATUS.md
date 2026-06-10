@@ -227,17 +227,33 @@ flowchart LR
 | **T2-8** | Expose as MCP tools — agent autonomous buy | coding-info Step 7 | ✅ `mcp/server` (search_skills, buy_skill) |
 
 > ⚠️ **Known limitation — buy mint step (T2-3 / T2-7).** Each skill mint is created
-> with the **creator** as mint authority, but `buySkill`/`unlockWorkflow` have the
+> with the **creator** as mint authority (per [`skill-nft-structure.md`](skill-nft-structure.md)
+> §1, "own mint authority = its creator"), but `buySkill`/`unlockWorkflow` have the
 > **buyer** sign the `mintTo`. On-chain, `mintTo` requires the mint authority's
 > signature → a buyer cannot self-mint a creator-authored mint, so the mint step of
 > buy fails on devnet. Everything *around* it works: payment routing, ATA creation,
 > prerequisite gate, publish, indexing, search, reputation, validation, MCP.
-> **Canonical fix** (plan [`skill-nft-structure.md`](skill-nft-structure.md) §4,
-> "P = Program"): an on-chain program whose **PDA is the mint authority** mints via
-> CPI atomically with payment. That program is **not built yet** — tracked as the
-> next T2 task. A protocol-minter keypair is a faster interim alternative.
+>
+> **The plans never resolved this.** README/about (the buy row, "🔨 new wrapper")
+> frame buy as a **client-side wrapper** — `SystemProgram.transfer` + `mintTo` in one
+> tx — which is exactly the code here, and exactly what can't work (buyer ≠ authority).
+> The §4 sequence diagram's `P = Program` is ambiguous: it reads most naturally as the
+> **Token-2022 program** executing `mintTo`, not a bespoke contract, and it silently
+> skips *who signs as mint authority*. So this is an **open design decision, not a
+> coded plan** — pick one:
+>   1. **Custom program** — a contract whose PDA is the mint authority mints via CPI
+>      atomically with payment (trustless; largest effort; **not** in IQ SDK).
+>   2. **Protocol minter keypair** — a known service key holds authority, co-signs each
+>      buy (ships fast; centralized).
+>   3. **Creator co-sign** — creator must be online per purchase (impractical).
+>
+> Until one lands, buy is built-but-blocked at the mint instruction.
 >
 > Other guards added: `getAccountInfo === null` for ATA existence (not try/catch);
+> table created before first write (`ensureTable`, else SDK throws "table not found");
+> row keys constrained to declared columns (SDK throws "unknown key" otherwise);
+> `price` serialized as string (BigInt isn't JSON-serializable);
+> non-row reads filtered out (readTableRows also returns metadata-shaped entries);
 > IQ fee skipped when treasury is the System-Program sentinel (else funds burn);
 > `supply` hydrated live from the mint (indexed copy is always 0).
 

@@ -45,12 +45,13 @@ interface MintConfig {
  * ⚠️ KNOWN LIMITATION (buy flow): mint authority = creator here, but `buySkill`
  * has the buyer sign the mintTo. On-chain mintTo requires the mint authority's
  * signature, so a buyer cannot self-mint a creator-authored mint — the buy tx
- * fails unless the creator co-signs. The canonical fix per the plan
- * (plans/skill-nft-structure.md §4, "P = Program") is an on-chain program whose
- * PDA is the mint authority and mints via CPI atomically with payment. That
- * program is not built yet — publish/index/search/reputation all work, but the
- * on-chain mint step of buy is blocked until the program (or a protocol minter)
- * lands. Tracked as T2 follow-up.
+ * fails unless the creator co-signs. The plans never resolved this: README/about
+ * frame buy as a client-side "wrapper" (transfer + mintTo in one tx — exactly this
+ * code, exactly what can't work), and §4's "P = Program" reads as the Token-2022
+ * program, not a bespoke contract. It's an open design decision — custom program
+ * with a PDA mint authority, a protocol minter keypair, or creator co-sign. See
+ * plans/STATUS.md for the full writeup. Everything else (publish/index/search/
+ * reputation/notes/validation/MCP) works; only the mint step of buy is blocked.
  */
 export async function createSkillMint(
   conn: Connection,
