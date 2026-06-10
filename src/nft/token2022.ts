@@ -78,6 +78,10 @@ export async function createSkillMint(
 
   // Sign and send
   const signerFull = signer as any; // cast to access signing
+  const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash();
+  tx.recentBlockhash = blockhash;
+  tx.feePayer = creatorPk;
+
   if ("secretKey" in signerFull) {
     // Keypair-like
     tx.sign(signerFull, mintKeypair);
@@ -89,10 +93,6 @@ export async function createSkillMint(
     await conn.confirmTransaction(sig);
     return mintKeypair.publicKey;
   }
-
-  const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash();
-  tx.recentBlockhash = blockhash;
-  tx.feePayer = creatorPk;
 
   const sig = await conn.sendRawTransaction(tx.serialize());
   await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
