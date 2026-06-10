@@ -11,14 +11,15 @@ import {
 } from "@solana/web3.js";
 import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
 import {
+  createAssociatedTokenAccountInstruction,
+  getAssociatedTokenAddressSync,
+  createMintToInstruction,
+} from "@solana/spl-token";
+import {
   codeIn,
-  writeRow,
   signerAddress,
-  getTablePdaRef,
   ensureDbRoot,
-  createTable,
 } from "../core/chain.js";
-import { AGENTNET_ROOT_ID, mysessionsHint } from "../core/seed.js";
 import type { Skill } from "../core/types.js";
 import { createSkillMint, mintSkillToken } from "./token2022.js";
 
@@ -137,17 +138,8 @@ export async function buySkill(
     }
   }
 
-  // 2. Mint skill token to buyer (via mintSkillToken's internal logic)
-  // Note: This would normally be done via a separate instruction
-  // For now, we compose the mint instruction directly here
+  // 2. Mint skill token to buyer (atomic with payment transfer above)
   const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPvZeJ");
-
-  const {
-    createAssociatedTokenAccountInstruction,
-    getAssociatedTokenAddressSync,
-    createMintToInstruction,
-  } = await import("@solana/spl-token");
-
   const ata = getAssociatedTokenAddressSync(skillMint, buyer, false, TOKEN_2022_PROGRAM_ID);
 
   // Create ATA if needed
