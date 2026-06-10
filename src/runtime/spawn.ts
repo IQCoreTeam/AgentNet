@@ -9,6 +9,8 @@
 // and never imports an SDK type. Output is delivered as already-mapped ChatMessages
 // (convert/* map the SDK events); the runtime just appends + paints.
 
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { Codex } from "@openai/codex-sdk";
 import type { ChatMessage } from "./contract.js";
@@ -16,6 +18,24 @@ import { mapClaudeMessage } from "./convert/claude.js";
 import { mapCodexEvent } from "./convert/codex.js";
 import type { ApprovalChannel, ApprovalRequest } from "./approval/channel.js";
 import { autoApprove } from "./approval/channel.js";
+
+// The SDK bundles its own native CLI binary, but when we BUNDLE the extension the
+// SDK can't resolve that binary's path (it's outside the bundle) → "Native CLI binary
+// not found". The fix: point the SDK at the user's installed `claude` (which they're
+// already logged into). Resolve it once from PATH via `which`/`where`.
+const exeCache = new Map<string, string | null>();
+function resolveExecutable(name: string): string | undefined {
+  if (!exeCache.has(name)) {
+    try {
+      const cmd = process.platform === "win32" ? "where" : "which";
+      const out = execFileSync(cmd, [name], { encoding: "utf8" }).split("\n")[0]?.trim();
+      exeCache.set(name, out && existsSync(out) ? out : null);
+    } catch {
+      exeCache.set(name, null);
+    }
+  }
+  return exeCache.get(name) ?? undefined;
+}
 
 // The runtime-facing engine handle. Callbacks are registered once; send() feeds a
 // user turn; stop() ends the session. sessionId(cb) fires when the engine reveals
@@ -96,6 +116,9 @@ function claudeEngine(opts: SpawnOpts): Engine {
       cwd: opts.cwd,
       canUseTool,
       includePartialMessages: false,
+      // use the user's installed claude (logged in) so the bundled extension doesn't
+      // need the SDK's own native binary on its (unresolvable) bundle-relative path.
+      pathToClaudeCodeExecutable: resolveExecutable("claude"),
       stderr: (d: string) => { if (d.trim()) cb.emitErr(`[claude] ${d.trim()}`); },
     },
   });
@@ -132,7 +155,8 @@ function claudeEngine(opts: SpawnOpts): Engine {
 function codexEngine(opts: SpawnOpts): Engine {
   const cb = callbacks();
   const approval = opts.approval ?? autoApprove();
-  const codex = new Codex();
+  // same bundle-path issue as claude: point the SDK at the user's installed `codex`.
+  const codex = new Codex({ codexPathOverride: resolveExecutable("codex") });
   // resume an existing thread (our injectCodex wrote it), else start fresh.
   const thread = opts.sessionId
     ? codex.resumeThread(opts.sessionId, threadOpts(opts))

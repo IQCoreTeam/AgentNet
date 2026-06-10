@@ -26,7 +26,8 @@ export function chatHtml(): string {
      Layered surfaces (bg-0 deepest → bg-2 raised) give cards real depth
      instead of one flat fill. All built on VSCode vars so themes still apply. */
   :root {
-    --an-green:      #3ac07a;          /* brand accent */
+    --an-green:      #3ac07a;          /* brand accent (codex/brand) */
+    --claude:        #e9883a;          /* claude engine accent (orange) */
     --an-green-soft: rgba(58,192,122,0.16);
     --an-green-line: rgba(58,192,122,0.38);
     --an-green-dim:  rgba(58,192,122,0.08);
@@ -61,12 +62,10 @@ export function chatHtml(): string {
             color: var(--vscode-foreground); border: 1px solid var(--vscode-inputValidation-errorBorder, #be1100); }
   .danger:hover { filter: brightness(1.15); }
 
-  /* top platform tabs (claude code | codex) + storage pill on the right */
-  #tabs { display: flex; align-items: center; border-bottom: 1px solid var(--vscode-panel-border); }
-  .tab { padding: 10px 16px; cursor: pointer; font-size: 0.9em; opacity: 0.6;
-         border-bottom: 2px solid transparent; user-select: none; }
-  .tab:hover { opacity: 0.85; }
-  .tab.active { opacity: 1; border-bottom-color: var(--an-green); color: var(--an-green); }
+  /* thin top bar: just the storage pill on the right (engine choice moved to the
+     composer's folder tabs at the bottom) */
+  #tabs { display: flex; align-items: center; padding: 6px 4px;
+          border-bottom: 1px solid var(--vscode-panel-border); }
   #storagePill { margin: 0 10px 0 auto; padding: 3px 11px; display: flex; align-items: center; gap: 5px;
                  font-size: 0.78em; opacity: 0.85; background: var(--an-bg-1); border-radius: 999px; }
   #storagePill .dot { font-size: 0.7em; }
@@ -130,32 +129,46 @@ export function chatHtml(): string {
 
   /* right chat area */
   #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-  #log { flex: 1; overflow-y: auto; padding: 14px 14px 18px; display: flex; flex-direction: column; gap: 2px;
+  #log { flex: 1; overflow-y: auto; padding: 0 0 24px; display: flex; flex-direction: column;
          scroll-behavior: smooth; }
 
-  /* a row = bubble (+ optional badge/footer under it). The ROW owns left/right
-     alignment; the bubble sizes to its content. */
-  .msgRow { display: flex; flex-direction: column; max-width: 82%; }
-  .msgRow.user { align-self: flex-end; align-items: flex-end; }
-  .msgRow.assistant, .msgRow.thinking, .msgRow.tool { align-self: flex-start; align-items: flex-start; }
-  .msg { margin: 5px 0; padding: 9px 14px; border-radius: 16px; white-space: pre-wrap; line-height: 1.5;
-         font-size: 0.95em; }
-  /* chat-bubble feel: round, with the "tail" corner slightly tucked */
-  .msgRow.user .msg      { border-bottom-right-radius: 4px; }
-  .msgRow.assistant .msg { border-bottom-left-radius: 4px; }
-  /* user bubble carries the brand with a soft green wash (no border — a border on a
-     rounded bubble reads as a "box inside a box", esp. on short messages) */
-  .user      { background: var(--an-green-soft); }
-  .assistant { background: var(--an-bg-2); }
-  .thinking  { opacity: 0.5; font-style: italic; font-size: 0.9em; }
-  .tool      { opacity: 0.8; font-family: var(--vscode-editor-font-family); font-size: 0.9em; }
+  /* ── TURN-THREAD layout (Claude-Code style) ──────────────────────────────
+     Each user command opens a TURN: the command becomes a STICKY header that
+     pins to the top while you read its replies, and the replies hang off a
+     vertical timeline (a left rail + a dot per item). Scroll past a turn and the
+     next command's header slides up and replaces it. */
+  .turn { display: flex; flex-direction: column; }
+  .turnHead { position: sticky; top: 0; z-index: 5; backdrop-filter: blur(8px);
+              background: color-mix(in srgb, var(--vscode-editor-background) 82%, transparent);
+              border-bottom: 1px solid var(--an-line-soft);
+              padding: 11px 16px; display: flex; align-items: flex-start; gap: 9px; cursor: default; }
+  .turnHead .uq { color: var(--an-green); font-weight: 700; flex: none; line-height: 1.5; opacity: 0.8; }
+  .turnHead .utext { flex: 1; min-width: 0; white-space: pre-wrap; line-height: 1.5; font-size: 0.95em;
+                     font-weight: 600; overflow-wrap: anywhere; }
+  /* the timeline body: a left rail; each child item gets a dot via ::before */
+  .turnBody { padding: 4px 16px 16px 16px; margin-left: 7px;
+              border-left: 1.5px solid var(--an-line-soft); display: flex; flex-direction: column; gap: 2px; }
+  .turn:last-child .turnBody { min-height: 40px; } /* room so the last head can pin */
+  /* a reply node on the thread: dot on the rail + content */
+  .node { position: relative; padding: 5px 0 5px 16px; }
+  .node::before { content: ''; position: absolute; left: -7px; top: 12px; width: 9px; height: 9px;
+                  border-radius: 50%; background: var(--an-bg-2); border: 1.5px solid var(--an-line);
+                  box-sizing: border-box; }
+  /* the timeline dot doubles as an ENGINE MARK: claude=orange, codex=green, so each
+     reply shows which engine produced it right on the rail. A subtle ring + glow. */
+  .node.assistant::before { background: var(--an-green); border-color: var(--an-green);
+                            box-shadow: 0 0 0 3px var(--an-green-dim); }
+  .node.assistant.claude::before { background: var(--claude); border-color: var(--claude);
+                                   box-shadow: 0 0 0 3px rgba(233,136,58,0.16); }
+  .node.thinking::before  { background: transparent; }
+  .msg { white-space: pre-wrap; line-height: 1.55; font-size: 0.95em; overflow-wrap: anywhere; }
+  .node.assistant .msg { }
+  .node.thinking .msg { opacity: 0.5; font-style: italic; font-size: 0.9em; }
+  .tool { font-family: var(--vscode-editor-font-family); font-size: 0.9em; }
 
-  /* collapse long user messages behind a fade + show more (OpenGUI pattern) */
-  .msg.clamp { max-height: 11lh; overflow: hidden; position: relative; }
-  .msg.clamp::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3lh;
-                      background: linear-gradient(to top, var(--an-green-soft), transparent);
-                      pointer-events: none; }
-  .moreBtn { font-size: 0.78em; opacity: 0.6; cursor: pointer; margin: 1px 6px 4px;
+  /* collapse long bodies (summaries) behind a fade + show more */
+  .msg.clamp, .summaryBody.clamp { max-height: 8lh; overflow: hidden; position: relative; }
+  .moreBtn { font-size: 0.78em; opacity: 0.6; cursor: pointer; margin: 2px 0 4px;
              background: none; border: none; color: var(--vscode-foreground); width: auto; padding: 2px; }
   .moreBtn:hover { opacity: 1; color: var(--an-green); }
 
@@ -171,18 +184,15 @@ export function chatHtml(): string {
   .compactRule .lbl { font-size: 0.7em; letter-spacing: 0.04em; text-transform: uppercase;
                       color: var(--an-amber); opacity: 0.85; display: inline-flex; align-items: center; gap: 5px;
                       font-family: var(--vscode-editor-font-family); }
-  .summaryBody { align-self: stretch; max-width: 100%; margin: 0 2px 6px; padding: 10px 13px;
+  .summaryBody { margin: 4px 0 6px; padding: 10px 13px;
                  font-size: 0.86em; line-height: 1.5; opacity: 0.72; white-space: pre-wrap;
                  border-left: 2px solid color-mix(in srgb, var(--an-amber) 45%, transparent);
                  background: color-mix(in srgb, var(--an-amber) 6%, transparent);
                  border-radius: 0 var(--an-radius-sm) var(--an-radius-sm) 0; }
-  .summaryBody.clamp { max-height: 8lh; overflow: hidden; }
 
   /* tool action cards: what the agent actually DID (bash / diff / file op).
-     Look: a quiet raised surface (bg-1) with a faint border; the HEAD is a
-     thin monospace row (icon + command), output sits below a hairline. Borrowed
-     the "soft bg / bright text" split + collapsible chevron from OpenGUI. */
-  .msgRow.tool { align-self: stretch; align-items: stretch; max-width: 100%; }
+     A quiet raised surface with a faint border; the HEAD is a thin monospace row
+     (icon + command), output below a hairline. "soft bg / bright text" + chevron. */
   .toolCard { font-family: var(--vscode-editor-font-family); font-size: 0.8em;
               border: 1px solid var(--an-line-soft); border-radius: var(--an-radius-sm);
               margin: 5px 0; overflow: hidden; background: var(--an-bg-1); }
@@ -222,12 +232,16 @@ export function chatHtml(): string {
   .diffBody .ctx { opacity: 0.5; }
   .diffBody .fold { opacity: 0.35; padding: 1px 11px; user-select: none; font-style: italic; }
 
-  /* tool-APPROVAL card: like a tool card but actionable — green ring + buttons.
-     This is where claude's canUseTool surfaces; the user gates each tool here. */
-  .approvalCard { align-self: stretch; max-width: 100%; margin: 6px 0;
-                  border: 1px solid var(--an-green-line); border-radius: var(--an-radius-sm);
+  /* approval DOCK: pending tool approvals sit here, pinned just above the composer
+     (Claude-Code style) — separate from the scrolling log so "what to answer now"
+     is always in reach. Empty = collapsed (no border/padding). */
+  #approvalDock { display: flex; flex-direction: column; gap: 6px; }
+  #approvalDock:not(:empty) { padding: 8px 12px 0; }
+
+  /* tool-APPROVAL card: like a tool card but actionable — green ring + buttons. */
+  .approvalCard { border: 1px solid var(--an-green-line); border-radius: var(--an-radius-sm);
                   background: var(--an-green-dim); overflow: hidden;
-                  box-shadow: 0 0 0 1px var(--an-green-dim); }
+                  box-shadow: 0 4px 16px rgba(0,0,0,0.25); }
   .apHead { display: flex; align-items: center; gap: 8px; padding: 8px 12px;
             font-family: var(--vscode-editor-font-family); font-size: 0.85em; }
   .apHead .apk { color: var(--an-green); font-weight: 700; }
@@ -271,22 +285,51 @@ export function chatHtml(): string {
   .badge.claude { color: #e9883a; border-color: #e9883a44; background: #e9883a14; }
   .badge.codex  { color: var(--an-green); border-color: var(--an-green-line); background: var(--an-green-dim); }
 
-  #controls { display: flex; gap: 8px; align-items: center; padding: 6px 10px;
-              border-top: 1px solid var(--vscode-panel-border); font-size: 0.85em; }
-  #controls label { opacity: 0.6; }
-  #model { background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground);
-           border: 1px solid var(--vscode-dropdown-border); border-radius: 4px; padding: 3px 6px; }
-  #bar { display: flex; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--an-line-soft); }
-  #input { flex: 1; padding: 9px 12px; background: var(--vscode-input-background);
-           color: var(--vscode-input-foreground); border: 1px solid var(--an-line);
-           border-radius: var(--an-radius-sm); resize: none; font-family: inherit; transition: border-color 0.12s; }
-  #input:focus { outline: none; border-color: var(--an-green-line);
-                 box-shadow: 0 0 0 2px var(--an-green-dim); }
-  button { padding: 8px 14px; background: var(--vscode-button-background);
-           color: var(--vscode-button-foreground); border: none; border-radius: 6px; cursor: pointer; }
-  /* Send carries the brand green; New is the ghost above */
-  #send { background: var(--an-green); color: #06231a; font-weight: 600; }
+  /* ── COMPOSER: engine folder-tabs + input + controls ─────────────────────
+     The engine (claude/codex) is chosen by FOLDER TABS at the top-right of the
+     input: the active one sits IN FRONT (connected to the input box), the other
+     tucks behind. Picking claude tints the whole composer ORANGE; codex stays
+     neutral — so the input itself signals which engine you're talking to. */
+  #composer { padding: 8px 12px 12px; border-top: 1px solid var(--an-line-soft);
+              display: flex; flex-direction: column; }
+  /* per-engine accent: a single var the composer themes off of */
+  #composer { --eng: var(--an-green); --engSoft: var(--an-green-dim); --engLine: var(--an-green-line); }
+  #composer[data-cli="claude"] { --eng: var(--claude); --engSoft: rgba(233,136,58,0.12); --engLine: rgba(233,136,58,0.45); }
+
+  #engineTabs { display: flex; gap: 3px; align-self: flex-end; margin-right: 4px; padding-left: 40%; }
+  .etab { display: flex; align-items: center; gap: 6px; padding: 5px 14px 7px;
+          font-size: 0.8em; cursor: pointer; user-select: none; opacity: 0.5;
+          background: var(--an-bg-1); border: 1px solid var(--an-line-soft); border-bottom: none;
+          border-radius: var(--an-radius-sm) var(--an-radius-sm) 0 0; position: relative; top: 1px;
+          transition: opacity 0.12s, background 0.12s; }
+  .etab:hover { opacity: 0.8; }
+  .etab .ed { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.5; }
+  .etab[data-cli="claude"] { color: var(--claude); }
+  .etab[data-cli="codex"]  { color: var(--an-green); }
+  /* the ACTIVE tab pops forward: full opacity, raised, merged into the input box */
+  .etab.active { opacity: 1; background: var(--an-bg-2); border-color: var(--engLine);
+                 border-bottom: 1px solid var(--an-bg-2); top: 2px; z-index: 2; font-weight: 600; }
+  .etab.active .ed { opacity: 1; }
+
+  #inputWrap { border: 1.5px solid var(--engLine); border-radius: var(--an-radius-sm);
+               background: var(--an-bg-2); overflow: hidden; transition: border-color 0.12s; }
+  #input { width: 100%; box-sizing: border-box; padding: 11px 12px 8px; background: transparent;
+           color: var(--vscode-input-foreground); border: none; resize: none; font-family: inherit;
+           font-size: 0.95em; display: block; }
+  #input:focus { outline: none; }
+  #inputWrap:focus-within { box-shadow: 0 0 0 2px var(--engSoft); }
+
+  #controls { display: flex; gap: 8px; align-items: center; padding: 4px 8px 7px; font-size: 0.82em; }
+  #model { background: var(--an-bg-1); color: var(--vscode-foreground);
+           border: 1px solid var(--an-line); border-radius: 6px; padding: 3px 7px; font-size: 0.92em; }
+  #autoEdit { display: flex; align-items: center; gap: 4px; opacity: 0.7; cursor: pointer; font-size: 0.92em; }
+  #autoEdit input { margin: 0; accent-color: var(--eng); }
+  #send { margin-left: auto; padding: 6px 16px; background: var(--eng); color: #1a1205; font-weight: 600;
+          border: none; border-radius: 6px; cursor: pointer; }
+  #composer[data-cli="codex"] #send { color: #06231a; }
   #send:hover { filter: brightness(1.08); }
+  button { background: var(--vscode-button-background); color: var(--vscode-button-foreground);
+           border: none; border-radius: 6px; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -295,8 +338,6 @@ export function chatHtml(): string {
   <!-- CHAT view -->
   <div id="chatView" class="panel">
   <div id="tabs">
-    <div class="tab active" data-cli="claude">claude code</div>
-    <div class="tab" data-cli="codex">codex</div>
     <div id="storagePill" title="Where sessions are saved">
       <span class="dot local">●</span><span>Local</span>
       <span class="sep">·</span>
@@ -326,13 +367,25 @@ export function chatHtml(): string {
     </div>
     <div id="main">
       <div id="log"></div>
-      <div id="controls">
-        <label>Model</label>
-        <select id="model"></select>
-      </div>
-      <div id="bar">
-        <textarea id="input" rows="1" placeholder="Message claude/codex... (Enter to send)"></textarea>
-        <button id="send">Send</button>
+      <!-- pending tool approvals dock just above the composer (Claude-Code style:
+           "the thing you must answer" sits right where you'd reply) -->
+      <div id="approvalDock"></div>
+      <!-- composer: engine folder-tabs (top-right) + input + controls (bottom-left) -->
+      <div id="composer" data-cli="claude">
+        <div id="engineTabs">
+          <div class="etab active" data-cli="claude"><span class="ed"></span>claude</div>
+          <div class="etab" data-cli="codex"><span class="ed"></span>codex</div>
+        </div>
+        <div id="inputWrap">
+          <textarea id="input" rows="1" placeholder="Message claude... (Enter to send)"></textarea>
+          <div id="controls">
+            <select id="model"></select>
+            <label id="autoEdit" title="Auto-approve edits (skip the approval card for file edits)">
+              <input type="checkbox" id="autoEditChk" /> auto-edit
+            </label>
+            <button id="send">Send</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -375,7 +428,10 @@ export function chatHtml(): string {
   const showAll = document.getElementById('showAll');
   const emptyEl = document.getElementById('empty');
   const modelSel = document.getElementById('model');
-  const tabs = Array.from(document.querySelectorAll('.tab'));
+  const composer = document.getElementById('composer');
+  const autoEditChk = document.getElementById('autoEditChk');
+  const approvalDock = document.getElementById('approvalDock');
+  const tabs = Array.from(document.querySelectorAll('.etab'));
 
   let streaming = null;     // bubble currently being streamed into
   let allSessions = [];     // last sessions payload from extension
@@ -416,6 +472,8 @@ export function chatHtml(): string {
     if (next !== 'claude' && next !== 'codex') return;
     cli = next;
     tabs.forEach(t => t.classList.toggle('active', t.dataset.cli === cli));
+    composer.dataset.cli = cli;                       // tints the input (claude=orange/codex=green)
+    input.placeholder = 'Message ' + cli + '... (Enter to send)';
     fillModels();
   }
   function selectTab(next) {
@@ -439,26 +497,76 @@ export function chatHtml(): string {
     return Math.floor(mo / 12) + '년';
   }
 
-  // ---- chat bubbles ----
-  // Each message is a row (bubble + optional platform badge). prepend=true inserts
-  // at the TOP (older messages on scroll-up) and does NOT auto-scroll.
-  // badgeCli (claude|codex) shows a chip under assistant replies so you can tell
-  // WHICH engine answered — essential once a session is continued across CLIs.
+  // ---- turn threads ----
+  // The log is a list of TURNS. A user command opens a turn (sticky header +
+  // timeline body); every reply until the next user command is a NODE on that
+  // turn's body. tailTurn/headTurn track where new replies and prepended history go.
+  let tailTurn = null; // the turn new (bottom) replies attach to
+  let headTurn = null; // the turn prepended (top, older) replies attach to
+
+  // Open a new turn at the bottom (a fresh user command). Returns its body element.
+  function startTurn(userText, badgeCli) {
+    const turn = document.createElement('div'); turn.className = 'turn';
+    const head = document.createElement('div'); head.className = 'turnHead';
+    head.innerHTML = '<span class="uq">&gt;</span>';
+    const ut = document.createElement('div'); ut.className = 'utext'; ut.textContent = userText;
+    head.appendChild(ut);
+    if (badgeCli) { const b = document.createElement('span'); b.className = 'badge ' + badgeCli;
+      b.textContent = badgeCli === 'codex' ? 'codex · gpt' : 'claude'; head.appendChild(b); }
+    const body = document.createElement('div'); body.className = 'turnBody';
+    turn.appendChild(head); turn.appendChild(body);
+    log.appendChild(turn);
+    turn._body = body; tailTurn = turn;
+    log.scrollTop = log.scrollHeight;
+    return body;
+  }
+  // Open a turn at the TOP (prepended older history). Same shape, inserted first.
+  function startTurnTop(userText, badgeCli) {
+    const turn = document.createElement('div'); turn.className = 'turn';
+    const head = document.createElement('div'); head.className = 'turnHead';
+    head.innerHTML = '<span class="uq">&gt;</span>';
+    const ut = document.createElement('div'); ut.className = 'utext'; ut.textContent = userText;
+    head.appendChild(ut);
+    if (badgeCli) { const b = document.createElement('span'); b.className = 'badge ' + badgeCli;
+      b.textContent = badgeCli === 'codex' ? 'codex · gpt' : 'claude'; head.appendChild(b); }
+    const body = document.createElement('div'); body.className = 'turnBody';
+    turn.appendChild(head); turn.appendChild(body);
+    log.insertBefore(turn, log.firstChild);
+    turn._body = body; headTurn = turn;
+    return body;
+  }
+  // The body a new BOTTOM reply attaches to. If no turn is open yet (a reply with no
+  // preceding user command — e.g. a resumed assistant-first history), open a headless
+  // turn so the timeline still renders.
+  function tailBody() {
+    if (tailTurn && tailTurn._body) return tailTurn._body;
+    const turn = document.createElement('div'); turn.className = 'turn';
+    const body = document.createElement('div'); body.className = 'turnBody';
+    turn.appendChild(body); log.appendChild(turn); turn._body = body; tailTurn = turn;
+    return body;
+  }
+
+  // Add a reply NODE (assistant/thinking/tool/summary) to a turn body. dir: 'tail'
+  // = current bottom turn; 'head' = the prepended top turn.
+  function appendNode(el, dir) {
+    const body = dir === 'head'
+      ? (headTurn && headTurn._body) || startTurnTop('', undefined)
+      : tailBody();
+    body.appendChild(el);
+    if (dir !== 'head') log.scrollTop = log.scrollHeight;
+  }
+
+  // ---- reply bubble (an assistant/thinking text node on the current turn) ----
+  // prepend=true → goes on the prepended (older) head turn; else the bottom tail turn.
   function bubble(role, prepend, badgeCli) {
-    const row = document.createElement('div');
-    row.className = 'msgRow ' + role;
+    const node = document.createElement('div');
+    // the engine class (claude/codex) tints the timeline dot into an engine mark
+    node.className = 'node ' + role + (badgeCli ? ' ' + badgeCli : '');
     const el = document.createElement('div');
     el.className = 'msg ' + role;
-    row.appendChild(el);
-    if (badgeCli && (role === 'assistant')) {
-      const b = document.createElement('div');
-      b.className = 'badge ' + badgeCli;
-      b.textContent = badgeCli === 'codex' ? 'codex · gpt' : 'claude';
-      row.appendChild(b);
-    }
-    if (prepend) log.insertBefore(row, log.firstChild);
-    else { log.appendChild(row); log.scrollTop = log.scrollHeight; }
-    el._row = row; // bubble's row, so callers can attach a footer / clamp toggle
+    node.appendChild(el);
+    appendNode(node, prepend ? 'head' : 'tail');
+    el._row = node; // node element, so callers can attach a footer / clamp toggle
     return el;
   }
 
@@ -480,14 +588,16 @@ export function chatHtml(): string {
   // in a quiet, foldable side-barred block. role:"summary" records land here so the
   // user SEES where history was condensed instead of it reading as a normal turn.
   function renderSummary(text, prepend) {
+    const node = document.createElement('div'); node.className = 'node summary';
     const rule = document.createElement('div');
     rule.className = 'compactRule';
     rule.innerHTML = '<div class="ln"></div><span class="lbl">⌘ context compacted</span><div class="ln"></div>';
     const body = document.createElement('div');
     body.className = 'summaryBody';
     body.textContent = text;
-    if (prepend) { log.insertBefore(body, log.firstChild); log.insertBefore(rule, body); }
-    else { log.appendChild(rule); log.appendChild(body); clampBody(body, body, 400); log.scrollTop = log.scrollHeight; }
+    node.appendChild(rule); node.appendChild(body);
+    appendNode(node, prepend ? 'head' : 'tail');
+    if (!prepend) clampBody(body, body, 400);
   }
 
   // The footer under an assistant reply: elapsed time + model name (when known).
@@ -509,9 +619,8 @@ export function chatHtml(): string {
   let openBash = null; // a bash card awaiting its output (claude's split result)
   function toolRow(prepend) {
     const row = document.createElement('div');
-    row.className = 'msgRow tool';
-    if (prepend) log.insertBefore(row, log.firstChild);
-    else { log.appendChild(row); }
+    row.className = 'node tool';
+    appendNode(row, prepend ? 'head' : 'tail');
     return row;
   }
   // a 11px chevron that rotates when its card is open
@@ -565,15 +674,10 @@ export function chatHtml(): string {
     }
     return { added, removed };
   }
-  function renderTool(msg, prepend) {
+  // Build a tool card into the given .node.tool row. Shared by live render + history
+  // prepend. Returns the bash card if it's awaiting output (so the caller can track it).
+  function renderToolInto(row, msg) {
     const t = msg.tool || {};
-    // output-only result (claude) → fold into the open bash card
-    if (t.command === undefined && t.diff === undefined && t.output && openBash && !prepend) {
-      setOutput(openBash, t.output, t.exitCode);
-      openBash = null;
-      return;
-    }
-    const row = toolRow(prepend);
     if (t.command !== undefined) {
       const card = document.createElement('div'); card.className = 'toolCard bash';
       const head = document.createElement('div'); head.className = 'toolHead';
@@ -581,8 +685,8 @@ export function chatHtml(): string {
       const cmd = document.createElement('span'); cmd.className = 'cmd'; cmd.textContent = t.command;
       head.appendChild(cmd); card.appendChild(head);
       if (t.output) setOutput(card, t.output, t.exitCode);
-      else openBash = card; // wait for the result message
       row.appendChild(card);
+      return t.output ? null : card; // no output yet → caller may fold a later result in
     } else if (t.diff !== undefined) {
       const card = document.createElement('div'); card.className = 'toolCard diff';
       const head = document.createElement('div'); head.className = 'toolHead';
@@ -596,17 +700,29 @@ export function chatHtml(): string {
       stat.innerHTML = '<span class="plus">+' + added + '</span><span class="minus">−' + removed + '</span>';
       head.appendChild(stat);
       card.appendChild(pre);
-      makeCollapsible(head, pre, true); // diffs open by default — they're the point
+      makeCollapsible(head, pre, true);
       row.appendChild(card);
     } else {
-      // file op / generic: a subtle one-liner
       const card = document.createElement('div'); card.className = 'toolCard op';
       const icon = t.name === 'Read' ? '📖' : t.name === 'Write' ? '✎' : '•';
       card.innerHTML = '<span class="icon">' + icon + '</span>';
       card.appendChild(document.createTextNode(msg.text || t.name || 'tool'));
       row.appendChild(card);
     }
-    if (!prepend) { if (typingEl) log.appendChild(typingEl); log.scrollTop = log.scrollHeight; }
+    return null;
+  }
+  function renderTool(msg, prepend) {
+    const t = msg.tool || {};
+    // output-only result (claude) → fold into the open bash card
+    if (t.command === undefined && t.diff === undefined && t.output && openBash && !prepend) {
+      setOutput(openBash, t.output, t.exitCode);
+      openBash = null;
+      return;
+    }
+    const row = toolRow(prepend);
+    const awaiting = renderToolInto(row, msg);
+    if (awaiting) openBash = awaiting; // bash card waiting for its result message
+    if (!prepend) { if (typingEl) tailBody().appendChild(typingEl); log.scrollTop = log.scrollHeight; }
   }
 
   // ---- tool-approval card ----
@@ -614,8 +730,12 @@ export function chatHtml(): string {
   // it wants to do (the command / file / diff) with [Approve] [Always] [Deny] buttons.
   // Clicking posts the decision back; the card then locks to show the resolution.
   function renderApproval(req) {
-    const row = document.createElement('div');
-    row.className = 'msgRow tool';
+    // auto-edit: if the toggle is on and this is a file edit/write, approve it
+    // silently (the tool card the engine emits already shows what changed).
+    if (autoEditChk && autoEditChk.checked && (req.kind === 'edit' || req.kind === 'write')) {
+      vscode.postMessage({ type: 'approvalDecision', id: req.id, outcome: 'once' });
+      return;
+    }
     const card = document.createElement('div');
     card.className = 'approvalCard';
 
@@ -647,10 +767,7 @@ export function chatHtml(): string {
     const actions = document.createElement('div'); actions.className = 'apActions';
     const decide = (outcome) => {
       vscode.postMessage({ type: 'approvalDecision', id: req.id, outcome });
-      actions.remove();
-      const done = document.createElement('div'); done.className = 'apResolved ' + (outcome === 'deny' ? 'denied' : 'allowed');
-      done.textContent = outcome === 'deny' ? '✕ Denied' : outcome === 'always' ? '✓ Always allowed' : '✓ Approved';
-      card.appendChild(done);
+      card.remove(); // answered → clear it from the dock
     };
     const mk = (label, outcome, cls) => {
       const b = document.createElement('button'); b.className = 'apBtn ' + cls; b.textContent = label;
@@ -661,19 +778,26 @@ export function chatHtml(): string {
     actions.appendChild(mk('Deny', 'deny', 'no'));
     card.appendChild(actions);
 
-    row.appendChild(card);
-    log.appendChild(row);
-    if (typingEl) log.appendChild(typingEl);
-    log.scrollTop = log.scrollHeight;
+    // dock it just above the composer (newest on top), not inside the scrolling log
+    approvalDock.insertBefore(card, approvalDock.firstChild);
   }
 
   function onMessage(msg) {
+    // a user command OPENS a new turn (its sticky header); everything after attaches
+    // to that turn until the next user command.
+    if (msg.role === 'user') {
+      const body = startTurn(msg.text, undefined);
+      if (typingEl) body.appendChild(typingEl);
+      return;
+    }
     if (msg.role === 'tool') { renderTool(msg, false); return; }
     if (msg.role === 'summary') { renderSummary(msg.text, false); return; }
     // Badge = the engine that ACTUALLY produced this message (msg.cli, stamped by
     // the runtime). NO fallback to the current tab — if a message has no cli (old
     // session saved before per-message cli), we show no badge rather than a wrong,
     // tab-following one. So badges never flip when you switch tabs.
+    // assistant / thinking reply nodes (badge only on assistant). The turn was
+    // already opened by the preceding user message.
     const badge = (msg.role === 'assistant' && msg.cli) ? msg.cli : undefined;
     if (msg.partial) {
       if (!streaming || streaming.dataset.role !== msg.role) {
@@ -690,11 +814,10 @@ export function chatHtml(): string {
       } else {
         const el = bubble(msg.role, false, badge);
         el.textContent = msg.text;
-        if (msg.role === 'user') clampBody(el, el._row, 600);            // fold verbose prompts
         if (msg.role === 'assistant') addFooter(el._row, msg.durationMs, msg.model); // time + model
       }
     }
-    if (typingEl) log.appendChild(typingEl); // keep the indicator at the bottom
+    if (typingEl) tailBody().appendChild(typingEl); // keep the indicator at the thread's tail
     log.scrollTop = log.scrollHeight;
   }
 
@@ -740,13 +863,13 @@ export function chatHtml(): string {
   let typingEl = null;
   function showTyping() {
     if (typingEl) return;
-    const row = document.createElement('div');
-    row.className = 'msgRow assistant';
-    row.innerHTML = '<div class="msg assistant typing"><span class="who">' + cli
+    const node = document.createElement('div');
+    node.className = 'node typing';
+    node.innerHTML = '<div class="typing"><span class="who">' + cli
       + '</span><span class="dots"><i></i><i></i><i></i></span></div>';
-    log.appendChild(row);
+    tailBody().appendChild(node);
     log.scrollTop = log.scrollHeight;
-    typingEl = row;
+    typingEl = node;
   }
   function hideTyping() { if (typingEl) { typingEl.remove(); typingEl = null; } }
 
@@ -858,21 +981,43 @@ export function chatHtml(): string {
 
   // Prepend older messages while keeping the viewport pinned (no jump): measure
   // scroll height before/after and restore the offset.
+  // Prepend an OLDER page (scroll-up). We build the page's turns into a detached
+  // fragment IN ORDER (so user commands open turns correctly), then insert the whole
+  // fragment above the current content — keeping scroll position stable.
   function prependOlder(messages) {
     const before = log.scrollHeight;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
-      if (m.role === 'tool') renderTool(m, true);
-      else if (m.role === 'summary') renderSummary(m.text, true);
-      else {
-        const badge = (m.role === 'assistant' && m.cli) ? m.cli : undefined;
-        const el = bubble(m.role, true, badge);
-        el.textContent = m.text;
-        if (m.role === 'user') clampBody(el, el._row, 600);
-        if (m.role === 'assistant') addFooter(el._row, m.durationMs, m.model);
+    const realLog = log;
+    const frag = document.createElement('div');
+    let body = null; // current turn body within the fragment
+    const openTurn = (userText, badge) => {
+      const turn = document.createElement('div'); turn.className = 'turn';
+      const head = document.createElement('div'); head.className = 'turnHead';
+      head.innerHTML = '<span class="uq">&gt;</span>';
+      const ut = document.createElement('div'); ut.className = 'utext'; ut.textContent = userText;
+      head.appendChild(ut);
+      if (badge) { const b = document.createElement('span'); b.className = 'badge ' + badge;
+        b.textContent = badge === 'codex' ? 'codex · gpt' : 'claude'; head.appendChild(b); }
+      const b = document.createElement('div'); b.className = 'turnBody';
+      turn.appendChild(head); turn.appendChild(b); frag.appendChild(turn); return b;
+    };
+    const node = (cls) => { const n = document.createElement('div'); n.className = 'node ' + cls;
+      (body || (body = openTurn('', undefined))).appendChild(n); return n; };
+    for (const m of messages) {
+      if (m.role === 'user') { body = openTurn(m.text, undefined); continue; }
+      if (m.role === 'tool') { renderToolInto(node('tool'), m); continue; }
+      if (m.role === 'summary') {
+        const n = node('summary');
+        n.innerHTML = '<div class="compactRule"><div class="ln"></div><span class="lbl">⌘ context compacted</span><div class="ln"></div></div>';
+        const sb = document.createElement('div'); sb.className = 'summaryBody'; sb.textContent = m.text; n.appendChild(sb);
+        continue;
       }
+      const n = node(m.role + (m.role === 'assistant' && m.cli ? ' ' + m.cli : ''));
+      const el = document.createElement('div'); el.className = 'msg ' + m.role;
+      el.textContent = m.text; n.appendChild(el);
+      if (m.role === 'assistant') addFooter(n, m.durationMs, m.model);
     }
-    log.scrollTop += log.scrollHeight - before;
+    realLog.insertBefore(frag, realLog.firstChild);
+    realLog.scrollTop += realLog.scrollHeight - before;
   }
 
   log.addEventListener('scroll', () => {
@@ -886,7 +1031,7 @@ export function chatHtml(): string {
     const m = event.data;
     if (m.type === 'message') onMessage(m.msg);
     else if (m.type === 'sessions') { allSessions = m.list || []; activeId = m.activeId; renderSessions(); }
-    else if (m.type === 'clear') { log.innerHTML = ''; streaming = null; openBash = null; hideTyping(); resetPaging(); }
+    else if (m.type === 'clear') { log.innerHTML = ''; approvalDock.innerHTML = ''; streaming = null; openBash = null; tailTurn = null; headTurn = null; hideTyping(); resetPaging(); }
     else if (m.type === 'turnEnd') hideTyping();
     else if (m.type === 'platform') setTab(m.cli); // extension switched CLI (e.g. on session open)
     else if (m.type === 'storage') { renderStorage(m.info, m.options); renderWalletStorage(); }
