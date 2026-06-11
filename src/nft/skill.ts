@@ -23,7 +23,7 @@ import {
   ensureTable,
   writeRow,
 } from "../core/chain.js";
-import { SKILLS_INDEX_HINT, SKILLS_INDEX_COLUMNS } from "../core/seed.js";
+import { SKILLS_INDEX_HINT, SKILLS_INDEX_COLUMNS, getSkillsCollectionMint } from "../core/seed.js";
 import { createSkillMint, mintSkillToken } from "./token2022.js";
 import { resolveMinter } from "./minter.js";
 import { defaultValidator, ValidationError } from "./validation/index.js";
@@ -75,12 +75,16 @@ export async function publishSkill(
 
   // 2. create the Token-2022 mint
   const creator = await signerAddress(signer);
+  const collectionStr = getSkillsCollectionMint();
+  const collectionMint = collectionStr ? new PublicKey(collectionStr) : undefined;
+  
   const skillMintAddr = await createSkillMint(conn, signer, {
     name: input.name,
     symbol: input.name.substring(0, 8).toUpperCase(),
     uri: skillTextTxid,
     category: input.category,
     hashtags: input.hashtags,
+    collectionMint,
   });
 
   // 3. Index skill metadata for search + reputation.

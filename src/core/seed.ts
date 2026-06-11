@@ -58,6 +58,22 @@ export function reputationHint(wallet: string): string {
   return `reputation:${wallet}`;
 }
 
+/**
+ * Returns the configured TokenGroup mint for skills, if any.
+ * This is the umbrella collection that new skills are enrolled into.
+ */
+export function getSkillsCollectionMint(): string | null {
+  return process.env.AGENTNET_SKILLS_COLLECTION_PUBKEY || null;
+}
+
+/**
+ * Returns the configured TokenGroup mint for workflows, if any.
+ * This is the umbrella collection that new workflows are enrolled into.
+ */
+export function getWorkflowsCollectionMint(): string | null {
+  return process.env.AGENTNET_WORKFLOWS_COLLECTION_PUBKEY || null;
+}
+
 // ===== Table column declarations =====
 //
 // The SDK's writeRow validates every row key against the table's declared

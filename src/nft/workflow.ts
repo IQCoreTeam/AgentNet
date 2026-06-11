@@ -13,7 +13,7 @@ import {
 } from "@solana/spl-token";
 
 import { codeIn, signerAddress, ensureDbRoot, ensureTable, writeRow } from "../core/chain.js";
-import { SKILLS_INDEX_HINT, SKILLS_INDEX_COLUMNS } from "../core/seed.js";
+import { SKILLS_INDEX_HINT, SKILLS_INDEX_COLUMNS, getWorkflowsCollectionMint } from "../core/seed.js";
 import { createSkillMint } from "./token2022.js";
 import { resolveMinter } from "./minter.js";
 import { getBalance } from "../notes/balance.js";
@@ -69,12 +69,16 @@ export async function publishWorkflow(
 
   // create the Token-2022 mint (soulbound)
   // Workflows use the same token pattern as skills.
+  const collectionStr = getWorkflowsCollectionMint();
+  const collectionMint = collectionStr ? new PublicKey(collectionStr) : undefined;
+  
   const workflowMintAddr = await createSkillMint(conn, signer, {
     name: input.name,
     symbol: input.name.substring(0, 8).toUpperCase(),
     uri: workflowTxid,
     category: input.category,
     hashtags: input.hashtags,
+    collectionMint,
   });
 
   // Index workflow for search + reputation

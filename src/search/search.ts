@@ -48,6 +48,8 @@ export async function searchSkills(
   const limit = options?.limit ?? 50;
   const sortBy = options?.sortBy ?? "supply";
   const filters = options?.filters ?? {};
+  // Default to the index-table CacheLayer. dasSource stays opt-in until the
+  // Token-2022 getAssetsByGroup assumption is devnet-proven (see skillSource.ts).
   const source = options?.source ?? indexTableSource;
 
   let skills = await source.listSkills();

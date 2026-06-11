@@ -17,6 +17,8 @@ vi.mock("../core/chain.js", () => ({
 vi.mock("../core/seed.js", () => ({
   SKILLS_INDEX_HINT: "skills:index",
   SKILLS_INDEX_COLUMNS: ["id", "name", "type", "supply", "createdAt"],
+  getSkillsCollectionMint: vi.fn().mockReturnValue(null),
+  getWorkflowsCollectionMint: vi.fn().mockReturnValue(null),
 }));
 
 vi.mock("./token2022.js", async () => {

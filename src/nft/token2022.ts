@@ -35,7 +35,7 @@ import { type SignerInput, type WalletSigner } from "@iqlabs-official/solana-sdk
 import { signerAddress, readCodeIn } from "../core/chain.js";
 import { resolveMinter, tryMinterPubkey } from "./minter.js";
 
-const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPvZeJ");
+import { TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 
 // additional_metadata field keys (skill-nft-structure.md §1 traits → search.md).
 // Stored on-chain in the TokenMetadata extension so search can filter by trait
@@ -55,6 +55,7 @@ interface MintConfig {
    * with the creator and buy/unlock remain blocked.
    */
   minterAuthority?: PublicKey;
+  collectionMint?: PublicKey; // new field for token group enrollment
 }
 
 /** On-chain skill traits read back from the mint's TokenMetadata extension. */
@@ -115,24 +116,54 @@ export async function createSkillMint(
     additionalMetadata,
   };
 
-  // Rent must cover the base mint (with pointer + soulbound exts) AND the
-  // variable-length metadata the program reallocs into the account.
+  // If enrolling into a collection, we need the GroupMemberPointer and TokenGroupMember extensions.
+  // The member enrollment must be signed by the group's update authority (the protocol minter).
+  const minter = config.collectionMint ? resolveMinter() : null;
+  const minterPk = config.minterAuthority ?? tryMinterPubkey();
+
   const extensions = [ExtensionType.NonTransferable, ExtensionType.MetadataPointer];
-  const mintLen = getMintLen(extensions);
+  if (config.collectionMint) {
+    extensions.push(ExtensionType.GroupMemberPointer);
+  }
+
+  const preInitMintLen = getMintLen(extensions);
+  
+  let groupMemberLen = 0;
+  if (config.collectionMint) {
+    const totalExtensions = [...extensions, ExtensionType.TokenGroupMember];
+    groupMemberLen = getMintLen(totalExtensions) - preInitMintLen;
+  }
+
   const metadataLen = TYPE_SIZE + LENGTH_SIZE + pack(metadata).length;
-  const lamports = await conn.getMinimumBalanceForRentExemption(mintLen + metadataLen);
+  const lamports = await conn.getMinimumBalanceForRentExemption(preInitMintLen + metadataLen + groupMemberLen);
 
   const tx = new Transaction().add(
-    // 1. Create the mint account (only base extension space; metadata reallocs in)
+    // 1. Create the mint account (only base extension space; metadata and groupMember reallocs in)
     SystemProgram.createAccount({
       fromPubkey: creatorPk,
       newAccountPubkey: mint,
       lamports,
-      space: mintLen,
+      space: preInitMintLen,
       programId: TOKEN_2022_PROGRAM_ID,
     }),
     // 2. MetadataPointer → the mint itself holds its metadata
     createInitializeMetadataPointerInstruction(mint, creatorPk, mint, TOKEN_2022_PROGRAM_ID),
+  );
+
+  if (config.collectionMint) {
+    // GroupMemberPointer is a pre-init extension → must come before initMint2.
+    const { createInitializeGroupMemberPointerInstruction } = await import("@solana/spl-token");
+    tx.add(
+      createInitializeGroupMemberPointerInstruction(
+        mint,
+        creatorPk,
+        mint, // memberAddress is the mint itself
+        TOKEN_2022_PROGRAM_ID
+      ),
+    );
+  }
+
+  tx.add(
     // 3. NonTransferable extension (soulbound)
     createInitializeNonTransferableMintInstruction(mint, TOKEN_2022_PROGRAM_ID),
     // 4. Initialize the mint (0 decimals for soulbound items). MUST come before
@@ -144,6 +175,23 @@ export async function createSkillMint(
       creatorPk, // freeze authority
       TOKEN_2022_PROGRAM_ID,
     ),
+  );
+
+  if (config.collectionMint && minter) {
+    const { createInitializeMemberInstruction } = await import("@solana/spl-token-group");
+    tx.add(
+      createInitializeMemberInstruction({
+        programId: TOKEN_2022_PROGRAM_ID,
+        member: mint,
+        memberMint: mint,
+        memberMintAuthority: creatorPk,
+        group: config.collectionMint,
+        groupUpdateAuthority: minter.publicKey,
+      })
+    );
+  }
+
+  tx.add(
     // 5. TokenMetadata: name/symbol/uri (uri = code-in txid)
     createInitializeMetadataInstruction({
       programId: TOKEN_2022_PROGRAM_ID,
@@ -172,12 +220,7 @@ export async function createSkillMint(
 
   // 7. Path A authority handoff: give MINT authority to the protocol minter so
   //    buyers can later mint via the minter's co-signature (Token-2022 mintTo
-  //    needs the authority's sig). The creator — current authority — signs this
-  //    handoff alone, so publish stays a single-signer flow; the minter is NOT
-  //    pulled into publish. Metadata updateAuthority stays the creator (they can
-  //    still edit traits). When no minter is configured, authority stays with the
-  //    creator and buy/unlock remain blocked (documented).
-  const minterPk = config.minterAuthority ?? tryMinterPubkey();
+  //    needs the authority's sig).
   if (minterPk && !minterPk.equals(creatorPk)) {
     tx.add(
       createSetAuthorityInstruction(
@@ -196,6 +239,10 @@ export async function createSkillMint(
   const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash();
   tx.recentBlockhash = blockhash;
   tx.feePayer = creatorPk;
+
+  if (minter) {
+    tx.partialSign(minter);
+  }
 
   if ("secretKey" in signerFull) {
     // Keypair-like

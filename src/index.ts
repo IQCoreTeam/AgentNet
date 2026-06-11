@@ -80,7 +80,7 @@ export {
 } from "./search/index.js";
 export type { SearchFilters, SortBy, SearchOptions } from "./search/index.js";
 
-export { indexTableSource } from "./core/skillSource.js";
+export { indexTableSource, dasSource } from "./core/skillSource.js";
 export type { SkillSource } from "./core/skillSource.js";
 
 export {
