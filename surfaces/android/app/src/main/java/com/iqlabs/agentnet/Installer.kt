@@ -61,6 +61,7 @@ class Installer(private val ctx: Context) {
         // in Kotlin before first proot use.
         Paths.dir(p.rootfs)
         TarExtractor.extract(ctx.assets.open("rootfs-$abi.tar"), File(p.rootfs))
+        configureGuest(p) // DNS/hosts/tmp — Android doesn't provide these to the guest
 
         onProgress("Installing AgentNet server…")
         Paths.dir(p.serverBundle)
@@ -68,6 +69,18 @@ class Installer(private val ctx: Context) {
 
         File(ctx.filesDir, MARKER).writeText("ok")
         Log.i(TAG, "install complete")
+    }
+
+    // Android exposes neither /etc/resolv.conf nor /etc/hosts to the proot guest, so
+    // the agent CLIs' DNS lookups (to the model API) fail without these. proot-distro
+    // writes the same files at install time. /tmp must exist + be world-writable since
+    // we bind it to /dev/shm.
+    private fun configureGuest(p: Paths.Layout) {
+        File(p.rootfs, "etc").mkdirs()
+        File(p.rootfs, "etc/resolv.conf").writeText("nameserver 8.8.8.8\nnameserver 8.8.4.4\n")
+        File(p.rootfs, "etc/hosts").writeText("127.0.0.1 localhost\n::1 localhost\n")
+        val tmp = File(p.rootfs, "tmp").apply { mkdirs() }
+        runCatching { android.system.Os.chmod(tmp.absolutePath, 0b001_111_111_111) } // 1777
     }
 
     private fun copyAsset(name: String, destPath: String) {

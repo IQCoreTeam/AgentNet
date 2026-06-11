@@ -36,20 +36,26 @@ class ServerManager(private val ctx: Context) {
     private fun prootCommand(p: Paths.Layout, cmd: String): List<String> = listOf(
         p.proot,
         "--kill-on-exit",
-        "--link2symlink",
+        "--link2symlink",           // app storage has no hardlinks; proot fakes them
         "--sysvipc",
+        "-L",                       // correct lstat for symlinks (a glibc rootfs is full of them)
+        // Fake a plausible kernel release; glibc/tooling reads uname and some choke on
+        // Android's non-standard string. Value mirrors proot-distro's format.
+        "--kernel-release=5.4.0-proot",
         "-r", p.rootfs,
-        "-0",                       // present as uid 0 inside the guest
+        "-0",                       // present as uid 0 inside the guest (fake root)
         "-b", "/dev",
         "-b", "/proc",
         "-b", "/sys",
-        "-b", "${p.rootfs}/tmp:/dev/shm",
+        "-b", "${p.rootfs}/tmp:/dev/shm", // Android has no /dev/shm; bind a guest tmp dir
         "-w", "/root",
         "/usr/bin/env", "-i",
         "HOME=/root",
-        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "USER=root",
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/games:/usr/games",
         "TERM=xterm-256color",
         "LANG=C.UTF-8",
+        "TMPDIR=/tmp",
         "AGENTNET_PORT=${Paths.PORT}",
         "/bin/sh", "-lc", cmd,
     )
@@ -65,7 +71,18 @@ class ServerManager(private val ctx: Context) {
         // `node` resolves from the guest PATH; the bundle is at /root/agentnet-server.
         val cmd = "exec node /root/agentnet-server/index.js"
         val pb = ProcessBuilder(prootCommand(p, cmd))
-        pb.environment()["PROOT_LOADER"] = p.loader // proot's own helper, not the guest's
+
+        // Host-side env for the proot PROCESS (not the guest). These are load-bearing:
+        val env = pb.environment()
+        env["PROOT_LOADER"] = p.loader            // proot's own ELF loader helper
+        // PROOT_NO_SECCOMP: Android 12+/15 tighten the seccomp filter (e.g. set_robust_list
+        // blocked), which makes glibc/node crash with SIGSYS under proot's seccomp fast
+        // path. Turning seccomp off trades the speed win for "it runs at all" — necessary
+        // on newer Android. (If a target kernel is fine with seccomp, dropping this would
+        // be faster; that's an on-device measurement, see project memory.)
+        env["PROOT_NO_SECCOMP"] = "1"
+        env["PROOT_TMP_DIR"] = Paths.dir("${p.rootfs}/tmp").absolutePath
+        env["PROOT_L2S_DIR"] = Paths.dir("${p.rootfs}/.l2s").absolutePath // stable link2symlink db
         pb.redirectErrorStream(true)
 
         val proc = pb.start()

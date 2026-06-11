@@ -45,17 +45,19 @@ surfaces/android/
 readiness poll, foreground service, first-run installer, tar extractor, WebView wiring,
 and the guest `AGENTS.md` environment guidance.
 
-**Open (not in the repo yet):**
-- **The asset artifacts.** `Installer.kt` extracts `proot-<abi>`, `rootfs-<abi>.tar`,
-  and `agentnet-server.tar` from `app/src/main/assets/` — these are **not committed**
-  (large binaries, fetched/built by a release pipeline). A `scripts/` step still needs
-  to: fetch a Bionic-native proot, build a proot-distro Ubuntu rootfs with node +
-  official claude/codex installed + our `surfaces/localhost` build copied in + the guest
-  `AGENTS.md` placed at `/root/`, and pack them as the three assets.
-- **On-device verification.** Nothing here has run on a real device yet. `AGENTS.md`'s
-  slow/forbidden lists are from documented proot behavior, **not measured on our exact
-  rootfs** — tighten them after the first real boot.
-- **App icon / launcher assets** (`mipmap`) are referenced by the manifest but not added.
+**Open:**
+- **Running the asset build.** `scripts/build-assets.sh` is a real, runnable script
+  (fetches an Android-native proot, builds a proot-distro Ubuntu rootfs, installs node +
+  the official claude/codex CLIs + ripgrep inside it, drops the guest `AGENTS.md` at
+  `/root/`, and packs `surfaces/localhost`'s build). It just hasn't been *run* — the
+  rootfs step needs the **target arch (aarch64)**: a root chroot on an arm64 host, an
+  arm64 CI runner, or qemu-user-static binfmt. The produced assets are gitignored
+  (large binaries), so they're never committed — they're built per release.
+- **On-device verification.** Nothing here has run on a real device yet. The proot
+  invocation (`ServerManager`) is validated against UserLAnd + proot-distro, including
+  `PROOT_NO_SECCOMP=1` (Android 12+/15 crash without it) and writing `/etc/resolv.conf`
+  for DNS — but the seccomp-off-vs-speed tradeoff and `AGENTS.md`'s slow/forbidden lists
+  still need real-device measurement.
 
 ## Attribution
 
