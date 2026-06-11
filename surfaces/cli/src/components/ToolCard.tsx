@@ -30,14 +30,25 @@ const kindGlyph: Record<string, string> = {
 };
 
 // Command output / read content: ANSI-stripped, line-clamped, with a fold note.
-function Output({ text }: { text: string }) {
+// Command output / read content: ANSI-stripped, line-clamped, on a left ⎿ rail so it reads
+// as "the result of the command above". Output stays READABLE (not dimmed) — it's usually
+// the point; failed runs tint it red. Long output folds with a count.
+function Output({ text, failed }: { text: string; failed?: boolean }) {
   const clean = stripAnsi(text);
   const { shown, hidden } = clampLines(clean, MAX_OUTPUT_LINES);
   if (!shown.trim()) return null;
+  const lines = shown.split("\n");
   return (
-    <Box flexDirection="column">
-      <Text dimColor>{shown}</Text>
-      {hidden > 0 ? <Text dimColor>⎿ +{hidden} more lines</Text> : null}
+    <Box>
+      <Text color={colors.dim}>⎿ </Text>
+      <Box flexDirection="column">
+        {lines.map((l, i) => (
+          <Text key={i} color={failed ? colors.err : undefined}>
+            {l || " "}
+          </Text>
+        ))}
+        {hidden > 0 ? <Text dimColor>+{hidden} more lines</Text> : null}
+      </Box>
     </Box>
   );
 }
@@ -87,7 +98,7 @@ export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: str
         ) : null}
       </Box>
       {body}
-      {tool.output ? <Output text={tool.output} /> : null}
+      {tool.output ? <Output text={tool.output} failed={!okExit} /> : null}
     </Box>
   );
 }
