@@ -22,6 +22,16 @@ export const gradients = {
   iq: ["#27e0d6", "#9b6cff", "#ff5cf0"],
 } as const;
 
+// Diff shading — bright fg on a dark tinted bg, Claude-Code style (added=green block,
+// removed=red block). Padded to a rectangle by the renderer so the bands look clean.
+export const diff = {
+  addFg: "#9be9a8",
+  addBg: "#16351f",
+  delFg: "#ff9aa2",
+  delBg: "#3a151b",
+  hunk: "#9b6cff", // @@ headers
+} as const;
+
 // Role glyphs shown before each transcript line.
 export const glyph = {
   user: "▸",

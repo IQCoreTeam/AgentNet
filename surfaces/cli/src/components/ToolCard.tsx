@@ -4,6 +4,10 @@ import { highlight } from "cli-highlight";
 import type { ToolAction } from "@iqlabs-official/agent-sdk/runtime/contract";
 import { glyph, toolTint, colors } from "../theme.js";
 import { TodoPanel } from "./TodoPanel.js";
+import { DiffView } from "./DiffView.js";
+import { stripAnsi, clampLines, lineCount } from "../format.js";
+
+const MAX_OUTPUT_LINES = 14;
 
 // Map an engine tool name to our render kind (and its tint/glyph).
 function kindOf(name: string): keyof typeof toolTint {
@@ -25,25 +29,21 @@ const kindGlyph: Record<string, string> = {
   other: glyph.other,
 };
 
-// Color a unified-ish diff: +green / -red, context dim. The diff text comes straight
-// from the engine — we only tint it, never rewrite it.
-function Diff({ diff }: { diff: string }) {
+// Command output / read content: ANSI-stripped, line-clamped, with a fold note.
+function Output({ text }: { text: string }) {
+  const clean = stripAnsi(text);
+  const { shown, hidden } = clampLines(clean, MAX_OUTPUT_LINES);
+  if (!shown.trim()) return null;
   return (
     <Box flexDirection="column">
-      {diff.split("\n").map((line, i) => {
-        const c = line.startsWith("+") ? colors.ok : line.startsWith("-") ? colors.err : undefined;
-        return (
-          <Text key={i} color={c} dimColor={!c}>
-            {line || " "}
-          </Text>
-        );
-      })}
+      <Text dimColor>{shown}</Text>
+      {hidden > 0 ? <Text dimColor>⎿ +{hidden} more lines</Text> : null}
     </Box>
   );
 }
 
-// One tool/agent action as a tinted, bordered card. Substance (command, output, diff)
-// is shown verbatim — the card is just framing.
+// One tool/agent action as a tinted, bordered card. Substance (command, output, diff) is
+// shown verbatim — the card is just framing, with line-count badges and folds.
 export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: string }) {
   if (!tool) {
     return (
@@ -52,15 +52,15 @@ export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: str
       </Box>
     );
   }
-  // TodoWrite renders as a checklist, not a generic card.
   if (tool.name === "TodoWrite" && tool.output) return <TodoPanel json={tool.output} />;
 
   const kind = kindOf(tool.name);
   const tint = toolTint[kind];
   const okExit = tool.exitCode === undefined || tool.exitCode === 0;
+  const outLines = tool.output ? lineCount(stripAnsi(tool.output)) : 0;
 
   let body: React.ReactNode = null;
-  if (tool.diff) body = <Diff diff={tool.diff} />;
+  if (tool.diff) body = <DiffView diff={tool.diff} />;
   else if (tool.command) {
     let cmd = tool.command;
     try {
@@ -69,7 +69,7 @@ export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: str
       /* keep raw */
     }
     body = <Text>$ {cmd}</Text>;
-  } else if (tool.file) body = <Text dimColor>{tool.file}</Text>;
+  }
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={tint} paddingX={1} marginLeft={2}>
@@ -78,6 +78,7 @@ export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: str
           {kindGlyph[kind]} {tool.name}
         </Text>
         {tool.file ? <Text dimColor> {tool.file}</Text> : null}
+        {outLines > 0 ? <Text dimColor> · {outLines} line{outLines === 1 ? "" : "s"}</Text> : null}
         {tool.exitCode !== undefined ? (
           <Text color={okExit ? colors.ok : colors.err}>
             {"  "}
@@ -86,9 +87,7 @@ export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: str
         ) : null}
       </Box>
       {body}
-      {tool.output ? (
-        <Text dimColor>{tool.output.length > 1200 ? tool.output.slice(0, 1200) + " …" : tool.output}</Text>
-      ) : null}
+      {tool.output ? <Output text={tool.output} /> : null}
     </Box>
   );
 }
