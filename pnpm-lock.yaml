@@ -45,7 +45,7 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
-  surfaces/server:
+  surfaces/localhost:
     dependencies:
       '@iqlabs-official/agent-sdk':
         specifier: workspace:*

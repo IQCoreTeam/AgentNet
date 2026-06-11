@@ -21,7 +21,7 @@ are stamped.)
   (which went glibc-native in v2.1.113 and would force proot). claude runs on bionic node.
 - **Architecture = local Node server + WebView**, same shape AnyClaw/codex-mobile proved:
   Kotlin shell boots node → node serves our core over `127.0.0.1:PORT` → WebView shows it.
-- **A new `surfaces/server` layer** (the HTTP form of vscode's extension.ts host) is shared by
+- **A new `surfaces/localhost` layer** (the HTTP form of vscode's extension.ts host) is shared by
   android + web + CLI — solves "mobile + CLI + web" with one host.
 - **codex = deferred to v2** (its SDK spawns a Rust/musl binary needing a special Android build
   + DNS proxy; claude-via-SDK is clean JS, so v1 = claude only).
@@ -63,7 +63,7 @@ claude's Android distribution story. Source links → "Reference sources" at the
 │   ForegroundService   → keep the node process alive in background
 │   ServerManager       → ProcessBuilder `sh -c "exec node <our server>"` + readiness poll
 │
-├ surfaces/server/  — NEW thin layer = the HTTP form of vscode's extension.ts host
+├ surfaces/localhost/  — NEW thin layer = the HTTP form of vscode's extension.ts host
 │   exposes packages/core over  POST /bridge (UI→core) + WS (core→UI)
 │   = the 20 message handlers extension.ts had, as an HTTP/WS server
 │   → REUSED by android (WebView), web (browser), and a future CLI
@@ -89,7 +89,7 @@ flowchart TB
         WV["chat UI (turn-thread, md,<br/>tool/diff cards, approval dock)<br/>transport shim only"]
     end
 
-    subgraph srv["surfaces/server — NEW (HTTP form of extension.ts host)"]
+    subgraph srv["surfaces/localhost — NEW (HTTP form of extension.ts host)"]
         HOST["POST /bridge (UI→core)<br/>WS (core→UI)<br/>= the 20 msg handlers"]
     end
 
@@ -136,7 +136,7 @@ flowchart TB
 - **Background = Kotlin Foreground Service** (`START_STICKY`, persistent notification). The node
   process is a separate OS process kept alive by app priority, not by any JS runtime. Approvals
   while backgrounded → push notifications (this is what `ApprovalChannel` was abstracted for).
-- **The `surfaces/server` host is the multiplier.** vscode's extension.ts = a host wiring the
+- **The `surfaces/localhost` host is the multiplier.** vscode's extension.ts = a host wiring the
   UI's 20 messages to core. Rewrite it ONCE as an HTTP/WS server and android + web + CLI all
   reuse it — this is how "mobile + CLI + web" collapses into one host. codex-mobile proves the
   shape (POST /rpc + WS/SSE + static SPA, origin-relative, WebView-portable). [ref #6]
@@ -148,7 +148,7 @@ flowchart TB
   the `ChatMessage`/`CanonicalSession` schema, and the `ApprovalChannel` seam.
 - **Reuse from vscode surface:** the webview UI (~98%) + the 14/20 message protocol.
 - **Build new (android-specific):** the Kotlin shell (mostly copied from AnyClaw), the trimmed
-  node rootfs (the one real new artifact), `surfaces/server` (the HTTP host), a mobile `Wallet`
+  node rootfs (the one real new artifact), `surfaces/localhost` (the HTTP host), a mobile `Wallet`
   impl, and a `PushApprovalChannel` (push-notification approvals).
 
 ### Open / still to confirm before/while building
@@ -445,7 +445,7 @@ glibc environment, not just node. Two ways to get there on Android:
   naturally with no engine change.
 - The `Wallet`/`StorageAdapter` interfaces = the phone implements them its own way.
 - The webview UI = **REUSED directly in a WebView (~98% unchanged), NOT rebuilt in Compose.**
-  The extension↔webview message protocol (14 down / 20 up) = the contract `surfaces/server`
+  The extension↔webview message protocol (14 down / 20 up) = the contract `surfaces/localhost`
   re-exposes over HTTP/WS.
 
 ## Unverified / next research
@@ -477,7 +477,7 @@ use the official `@anthropic-ai/claude-agent-sdk`.
     `CodexServerManager.kt`, `android/app/build.gradle.kts`, `android/scripts/download-bootstrap.sh`
 - **#6 — codex-mobile / "codexapp"** (MIT) — Node bridge exposing codex app-server as a web UI
   (Express + WS/SSE + Vue SPA), runs in Termux via `npx codexapp`. Proves the local-server +
-  WebView-portable UI contract we copy for `surfaces/server`.
+  WebView-portable UI contract we copy for `surfaces/localhost`.
   - https://github.com/friuns2/codex-mobile
   - (npm: `codexapp`; upstream it forks: `pavel-voronin/codex-web-local`)
 

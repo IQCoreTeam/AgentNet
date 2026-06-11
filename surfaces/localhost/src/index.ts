@@ -1,4 +1,7 @@
-// AgentNet server surface — the HTTP/WebSocket form of vscode's extension host.
+// AgentNet localhost surface — the HTTP/WebSocket form of vscode's extension host.
+// NOT a remote server: this is a LOCAL node process on the user's own machine (and,
+// on Android, inside their own phone). It serves the webview to a browser / WebView
+// over 127.0.0.1 and nothing leaves the device.
 //
 // Same core, different pipe: where vscode hands the chat dispatcher a panel
 // (postMessage), this hands it a WebSocket. The browser (or an Android WebView)
@@ -6,10 +9,10 @@
 // speaks the identical message protocol. So one dispatcher, one webview, two
 // transports (CODE-RULES: no per-platform fork).
 //
-// Scope (v1): one wallet per server (the single user this host runs for), claude +
-// codex via the SDKs, local storage always on + optional cloud mirror. Native-only
-// flows (a quick-pick to choose a cloud, the onboarding hand-off) aren't wired here
-// yet — those env hooks are omitted, so their messages no-op until added.
+// Scope (v1): one wallet for this host (the user it runs for), claude + codex via the
+// SDKs, local storage always on + optional cloud mirror. Native-only flows (a
+// quick-pick to choose a cloud, the onboarding hand-off) aren't wired here yet —
+// those env hooks are omitted, so their messages no-op until added.
 
 import { createServer } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
@@ -27,9 +30,9 @@ import { localWallet } from "@iqlabs-official/agent-sdk/account/localWallet";
 
 const PORT = Number(process.env.AGENTNET_PORT ?? 4317);
 
-// One wallet for the whole server (the user it runs for). Loaded once at boot from
-// the configured keypair (created at the default path if missing — same as vscode's
-// first run). The runtime is rebuilt whenever storage changes, so keep it mutable.
+// One wallet for this host (the user it runs for). Loaded once at boot from the
+// configured keypair (created at the default path if missing — same as vscode's first
+// run). The runtime is rebuilt whenever storage changes, so keep it mutable.
 const { wallet } = await localWallet();
 
 // Latest drive-mirror sync result + the hook the active chat sets to surface it
@@ -54,7 +57,7 @@ const http = createServer((req, res) => {
 // ── WS: each socket is one chat (one browser tab / one Android WebView) ──
 // Mirrors vscode's openChat: a per-socket transport + approval channel, wired to the
 // shared runtime. The dispatcher owns all chat state; we only adapt the pipe and
-// supply the host env (cwd = where the server runs; cloud actions; storage info).
+// supply the host env (cwd = where this process runs; cloud actions; storage info).
 const wss = new WebSocketServer({ server: http, path: "/chat" });
 wss.on("connection", (ws: WebSocket) => {
   const transport = {
@@ -94,5 +97,5 @@ wss.on("connection", (ws: WebSocket) => {
 });
 
 http.listen(PORT, () => {
-  console.log(`AgentNet server → http://localhost:${PORT}  (wallet ${wallet.address})`);
+  console.log(`AgentNet localhost → http://localhost:${PORT}  (wallet ${wallet.address})`);
 });

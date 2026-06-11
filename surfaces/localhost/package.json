@@ -1,9 +1,9 @@
 {
-  "name": "agentnet-server",
+  "name": "agentnet-localhost",
   "version": "0.0.1",
   "type": "module",
   "private": true,
-  "bin": { "agentnet-server": "./dist/index.js" },
+  "bin": { "agentnet-localhost": "./dist/index.js" },
   "scripts": {
     "build": "tsup",
     "dev": "tsx src/index.ts",
