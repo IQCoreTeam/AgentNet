@@ -126,7 +126,25 @@ export function createChatSession(
     transport.send({ type: "storage", info, options });
   }
 
-  transport.onRecv(async (m) => {
+  // Process messages STRICTLY in order — each handler runs to completion before the
+  // next starts. Without this, two async handlers race: e.g. "ready" (which awaits
+  // open()) and a fast "send" overlap, and ready's open() stops the handle send just
+  // created → an empty turn. A surface may fire ready+send back-to-back (reconnect,
+  // automation), so the dispatcher owns the ordering rather than trusting arrival gaps.
+  const queue: any[] = [];
+  let pumping = false;
+  async function pump() {
+    if (pumping) return;
+    pumping = true;
+    try {
+      while (queue.length) await handle(queue.shift());
+    } finally {
+      pumping = false;
+    }
+  }
+  transport.onRecv((m) => { queue.push(m); void pump(); });
+
+  async function handle(m: any) {
     switch (m?.type) {
       case "ready": await pushSessions(); await pushStorage(); await open(); break;
       case "new":   await open(); await pushSessions(); break;
@@ -191,7 +209,7 @@ export function createChatSession(
       case "openCloud":       await env.openCloud?.(m.kind, m.location); break;
       case "wallet":          transport.send({ type: "wallet", address: env.walletAddress() }); break;
     }
-  });
+  }
 
   return {
     stop() { slots.claude.handle?.stop(); slots.codex.handle?.stop(); },
