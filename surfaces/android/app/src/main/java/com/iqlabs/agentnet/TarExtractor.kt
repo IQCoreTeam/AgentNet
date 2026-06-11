@@ -1,0 +1,103 @@
+package com.iqlabs.agentnet
+
+import android.system.Os
+import java.io.File
+import java.io.InputStream
+
+// Minimal USTAR/GNU-tar reader, enough to unpack a Linux rootfs (regular files,
+// directories, symlinks, hardlinks, exec bits). A glibc rootfs is full of symlinks
+// (libc.so.6 -> libc-2.x.so, etc.), so symlink support is mandatory, not optional.
+// We avoid pulling in a tar library; the format is simple and this keeps the APK lean.
+object TarExtractor {
+    private const val BLOCK = 512
+
+    fun extract(input: InputStream, dest: File) {
+        dest.mkdirs()
+        input.buffered().use { stream ->
+            val header = ByteArray(BLOCK)
+            while (true) {
+                if (!readFully(stream, header)) break
+                if (header.all { it.toInt() == 0 }) break // end-of-archive
+
+                val name = cstr(header, 0, 100)
+                if (name.isEmpty()) break
+                val sizeOctal = cstr(header, 124, 12).trim()
+                val size = if (sizeOctal.isEmpty()) 0L else sizeOctal.toLong(8)
+                val mode = cstr(header, 100, 8).trim().ifEmpty { "644" }.toInt(8)
+                val type = header[156].toInt().toChar()
+                val linkName = cstr(header, 157, 100)
+                val target = File(dest, name)
+
+                // Apply the entry's metadata. Only regular files carry a body; for those
+                // we drain `size` here, and the uniform skip below removes just padding.
+                var drained = 0L
+                when (type) {
+                    '5' -> target.mkdirs() // directory
+                    '2' -> { // symlink
+                        target.parentFile?.mkdirs()
+                        target.delete()
+                        runCatching { Os.symlink(linkName, target.absolutePath) }
+                    }
+                    '1' -> { // hardlink: fall back to a symlink into the same rootfs
+                        target.parentFile?.mkdirs()
+                        target.delete()
+                        runCatching { Os.symlink(File(dest, linkName).absolutePath, target.absolutePath) }
+                    }
+                    '0', ' ' -> { // regular file
+                        target.parentFile?.mkdirs()
+                        target.outputStream().use { out -> copyExactly(stream, out, size) }
+                        runCatching { Os.chmod(target.absolutePath, mode) }
+                        drained = size
+                    }
+                    // unsupported entry (device node, PAX header, etc.): not created;
+                    // its body is skipped by the uniform step below.
+                }
+
+                // Consume any body bytes not already read, plus block padding, exactly
+                // once for every type, so the stream stays aligned to the next header.
+                skipFully(stream, (size - drained) + padding(size))
+            }
+        }
+    }
+
+    private fun padding(size: Long): Long = (BLOCK - (size % BLOCK)) % BLOCK
+
+    private fun cstr(buf: ByteArray, off: Int, len: Int): String {
+        var end = off
+        val limit = off + len
+        while (end < limit && buf[end].toInt() != 0) end++
+        return String(buf, off, end - off, Charsets.UTF_8)
+    }
+
+    private fun readFully(s: InputStream, buf: ByteArray): Boolean {
+        var read = 0
+        while (read < buf.size) {
+            val n = s.read(buf, read, buf.size - read)
+            if (n < 0) return read > 0 && run { buf.fill(0, read); true }
+            read += n
+        }
+        return true
+    }
+
+    private fun copyExactly(s: InputStream, out: java.io.OutputStream, size: Long) {
+        var remaining = size
+        val chunk = ByteArray(65536)
+        while (remaining > 0) {
+            val want = minOf(chunk.size.toLong(), remaining).toInt()
+            val n = s.read(chunk, 0, want)
+            if (n < 0) break
+            out.write(chunk, 0, n)
+            remaining -= n
+        }
+    }
+
+    private fun skipFully(s: InputStream, count: Long) {
+        var remaining = count
+        val chunk = ByteArray(65536)
+        while (remaining > 0) {
+            val n = s.read(chunk, 0, minOf(chunk.size.toLong(), remaining).toInt())
+            if (n < 0) break
+            remaining -= n
+        }
+    }
+}

@@ -1,0 +1,12 @@
+# Gradle / Android build output
+.gradle/
+build/
+local.properties
+*.apk
+*.aab
+
+# Runtime assets extracted on-device — large binaries built by the release pipeline,
+# never committed (see scripts/build-assets.sh).
+app/src/main/assets/proot-*
+app/src/main/assets/rootfs-*
+app/src/main/assets/agentnet-server.tar
