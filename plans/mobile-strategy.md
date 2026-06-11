@@ -13,9 +13,12 @@ are stamped.)
 ## TL;DR
 
 - **Android only.** iOS shelved (Apple blocks fork/exec at the kernel — not a perf issue).
-- **UI = reuse our existing webview UI inside an Android WebView** (NOT a Compose rewrite).
-  ~1430 of webview.ts's 1457 lines stay byte-identical; only the transport shim + theme vars
-  change. One UI shared across vscode / android / web.
+- **UI = split per surface (UPDATED 2026-06-11).** vscode keeps its hand-written HTML webview;
+  **web + android share a NEW React/Tailwind SPA in `surfaces/web`**, built by referencing the
+  MIT example apps (OpenGUI, codex-mobile). Android's WebView loads that SPA, not `chatHtml()`.
+  Only `packages/core` (logic/dispatcher/transport) is shared across surfaces — the UI is not.
+  (This REVERSES the earlier "one webview.ts reused across vscode/android/web" decision; see
+  the ⚠️ banner under "## ARCHITECTURE" for why.)
 - **Engine = our `packages/core` running on plain Node inside a Termux-style rootfs.** No proot
   needed, BECAUSE we use the **claude Agent SDK (pure JS)**, not the official claude-code binary
   (which went glibc-native in v2.1.113 and would force proot). claude runs on bionic node.
@@ -43,6 +46,19 @@ This is the current plan. It was reached by analyzing two MIT reference apps (An
 openclaw-android, codex-mobile/"codexapp"), reading our own webview + core, and verifying
 claude's Android distribution story. Source links → "Reference sources" at the bottom.
 
+> ⚠️ **UI DECISION UPDATED 2026-06-11 — split per surface (was: one webview.ts reused).**
+> The original plan reused `surfaces/vscode/webview.ts` byte-for-byte as the android/web UI.
+> We're reversing that: that webview is hand-written HTML hard-shaped to vscode (`--vscode-*`
+> theme vars, vscode panel layout) and can't absorb the React/Tailwind UI of the reference apps
+> (OpenGUI, codex-mobile) that web/mobile need — those would all have to be hand-translated.
+> **New split:** `packages/core` (dispatcher, transport, runtime, wallet, storage) stays the one
+> shared codebase. **UI forks by surface** — vscode keeps its HTML webview; web + android share a
+> new **`surfaces/web` React/Tailwind SPA** that builds on the example apps. Android is UNAFFECTED
+> structurally: its WebView already just loads `http://127.0.0.1:PORT`; the only change is what
+> `surfaces/localhost` serves there — the React build output instead of `chatHtml()`. The Kotlin
+> shell, the node rootfs, `surfaces/localhost`, and all of `packages/core` reuse are unchanged.
+> Where the sections below still say "reuse webview.ts ~98%", read them as superseded by this.
+
 ### The one fact that unlocks everything: claude Agent SDK is JS, the official CLI is not
 - The **official `@anthropic-ai/claude-code` CLI went native (glibc ELF) in v2.1.113
   (2026-04-17)** — `bin` flipped from `cli.js` to `bin/claude.exe`, no JS fallback, no
@@ -63,14 +79,16 @@ claude's Android distribution story. Source links → "Reference sources" at the
 │   ForegroundService   → keep the node process alive in background
 │   ServerManager       → ProcessBuilder `sh -c "exec node <our server>"` + readiness poll
 │
-├ surfaces/localhost/  — NEW thin layer = the HTTP form of vscode's extension.ts host
-│   exposes packages/core over  POST /bridge (UI→core) + WS (core→UI)
-│   = the 20 message handlers extension.ts had, as an HTTP/WS server
+├ surfaces/localhost/  — thin layer = the HTTP form of vscode's extension.ts host
+│   exposes packages/core over  POST /rpc (UI→core) + SSE /events (core→UI)
+│   = the chat dispatcher's message handlers, as an HTTP server
 │   → REUSED by android (WebView), web (browser), and a future CLI
+│   serves the surfaces/web SPA build as static assets (UPDATED — was: serves chatHtml())
 │
-├ webview UI  — REUSED from surfaces/vscode/src/webview.ts (~98% unchanged)
-│   only change: transport shim (acquireVsCodeApi → window.AgentBridge / fetch('/bridge'))
-│   + redefine 13 --vscode-* CSS vars + pre-render chatHtml() to a static asset at build
+├ surfaces/web/  — NEW React/Tailwind SPA  (UPDATED 2026-06-11; was: reuse webview.ts ~98%)
+│   the web + android chat UI, built referencing OpenGUI / codex-mobile (MIT)
+│   talks to surfaces/localhost over the same POST /rpc + SSE /events transport
+│   (vscode keeps its own hand-written HTML webview, NOT shared with this)
 │
 └ packages/core  — UNCHANGED. Runs on the node inside the rootfs.
     claude = Agent SDK (JS) → runs on bionic node ✅   |   codex = v2
@@ -85,12 +103,12 @@ flowchart TB
         SM["ServerManager<br/>sh -c 'exec node …' + poll"]
     end
 
-    subgraph ui["webview UI — REUSED from surfaces/vscode/webview.ts (~98%)"]
-        WV["chat UI (turn-thread, md,<br/>tool/diff cards, approval dock)<br/>transport shim only"]
+    subgraph ui["surfaces/web — NEW React/Tailwind SPA (web + android share; UPDATED)"]
+        WV["chat UI (turn-thread, md,<br/>tool/diff cards, approval dock)<br/>built from OpenGUI/codex-mobile refs"]
     end
 
-    subgraph srv["surfaces/localhost — NEW (HTTP form of extension.ts host)"]
-        HOST["POST /bridge (UI→core)<br/>WS (core→UI)<br/>= the 20 msg handlers"]
+    subgraph srv["surfaces/localhost — HTTP form of extension.ts host"]
+        HOST["POST /rpc (UI→core)<br/>SSE /events (core→UI)<br/>+ serves surfaces/web build"]
     end
 
     subgraph core["packages/core — UNCHANGED (runs on node in rootfs)"]
@@ -103,7 +121,7 @@ flowchart TB
     MA -. "boots" .-> SM
     SM -- "spawns node" --> HOST
     MA -- "loads http://127.0.0.1:PORT" --> WV
-    WV <-- "POST /bridge + WS" --> HOST
+    WV <-- "POST /rpc + SSE /events" --> HOST
     HOST --> RT
     RT --> CL
     RT --> CX
@@ -119,11 +137,13 @@ flowchart TB
 ```
 
 ### Why each call (with the evidence)
-- **UI = WebView reuse, NOT Compose.** webview.ts is self-contained (marked/dompurify inlined),
-  its VSCode coupling is 3 spots only: `acquireVsCodeApi()` (1 line), 13 `--vscode-*` vars,
-  3 watermark lines. The msg protocol (14 down / 20 up) is pure JSON. ~1430/1457 lines stay
-  identical. A Compose rewrite would redo all of it AND fork the UI from vscode. (This REVERSES
-  the earlier "rebuild in Compose" decision.)
+- **UI = WebView, NOT Compose** (still true). Android shows a WebView, not native Compose — a
+  Compose rewrite would fork the UI and redo everything. What the WebView LOADS changed though:
+  not vscode's `chatHtml()`, but the new `surfaces/web` React SPA (see ⚠️ banner). Reason: the
+  vscode webview is hand-written HTML welded to vscode (`--vscode-*` theme vars, panel layout);
+  web/mobile want the React/Tailwind UX the reference apps (OpenGUI, codex-mobile) already have,
+  which can't be grafted onto a string-template webview. So vscode keeps its HTML; web+android
+  share a React SPA; only `packages/core` is shared across all three.
 - **No native JS bridge needed.** AnyClaw has zero `addJavascriptInterface` — the WebView just
   loads the local node server over HTTP. We do the same; our transport shim talks to a
   localhost server, not a Kotlin bridge. [ref #4]
@@ -146,10 +166,13 @@ flowchart TB
   resume, AES-GCM session encryption keyed by wallet signature, the paginated page-log
   `SessionStore`, all 4 storage adapters + local-first cloud mirror, `connect()`/`login()`,
   the `ChatMessage`/`CanonicalSession` schema, and the `ApprovalChannel` seam.
-- **Reuse from vscode surface:** the webview UI (~98%) + the 14/20 message protocol.
+- **Reuse from vscode surface:** the chat message protocol only (the JSON shape the dispatcher
+  speaks). NOT the webview HTML — that stays vscode-only now (see ⚠️ banner).
+- **Build new (shared web/mobile):** `surfaces/web` — a React/Tailwind SPA referencing OpenGUI /
+  codex-mobile (MIT), driving the same POST /rpc + SSE /events transport. Web and android share it.
 - **Build new (android-specific):** the Kotlin shell (mostly copied from AnyClaw), the trimmed
-  node rootfs (the one real new artifact), `surfaces/localhost` (the HTTP host), a mobile `Wallet`
-  impl, and a `PushApprovalChannel` (push-notification approvals).
+  node rootfs (the one real new artifact), `surfaces/localhost` (the HTTP host, also serves the
+  surfaces/web build), a mobile `Wallet` impl, and a `PushApprovalChannel` (push approvals).
 
 ### Open / still to confirm before/while building
 - **The trimmed node rootfs** is the one genuinely new artifact — produce it once on a build
@@ -447,6 +470,8 @@ glibc environment, not just node. Two ways to get there on Android:
 - The webview UI = **REUSED directly in a WebView (~98% unchanged), NOT rebuilt in Compose.**
   The extension↔webview message protocol (14 down / 20 up) = the contract `surfaces/localhost`
   re-exposes over HTTP/WS.
+  _(SUPERSEDED 2026-06-11: UI is no longer reused from webview.ts — web+android share a new React
+  SPA in `surfaces/web`; only the message protocol + core are reused. See ⚠️ banner at top.)_
 
 ## Unverified / next research
 - ⭐ **Produce the trimmed node rootfs** — the one new artifact. Termux bootstrap + node + libs,
@@ -504,6 +529,8 @@ use the official `@anthropic-ai/claude-agent-sdk`.
 **Our own assets referenced:**
 - UI to reuse: `surfaces/vscode/src/webview.ts` (~98% portable) + the host to re-form as HTTP:
   `surfaces/vscode/src/extension.ts`.
+  _(SUPERSEDED 2026-06-11: web/android UI = new React SPA in `surfaces/web`, not webview.ts. The
+  extension.ts → HTTP host part still holds (it became `surfaces/localhost`). See ⚠️ banner.)_
 - Core reused as-is: `packages/core` (`@iqlabs-official/agent-sdk`).
 - Related plan: `plans/mobile-app/oauth-on-mobile.md` (`claude setup-token` flow).
 
