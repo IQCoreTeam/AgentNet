@@ -48,6 +48,18 @@ import { login } from "./account/login.js";
 export type { ApprovalChannel, ApprovalRequest, ApprovalDecision } from "./runtime/approval/channel.js";
 export { autoApprove } from "./runtime/approval/channel.js";
 
+// the transport-neutral chat dispatcher + its button-approval channel, shared by
+// every surface (vscode, server, android). A surface supplies a ChatTransport and a
+// ChatEnv; this owns all the chat state + the UI↔runtime message switch.
+export { createChatSession } from "./chat/session.js";
+export type { ChatTransport, ChatEnv } from "./chat/session.js";
+export { TransportApprovalChannel } from "./chat/approvalChannel.js";
+
+// the chat + onboarding HTML (one webview, transport-shimmed: vscode acquireVsCodeApi
+// or a WebSocket in the browser/Android). Surfaces serve these strings as-is.
+export { chatHtml } from "./chat/ui/webview.js";
+export { onboardingHtml } from "./chat/ui/onboarding.js";
+
 // Connect a wallet, restore its configured storage, return a ready runtime.
 // (Assumes initialize() was already run once to pick a storage backend.)
 // onCloudStatus (optional): reports whether each drive-mirror write succeeded, so

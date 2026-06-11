@@ -35,7 +35,9 @@ let mdLibs: string | undefined;
 function markdownLibs(): string {
   if (mdLibs !== undefined) return mdLibs;
   try {
-    const req = createRequire(__filename);
+    // import.meta.url works natively in ESM (server) and is shimmed to importMetaUrl
+    // by the vscode CJS bundle — so createRequire resolves marked/dompurify on both.
+    const req = createRequire(import.meta.url);
     const marked = readFileSync(join(pkgRoot(req, "marked"), "lib", "marked.umd.js"), "utf8");
     const purify = readFileSync(join(pkgRoot(req, "dompurify"), "dist", "purify.min.js"), "utf8");
     mdLibs = marked + "\n" + purify;
@@ -669,7 +671,25 @@ export function chatHtml(): string {
 <script>
   const AVATAR_SVG = ${JSON.stringify(AVATAR_SVG)};
   ${AVATAR_SCRIPT}
-  const vscode = acquireVsCodeApi();
+  // The host pipe. Inside VSCode it's acquireVsCodeApi(); in a browser/Android WebView
+  // there's no such global, so we fall back to a WebSocket that speaks the SAME shape:
+  // postMessage(obj) sends out, and inbound frames are re-dispatched as window 'message'
+  // events — so every \`vscode.postMessage(...)\` and \`addEventListener('message',...)\`
+  // below works unchanged on any surface (CODE-RULES: one UI, no per-platform fork).
+  const vscode = (typeof acquireVsCodeApi === "function")
+    ? acquireVsCodeApi()
+    : (() => {
+        const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/chat");
+        const outbox = [];
+        ws.onopen = () => { for (const m of outbox.splice(0)) ws.send(m); };
+        ws.onmessage = (e) => window.dispatchEvent(new MessageEvent("message", { data: JSON.parse(e.data) }));
+        return {
+          postMessage: (obj) => {
+            const s = JSON.stringify(obj);
+            if (ws.readyState === WebSocket.OPEN) ws.send(s); else outbox.push(s);
+          },
+        };
+      })();
 
   // ---- markdown rendering (marked + dompurify), with a plain-text fallback ----
   const MD_OK = !!(window.marked && window.DOMPurify);

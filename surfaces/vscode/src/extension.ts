@@ -4,7 +4,7 @@
 //   handle.onMessage -> webview "message" (CLI output -> panel)
 
 import * as vscode from "vscode";
-import type { AgentRuntime, SessionHandle, Wallet } from "@iqlabs-official/agent-sdk/runtime/contract";
+import type { AgentRuntime, Wallet } from "@iqlabs-official/agent-sdk/runtime/contract";
 import {
   connect,
   initialize,
@@ -15,12 +15,13 @@ import {
   disconnectCloud,
   agentnetFolderLink,
   STORAGE_OPTIONS,
+  createChatSession,
+  TransportApprovalChannel,
+  chatHtml,
+  onboardingHtml,
   type StorageConfig,
 } from "@iqlabs-official/agent-sdk";
 import { localWallet, solanaDefaultKeypairPath } from "@iqlabs-official/agent-sdk/account/localWallet";
-import { chatHtml } from "./webview";
-import { onboardingHtml } from "./onboarding";
-import { WebviewApprovalChannel } from "./approval";
 
 // Built during onboarding (or restored on a configured device), then handed to chat.
 // The wallet + runtime are SHARED across all chat panels (one wallet = one session
@@ -156,237 +157,105 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
   panel.iconPath = vscode.Uri.joinPath(context.extensionUri, "media", "iq-logo.svg");
   panel.webview.html = chatHtml();
 
-  // This panel's OWN approval channel — tool approvals from sessions started here
-  // dock in THIS panel, never another tab. Bound for the panel's lifetime.
-  const approvalChannel = new WebviewApprovalChannel();
-  approvalChannel.bind(panel);
-  panel.onDidDispose(() => approvalChannel.bind(null));
-
-  const rt = runtime!; // boot/onboarding guarantee a runtime before chat opens
-
-  // Both CLIs stay "on" at once: each has its OWN slot (handle + which session +
-  // model). Switching tabs just repaints the active slot — nothing is killed, so
-  // claude and codex never step on each other. A handle is spawned lazily on first
-  // send (spawn costs ~2s); codex re-spawns per turn internally anyway.
-  type Slot = { handle: SessionHandle | null; pendingId?: string; model?: string };
-  const slots: Record<"claude" | "codex", Slot> = {
-    claude: { handle: null },
-    codex: { handle: null },
+  // The transport: VSCode's postMessage ⇄ onDidReceiveMessage in the shape the core
+  // dispatcher expects. Everything chat-related lives in createChatSession now; this
+  // file only adapts VSCode's pipe and supplies the host-specific env callbacks.
+  const transport = {
+    send: (msg: unknown) => panel.webview.postMessage(msg),
+    onRecv: (cb: (m: any) => void) => panel.webview.onDidReceiveMessage(cb),
   };
-  let cli: "claude" | "codex" = "claude"; // which tab is showing
-  const slot = () => slots[cli];
 
-  // A handle's output is only painted when ITS cli tab is the active one (so a
-  // background reply doesn't bleed into the other tab's log). The message already
-  // carries its own .cli (stamped by the runtime), so the webview badges the real
-  // engine per-message — correct even for a cross-CLI session.
-  function wire(forCli: "claude" | "codex", h: SessionHandle) {
-    h.onMessage((msg) => { if (cli === forCli) panel.webview.postMessage({ type: "message", msg }); });
-    h.onTurnEnd(async () => {
-      if (cli === forCli) panel.webview.postMessage({ type: "turnEnd" }); // stop the typing dots
-      await pushSessions();
-    });
-  }
+  // This panel's OWN approval channel — tool approvals from sessions started here
+  // dock in THIS panel (it shares this panel's transport). Drained on dispose so a
+  // request to a closed panel auto-denies instead of hanging the engine.
+  const approval = new TransportApprovalChannel(transport);
+  panel.onDidDispose(() => approval.drain());
 
-  // Repaint the log for the current tab from its slot (history of pending session).
-  // Each stored message carries its own .cli, so badges reflect the engine that
-  // actually produced each turn — not the current tab.
-  async function repaint() {
-    panel.webview.postMessage({ type: "clear" });
-    const id = slot().pendingId;
-    if (id) {
-      const page = await rt.loadSession(id);
-      for (const msg of page.messages) panel.webview.postMessage({ type: "message", msg });
-      panel.webview.postMessage({ type: "page", hasMore: page.hasMore, cursor: page.cursor });
-    }
-  }
-
-  // Open a session into the CURRENT tab's slot — cross-CLI: clicking a session
-  // continues that canonical conversation in WHATEVER cli the tab is on (the runtime
-  // re-injects its history into that cli on resume). A fresh handle is spawned lazily
-  // on the next send.
-  //
-  // Multi-tab guard: if the session is already open in ANOTHER panel, focus that one
-  // instead of opening a duplicate (two panels writing one log races). We track which
-  // session THIS panel holds in openSessions so we can hand it back on close.
-  let heldSession: string | undefined; // the session id this panel currently owns
-  async function open(sessionId?: string) {
+  // Multi-tab guard: VSCode can open the same session in two panels (two tabs writing
+  // one log races). Claim a session before opening; if another panel holds it, reveal
+  // that panel and reject. This panel hands its claim back on close.
+  let heldSession: string | undefined;
+  function claimSession(sessionId: string | undefined): boolean {
     if (sessionId) {
       const other = openSessions.get(sessionId);
-      if (other && other !== panel) { other.reveal(); return; } // already open elsewhere
+      if (other && other !== panel) { other.reveal(); return false; } // open elsewhere
     }
     if (heldSession) openSessions.delete(heldSession);
-    slot().handle?.stop();
-    slot().handle = null;
-    slot().pendingId = sessionId;
     heldSession = sessionId;
     if (sessionId) openSessions.set(sessionId, panel);
-    await repaint();
+    return true;
   }
   panel.onDidDispose(() => { if (heldSession) openSessions.delete(heldSession); });
 
-  async function ensureHandle() {
-    const s = slot();
-    if (s.handle) return s.handle;
-    const spawnCli = cli; // capture: cli must not change across the await
-    // pass THIS panel's approval channel so its tool approvals dock here.
-    s.handle = await rt.startSession({ cli: spawnCli, model: s.model, cwd: getCwd(), sessionId: s.pendingId, approval: approvalChannel });
-    wire(spawnCli, s.handle);
-    return s.handle;
-  }
-
-  async function pushSessions() {
-    const list = await rt.listSessions();
-    const activeId = slot().handle?.sessionId ?? slot().pendingId;
-    panel.webview.postMessage({ type: "sessions", list, activeId });
-  }
-
-  // "Storage: iCloud [change]" — local vs cloud state shown in the header.
-  async function pushStorage() {
-    const info = await getStorageInfo();
-    panel.webview.postMessage({ type: "storage", info, options: STORAGE_OPTIONS });
-  }
-
-  // Push the latest drive-mirror sync result to the pill (ok / error). Wired to the
-  // module-level callback so every cloud write updates the UI.
-  function pushCloudStatus() {
-    panel.webview.postMessage({ type: "cloudSync", status: lastCloudStatus });
-  }
-  onCloudStatusChange = pushCloudStatus;
-
-  panel.webview.onDidReceiveMessage(async (m) => {
-    switch (m?.type) {
-      case "ready": await pushSessions(); await pushStorage(); await open(); break;
-      case "new":   await open(); await pushSessions(); break;
-      case "newTab": vscode.commands.executeCommand("agentnet.newChat"); break; // open another panel
-      // Clicking a session resumes it in the CURRENT tab's cli (cross-CLI). The
-      // session's own cli is ignored — that's the whole point of cross-CLI resume.
-      case "open":  await open(m.sessionId); await pushSessions(); break;
-      case "platform":
-        // Switching engine CARRIES the current session over (cross-CLI resume): the
-        // session you're working on follows you to the other CLI instead of dropping
-        // you on an empty screen. We show a loading flash, hand the session to the new
-        // slot, and repaint — the next send resumes it (history re-injected into the
-        // new cli). If nothing was open, just switch to a blank chat as before.
-        if ((m.cli === "claude" || m.cli === "codex") && m.cli !== cli) {
-          const carry = slot().pendingId; // the session the OLD engine was showing
-          cli = m.cli;
-          if (carry && slot().pendingId !== carry) {
-            panel.webview.postMessage({ type: "loading" });
-            await open(carry); // resume the same canonical session in the new cli
-          } else {
-            await repaint();
-          }
-          await pushSessions();
-        }
-        break;
-      case "model":
-        // model is per-slot; changing it only re-spawns THAT slot's handle next send.
-        slot().model = m.model && m.model !== "default" ? m.model : undefined;
-        slot().handle?.stop(); slot().handle = null;
-        break;
-      case "send":
-        if (typeof m.text === "string") (await ensureHandle()).send(m.text);
-        break;
-      // user clicked Approve/Deny on a tool-approval card → resolve the pending
-      // request so the waiting engine (claude canUseTool) continues.
-      case "approvalDecision":
-        if (typeof m.id === "string" && m.outcome)
-          approvalChannel.resolve(m.id, { outcome: m.outcome, reason: m.reason });
-        break;
-      // scroll-to-top: fetch the page older than `cursor`, prepend in the webview
-      case "loadMore":
-        if (slot().pendingId && typeof m.cursor === "number") {
-          const page = await rt.loadMore(slot().pendingId!, m.cursor);
-          panel.webview.postMessage({
-            type: "older",
-            messages: page.messages,
-            hasMore: page.hasMore,
-            cursor: page.cursor,
-          });
-        }
-        break;
-      case "delete":
-        if (typeof m.sessionId === "string") {
-          await rt.deleteSession(m.sessionId);
-          // if the deleted one is open in either slot, clear that slot
-          for (const k of ["claude", "codex"] as const) {
-            const s = slots[k];
-            if (m.sessionId === (s.handle?.sessionId ?? s.pendingId)) {
-              s.handle?.stop(); s.handle = null; s.pendingId = undefined;
-            }
-          }
-          await repaint();
-          await pushSessions();
-        }
-        break;
-      // header "connect" link → native quick-pick of cloud backends, then connect
-      case "pickCloud": {
-        const cfg = await pickCloud();
-        if (!cfg) break; // user dismissed
-        try {
-          await switchStorage(wallet!, cfg, openExternal);
-          runtime = await connect(wallet!, cloudStatusCb);
-          await pushStorage();
-          await pushSessions();
-        } catch (e) {
-          // surface the failure instead of silently doing nothing (e.g. missing creds)
-          vscode.window.showErrorMessage(
-            "Cloud connect failed: " + (e instanceof Error ? e.message : String(e)),
-          );
-        }
-        break;
-      }
-      // connect / change the cloud mirror (local stays on regardless)
-      case "connectCloud": {
-        const cfg: StorageConfig = { kind: m.kind, location: m.location, authHeader: m.authHeader };
+  const chat = createChatSession(runtime!, transport, {
+    cwd: getCwd,
+    approval,
+    claimSession,
+    walletAddress: () => wallet?.address ?? null,
+    storageInfo: async () => ({ info: await getStorageInfo(), options: STORAGE_OPTIONS }),
+    // header "connect" link → native quick-pick of cloud backends, then connect
+    pickCloud: async () => {
+      const cfg = await pickCloud();
+      if (!cfg) return; // user dismissed
+      try {
         await switchStorage(wallet!, cfg, openExternal);
         runtime = await connect(wallet!, cloudStatusCb);
-        await pushStorage();
-        await pushSessions();
-        break;
+      } catch (e) {
+        // surface the failure instead of silently doing nothing (e.g. missing creds)
+        vscode.window.showErrorMessage(
+          "Cloud connect failed: " + (e instanceof Error ? e.message : String(e)),
+        );
       }
-      // turn the cloud mirror OFF; local sessions stay
-      case "disconnectCloud":
-        await disconnectCloud();
-        runtime = await connect(wallet!, cloudStatusCb);
-        await pushStorage();
-        await pushSessions();
-        break;
-      // Clicking the cloud label opens where the sessions actually live. For
-      // gdrive we resolve the real "AgentNet" folder link (only the signed-in user
-      // can see it) — a direct folder URL, not a search that may not match. Falls
-      // back to Drive home if the folder isn't created yet.
-      case "openCloud":
-        if (m.kind === "gdrive" && wallet) {
-          const link = await agentnetFolderLink(wallet.address);
-          openExternal(link ?? "https://drive.google.com/drive/my-drive");
-        } else if (m.kind === "custom" && typeof m.location === "string") {
-          openExternal(m.location);
-        }
-        break;
-      // My Wallet view asks for the address
-      case "wallet":
-        panel.webview.postMessage({ type: "wallet", address: wallet?.address ?? null });
-        break;
-      // Disconnect the wallet entirely: drop the cloud, forget onboarding, and go
-      // back to the pre-connect (onboarding) screen. Local session files stay on disk.
-      // The runtime (tied to this wallet) goes away, so EVERY open chat tab must close —
-      // otherwise other tabs become zombies pointing at a null runtime / stale wallet.
-      case "disconnectWallet":
-        await disconnectCloud();
-        await context.globalState.update("onboarded", false);
-        wallet = null;
-        runtime = null;
-        closeAllChatPanels(); // dispose all tabs (each tab's onDidDispose stops its handles)
-        openOnboarding(context);
-        break;
-    }
+    },
+    // connect / change the cloud mirror (local stays on regardless)
+    connectCloud: async (c) => {
+      await switchStorage(wallet!, { kind: c.kind, location: c.location, authHeader: c.authHeader } as StorageConfig, openExternal);
+      runtime = await connect(wallet!, cloudStatusCb);
+    },
+    // turn the cloud mirror OFF; local sessions stay
+    disconnectCloud: async () => {
+      await disconnectCloud();
+      runtime = await connect(wallet!, cloudStatusCb);
+    },
+    // Clicking the cloud label opens where the sessions actually live. For gdrive we
+    // resolve the real per-wallet folder link (only the signed-in user can see it) —
+    // a direct URL, not a search that may not match. Falls back to Drive home.
+    openCloud: async (kind, location) => {
+      if (kind === "gdrive" && wallet) {
+        const link = await agentnetFolderLink(wallet.address);
+        openExternal(link ?? "https://drive.google.com/drive/my-drive");
+      } else if (kind === "custom" && typeof location === "string") {
+        openExternal(location);
+      }
+    },
+    // Disconnect the wallet entirely: drop the cloud, forget onboarding, go back to
+    // onboarding. Local session files stay on disk. The runtime (tied to this wallet)
+    // goes away, so EVERY open chat tab must close — otherwise stragglers point at a
+    // now-null runtime / stale wallet.
+    disconnectWallet: async () => {
+      await disconnectCloud();
+      await context.globalState.update("onboarded", false);
+      wallet = null;
+      runtime = null;
+      closeAllChatPanels();
+      openOnboarding(context);
+    },
   });
 
+  // The "new tab" button is genuinely VSCode-only (it opens another panel). Core has
+  // no concept of tabs, so the host handles this message before/around the dispatcher.
+  panel.webview.onDidReceiveMessage((m) => {
+    if (m?.type === "newTab") vscode.commands.executeCommand("agentnet.newChat");
+  });
+
+  // Wire the drive-mirror sync pill: every cloud write reports here; push it to THIS
+  // panel. Last writer wins (one active panel reflects status) — matches prior behavior.
+  const cloudHook = () => chat.pushCloudStatus(lastCloudStatus);
+  onCloudStatusChange = cloudHook;
+
   panel.onDidDispose(() => {
-    slots.claude.handle?.stop(); slots.codex.handle?.stop();
-    if (onCloudStatusChange === pushCloudStatus) onCloudStatusChange = null;
+    chat.stop();
+    if (onCloudStatusChange === cloudHook) onCloudStatusChange = null; // only clear OUR hook
   });
 }
 

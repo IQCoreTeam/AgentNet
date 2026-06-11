@@ -16,6 +16,12 @@ importers:
       '@openai/codex-sdk':
         specifier: ^0.139.0
         version: 0.139.0
+      dompurify:
+        specifier: ^3.4.9
+        version: 3.4.9
+      marked:
+        specifier: ^18.0.5
+        version: 18.0.5
     devDependencies:
       '@iqlabs-official/solana-sdk':
         specifier: ^0.1.27
@@ -39,20 +45,36 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
+  surfaces/server:
+    dependencies:
+      '@iqlabs-official/agent-sdk':
+        specifier: workspace:*
+        version: link:../../packages/core
+      ws:
+        specifier: ^8.18.0
+        version: 8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.42
+      '@types/ws':
+        specifier: ^8.5.0
+        version: 8.18.1
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(tsx@4.22.4)(typescript@5.9.3)
+      tsx:
+        specifier: ^4.19.2
+        version: 4.22.4
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
   surfaces/vscode:
     dependencies:
       '@iqlabs-official/agent-sdk':
         specifier: workspace:*
         version: link:../../packages/core
-      dompurify:
-        specifier: ^3.4.9
-        version: 3.4.9
-      marked:
-        specifier: ^18.0.5
-        version: 18.0.5
-      tweetnacl:
-        specifier: ^1.0.3
-        version: 1.0.3
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
