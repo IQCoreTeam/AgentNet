@@ -70,19 +70,38 @@ export function onboardingHtml(): string {
   <h1>AgentNet</h1>
   <div class="sub">Connect a wallet — your sessions are encrypted to it.</div>
 
-  <!-- STEP 1: wallet (choose / create a local Solana keypair by path) -->
+  <!-- STEP 1: wallet. Two modes by surface (filled in by script):
+       - local  (vscode/cli): choose / create a Solana keypair by file path
+       - web    (browser/mobile): connect a wallet (Phantom/Solflare/Backpack/…) -->
   <div class="step active" id="step-wallet">
     <div class="row" id="walletRow" style="display:none">
       <span class="ok">●</span>
       <div class="grow"><div class="addr" id="walletAddr"></div></div>
     </div>
-    <label class="fieldLabel">Solana keypair file</label>
-    <input id="walletPath" spellcheck="false" placeholder="/path/to/id.json" />
-    <div class="hint" id="walletHint">If no keypair exists here, a new one is created at this path.</div>
-    <button class="primary" id="connectBtn">Use this wallet</button>
-    <div class="note">
-      This keypair is your wallet (a real Phantom connection comes later). The same
-      wallet = the same key that decrypts your sessions on any device.
+
+    <!-- local-keypair mode (vscode/cli) -->
+    <div id="walletLocal">
+      <label class="fieldLabel">Solana keypair file</label>
+      <input id="walletPath" spellcheck="false" placeholder="/path/to/id.json" />
+      <div class="hint" id="walletHint">If no keypair exists here, a new one is created at this path.</div>
+      <button class="primary" id="connectBtn">Use this wallet</button>
+      <div class="note">
+        This keypair is your wallet. The same wallet = the same key that decrypts
+        your sessions on any device.
+      </div>
+    </div>
+
+    <!-- web-wallet mode (browser/mobile): one button per DETECTED wallet -->
+    <div id="walletWeb" style="display:none">
+      <div id="walletButtons"><!-- filled from detected providers --></div>
+      <div class="hint" id="noWallet" style="display:none">
+        No Solana wallet detected. Install Phantom, Solflare, or Backpack and reload.
+      </div>
+      <div class="note">
+        Connect your wallet. You'll sign one message so this device can encrypt your
+        sessions to you — it's an off-chain signature, not a transaction (nothing
+        on-chain, no fee). The same wallet decrypts your sessions on any device.
+      </div>
     </div>
   </div>
 
@@ -118,10 +137,110 @@ export function onboardingHtml(): string {
   </div>
 </div>
 <script>
-  const vscode = acquireVsCodeApi();
+  // Host pipe — same shim as the chat webview (kept identical; both live in inline
+  // <script> strings so they can't share an import): acquireVsCodeApi() inside VSCode,
+  // else HTTP-RPC + SSE. postMessage(obj) → POST /rpc; the SSE stream (GET /events)
+  // becomes window 'message' events. The server issues a client id we tag onto POSTs.
+  const IS_VSCODE = typeof acquireVsCodeApi === "function";
+  const vscode = IS_VSCODE
+    ? acquireVsCodeApi()
+    : (() => {
+        let clientId = null;
+        const outbox = [];
+        function post(s) {
+          fetch("/rpc?client=" + encodeURIComponent(clientId), {
+            method: "POST", headers: { "content-type": "application/json" }, body: s,
+          }).catch(() => {});
+        }
+        function open(url) {
+          const es = new EventSource(url);
+          es.addEventListener("client", (e) => {
+            const id = JSON.parse(e.data).client;
+            if (clientId === null) {
+              clientId = id;
+              es.close();
+              open("/events?client=" + encodeURIComponent(id));
+              for (const m of outbox.splice(0)) post(m);
+            }
+          });
+          es.onmessage = (e) => window.dispatchEvent(new MessageEvent("message", { data: JSON.parse(e.data) }));
+        }
+        open("/events");
+        return {
+          postMessage: (obj) => {
+            const s = JSON.stringify(obj);
+            if (clientId !== null) post(s); else outbox.push(s);
+          },
+        };
+      })();
+
   const $ = (id) => document.getElementById(id);
   let chosenKind = null;
   const NEEDS_LOCATION = { custom: true }; // which kinds need extra input fields
+
+  // STEP 1 mode: local keypair (vscode/cli) vs web wallet (browser/mobile).
+  // A browser has no acquireVsCodeApi → web-wallet mode (Phantom/Solflare/Backpack/…).
+  const WEB = !IS_VSCODE;
+  $('walletLocal').style.display = WEB ? 'none' : 'block';
+  $('walletWeb').style.display = WEB ? 'block' : 'none';
+
+  // The exact message the session-key derivation signs (must match SESSION_KEY_MESSAGE
+  // in webWallet.ts / deriveX25519Keypair — same bytes → same key).
+  const SESSION_KEY_MESSAGE = "iq-sdk-derive-encryption-key-v1";
+
+  // Detect installed Solana wallets. Most inject a provider on a well-known global and
+  // follow Phantom's connect()/signMessage() shape, so one path handles them all — we
+  // just label the button by which provider answered. window.solana is the de-facto
+  // standard slot (Phantom/Solflare/… set it), kept last as the catch-all.
+  function detectWallets() {
+    const w = window;
+    const seen = new Set();
+    const found = [];
+    const add = (name, provider) => {
+      if (!provider || typeof provider.signMessage !== 'function' || seen.has(provider)) return;
+      seen.add(provider);
+      found.push({ name, provider });
+    };
+    add('Phantom',  w.phantom && w.phantom.solana);
+    add('Solflare', w.solflare);
+    add('Backpack', w.backpack);
+    add('OKX',      w.okxwallet && w.okxwallet.solana);
+    // catch-all: whatever set window.solana, if not already added by identity above.
+    add(w.solana && w.solana.isPhantom ? 'Phantom' : 'Wallet', w.solana);
+    return found;
+  }
+
+  async function connectWith(provider) {
+    try {
+      const res = await provider.connect();
+      const pk = (res && res.publicKey) || provider.publicKey;
+      const address = pk.toString();
+      // Off-chain signMessage over the FIXED bytes — this is what derives the session
+      // key. One prompt; the signature is reused for every session.
+      const signed = await provider.signMessage(new TextEncoder().encode(SESSION_KEY_MESSAGE), 'utf8');
+      const signature = signed.signature || signed; // some wallets return raw bytes
+      vscode.postMessage({ type: 'connectWallet', address, signature: Array.from(signature) });
+    } catch (e) {
+      vscode.postMessage({ type: 'toast', text: 'Wallet connection cancelled.' });
+    }
+  }
+
+  if (WEB) {
+    const wallets = detectWallets();
+    const box = $('walletButtons');
+    if (!wallets.length) {
+      $('noWallet').style.display = 'block';
+    } else {
+      for (const { name, provider } of wallets) {
+        const btn = document.createElement('button');
+        btn.className = 'primary';
+        btn.style.marginBottom = '8px';
+        btn.textContent = 'Connect ' + name;
+        btn.addEventListener('click', () => connectWith(provider));
+        box.appendChild(btn);
+      }
+    }
+  }
 
   // step switching
   function show(step) {
@@ -132,7 +251,7 @@ export function onboardingHtml(): string {
   // A keypair path must be absolute and end in .json (we never overwrite an existing
   // valid one — the extension loads it, or creates a new keypair only if missing).
   function validPath(p) { return /^(\\/|[A-Za-z]:\\\\|~\\/).*\\.json$/.test(p.trim()); }
-  $('connectBtn').addEventListener('click', () => {
+  if (!WEB) $('connectBtn').addEventListener('click', () => {
     const p = $('walletPath').value.trim();
     if (!validPath(p)) {
       $('walletPath').classList.add('bad');
@@ -142,7 +261,7 @@ export function onboardingHtml(): string {
     $('walletPath').classList.remove('bad');
     vscode.postMessage({ type: 'connectWallet', path: p });
   });
-  $('walletPath').addEventListener('input', () => $('walletPath').classList.remove('bad'));
+  if (!WEB) $('walletPath').addEventListener('input', () => $('walletPath').classList.remove('bad'));
 
   function pickOption(el, kind) {
     chosenKind = kind;
@@ -182,6 +301,10 @@ export function onboardingHtml(): string {
       if (m.defaultPath) $('walletPath').value = m.defaultPath;
       cloudPreselect = m.cloudKind || null; // e.g. "gdrive" if already connected
     } else if (m.type === 'walletConnected') {
+      // Browser/mobile: the wallet is the whole onboarding — local save is always on
+      // and a cloud can be added later from chat, so go straight to chat (this socket
+      // is already attached to the chat dispatcher on the host side).
+      if (WEB) { location.href = '/'; return; }
       $('walletRow').style.display = 'flex';
       $('walletAddr').textContent = m.address;
       $('walletAddr2').textContent = m.address;

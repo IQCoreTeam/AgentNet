@@ -22,6 +22,10 @@ export {
   localWallet,
 } from "./account/localWallet.js";
 export type { WalletFileState, LoadResult } from "./account/localWallet.js";
+// Web/mobile wallet (Phantom, Solflare, Backpack, …): a Wallet built from the
+// front-end's signature over the fixed session-key message — wallet-agnostic, the
+// front-end picks the provider. Local surfaces use localWallet; web uses this.
+export { webWallet, SESSION_KEY_MESSAGE } from "./account/webWallet.js";
 export {
   initialize,
   isInitialized,
