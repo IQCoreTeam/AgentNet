@@ -25,11 +25,35 @@ const OUTPUT_CAP = 4000;
 const base = (text: string): ChatMessage => ({ role: "tool", text, ts: Date.now() });
 const fileName = (p?: string) => (p ? p.split("/").pop() || p : "");
 
-// old/new → a simple, accurate diff (the replaced region as "-", the new as "+").
+// old/new → a line-level INTERLEAVED diff via LCS, so unchanged lines render as context
+// (" ") between the "-"/"+" changes instead of one block of removals then one of additions.
+// Edit old/new strings are usually a small region, so the O(m·n) table is cheap; we guard
+// against a pathological size and fall back to the plain block form.
 function makeDiff(oldStr = "", newStr = ""): string {
-  const minus = oldStr.split("\n").map((l) => "-" + l);
-  const plus = newStr.split("\n").map((l) => "+" + l);
-  return [...minus, ...plus].slice(0, 200).join("\n");
+  const a = oldStr.split("\n");
+  const b = newStr.split("\n");
+  if (a.length * b.length > 250_000) {
+    return [...a.map((l) => "-" + l), ...b.map((l) => "+" + l)].slice(0, 200).join("\n");
+  }
+  const m = a.length;
+  const n = b.length;
+  // dp[i][j] = LCS length of a[i:], b[j:]
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = m - 1; i >= 0; i--)
+    for (let j = n - 1; j >= 0; j--)
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+
+  const out: string[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < m && j < n) {
+    if (a[i] === b[j]) out.push(" " + a[i++]), j++;
+    else if (dp[i + 1][j] >= dp[i][j + 1]) out.push("-" + a[i++]);
+    else out.push("+" + b[j++]);
+  }
+  while (i < m) out.push("-" + a[i++]);
+  while (j < n) out.push("+" + b[j++]);
+  return out.slice(0, 200).join("\n");
 }
 
 // tool_result.content can be a string or an array of {type:"text",text} parts.
