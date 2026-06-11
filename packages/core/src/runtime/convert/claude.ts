@@ -67,6 +67,12 @@ function toolUseMessage(b: Block): ChatMessage {
       const file = String(input.file_path ?? "");
       return { ...base("Read " + fileName(file)), tool: { name, file } };
     }
+    case "TodoWrite": {
+      // preserve the structured todo list in `output` (JSON) so a surface can render it
+      // as a checklist; the neutral ToolAction shape needs no new field.
+      const todos = Array.isArray(input.todos) ? input.todos : [];
+      return { ...base("TodoWrite"), tool: { name, output: JSON.stringify(todos) } };
+    }
     case "Agent": {
       const title = String(input.description ?? "subagent");
       return { ...base("Agent: " + title), tool: { name, command: title } };
@@ -89,6 +95,12 @@ export function mapClaudeMessage(m: unknown): ParseResult {
     session_id?: string;
     compact_metadata?: unknown;
     message?: { content?: Block[] | string; role?: string };
+    event?: { type?: string; delta?: { type?: string; text?: string } };
+    usage?: {
+      input_tokens?: number;
+      cache_read_input_tokens?: number;
+      cache_creation_input_tokens?: number;
+    };
   };
 
   // system/init and any assistant/result frame carries the session id.
@@ -96,6 +108,17 @@ export function mapClaudeMessage(m: unknown): ParseResult {
     out.sessionId = msg.session_id;
   }
   if (msg.session_id && !out.sessionId) out.sessionId = msg.session_id;
+
+  // streaming: a partial text delta (only sent when includePartialMessages is on). Emit
+  // it as a partial:true assistant chunk; the surface coalesces deltas into the live line.
+  // The final complete `assistant` frame (below) still arrives as the partial:false text.
+  if (msg.type === "stream_event") {
+    const ev = msg.event;
+    if (ev?.type === "content_block_delta" && ev.delta?.type === "text_delta" && ev.delta.text) {
+      out.messages.push({ role: "assistant", text: ev.delta.text, ts: Date.now(), partial: true });
+    }
+    return out;
+  }
 
   // a compact boundary = claude condensed the history; surface a summary record so
   // it folds in cross-CLI exactly like the line path's isCompactSummary.
@@ -127,7 +150,15 @@ export function mapClaudeMessage(m: unknown): ParseResult {
     }
   }
 
-  // a 'result' frame ends the turn.
-  if (msg.type === "result") out.turnEnded = true;
+  // a 'result' frame ends the turn — and carries the turn's token usage. The context
+  // window occupancy = input + cache-read + cache-create (the full prompt that was sent).
+  if (msg.type === "result") {
+    out.turnEnded = true;
+    const u = msg.usage;
+    if (u) {
+      out.contextTokens =
+        (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+    }
+  }
   return out;
 }

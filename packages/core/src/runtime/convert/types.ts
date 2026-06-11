@@ -7,4 +7,7 @@ export interface ParseResult {
   sessionId?: string; // set when the engine reveals its session/thread id
   messages: ChatMessage[]; // 0+ complete messages emitted by this event
   turnEnded: boolean; // true when the engine signals the turn is done
+  // tokens occupying the context window after this event (input + cached + cache-create).
+  // Set on a turn-final/result frame; lets a surface show a real context-left meter.
+  contextTokens?: number;
 }

@@ -79,6 +79,9 @@ export interface SessionHandle {
   send(userText: string): void; // user input → CLI stdin
   onMessage(cb: (msg: ChatMessage) => void): void; // CLI output (UI renders)
   onTurnEnd(cb: () => void): void; // turn finished (runtime auto-saves here)
+  // real context-window occupancy (tokens) reported by the engine each turn. Optional
+  // for the UI to use (e.g. a context-left meter); surfaces may ignore it.
+  onUsage(cb: (contextTokens: number) => void): void;
   stop(): void;
 }
 
@@ -91,6 +94,11 @@ export interface AgentRuntime {
     cwd: string;
     sessionId?: string; // present = resume, absent = new
     model?: string;
+    // opt-in token streaming: when true, the engine emits partial assistant deltas
+    // (ChatMessage.partial:true) followed by a final partial:false message. Surfaces that
+    // don't set this (e.g. vscode) keep the whole-turn behavior unchanged. Partials are
+    // rendered but NOT persisted — only the final message is written to the log.
+    stream?: boolean;
     // who decides tool approvals for THIS session. Per-session (not per-runtime) so
     // multiple chat panels sharing one runtime each route approvals to their OWN
     // panel. Omit → the runtime's default channel (or auto-allow).

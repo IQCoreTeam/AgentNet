@@ -47,6 +47,7 @@ export function createRuntime(
       let title = "";
       const msgCbs: Array<(m: ChatMessage) => void> = [];
       const turnCbs: Array<() => void> = [];
+      const usageCbs: Array<(n: number) => void> = [];
       const pending: ChatMessage[] = []; // messages awaiting a known sessionId
 
       const meta = () => ({ sessionId, cli: opts.cli, title, ts: Date.now() });
@@ -59,6 +60,9 @@ export function createRuntime(
         if (!m.cli) m.cli = opts.cli;
         if (!title && m.role === "user") title = m.text.slice(0, 60);
         for (const cb of msgCbs) cb(m);
+        // streaming deltas are for the live UI only — never persist them. The final
+        // (partial:false) assistant message carries the full text and IS stored below.
+        if (m.partial) return;
         if (sessionId) void store.appendMessage(meta(), m);
         else pending.push(m);
       };
@@ -76,6 +80,7 @@ export function createRuntime(
         void flush();
       });
       cli.onMessage((m: ChatMessage) => emit(m));
+      cli.onUsage((n: number) => { for (const cb of usageCbs) cb(n); });
       cli.onTurnEnd(() => {
         void flush().then(() => {
           for (const cb of turnCbs) cb();
@@ -107,6 +112,9 @@ export function createRuntime(
         },
         onTurnEnd(cb) {
           turnCbs.push(cb);
+        },
+        onUsage(cb) {
+          usageCbs.push(cb);
         },
         stop() {
           stopped = true; // mark so the resulting exit isn't reported as a failure

@@ -1,0 +1,329 @@
+import React, { useEffect, useRef, useState } from "react";
+import { Box, Text, Static, useApp, useInput } from "ink";
+import type { AgentRuntime } from "@iqlabs-official/agent-sdk/runtime/contract";
+import type { CliReport } from "@iqlabs-official/agent-sdk";
+import type { ApprovalRequest } from "@iqlabs-official/agent-sdk/runtime/approval/channel";
+import type { AppOptions } from "../app.js";
+import type { InkApprovalChannel } from "../InkApprovalChannel.js";
+import { useChat, type Engine } from "../hooks/useChat.js";
+import { useFrameLoop } from "../hooks/useFrameLoop.js";
+import { getStorageInfo } from "@iqlabs-official/agent-sdk";
+import { copyToClipboard } from "../clipboard.js";
+import { Message } from "../components/Message.js";
+import { StatusLine } from "../components/StatusLine.js";
+import { ApprovalCard } from "../components/ApprovalCard.js";
+import { Celebrate } from "../components/Celebrate.js";
+import { Composer } from "../components/Composer.js";
+import { SessionList } from "./SessionList.js";
+import { ModelPicker } from "./ModelPicker.js";
+import { type Mood } from "../components/Iggy.js";
+import { thinkingLabels, colors, copy, pick } from "../theme.js";
+
+// IQ-flavored rotating label while a turn runs.
+function ThinkingLine() {
+  const i = useFrameLoop(thinkingLabels.length, 1.2);
+  return (
+    <Box paddingLeft={2} marginTop={1}>
+      <Text color={colors.iqViolet}>{thinkingLabels[i]}</Text>
+    </Box>
+  );
+}
+
+export function Chat({
+  runtime,
+  options,
+  approval,
+  address,
+}: {
+  runtime: AgentRuntime;
+  address: string;
+  report: CliReport;
+  options: AppOptions;
+  approval: InkApprovalChannel | null;
+}) {
+  const { exit } = useApp();
+  const cwd = options.cwd ?? process.cwd();
+  const chat = useChat(runtime, {
+    cli: options.cli ?? "claude",
+    model: options.model,
+    cwd,
+    resume: options.resume,
+    approval: approval ?? undefined,
+  });
+  const [notice, setNotice] = useState("");
+  const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
+  const [showSessions, setShowSessions] = useState(false);
+  const [showModels, setShowModels] = useState(false);
+  const [celebrate, setCelebrate] = useState<"sparkle" | "confetti" | null>(null);
+  const [eggMood, setEggMood] = useState<Mood | null>(null);
+  const [idle, setIdle] = useState(false);
+  const prevBusy = useRef(false);
+  const konami = useRef<string[]>([]);
+
+  // celebration on turn completion: confetti if the last tool looks like a win, else a
+  // quick sparkle. Disabled visually by Celebrate under --calm.
+  useEffect(() => {
+    if (prevBusy.current && !chat.busy && chat.messages.length) {
+      const last = chat.messages[chat.messages.length - 1];
+      // an engine error ends the turn too — don't celebrate it; show the calm error face.
+      const errored =
+        !!last &&
+        last.role === "tool" &&
+        (last.tool?.name === "Error" ||
+          (last.tool?.exitCode !== undefined && last.tool.exitCode !== 0) ||
+          /\b(engine\]|exited with code|error)/i.test(last.text));
+      if (errored) {
+        setEggMood("error");
+      } else {
+        const lastTool = [...chat.messages].reverse().find((m) => m.role === "tool");
+        const win =
+          !!lastTool &&
+          (lastTool.tool?.exitCode === 0 || /\b\d+\s+pass(ing|ed)\b/i.test(lastTool.tool?.output ?? ""));
+        setCelebrate(win ? "confetti" : "sparkle");
+        setEggMood("success");
+      }
+      const t = setTimeout(() => {
+        setCelebrate(null);
+        setEggMood(null);
+      }, 1600);
+      prevBusy.current = chat.busy;
+      return () => clearTimeout(t);
+    }
+    prevBusy.current = chat.busy;
+  }, [chat.busy, chat.messages]);
+
+  // idle nudge: Iggy dozes off after a minute of no activity. Any input resets it.
+  useEffect(() => {
+    setIdle(false);
+    const t = setTimeout(() => setIdle(true), 60_000);
+    return () => clearTimeout(t);
+  }, [chat.messages.length, chat.busy, notice]);
+
+  // Esc cancels a running turn (only while busy and no approval pending).
+  useInput(
+    (_i, key) => {
+      if (key.escape) {
+        chat.interrupt();
+        setNotice("interrupted.");
+      }
+    },
+    { isActive: chat.busy && !pendingApproval },
+  );
+
+  // surface tool-approval requests from the engine and answer them with y/a/n keys.
+  useEffect(() => approval?.subscribe(setPendingApproval), [approval]);
+  useInput(
+    (input) => {
+      if (!pendingApproval || !approval) return;
+      if (input === "y") approval.resolve(pendingApproval.id, { outcome: "once" });
+      else if (input === "a") approval.resolve(pendingApproval.id, { outcome: "always" });
+      else if (input === "n")
+        approval.resolve(pendingApproval.id, { outcome: "deny", reason: "denied by user" });
+    },
+    { isActive: !!pendingApproval },
+  );
+
+  // hidden: ↑↑↓↓ toggles a playful "turbo glow" acknowledgement.
+  useInput(
+    (_input, key) => {
+      const k = key.upArrow ? "U" : key.downArrow ? "D" : "";
+      if (!k) return;
+      konami.current = [...konami.current, k].slice(-4);
+      if (konami.current.join("") === "UUDD") {
+        setNotice("⚡ turbo glow engaged — you found it ✦");
+        konami.current = [];
+      }
+    },
+    { isActive: !pendingApproval && !showSessions && !showModels },
+  );
+
+  function runSlash(raw: string) {
+    const [cmd, ...rest] = raw.slice(1).trim().split(/\s+/);
+    const arg = rest.join(" ");
+    switch (cmd) {
+      case "quit":
+      case "q":
+        setNotice(pick(copy.signoffs));
+        setTimeout(() => exit(), 350);
+        return;
+      case "new":
+        chat.newSession();
+        setNotice("fresh session — say hi");
+        return;
+      case "engine":
+        if (arg === "claude" || arg === "codex") {
+          chat.switchEngine(arg as Engine);
+          setNotice(`switched to ${arg} (session carries over)`);
+        } else setNotice("usage: /engine claude|codex");
+        return;
+      case "model":
+        if (!arg) {
+          setShowModels(true); // no arg → open the picker
+          return;
+        }
+        chat.changeModel(arg);
+        setNotice(`model → ${arg}`);
+        return;
+      case "models":
+        setShowModels(true);
+        return;
+      case "sessions":
+      case "ls":
+        void chat.refreshSessions();
+        setShowSessions(true);
+        return;
+      case "resume": {
+        const hit = chat.sessions.find((s) => s.sessionId.startsWith(arg));
+        if (arg && hit) {
+          void chat.openSession(hit.sessionId);
+          setNotice(`resumed ${hit.title || hit.sessionId.slice(0, 8)}`);
+        } else setNotice("usage: /resume <id-prefix> — see /sessions");
+        return;
+      }
+      case "wallet":
+        setNotice(`wallet ${address}`);
+        return;
+      case "iq":
+        setNotice(`◆ ${pick(copy.iqFacts)}`);
+        setEggMood("success");
+        setTimeout(() => setEggMood(null), 2000);
+        return;
+      case "dance":
+        setEggMood("dance");
+        setNotice("♪ Iggy hits the floor");
+        setTimeout(() => setEggMood(null), 3000);
+        return;
+      case "more":
+        void chat.loadOlder();
+        setNotice("loaded older history");
+        return;
+      case "compact":
+        // claude/codex honor their own /compact command; pass it through as a turn.
+        void chat.send("/compact");
+        setNotice("compacting context…");
+        return;
+      case "clear":
+        chat.clearView();
+        setNotice("cleared (session kept — /more to restore)");
+        return;
+      case "copy": {
+        const lastAsst = [...chat.messages].reverse().find((m) => m.role === "assistant");
+        if (!lastAsst) {
+          setNotice("nothing to copy yet");
+          return;
+        }
+        void copyToClipboard(lastAsst.text).then((ok) =>
+          setNotice(ok ? "copied last reply to clipboard" : "clipboard tool not available"),
+        );
+        return;
+      }
+      case "storage":
+        void getStorageInfo().then((info) =>
+          setNotice(info ? `storage: ${info.kind}${info.account ? ` (${info.account})` : ""}` : "storage: local only"),
+        );
+        return;
+      case "help":
+        setNotice("/new /sessions /resume /more /compact /clear /copy /models /engine /wallet /storage /iq /quit · !cmd shell · Esc cancels · Ctrl+A/E/W/U edit");
+        return;
+      default:
+        setNotice(`unknown command: /${cmd} — try /help`);
+    }
+  }
+
+  function onSubmit(value: string) {
+    const text = value.trim();
+    if (!text) return;
+    setNotice("");
+    if (text.startsWith("/")) return runSlash(text);
+    if (text.startsWith("!")) return chat.runBash(text.slice(1)); // quick local shell
+    void chat.send(text);
+  }
+
+  const mood: Mood = eggMood ?? (pendingApproval ? "tool" : chat.busy ? "thinking" : idle ? "sleeping" : "idle");
+  // context-left: prefer the engine's REAL per-turn usage; before the first turn reports,
+  // fall back to a rough chars/4 estimate so the meter isn't blank.
+  const WINDOW = chat.cli === "codex" ? 256_000 : 200_000;
+  const usedTokens =
+    chat.contextTokens ?? chat.messages.reduce((n, m) => n + m.text.length, 0) / 4;
+  const ctx = Math.max(0, 1 - usedTokens / WINDOW);
+  const ctxReal = chat.contextTokens !== undefined;
+
+  // model picker overlay.
+  if (showModels) {
+    return (
+      <ModelPicker
+        cli={chat.cli}
+        current={chat.model}
+        onPick={(v) => {
+          chat.changeModel(v);
+          setNotice(`model → ${v ?? "default"}`);
+          setShowModels(false);
+        }}
+        onClose={() => setShowModels(false)}
+      />
+    );
+  }
+
+  // session picker overlay — takes over input while open.
+  if (showSessions) {
+    return (
+      <SessionList
+        sessions={chat.sessions}
+        activeId={chat.pendingId}
+        onResume={(id) => {
+          void chat.openSession(id);
+          setShowSessions(false);
+        }}
+        onDelete={(id) => void chat.deleteSession(id)}
+        onClose={() => setShowSessions(false)}
+      />
+    );
+  }
+
+  // the last message is rendered LIVE (dynamic) only while it's a streaming assistant;
+  // everything else is committed to <Static>, which renders each line once and never
+  // re-renders — so Iggy/spinner ticks don't repaint the whole scrollback. `epoch` resets
+  // Static on wholesale changes (resume / new / scroll-back prepend).
+  const lastMsg = chat.messages[chat.messages.length - 1];
+  const streaming = chat.busy && lastMsg?.role === "assistant";
+  const committed = streaming ? chat.messages.slice(0, -1) : chat.messages;
+  const liveMsg = streaming ? lastMsg : null;
+
+  return (
+    <Box flexDirection="column" paddingX={1}>
+      {chat.messages.length === 0 && !chat.busy ? (
+        <Text dimColor>{copy.emptySessions}</Text>
+      ) : null}
+
+      <Static key={chat.epoch} items={committed.map((m, i) => ({ m, i }))}>
+        {({ m, i }) => <Message key={`${m.ts}-${i}`} msg={m} />}
+      </Static>
+
+      {chat.hasMore ? <Text dimColor>… older history above — /more to load</Text> : null}
+
+      {liveMsg ? <Message msg={liveMsg} live /> : null}
+
+      {chat.busy && !pendingApproval ? <ThinkingLine /> : null}
+
+      {pendingApproval ? <ApprovalCard req={pendingApproval} /> : null}
+
+      <Celebrate kind={celebrate} />
+      {idle && !chat.busy ? <Text dimColor>{copy.idleNudge}</Text> : null}
+
+      <StatusLine mood={mood} cli={chat.cli} model={chat.model} cwd={cwd} elapsed={chat.busy ? chat.elapsed : undefined} ctx={ctx} ctxApprox={!ctxReal} />
+
+      {/* hide the composer while an approval is pending — keys answer the card instead */}
+      {!pendingApproval ? (
+        <Box marginTop={1}>
+          <Composer
+            cwd={cwd}
+            onSubmit={onSubmit}
+            disabled={showSessions}
+            history={chat.messages.filter((m) => m.role === "user").map((m) => m.text)}
+          />
+        </Box>
+      ) : null}
+      {notice ? <Text dimColor>{notice}</Text> : null}
+    </Box>
+  );
+}

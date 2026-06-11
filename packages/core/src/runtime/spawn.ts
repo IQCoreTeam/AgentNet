@@ -45,6 +45,7 @@ export interface Engine {
   onSessionId(cb: (id: string) => void): void;
   onTurnEnd(cb: () => void): void;
   onError(cb: (text: string) => void): void;
+  onUsage(cb: (contextTokens: number) => void): void; // real context occupancy per turn
   send(text: string): void;
   stop(): void;
 }
@@ -55,6 +56,7 @@ export interface SpawnOpts {
   sessionId?: string; // NATIVE resume id (inject/prepareResume resolved it already)
   model?: string;
   approval?: ApprovalChannel; // how tool approvals get decided; default = auto-allow
+  stream?: boolean; // emit partial assistant deltas (claude includePartialMessages)
 }
 
 export function spawnCli(opts: SpawnOpts): Engine {
@@ -67,12 +69,14 @@ function callbacks() {
   const sid: Array<(id: string) => void> = [];
   const turn: Array<() => void> = [];
   const err: Array<(t: string) => void> = [];
+  const use: Array<(n: number) => void> = [];
   return {
-    msg, sid, turn, err,
+    msg, sid, turn, err, use,
     emitMsg: (m: ChatMessage) => { for (const c of msg) c(m); },
     emitSid: (id: string) => { for (const c of sid) c(id); },
     emitTurn: () => { for (const c of turn) c(); },
     emitErr: (t: string) => { for (const c of err) c(t); },
+    emitUsage: (n: number) => { for (const c of use) c(n); },
   };
 }
 
@@ -115,7 +119,17 @@ function claudeEngine(opts: SpawnOpts): Engine {
       model: opts.model,
       cwd: opts.cwd,
       canUseTool,
-      includePartialMessages: false,
+      includePartialMessages: !!opts.stream,
+      // keep claude's full coding system prompt, append an anti-laziness nudge: some
+      // models reply "already done / file exists" on simple asks without acting. This
+      // pushes them to verify-or-create with a tool instead of describing.
+      systemPrompt: {
+        type: "preset",
+        preset: "claude_code",
+        append:
+          "Never assume a file already exists or that a task is already done. " +
+          "Verify with a tool (Read/Bash) or create it. Do the work with tools; do not just describe it.",
+      },
       // use the user's installed claude (logged in) so the bundled extension doesn't
       // need the SDK's own native binary on its (unresolvable) bundle-relative path.
       pathToClaudeCodeExecutable: resolveExecutable("claude"),
@@ -123,14 +137,26 @@ function claudeEngine(opts: SpawnOpts): Engine {
     },
   });
 
-  // drive the output generator; map each SDKMessage → ChatMessages.
+  // drive the output generator; map each SDKMessage → ChatMessages. Partial assistant
+  // deltas are ACCUMULATED here into a running snapshot so the surface always receives
+  // "full text so far" (replace-semantics) — matching codex's item.updated snapshots.
   (async () => {
+    let streamBuf = "";
     try {
       for await (const m of q) {
         const r = mapClaudeMessage(m);
         if (r.sessionId && !sessionId) { sessionId = r.sessionId; cb.emitSid(r.sessionId); }
-        for (const cm of r.messages) cb.emitMsg(cm);
-        if (r.turnEnded) cb.emitTurn();
+        for (const cm of r.messages) {
+          if (cm.role === "assistant" && cm.partial) {
+            streamBuf += cm.text;
+            cb.emitMsg({ ...cm, text: streamBuf });
+          } else {
+            if (cm.role === "assistant" && !cm.partial) streamBuf = ""; // final block arrived
+            cb.emitMsg(cm);
+          }
+        }
+        if (r.contextTokens !== undefined) cb.emitUsage(r.contextTokens);
+        if (r.turnEnded) { streamBuf = ""; cb.emitTurn(); }
       }
     } catch (e) {
       cb.emitErr(`[claude engine] ${e instanceof Error ? e.message : String(e)}`);
@@ -143,6 +169,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
     onSessionId: (c) => cb.sid.push(c),
     onTurnEnd: (c) => cb.turn.push(c),
     onError: (c) => cb.err.push(c),
+    onUsage: (c) => cb.use.push(c),
     send: (t) => push(t),
     stop: () => { closed = true; wake?.(); void q.interrupt?.().catch(() => {}); },
   };
@@ -172,7 +199,9 @@ function codexEngine(opts: SpawnOpts): Engine {
       for await (const ev of events) {
         const r = mapCodexEvent(ev);
         if (r.sessionId && !sessionId) { sessionId = r.sessionId; cb.emitSid(r.sessionId); }
+        // codex partials are already full snapshots (item.updated) → emit as-is.
         for (const cm of r.messages) cb.emitMsg(cm);
+        if (r.contextTokens !== undefined) cb.emitUsage(r.contextTokens);
         if (r.turnEnded) cb.emitTurn();
       }
     } catch (e) {
@@ -188,6 +217,7 @@ function codexEngine(opts: SpawnOpts): Engine {
     onSessionId: (c) => cb.sid.push(c),
     onTurnEnd: (c) => cb.turn.push(c),
     onError: (c) => cb.err.push(c),
+    onUsage: (c) => cb.use.push(c),
     send: (t) => {
       // codex SDK has no inline approval; surface ONE policy decision per turn so the
       // ApprovalChannel still sees the action (and can deny up front). On allow, run.
