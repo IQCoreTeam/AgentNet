@@ -36,6 +36,10 @@ export {
 export { STORAGE_OPTIONS } from "./account/storage/adapter.js";
 export type { StorageConfig, StorageKind } from "./account/storage/adapter.js";
 export { manualStorage } from "./account/storage/manual.js";
+// session-key lifetime policy: ephemeral (memory, default) vs persisted (KeyVault).
+// A surface picks one to enable "local storage mode"; default stays ephemeral.
+export { ephemeralKey, persistedKey } from "./account/keyPolicy.js";
+export type { KeyPolicy, KeyVault } from "./account/keyPolicy.js";
 export { agentnetFolderLink } from "./account/storage/gdrive.js";
 export type { CloudStatus } from "./account/storage/mirror.js";
 

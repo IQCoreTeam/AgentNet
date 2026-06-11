@@ -15,7 +15,8 @@ import type {
   StorageAdapter,
   Wallet,
 } from "../runtime/contract.js";
-import { deriveSessionKey, type SessionKey } from "../core/crypto.js";
+import { type SessionKey } from "../core/crypto.js";
+import { ephemeralKey, type KeyPolicy } from "./keyPolicy.js";
 import { encodeRecord, metaRecord, msgRecord, decodeLog } from "./sessionLog.js";
 
 export const PAGE_SIZE = 30;
@@ -37,18 +38,20 @@ export interface PageResult {
 }
 
 export class SessionStore {
-  private key?: SessionKey;
   // per-session in-memory state for the CURRENT page (this process)
   private cur = new Map<string, { page: number; count: number }>();
 
+  // The key POLICY owns the session key's lifetime (memory vs persisted). Defaults to
+  // ephemeral so existing callers are unchanged; a surface passes persistedKey(vault)
+  // to enable "local storage mode".
   constructor(
     private wallet: Wallet,
     private storage: StorageAdapter,
+    private keys: KeyPolicy = ephemeralKey(),
   ) {}
 
-  private async getKey(): Promise<SessionKey> {
-    if (!this.key) this.key = await deriveSessionKey(this.wallet);
-    return this.key;
+  private getKey(): Promise<SessionKey> {
+    return this.keys.getKey(this.wallet);
   }
 
   private async write(key: string, chunk: Uint8Array): Promise<void> {
