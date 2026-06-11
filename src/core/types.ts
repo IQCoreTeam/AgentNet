@@ -41,15 +41,23 @@ export interface Workflow {
   createdAt: number;
 }
 
-/** Note (comment) row stored in `notes/[skillNFT]` or `notes/[agentWallet]`. */
+/**
+ * Note (comment) on `notes/[skillNFT]` or `notes/[agentWallet]`.
+ *
+ * STORED columns: id · author · text · gitLink? · timestamp · meta?. The
+ * `subject` (= the table key) and `isSelfNote` (= author == subject) are NOT
+ * stored — they're derived at read time (notes.md §3 "no flag, derive from
+ * author"), so they're optional here and only present on read results.
+ */
 export interface Note {
-  id: string; // unique id (author + timestamp)
+  id: string; // unique id (author + timestamp + nonce)
   author: string; // wallet address
-  subject: string; // skill NFT address or agent wallet address
   text: string;
-  gitLink?: string; // optional github/on-chain-git link
-  isSelfNote?: boolean; // true if author == subject (owner post)
+  gitLink?: string; // optional github/on-chain-git link (URL tells on/off-chain)
   timestamp: number;
+  meta?: Record<string, unknown>; // optional free-form extras (one column, JSON)
+  subject?: string; // derived on read: the table key (skill mint / agent wallet)
+  isSelfNote?: boolean; // derived on read: author == subject (owner post)
 }
 
 /**

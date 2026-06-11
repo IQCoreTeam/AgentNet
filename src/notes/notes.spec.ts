@@ -32,12 +32,28 @@ describe("notes/notes", () => {
 
     const noteId = await postNote(mockConn as any, signer, {
       skillId: "11111111111111111111111111111111",
-      subject: "Test Note",
       text: "This is a test note",
     });
 
     expect(noteId).toContain("note:11111111111111111111111111111111:");
     expect(chain.writeRow).toHaveBeenCalled();
+  });
+
+  it("writes a trimmed row: no subject/isSelfNote, optional meta included", async () => {
+    vi.mocked(balance.getBalance).mockResolvedValue(1n);
+
+    await postNote(mockConn as any, signer, {
+      skillId: "11111111111111111111111111111111",
+      text: "hi",
+      meta: { tag: "v1" },
+    });
+
+    const rowJson = vi.mocked(chain.writeRow).mock.calls[0][2] as string;
+    const row = JSON.parse(rowJson);
+    expect(row).not.toHaveProperty("subject"); // table key, not stored
+    expect(row).not.toHaveProperty("isSelfNote"); // derived on read
+    expect(row.meta).toEqual({ tag: "v1" });
+    expect(row).toHaveProperty("text", "hi");
   });
 
   it("should throw if balance is < 1", async () => {
@@ -46,16 +62,22 @@ describe("notes/notes", () => {
     await expect(
       postNote(mockConn as any, signer, {
         skillId: "11111111111111111111111111111111",
-        subject: "Test Note",
         text: "This is a test note",
       })
     ).rejects.toThrow(/Must own ≥1 skill token/);
   });
 
-  it("should read notes", async () => {
-    const notes = await readNotes(mockConn as any, "11111111111111111111111111111111");
+  it("should read notes and derive subject + isSelfNote", async () => {
+    const skillId = "11111111111111111111111111111111";
+    vi.mocked(chain.readRows).mockResolvedValueOnce([
+      { id: "note1", author: "someBuyer", text: "great", timestamp: 1 },
+    ] as any);
+
+    const notes = await readNotes(mockConn as any, skillId);
     expect(notes.length).toBe(1);
     expect(notes[0].id).toBe("note1");
+    expect(notes[0].subject).toBe(skillId); // derived from the table key
+    expect(notes[0].isSelfNote).toBe(false); // author != subject
     expect(chain.readRows).toHaveBeenCalled();
   });
 

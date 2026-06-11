@@ -81,14 +81,16 @@ export const SKILLS_INDEX_COLUMNS = [
   "createdAt",
 ];
 
+// Trimmed per notes.md: `subject` is the table key (not stored) and
+// `isSelfNote` is derived (author == subject) at read time. `meta` is one
+// optional column holding a JSON blob for future/experimental fields.
 export const NOTE_COLUMNS = [
   "id",
   "author",
-  "subject",
   "text",
   "gitLink",
-  "isSelfNote",
   "timestamp",
+  "meta",
 ];
 
 // Reputation is NOT a score (notes.md: "Not a rating/score"). An agent's

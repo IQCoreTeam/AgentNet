@@ -21,11 +21,51 @@ import { indexTableSource, type SkillSource } from "../core/skillSource.js";
 import type { Note, Row } from "../core/types.js";
 import { getBalance } from "./balance.js";
 
-export interface PostNoteInput {
-  skillId: string; // skill mint address
-  subject: string;
+/** The stored row shape — derived fields (subject/isSelfNote) are NOT included. */
+interface StoredNote {
+  id: string;
+  author: string;
   text: string;
   gitLink?: string;
+  timestamp: number;
+  meta?: Record<string, unknown>;
+}
+
+/** Build the trimmed row + a collision-resistant id (author:ts:nonce). */
+function buildNote(
+  author: string,
+  text: string,
+  gitLink?: string,
+  meta?: Record<string, unknown>,
+): StoredNote {
+  const nonce = Math.random().toString(36).slice(2, 8);
+  const row: StoredNote = {
+    id: `note:${author}:${Date.now()}:${nonce}`,
+    author,
+    text,
+    timestamp: Date.now(),
+  };
+  if (gitLink !== undefined) row.gitLink = gitLink;
+  if (meta !== undefined) row.meta = meta;
+  return row;
+}
+
+/**
+ * Map stored rows → Note[], deriving the non-stored fields from the subject
+ * (the table key): `subject` = subject, `isSelfNote` = author == subject.
+ * Drops non-row entries (metadata shapes from readTableRows have no `id`).
+ */
+function hydrateNotes(rows: Row[], subject: string): Note[] {
+  return (rows as unknown as Note[])
+    .filter((n) => typeof n.id === "string")
+    .map((n) => ({ ...n, subject, isSelfNote: n.author === subject }));
+}
+
+export interface PostNoteInput {
+  skillId: string; // skill mint address (= the table subject)
+  text: string;
+  gitLink?: string;
+  meta?: Record<string, unknown>;
 }
 
 export async function postNote(
@@ -58,21 +98,12 @@ export async function postNote(
   }
 
   const hint = notesSkillHint(input.skillId);
-  const noteId = `note:${author}:${Date.now()}`;
-  const note: Note = {
-    id: noteId,
-    author,
-    subject: input.subject,
-    text: input.text,
-    gitLink: input.gitLink,
-    isSelfNote: false,
-    timestamp: Date.now(),
-  };
+  const note = buildNote(author, input.text, input.gitLink, input.meta);
 
   // Open table (no native gate — see the Token-2022 incompatibility above).
   await ensureTable(signer, hint, NOTE_COLUMNS, "id");
   await writeRow(signer, hint, JSON.stringify(note));
-  return noteId;
+  return note.id;
 }
 
 export interface ReadNotesOptions {
@@ -85,11 +116,8 @@ export async function readNotes(
   options?: ReadNotesOptions,
 ): Promise<Note[]> {
   const hint = notesSkillHint(skillId);
-  const rows = await readRows(hint, {
-    limit: options?.limit ?? 100,
-  });
-  // Drop non-row entries (metadata shapes from readTableRows have no `id`).
-  return (rows as unknown as Note[]).filter((n) => typeof n.id === "string");
+  const rows = await readRows(hint, { limit: options?.limit ?? 100 });
+  return hydrateNotes(rows, skillId);
 }
 
 // ===== Agent notes (notes/[agentWallet]) — self-notes + others' comments =====
@@ -98,6 +126,7 @@ export interface PostAgentNoteInput {
   agentWallet: string; // subject — the agent's wallet (the notes/[agentWallet] table key)
   text: string;
   gitLink?: string;
+  meta?: Record<string, unknown>;
   /** Skill source to enumerate the agent's skills for the comment gate. */
   source?: SkillSource;
 }
@@ -145,21 +174,12 @@ export async function postAgentNote(
   }
 
   const hint = notesAgentHint(input.agentWallet);
-  const noteId = `note:${author}:${Date.now()}`;
-  const note: Note = {
-    id: noteId,
-    author,
-    subject: input.agentWallet,
-    text: input.text,
-    gitLink: input.gitLink,
-    isSelfNote,
-    timestamp: Date.now(),
-  };
+  const note = buildNote(author, input.text, input.gitLink, input.meta);
 
   // Open table (no native gate — see the module header).
   await ensureTable(signer, hint, NOTE_COLUMNS, "id");
   await writeRow(signer, hint, JSON.stringify(note));
-  return noteId;
+  return note.id;
 }
 
 /**
@@ -173,9 +193,9 @@ export async function readAgentNotes(
 ): Promise<Note[]> {
   const hint = notesAgentHint(agentWallet);
   const rows = await readRows(hint, { limit: options?.limit ?? 100 });
-  let notes = (rows as unknown as Note[]).filter((n) => typeof n.id === "string");
+  let notes = hydrateNotes(rows, agentWallet); // subject + isSelfNote derived
   if (options?.selfOnly) {
-    notes = notes.filter((n) => n.author === agentWallet);
+    notes = notes.filter((n) => n.isSelfNote);
   }
   return notes.sort((a, b) => b.timestamp - a.timestamp);
 }

@@ -32,7 +32,7 @@ import {
   type TokenMetadata,
 } from "@solana/spl-token-metadata";
 import { type SignerInput, type WalletSigner } from "@iqlabs-official/solana-sdk/utils";
-import { signerAddress } from "../core/chain.js";
+import { signerAddress, readCodeIn } from "../core/chain.js";
 import { resolveMinter, tryMinterPubkey } from "./minter.js";
 
 const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPvZeJ");
@@ -252,6 +252,26 @@ export async function readSkillMintMetadata(
     category: fields.get(FIELD_CATEGORY),
     hashtags,
   };
+}
+
+/**
+ * Read a published skill's BODY text — the full NFT→content round-trip
+ * (skill-nft-structure.md §2). Joins the two halves that otherwise sit
+ * disconnected: `readSkillMintMetadata` (mint → uri=txid) then `readCodeIn`
+ * (txid → inscribed SKILL.md text). Returns null if the mint has no metadata
+ * or the inscription can't be resolved.
+ *
+ * This is the "show me this NFT's letter" call — search/detail views use it to
+ * surface the actual skill content, not just the indexed name/description.
+ */
+export async function readSkillText(
+  conn: Connection,
+  skillMintAddr: string,
+): Promise<string | null> {
+  const md = await readSkillMintMetadata(conn, skillMintAddr);
+  if (!md?.uri) return null;
+  const { data } = await readCodeIn(md.uri);
+  return data;
 }
 
 /**

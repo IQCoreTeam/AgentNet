@@ -59,6 +59,7 @@ export {
   mintSkillToken,
   getMintSupply,
   readSkillMintMetadata,
+  readSkillText,
 } from "./nft/index.js";
 export type { PublishSkillInput, BuySkillInput } from "./nft/skill.js";
 export type { SkillMintMetadata } from "./nft/token2022.js";
