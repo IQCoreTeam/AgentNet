@@ -1,25 +1,24 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Box, Text } from "ink";
 import { Select, TextInput } from "@inkjs/ui";
-import { STORAGE_OPTIONS, type StorageConfig, type StorageKind } from "@iqlabs-official/agent-sdk";
+import { STORAGE_OPTIONS, type StorageConfig, type StorageKind, startCodexLogin, markCodexConnected } from "@iqlabs-official/agent-sdk";
 import type { CliReport, CliStatus } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../theme.js";
 import { Iggy } from "../components/Iggy.js";
 
-// First-run setup. Shows the REAL engine status (detectCli — vscode never does this) so
-// the user fixes a missing/logged-out CLI before starting, then PICKS which engine to
-// activate (claude or codex — not forced through claude), then picks where sessions save.
-// "This device only" = skip cloud (local is always on). icloud/custom ask for a path/URL;
-// gdrive opens a browser during connect. onDone(engine, cfg?) → cfg undefined = local.
+// First-run setup. Sequence: engine pick → codex login (if needed) → storage.
 //
-// Codex is gated "coming soon": its login flow + interactive approvals aren't wired yet
-// (codex-sdk exposes approvalPolicy only — see runtime/spawn.ts), so selecting it shows a
-// note and doesn't advance. Claude is the only engine that onboards end-to-end today.
+// Engine pick: Claude or Codex. Both work end-to-end. Claude has no onboarding
+// login step here (user runs `claude auth login` separately if needed — detectCli
+// reports status up front). Codex with no-login status drives `codex login
+// --device-auth` inline: shows URL + one-time code; CLI auto-polls, no stdin needed.
 function statusBadge(s: CliStatus) {
   if (s === "ok") return <Text color={colors.ok}>{glyph.ok} ready</Text>;
   if (s === "no-login") return <Text color={colors.warn}>! not logged in</Text>;
   return <Text color={colors.err}>{glyph.fail} not installed</Text>;
 }
+
+type OnboardStep = "engine" | "codexLogin" | "storage" | "location";
 
 export function Onboarding({
   report,
@@ -30,67 +29,99 @@ export function Onboarding({
   address: string;
   onDone: (engine: "claude" | "codex", cfg?: StorageConfig) => void;
 }) {
-  // engine pick comes first; null = still choosing. codexNote shows the coming-soon
-  // message after a codex pick (which doesn't advance).
-  const [engine, setEngine] = useState<"claude" | "codex" | null>(null);
-  const [codexNote, setCodexNote] = useState(false);
+  const [step, setStep] = useState<OnboardStep>("engine");
+  const [engine, setEngine] = useState<"claude" | "codex">("claude");
   const [kind, setKind] = useState<StorageKind | null>(null);
   const [location, setLocation] = useState("");
 
-  // engine chosen → claude advances to storage; codex is coming-soon (show note, stay).
+  // codex device-auth state
+  const [codexUrl, setCodexUrl] = useState<string | null>(null);
+  const [codexCode, setCodexCode] = useState<string | null>(null);
+  const [codexErr, setCodexErr] = useState<string | null>(null);
+
   function chooseEngine(e: "claude" | "codex") {
-    if (e === "codex") return setCodexNote(true);
-    setCodexNote(false);
-    setEngine("claude");
+    setEngine(e);
+    if (e === "codex" && report.codex === "no-login") {
+      setStep("codexLogin");
+    } else {
+      setStep("storage");
+    }
   }
 
-  // backend chosen → either finish now (gdrive/local) or ask for a path/url first.
-  // engine is locked to claude by the time we reach storage (codex never advances).
+  // drive `codex login --device-auth` when the codexLogin step becomes active.
+  useEffect(() => {
+    if (step !== "codexLogin") return;
+    let cancelled = false;
+    startCodexLogin().then((login) => {
+      if (cancelled) { login.cancel(); return; }
+      setCodexUrl(login.url);
+      setCodexCode(login.code);
+      login.done.then(async (ok) => {
+        if (cancelled) return;
+        if (ok) {
+          await markCodexConnected();
+          setStep("storage");
+        } else {
+          setCodexErr("Login failed or timed out. Re-open to try again.");
+        }
+      });
+    }).catch((e: unknown) => {
+      if (!cancelled) setCodexErr((e instanceof Error ? e.message : String(e)));
+    });
+    return () => { cancelled = true; };
+  }, [step]);
+
   function chooseKind(k: StorageKind) {
-    const eng = engine ?? "claude";
-    if (k === "local") return onDone(eng); // local-only, no cloud mirror
-    if (k === "gdrive") return onDone(eng, { kind: "gdrive" }); // browser opens during connect
-    setKind(k); // icloud / custom → collect a location next
+    if (k === "local") return onDone(engine);
+    if (k === "gdrive") return onDone(engine, { kind: "gdrive" });
+    setKind(k);
+    setStep("location");
   }
 
   return (
     <Box flexDirection="column" paddingX={1} gap={1}>
       <Box>
         <Iggy mood="idle" />
-        <Text bold color={colors.iqMagenta}>
-          {" "}welcome to AgentNet
-        </Text>
+        <Text bold color={colors.iqMagenta}>{" "}welcome to AgentNet</Text>
       </Box>
       <Text dimColor>wallet {address.slice(0, 6)}…{address.slice(-4)}</Text>
 
       <Box flexDirection="column">
-        <Box>
-          <Text>claude </Text>
-          {statusBadge(report.claude)}
-        </Box>
-        <Box>
-          <Text>codex&nbsp; </Text>
-          {statusBadge(report.codex)}
-        </Box>
+        <Box><Text>claude </Text>{statusBadge(report.claude)}</Box>
+        <Box><Text>codex&nbsp; </Text>{statusBadge(report.codex)}</Box>
       </Box>
 
-      {engine === null ? (
+      {step === "engine" && (
         <Box flexDirection="column">
           <Text color={colors.iqCyan}>which engine do you want to use?</Text>
           <Select
             options={[
               { label: "Claude", value: "claude" },
-              { label: "Codex (coming soon)", value: "codex" },
+              { label: "Codex", value: "codex" },
             ]}
             onChange={(v) => chooseEngine(v as "claude" | "codex")}
           />
-          {codexNote && (
-            <Text color={colors.warn}>
-              Codex isn't ready yet — login + approvals aren't wired. Pick Claude for now.
-            </Text>
-          )}
         </Box>
-      ) : kind === null ? (
+      )}
+
+      {step === "codexLogin" && (
+        <Box flexDirection="column" gap={1}>
+          <Text color={colors.iqCyan}>sign in to Codex with ChatGPT</Text>
+          {!codexUrl && !codexErr && <Text dimColor>starting device auth…</Text>}
+          {codexUrl && (
+            <>
+              <Text>1. open in browser:</Text>
+              <Text color={colors.iqCyan}>{codexUrl}</Text>
+              <Text>2. enter this code on the page:</Text>
+              <Text bold color={colors.iqCyan}>{codexCode}</Text>
+              <Text dimColor>waiting for approval…</Text>
+            </>
+          )}
+          {codexErr && <Text color={colors.err}>{codexErr}</Text>}
+        </Box>
+      )}
+
+      {step === "storage" && (
         <Box flexDirection="column">
           <Text color={colors.iqCyan}>where should your sessions live?</Text>
           <Text dimColor>(local is always on — a cloud just mirrors it)</Text>
@@ -102,7 +133,9 @@ export function Onboarding({
             onChange={(v) => chooseKind(v as StorageKind)}
           />
         </Box>
-      ) : (
+      )}
+
+      {step === "location" && kind && (
         <Box flexDirection="column">
           <Text color={colors.iqCyan}>
             {kind === "icloud" ? "iCloud folder path:" : "endpoint base URL:"}
@@ -110,7 +143,7 @@ export function Onboarding({
           <TextInput
             placeholder={kind === "icloud" ? "~/Library/Mobile Documents/…" : "https://…"}
             onChange={setLocation}
-            onSubmit={(v) => onDone(engine ?? "claude", { kind, location: v || location })}
+            onSubmit={(v) => onDone(engine, { kind, location: v || location })}
           />
         </Box>
       )}

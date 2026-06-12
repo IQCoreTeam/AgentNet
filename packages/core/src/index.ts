@@ -38,6 +38,13 @@ export type { StorageConfig, StorageKind } from "./account/storage/adapter.js";
 export { manualStorage } from "./account/storage/manual.js";
 export { agentnetFolderLink } from "./account/storage/gdrive.js";
 export type { CloudStatus } from "./account/storage/mirror.js";
+export {
+  startCodexLogin,
+  isCodexLoggedIn,
+  markCodexConnected,
+  isCodexMarked,
+} from "./account/codexAuth.js";
+export type { CodexLogin } from "./account/codexAuth.js";
 
 import type { AgentRuntime, Wallet } from "./runtime/contract.js";
 import type { CloudStatus } from "./account/storage/mirror.js";
