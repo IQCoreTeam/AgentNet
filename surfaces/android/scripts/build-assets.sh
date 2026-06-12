@@ -94,10 +94,16 @@ cp "$ANDROID_DIR/guest/AGENTS.md" "$ROOTFS_DIR/root/AGENTS.md"
 echo "    packing rootfs tar (plain tar; TarExtractor reads .tar)"
 tar -cf "$ASSETS/rootfs-$ABI.tar" -C "$ROOTFS_DIR" .
 
-# 3) Our localhost server bundle.
-echo "==> [3/3] building agentnet-server bundle"
-( cd "$REPO_ROOT" && pnpm --filter agentnet-localhost build )
-tar -cf "$ASSETS/agentnet-server.tar" -C "$REPO_ROOT/surfaces/localhost/dist" .
+# 3) Our localhost server bundle. Reuse an existing build if present (the CI builds it
+# on the host before entering the arm64 container, which has no pnpm); otherwise build
+# it here. The bundle is arch-independent JS, so a host build is fine to reuse.
+echo "==> [3/3] packing agentnet-server bundle"
+DIST="$REPO_ROOT/surfaces/localhost/dist"
+if [ ! -f "$DIST/index.js" ]; then
+  echo "    dist not found; building with pnpm"
+  ( cd "$REPO_ROOT" && pnpm --filter agentnet-localhost build )
+fi
+tar -cf "$ASSETS/agentnet-server.tar" -C "$DIST" .
 
 echo "==> done. assets:"
 ls -lh "$ASSETS"
