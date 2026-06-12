@@ -68,6 +68,7 @@ export interface SpawnOpts {
   approval?: ApprovalChannel; // how tool approvals get decided; default = auto-allow
   stream?: boolean; // emit partial assistant deltas (claude includePartialMessages)
   apiKey?: string; // Stage 1 Codex API Key
+  ephemeral?: boolean; // If true, disable tools / auto-deny approvals
 }
 
 export function spawnCli(opts: SpawnOpts): Engine {
@@ -154,6 +155,9 @@ function claudeEngine(opts: SpawnOpts): Engine {
   // canUseTool: claude calls this BEFORE each tool; we translate to a neutral
   // ApprovalRequest, await the channel, and map the decision back to the SDK shape.
   const canUseTool = async (toolName: string, input: Record<string, unknown>) => {
+    if (opts.ephemeral) {
+      return { behavior: "deny" as const, message: "Tool use is disabled for side-channel (/btw) queries." };
+    }
     if (READONLY.has(toolName)) return { behavior: "allow" as const, updatedInput: input };
     const req = toApprovalRequest("claude", sessionId, toolName, input, opts.cwd);
     const key = actionKey(req);
@@ -412,6 +416,20 @@ function codexEngine(opts: SpawnOpts): Engine {
   async function handleServerRequest(msg: any) {
     const params = msg.params;
     try {
+      if (opts.ephemeral) {
+        if (msg.method === "execCommandApproval" || msg.method === "item/commandExecution/requestApproval") {
+          const decision = msg.method === "execCommandApproval" ? "denied" : "decline";
+          sendResponse(msg.id, { decision });
+        } else if (msg.method === "applyPatchApproval" || msg.method === "item/fileChange/requestApproval") {
+          const decision = msg.method === "applyPatchApproval" ? "denied" : "decline";
+          sendResponse(msg.id, { decision });
+        } else if (msg.method === "item/permissions/requestApproval") {
+          sendError(msg.id, { code: 4001, message: "User declined permissions request in side-channel mode." });
+        } else {
+          sendError(msg.id, { code: -32601, message: `Method '${msg.method}' not allowed in side-channel mode` });
+        }
+        return;
+      }
       if (msg.method === "execCommandApproval" || msg.method === "item/commandExecution/requestApproval") {
         let cmdStr = "";
         if (params.command) {

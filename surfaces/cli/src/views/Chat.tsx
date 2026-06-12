@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Box, Text, Static, useApp, useInput } from "ink";
 import type { AgentRuntime } from "@iqlabs-official/agent-sdk/runtime/contract";
 import type { CliReport } from "@iqlabs-official/agent-sdk";
@@ -51,6 +51,61 @@ export function Chat({
     approval: approval ?? undefined,
   });
   const [notice, setNotice] = useState("");
+  const [showBtw, setShowBtw] = useState(false);
+  const [btwQuestion, setBtwQuestion] = useState("");
+  const [btwAnswer, setBtwAnswer] = useState("");
+  const [btwBusy, setBtwBusy] = useState(false);
+  const [btwElapsed, setBtwElapsed] = useState(0);
+  const btwHandleRef = useRef<any>(null);
+
+  // tick elapsed while btwBusy
+  useEffect(() => {
+    if (!btwBusy) return;
+    const start = Date.now();
+    setBtwElapsed(0);
+    const id = setInterval(() => setBtwElapsed((Date.now() - start) / 1000), 100);
+    return () => clearInterval(id);
+  }, [btwBusy]);
+
+  const startBtwQuery = useCallback((question: string) => {
+    if (!chat.pendingId) {
+      setNotice("please start/resume a session first — try /resume or say hi");
+      return;
+    }
+    setShowBtw(true);
+    setBtwQuestion(question);
+    setBtwAnswer("");
+    setBtwBusy(true);
+
+    void (async () => {
+      try {
+        const h = await runtime.startSession({
+          cli: chat.cli,
+          model: chat.model,
+          cwd,
+          sessionId: chat.pendingId,
+          stream: true,
+          ephemeral: true,
+        });
+        btwHandleRef.current = h;
+        h.onMessage((m) => {
+          if (m.role === "assistant") {
+            setBtwAnswer(m.text);
+          }
+        });
+        h.onTurnEnd(() => {
+          setBtwBusy(false);
+          btwHandleRef.current = null;
+        });
+        h.send(question);
+      } catch (e: any) {
+        setBtwAnswer((prev) => prev + `\n[error] ${e.message || String(e)}`);
+        setBtwBusy(false);
+        btwHandleRef.current = null;
+      }
+    })();
+  }, [chat.cli, chat.model, chat.pendingId, cwd, runtime]);
+
   const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
   const [diffExpanded, setDiffExpanded] = useState(false);
   const [activeDiffFileIdx, setActiveDiffFileIdx] = useState(0);
@@ -187,7 +242,24 @@ export function Chat({
         konami.current = [];
       }
     },
-    { isActive: !pendingApproval && !showSessions && !showModels },
+    { isActive: !pendingApproval && !showSessions && !showModels && !showBtw },
+  );
+
+  // Escape or Return closes the /btw overlay.
+  useInput(
+    (_input, key) => {
+      if (key.escape || key.return) {
+        setShowBtw(false);
+        setBtwQuestion("");
+        setBtwAnswer("");
+        setBtwBusy(false);
+        if (btwHandleRef.current) {
+          btwHandleRef.current.stop();
+          btwHandleRef.current = null;
+        }
+      }
+    },
+    { isActive: showBtw },
   );
 
   function runSlash(raw: string) {
@@ -275,8 +347,15 @@ export function Chat({
           setNotice(info ? `storage: ${info.kind}${info.account ? ` (${info.account})` : ""}` : "storage: local only"),
         );
         return;
+      case "btw":
+        if (!arg.trim()) {
+          setNotice("usage: /btw <question>");
+          return;
+        }
+        startBtwQuery(arg.trim());
+        return;
       case "help":
-        setNotice("/new /sessions /resume /more /compact /clear /copy /models /engine /wallet /storage /iq /quit · !cmd shell · Esc cancels · Ctrl+A/E/W/U edit");
+        setNotice("/new /sessions /resume /more /compact /clear /copy /models /engine /wallet /storage /btw <question> /iq /quit · !cmd shell · Esc cancels · Ctrl+A/E/W/U edit");
         return;
       default:
         setNotice(`unknown command: /${cmd} — try /help`);
@@ -330,6 +409,41 @@ export function Chat({
         onDelete={(id) => void chat.deleteSession(id)}
         onClose={() => setShowSessions(false)}
       />
+    );
+  }
+
+  // /btw side-channel overlay.
+  if (showBtw) {
+    return (
+      <Box flexDirection="column" paddingX={1}>
+        <Box borderStyle="round" borderColor="cyan" flexDirection="column" paddingX={1} paddingY={1}>
+          <Box marginBottom={1}>
+            <Text bold color="cyan">⚡ /btw (side-channel query)</Text>
+          </Box>
+          <Box flexDirection="row" marginBottom={1}>
+            <Text bold color="white">Q: </Text>
+            <Text color="cyan">{btwQuestion}</Text>
+          </Box>
+          <Box flexDirection="column" marginBottom={1}>
+            <Text bold color="white">A: </Text>
+            {btwAnswer ? (
+              <Text color="gray">{btwAnswer}</Text>
+            ) : (
+              <Text dimColor>Thinking...</Text>
+            )}
+          </Box>
+          {btwBusy ? (
+            <Box flexDirection="row" marginTop={1}>
+              <Text color="cyan">⏱ {btwElapsed.toFixed(1)}s </Text>
+              <Text dimColor>Loading answer from {chat.cli}...</Text>
+            </Box>
+          ) : (
+            <Box marginTop={1}>
+              <Text bold color="green">✔ Done. Press Escape or Enter to return to chat.</Text>
+            </Box>
+          )}
+        </Box>
+      </Box>
     );
   }
 

@@ -31,31 +31,48 @@ async function runTurn(cli: "claude" | "codex", prompt: string, sessionId?: stri
   return handle.sessionId;
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function main() {
   // 1. claude
   console.log("→ claude turn 1");
   const claudeId = await runTurn("claude", "reply with exactly: hello from agentnet");
+  await sleep(100);
   const c1 = await new SessionStore(wallet, storage).load(claudeId);
   console.log(`  reloaded: ${c1?.messages.length} msgs, title="${c1?.title}"`);
 
   // 2. codex
   console.log("→ codex turn 1");
   const codexId = await runTurn("codex", "reply with exactly: hello from agentnet");
+  await sleep(100);
   const x1 = await new SessionStore(wallet, storage).load(codexId);
   console.log(`  reloaded: ${x1?.messages.length} msgs, title="${x1?.title}"`);
 
   // 3. shared/append: resume the SAME claude session, append a 2nd turn
   console.log("→ claude turn 2 (resume same session, should APPEND)");
   await runTurn("claude", "now reply with exactly: second turn", claudeId);
+  await sleep(100);
   const c2 = await new SessionStore(wallet, storage).load(claudeId);
   console.log(`  after 2 turns: ${c2?.messages.length} msgs (expect > ${c1?.messages.length})`);
+
+  // 4. ephemeral: start session with ephemeral: true, should NOT modify store
+  console.log("→ claude ephemeral turn (should NOT modify store)");
+  const handleBtw = await runtime.startSession({ cli: "claude", cwd: process.cwd(), sessionId: claudeId, ephemeral: true });
+  const doneBtw = new Promise<void>((resolve) => handleBtw.onTurnEnd(() => resolve()));
+  handleBtw.send("reply with exactly: ephemeral hello");
+  await doneBtw;
+  handleBtw.stop();
+  await sleep(100);
+  const c3 = await new SessionStore(wallet, storage).load(claudeId);
+  console.log(`  after ephemeral turn: ${c3?.messages.length} msgs (expect same as before: ${c2?.messages.length})`);
 
   const okClaude = (c1?.messages.length ?? 0) > 0;
   const okCodex = (x1?.messages.length ?? 0) > 0;
   const okAppend = (c2?.messages.length ?? 0) > (c1?.messages.length ?? 0);
-  console.log(`\n  claude: ${okClaude ? "✅" : "❌"}  codex: ${okCodex ? "✅" : "❌"}  append-grows: ${okAppend ? "✅" : "❌"}`);
+  const okEphemeral = c3?.messages.length === c2?.messages.length;
+  console.log(`\n  claude: ${okClaude ? "✅" : "❌"}  codex: ${okCodex ? "✅" : "❌"}  append-grows: ${okAppend ? "✅" : "❌"}  ephemeral-ignores: ${okEphemeral ? "✅" : "❌"}`);
 
-  if (okClaude && okCodex && okAppend) console.log("\n✅ PASS — both CLIs capture, encrypt, append, reload.");
+  if (okClaude && okCodex && okAppend && okEphemeral) console.log("\n✅ PASS — both CLIs capture, encrypt, append, reload.");
   else {
     console.log("\n❌ FAIL");
     process.exit(1);

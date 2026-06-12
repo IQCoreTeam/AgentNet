@@ -105,6 +105,8 @@ export interface AgentRuntime {
     approval?: ApprovalChannel;
     // Optional Codex API Key (Stage 1)
     apiKey?: string;
+    // Ephemeral (side-channel /btw) session that doesn't save messages to the store.
+    ephemeral?: boolean;
   }): Promise<SessionHandle>;
 
   // list the wallet's saved sessions (for the UI's session list)

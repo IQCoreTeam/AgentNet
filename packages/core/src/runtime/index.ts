@@ -35,7 +35,7 @@ export function createRuntime(
       // FRESH: no sessionId; the cli mints its own, which becomes the canonical id.
       const resuming = !!opts.sessionId;
       const nativeId = resuming
-        ? await prepareResume(store, opts.cli, opts.cwd, opts.sessionId!)
+        ? await prepareResume(store, opts.cli, opts.cwd, opts.sessionId!, opts.ephemeral)
         : undefined;
 
       // per-session approval channel (each panel passes its own) wins; fall back to
@@ -65,6 +65,7 @@ export function createRuntime(
         // streaming deltas are for the live UI only — never persist them. The final
         // (partial:false) assistant message carries the full text and IS stored below.
         if (m.partial) return;
+        if (opts.ephemeral) return; // Do not save ephemeral messages to the store.
         if (sessionId) void store.appendMessage(meta(), m);
         else pending.push(m);
       };
@@ -84,6 +85,10 @@ export function createRuntime(
       cli.onMessage((m: ChatMessage) => emit(m));
       cli.onUsage((n: number) => { for (const cb of usageCbs) cb(n); });
       cli.onTurnEnd(() => {
+        if (opts.ephemeral) {
+          for (const cb of turnCbs) cb();
+          return;
+        }
         void flush().then(() => {
           for (const cb of turnCbs) cb();
         });
