@@ -36,14 +36,25 @@ echo "==> ABI=$ABI  proot=$PROOT_ARCH  ubuntu=$UBUNTU_ARCH"
 echo "==> assets -> $ASSETS"
 echo "==> work   -> $WORK"
 
-# 1) proot binary + loader (Android-native, statically linked, relocatable loader).
-#    Source: green-green-avk/build-proot-android releases. Pin a known-good tag.
-PROOT_TAG="${PROOT_TAG:-v5.1.107-32}"
-PROOT_URL="https://github.com/green-green-avk/build-proot-android/releases/download/$PROOT_TAG/proot-$PROOT_ARCH"
-LOADER_URL="https://github.com/green-green-avk/build-proot-android/releases/download/$PROOT_TAG/loader-$PROOT_ARCH"
-echo "==> [1/3] fetching proot ($PROOT_TAG)"
-curl -fSL "$PROOT_URL"  -o "$ASSETS/proot-$ABI"
-curl -fSL "$LOADER_URL" -o "$ASSETS/loader-$ABI"
+# 1) proot binary + loader (Android-native, relocatable loader). green-green-avk has NO
+#    GitHub releases — the prebuilt binaries are committed as tar.gz under /packages on
+#    master (proot dyn-linked vs Bionic /system/bin/linker64 = present on every Android;
+#    loader ships inside the SAME archive, found via the relative ../libexec path or the
+#    PROOT_LOADER env we set in ServerManager). Pin a commit via PROOT_REF for repro CI.
+PROOT_REF="${PROOT_REF:-master}"
+PROOT_PKG="proot-android-$PROOT_ARCH.tar.gz"
+PROOT_URL="https://raw.githubusercontent.com/green-green-avk/build-proot-android/$PROOT_REF/packages/$PROOT_PKG"
+echo "==> [1/3] fetching proot ($PROOT_PKG @ $PROOT_REF)"
+PROOT_STAGE="$WORK/proot"
+rm -rf "$PROOT_STAGE"; mkdir -p "$PROOT_STAGE"
+# --strip-components=1 drops the archive's leading "root/" so we get bin/ + libexec/.
+curl -fsSL "$PROOT_URL" | tar -xz -C "$PROOT_STAGE" --strip-components=1
+# Lay out under assets to match Paths.kt: proot at proot/bin/proot, loader at
+# proot/libexec/proot/loader (ServerManager points PROOT_LOADER there).
+rm -rf "$ASSETS/proot-$ABI"
+mkdir -p "$ASSETS/proot-$ABI"
+cp -R "$PROOT_STAGE/bin" "$PROOT_STAGE/libexec" "$ASSETS/proot-$ABI/"
+chmod +x "$ASSETS/proot-$ABI/bin/proot" "$ASSETS/proot-$ABI/libexec/proot/loader"* 2>/dev/null || true
 
 # 2) Ubuntu rootfs with the engine installed. We start from proot-distro's published
 #    Ubuntu rootfs, unpack it, then install node + the OFFICIAL claude/codex CLIs +

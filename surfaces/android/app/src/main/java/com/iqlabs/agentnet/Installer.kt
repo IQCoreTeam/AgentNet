@@ -11,7 +11,7 @@ import java.io.FileOutputStream
 // no-op on every launch after the first.
 //
 // What ships in assets (prepared by scripts/, see README):
-//   proot-<abi>            — Bionic-native proot binary (runs on Android directly)
+//   proot-<abi>/           — Bionic-native proot tree (bin/proot + libexec/proot/loader)
 //   rootfs-<abi>.tar.xz    — proot-distro Ubuntu (glibc) rootfs; claude/codex + node
 //                            are installed into it (so they're real Linux binaries)
 //   agentnet-server.tar    — our surfaces/localhost build output (the node bundle)
@@ -46,11 +46,13 @@ class Installer(private val ctx: Context) {
         val abi = abi()
 
         onProgress("Unpacking runtime…")
-        // proot binary: small, copy straight from assets and mark executable.
-        copyAsset("proot-$abi", p.proot)
+        // proot ships as a small dir tree in assets (proot-<abi>/bin/proot +
+        // proot-<abi>/libexec/proot/loader). Copy the whole tree to filesDir/proot and
+        // mark the binary + loaders executable.
+        copyAssetDir("proot-$abi", p.prootRoot)
         Os.chmod(p.proot, 0b111_101_101) // 0755
-        // proot's loader helper (some builds ship a separate ELF loader).
-        runCatching { copyAsset("loader-$abi", p.loader); Os.chmod(p.loader, 0b111_101_101) }
+        Os.chmod(p.loader, 0b111_101_101)
+        runCatching { Os.chmod("${p.loader}32", 0b111_101_101) } // loader32, if present
 
         onProgress("Installing Linux environment… (one time, a few minutes)")
         // rootfs is large; stream it to disk, then let the guest's tar unpack it. We
@@ -83,11 +85,19 @@ class Installer(private val ctx: Context) {
         runCatching { android.system.Os.chmod(tmp.absolutePath, 0b001_111_111_111) } // 1777
     }
 
-    private fun copyAsset(name: String, destPath: String) {
-        val dest = File(destPath)
-        dest.parentFile?.mkdirs()
-        ctx.assets.open(name).use { input ->
-            FileOutputStream(dest).use { output -> input.copyTo(output) }
+    // Recursively copy an assets/ subtree to a destination dir. assets.list(path)
+    // returns child names; a leaf (empty list) is a file, a node has children.
+    private fun copyAssetDir(assetPath: String, destPath: String) {
+        val children = ctx.assets.list(assetPath) ?: emptyArray()
+        if (children.isEmpty()) { // file
+            val dest = File(destPath)
+            dest.parentFile?.mkdirs()
+            ctx.assets.open(assetPath).use { input ->
+                FileOutputStream(dest).use { output -> input.copyTo(output) }
+            }
+            return
         }
+        File(destPath).mkdirs()
+        for (child in children) copyAssetDir("$assetPath/$child", "$destPath/$child")
     }
 }

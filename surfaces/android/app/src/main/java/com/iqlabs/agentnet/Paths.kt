@@ -13,7 +13,8 @@ object Paths {
     data class Layout(
         val filesDir: String,   // app private root
         val proot: String,      // the proot binary (Bionic-native, runs on Android)
-        val loader: String,     // proot's libtalloc/loader helpers dir
+        val loader: String,     // proot's ELF loader FILE (PROOT_LOADER points here)
+        val prootRoot: String,  // the extracted proot/ dir (bin/ + libexec/)
         val rootfs: String,     // the extracted Ubuntu glibc rootfs
         val home: String,       // $HOME inside the guest's view (under rootfs)
         val serverBundle: String, // our localhost bundle, copied into the rootfs
@@ -23,8 +24,9 @@ object Paths {
         val files = ctx.filesDir.absolutePath
         return Layout(
             filesDir = files,
+            prootRoot = "$files/proot",
             proot = "$files/proot/bin/proot",
-            loader = "$files/proot/libexec/proot",
+            loader = "$files/proot/libexec/proot/loader",
             rootfs = "$files/rootfs",
             home = "$files/rootfs/root",
             serverBundle = "$files/rootfs/root/agentnet-server",
