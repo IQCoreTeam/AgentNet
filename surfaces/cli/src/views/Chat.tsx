@@ -78,6 +78,15 @@ export function Chat({
       setNotice("please start/resume a session first — try /resume or say hi");
       return;
     }
+    if (chat.busy) {
+      setNotice("/btw unavailable while a turn is running — wait for it to finish");
+      return;
+    }
+    // stop any leftover handle from a previous btw query
+    if (btwHandleRef.current) {
+      btwHandleRef.current.stop();
+      btwHandleRef.current = null;
+    }
     setShowBtw(true);
     setBtwQuestion(question);
     setBtwAnswer("");
@@ -439,9 +448,14 @@ export function Chat({
   // context-left: prefer the engine's REAL per-turn usage; before the first turn reports,
   // fall back to a rough chars/4 estimate so the meter isn't blank.
   const WINDOW = chat.cli === "codex" ? 256_000 : 200_000;
+  // Only fall back to char-count estimate when there are actual messages — otherwise
+  // the bar shows 0/200k on every fresh session which is meaningless noise.
   const usedTokens =
-    chat.contextTokens ?? chat.messages.reduce((n, m) => n + m.text.length, 0) / 4;
-  const usedFrac = Math.min(1, usedTokens / WINDOW); // 0..1 of window consumed
+    chat.contextTokens ??
+    (chat.messages.length > 0
+      ? chat.messages.reduce((n, m) => n + m.text.length, 0) / 4
+      : undefined);
+  const usedFrac = usedTokens !== undefined ? Math.min(1, usedTokens / WINDOW) : undefined;
   const ctxReal = chat.contextTokens !== undefined;
 
   // /account overlay.
@@ -602,7 +616,7 @@ export function Chat({
       <Celebrate kind={celebrate} />
       {idle && !chat.busy ? <Text dimColor>{copy.idleNudge}</Text> : null}
 
-      <StatusLine mood={mood} cli={chat.cli} model={chat.model} effort={chat.effort} cwd={cwd} elapsed={chat.busy ? chat.elapsed : undefined} ctx={usedFrac} ctxTokens={Math.round(usedTokens)} ctxWindow={WINDOW} ctxApprox={!ctxReal} />
+      <StatusLine mood={mood} cli={chat.cli} model={chat.model} effort={chat.effort} cwd={cwd} elapsed={chat.busy ? chat.elapsed : undefined} ctx={usedFrac} ctxTokens={usedTokens !== undefined ? Math.round(usedTokens) : undefined} ctxWindow={usedFrac !== undefined ? WINDOW : undefined} ctxApprox={!ctxReal} />
 
       {/* hide the composer while an approval is pending — keys answer the card instead */}
       {!pendingApproval ? (
