@@ -24,10 +24,15 @@ import type {
 
 // A rendered log entry. We keep messages as-is and stream into the last assistant/
 // thinking bubble when `partial` is set, matching the HTML webview's bubble model.
+export type EngineStatus = "ok" | "no-login" | "missing";
+
 export interface State {
-  phase: "connecting" | "onboarding" | "claudeAuth" | "chat";
+  phase: "connecting" | "onboarding" | "engineSelect" | "claudeAuth" | "chat";
   walletAddress: string | null;
   cli: Cli;
+  // per-engine install/login status from the post-wallet `cliStatus` event, kept so the
+  // engine picker can show a live badge next to each choice (null until it arrives).
+  cliReport: { claude: EngineStatus; codex: EngineStatus } | null;
   // claude subscription login during onboarding: the OAuth URL to open and the status
   // of the in-flight login (null when no error/pending state to show).
   claudeLoginUrl: string | null;
@@ -49,6 +54,7 @@ const initialState: State = {
   phase: "connecting",
   walletAddress: null,
   cli: "claude",
+  cliReport: null,
   claudeLoginUrl: null,
   claudeLoginError: null,
   log: [],
@@ -88,7 +94,8 @@ function appendMessage(log: ChatMessage[], msg: ChatMessage): ChatMessage[] {
 type LocalAction =
   | { type: "__typing" }
   | { type: "__removeApproval"; id: string }
-  | { type: "__clearToast" };
+  | { type: "__clearToast" }
+  | { type: "__selectEngine"; cli: Cli };
 type Action = ServerMessage | LocalAction;
 
 function reducer(state: State, ev: Action): State {
@@ -99,6 +106,15 @@ function reducer(state: State, ev: Action): State {
       return { ...state, approvals: state.approvals.filter((a) => a.id !== ev.id) };
     case "__clearToast":
       return { ...state, toast: null };
+    case "__selectEngine": {
+      // User picked which engine to activate. Codex is gated "coming soon" (no login
+      // flow / interactive approvals yet — codex-sdk exposes approvalPolicy only), so it
+      // never advances here; the picker shows its disabled state inline. Claude becomes
+      // the active tab and gates on subscription login only if it's logged out.
+      if (ev.cli === "codex") return state;
+      const needsLogin = state.cliReport?.claude === "no-login";
+      return { ...state, cli: "claude", phase: needsLogin ? "claudeAuth" : "chat" };
+    }
     case "init":
       // Onboarding handshake: no runtime yet → show ConnectWallet.
       return { ...state, phase: "onboarding" };
@@ -107,9 +123,14 @@ function reducer(state: State, ev: Action): State {
       // claude needs a subscription login first. Stay in onboarding meanwhile.
       return { ...state, walletAddress: ev.address };
     case "cliStatus":
-      // After wallet: if claude is installed but logged out, gate on the subscription
-      // login screen; otherwise proceed to chat (the dispatcher attaches on next /events).
-      return { ...state, phase: ev.claude === "no-login" ? "claudeAuth" : "chat" };
+      // After wallet: don't force claude. Record both engines' status and show the engine
+      // picker so the user chooses which one to activate. The chosen engine then runs its
+      // own gate (claude → login if needed; codex → coming-soon) via __selectEngine.
+      return {
+        ...state,
+        cliReport: { claude: ev.claude, codex: ev.codex },
+        phase: "engineSelect",
+      };
     case "claudeLoginUrl":
       return { ...state, claudeLoginUrl: ev.url, claudeLoginError: null };
     case "claudeLoginStatus":
@@ -160,6 +181,7 @@ interface Store {
   startTyping: () => void;
   resolveApproval: (id: string) => void;
   clearToast: () => void;
+  selectEngine: (cli: Cli) => void;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -208,6 +230,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // Drop an answered approval from the dock immediately; core won't re-send it.
       resolveApproval: (id) => raw({ type: "__removeApproval", id }),
       clearToast: () => raw({ type: "__clearToast" }),
+      // Activate the chosen engine; routing (login gate / chat) is decided in the reducer.
+      selectEngine: (cli) => raw({ type: "__selectEngine", cli }),
     };
   }, [state]);
 
