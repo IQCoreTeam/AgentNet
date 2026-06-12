@@ -43,6 +43,13 @@ import {
   type CloudStatus,
   type ClaudeLogin,
   type CodexLogin,
+  type Wallet,
+  type GoogleLogin,
+  type StorageConfig,
+  switchStorage,
+  disconnectCloud,
+  agentnetFolderLink,
+  startGoogleLogin,
 } from "@iqlabs-official/agent-sdk";
 
 const PORT = Number(process.env.AGENTNET_PORT ?? 4317);
@@ -92,6 +99,7 @@ const REPLAY_BUFFER = 256;
 
 // The one runtime for this host, built on first wallet connect. Null until then; once
 // set, every client uses it (so the chat page after onboarding finds it ready).
+let wallet: Wallet | null = null;
 let runtime: AgentRuntime | null = null;
 let walletAddress: string | null = null;
 
@@ -99,12 +107,13 @@ let walletAddress: string | null = null;
 // (cloud writes are otherwise silent). One value; the connected chat reflects it.
 let lastCloudStatus: CloudStatus | null = null;
 let onCloudStatus: (() => void) | null = null;
+let googleLoginSession: GoogleLogin | null = null;
 
 // Build the runtime from a freshly connected wallet (idempotent for this host: a
 // second connect with the same address is a no-op so re-opened tabs don't rebuild).
 async function connectWallet(address: string, signature: Uint8Array): Promise<void> {
   if (runtime && walletAddress === address) return;
-  const wallet = webWallet(address, signature);
+  wallet = webWallet(address, signature);
   runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
   walletAddress = address;
 }
@@ -182,9 +191,72 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
     approval,
     walletAddress: () => walletAddress,
     storageInfo: async () => ({ info: await getStorageInfo(), options: STORAGE_OPTIONS }),
-    // Cloud actions (pickCloud / connectCloud / …) rely on native flows this headless
-    // host doesn't have yet; their messages no-op (the dispatcher guards each).
+    connectCloud: async (cfg) => {
+      if (wallet) {
+        await switchStorage(wallet, { kind: cfg.kind, location: cfg.location, authHeader: cfg.authHeader } as StorageConfig);
+        runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
+      }
+    },
+    disconnectCloud: async () => {
+      await disconnectCloud();
+      if (wallet) {
+        runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
+      }
+    },
+    disconnectWallet: async () => {
+      await disconnectCloud();
+      wallet = null;
+      walletAddress = null;
+      runtime = null;
+      c.send({ type: "clear" });
+      c.send({ type: "init", defaultPath: null, cloudKind: null });
+    },
+    openCloud: async (kind, location) => {
+      if (kind === "gdrive" && walletAddress) {
+        const link = await agentnetFolderLink(walletAddress);
+        c.send({ type: "openUrl", url: link ?? "https://drive.google.com/drive/my-drive" });
+      } else if (kind === "custom" && typeof location === "string") {
+        c.send({ type: "openUrl", url: location });
+      }
+    },
   });
+  c.recvs.push(async (m: any) => {
+    if (m?.type === "startGoogleLogin") {
+      try {
+        googleLoginSession?.cancel();
+        googleLoginSession = await startGoogleLogin();
+        c.send({ type: "googleLoginUrl", url: googleLoginSession.url });
+        googleLoginSession.done.then(async (ok) => {
+          if (ok) {
+            if (wallet) {
+              await switchStorage(wallet, { kind: "gdrive" });
+              runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
+            }
+          }
+          c.send({ type: "googleLoginStatus", status: ok ? "done" : "error", error: ok ? undefined : "Login was not completed." });
+          googleLoginSession = null;
+        });
+      } catch (e) {
+        c.send({ type: "googleLoginStatus", status: "error", error: (e as Error).message });
+        googleLoginSession = null;
+      }
+      return;
+    }
+    if (m?.type === "googleAuthCode" && typeof m.code === "string") {
+      try {
+        await googleLoginSession?.submitCode(m.code);
+      } catch (e) {
+        c.send({ type: "googleLoginStatus", status: "error", error: (e as Error).message });
+      }
+      return;
+    }
+    if (m?.type === "cancelGoogleLogin") {
+      googleLoginSession?.cancel();
+      googleLoginSession = null;
+      return;
+    }
+  });
+
   const hook = () => chat.pushCloudStatus(lastCloudStatus);
   onCloudStatus = hook;
   // Teardown is deferred: when the SSE stream closes we don't kill the chat at once —
@@ -284,6 +356,40 @@ function attachOnboarding(c: Client) {
       } catch (e) {
         c.send({ type: "codexLoginStatus", status: "error", error: (e as Error).message });
       }
+      return;
+    }
+    if (m?.type === "startGoogleLogin") {
+      try {
+        googleLoginSession?.cancel();
+        googleLoginSession = await startGoogleLogin();
+        c.send({ type: "googleLoginUrl", url: googleLoginSession.url });
+        googleLoginSession.done.then(async (ok) => {
+          if (ok) {
+            if (wallet) {
+              await switchStorage(wallet, { kind: "gdrive" });
+              runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
+            }
+          }
+          c.send({ type: "googleLoginStatus", status: ok ? "done" : "error", error: ok ? undefined : "Login was not completed." });
+          googleLoginSession = null;
+        });
+      } catch (e) {
+        c.send({ type: "googleLoginStatus", status: "error", error: (e as Error).message });
+        googleLoginSession = null;
+      }
+      return;
+    }
+    if (m?.type === "googleAuthCode" && typeof m.code === "string") {
+      try {
+        await googleLoginSession?.submitCode(m.code);
+      } catch (e) {
+        c.send({ type: "googleLoginStatus", status: "error", error: (e as Error).message });
+      }
+      return;
+    }
+    if (m?.type === "cancelGoogleLogin") {
+      googleLoginSession?.cancel();
+      googleLoginSession = null;
       return;
     }
   });

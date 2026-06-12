@@ -27,9 +27,18 @@ import type {
 export type EngineStatus = "ok" | "no-login" | "missing";
 
 export interface State {
-  phase: "connecting" | "onboarding" | "engineSelect" | "claudeAuth" | "codexAuth" | "chat";
+  phase:
+    | "connecting"
+    | "onboarding"
+    | "storageSelect"
+    | "engineSelect"
+    | "claudeAuth"
+    | "codexAuth"
+    | "chat";
   walletAddress: string | null;
   cli: Cli;
+  googleLoginUrl: string | null;
+  googleLoginError: string | null;
   // per-engine install/login status from the post-wallet `cliStatus` event, kept so the
   // engine picker can show a live badge next to each choice (null until it arrives).
   cliReport: { claude: EngineStatus; codex: EngineStatus } | null;
@@ -60,6 +69,8 @@ const initialState: State = {
   cli: "claude",
   cliReport: null,
   claudeLoginUrl: null,
+  googleLoginUrl: null,
+  googleLoginError: null,
   claudeLoginError: null,
   codexLoginUrl: null,
   codexLoginCode: null,
@@ -102,7 +113,8 @@ type LocalAction =
   | { type: "__typing" }
   | { type: "__removeApproval"; id: string }
   | { type: "__clearToast" }
-  | { type: "__selectEngine"; cli: Cli };
+  | { type: "__selectEngine"; cli: Cli }
+  | { type: "__finishStorage" };
 type Action = ServerMessage | LocalAction;
 
 function reducer(state: State, ev: Action): State {
@@ -133,7 +145,7 @@ function reducer(state: State, ev: Action): State {
     case "walletConnected":
       // Wallet is in. Don't jump to chat yet — the cliStatus that follows decides whether
       // claude needs a subscription login first. Stay in onboarding meanwhile.
-      return { ...state, walletAddress: ev.address };
+      return { ...state, walletAddress: ev.address, phase: "storageSelect" };
     case "cliStatus":
       // After wallet: don't force claude. Record both engines' status and show the engine
       // picker so the user chooses which one to activate. The chosen engine then runs its
@@ -141,8 +153,18 @@ function reducer(state: State, ev: Action): State {
       return {
         ...state,
         cliReport: { claude: ev.claude, codex: ev.codex },
-        phase: "engineSelect",
       };
+    case "__finishStorage":
+      return { ...state, phase: "engineSelect" };
+    case "googleLoginUrl":
+      return { ...state, googleLoginUrl: ev.url, googleLoginError: null };
+    case "googleLoginStatus":
+      return ev.status === "done"
+        ? { ...state, googleLoginUrl: null, googleLoginError: null, phase: "engineSelect" }
+        : { ...state, googleLoginUrl: null, googleLoginError: ev.error ?? "Login failed." };
+    case "openUrl":
+      window.open(ev.url, "_blank");
+      return state;
     case "claudeLoginUrl":
       return { ...state, claudeLoginUrl: ev.url, claudeLoginError: null };
     case "claudeLoginStatus":
@@ -199,6 +221,7 @@ interface Store {
   resolveApproval: (id: string) => void;
   clearToast: () => void;
   selectEngine: (cli: Cli) => void;
+  finishStorage: () => void;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -249,6 +272,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       clearToast: () => raw({ type: "__clearToast" }),
       // Activate the chosen engine; routing (login gate / chat) is decided in the reducer.
       selectEngine: (cli) => raw({ type: "__selectEngine", cli }),
+      finishStorage: () => raw({ type: "__finishStorage" }),
     };
   }, [state]);
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Box, Text } from "ink";
 import { Select, TextInput } from "@inkjs/ui";
-import { STORAGE_OPTIONS, type StorageConfig, type StorageKind, startCodexLogin, markCodexConnected, saveCodexApiKey } from "@iqlabs-official/agent-sdk";
+import { STORAGE_OPTIONS, type StorageConfig, type StorageKind, startCodexLogin, markCodexConnected, saveCodexApiKey, startGoogleLogin, type GoogleLogin } from "@iqlabs-official/agent-sdk";
 import type { CliReport, CliStatus } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../theme.js";
 import { Iggy } from "../components/Iggy.js";
@@ -18,7 +18,7 @@ function statusBadge(s: CliStatus) {
   return <Text color={colors.err}>{glyph.fail} not installed</Text>;
 }
 
-type OnboardStep = "engine" | "codexAuthChoice" | "codexLogin" | "codexApiKey" | "storage" | "location";
+type OnboardStep = "engine" | "codexAuthChoice" | "codexLogin" | "codexApiKey" | "storage" | "location" | "gdriveLogin";
 
 export function Onboarding({
   report,
@@ -38,6 +38,12 @@ export function Onboarding({
   const [codexUrl, setCodexUrl] = useState<string | null>(null);
   const [codexCode, setCodexCode] = useState<string | null>(null);
   const [codexErr, setCodexErr] = useState<string | null>(null);
+
+  // gdrive OAuth state
+  const [gdriveUrl, setGdriveUrl] = useState<string | null>(null);
+  const [gdriveErr, setGdriveErr] = useState<string | null>(null);
+  const [googleSession, setGoogleSession] = useState<GoogleLogin | null>(null);
+  const [busy, setBusy] = useState(false);
 
   function chooseEngine(e: "claude" | "codex") {
     setEngine(e);
@@ -82,9 +88,47 @@ export function Onboarding({
     }
   }
 
+  useEffect(() => {
+    if (step !== "gdriveLogin") return;
+    let activeSession: GoogleLogin | null = null;
+    let cancelled = false;
+    startGoogleLogin().then((session) => {
+      if (cancelled) { session.cancel(); return; }
+      activeSession = session;
+      setGdriveUrl(session.url);
+      setGoogleSession(session);
+      session.done.then((ok) => {
+        if (cancelled) return;
+        if (ok) {
+          onDone(engine, { kind: "gdrive" });
+        } else {
+          setGdriveErr("Google sign-in was not completed.");
+        }
+      });
+    }).catch((e: unknown) => {
+      if (!cancelled) setGdriveErr(e instanceof Error ? e.message : String(e));
+    });
+    return () => {
+      cancelled = true;
+      if (activeSession) activeSession.cancel();
+    };
+  }, [step]);
+
+  async function submitGdriveCode(codeVal: string) {
+    if (!codeVal.trim() || !googleSession) return;
+    try {
+      await googleSession.submitCode(codeVal.trim());
+    } catch (e: unknown) {
+      setGdriveErr(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   function chooseKind(k: StorageKind) {
     if (k === "local") return onDone(engine);
-    if (k === "gdrive") return onDone(engine, { kind: "gdrive" });
+    if (k === "gdrive") {
+      setStep("gdriveLogin");
+      return;
+    }
     setKind(k);
     setStep("location");
   }
@@ -170,6 +214,25 @@ export function Onboarding({
             }))}
             onChange={(v) => chooseKind(v as StorageKind)}
           />
+        </Box>
+      )}
+
+      {step === "gdriveLogin" && (
+        <Box flexDirection="column" gap={1}>
+          <Text color={colors.iqCyan}>sign in to Google Drive</Text>
+          {!gdriveUrl && !gdriveErr && <Text dimColor>starting OAuth flow…</Text>}
+          {gdriveUrl && (
+            <>
+              <Text>1. open in browser (or copy link):</Text>
+              <Text color={colors.iqCyan}>{gdriveUrl}</Text>
+              <Text>2. paste the redirected URL or authorization code here:</Text>
+              <TextInput
+                placeholder="Paste URL or code here"
+                onSubmit={submitGdriveCode}
+              />
+            </>
+          )}
+          {gdriveErr && <Text color={colors.err}>{gdriveErr}</Text>}
         </Box>
       )}
 

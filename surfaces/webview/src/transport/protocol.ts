@@ -85,6 +85,9 @@ export type ClientMessage =
   | { type: "startCodexLogin" }
   | { type: "cancelCodexLogin" }
   | { type: "submitCodexApiKey"; key: string }
+  | { type: "startGoogleLogin" }
+  | { type: "googleAuthCode"; code: string }
+  | { type: "cancelGoogleLogin" }
   | { type: "toast"; text: string };
 
 // ── server → UI (SSE /events) ──
@@ -113,4 +116,7 @@ export type ServerMessage =
   // codex device-auth: server streams the URL + one-time code; CLI auto-polls (no code submittal).
   | { type: "codexLoginChallenge"; url: string; code: string }
   | { type: "codexLoginStatus"; status: "done" | "error"; error?: string }
+  | { type: "googleLoginUrl"; url: string }
+  | { type: "googleLoginStatus"; status: "done" | "error"; error?: string }
+  | { type: "openUrl"; url: string }
   | { type: "toast"; text: string };

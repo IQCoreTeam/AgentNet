@@ -1,5 +1,6 @@
 import { useStore } from "./state/store";
 import { ConnectWallet } from "./onboarding/ConnectWallet";
+import { ConnectStorage } from "./onboarding/ConnectStorage";
 import { PickEngine } from "./onboarding/PickEngine";
 import { ConnectClaude } from "./onboarding/ConnectClaude";
 import { ConnectCodex } from "./onboarding/ConnectCodex";
@@ -9,6 +10,7 @@ import { Toast } from "./Toast";
 // Phase router:
 //   connecting   → opening SSE stream / sent `ready`, waiting for init|sessions
 //   onboarding   → no runtime yet → connect a wallet
+//   storageSelect→ wallet connected → choose cloud/local storage mirror configuration
 //   engineSelect → wallet in → pick which engine to activate (claude or codex)
 //   claudeAuth   → claude chosen, not logged in → connect the Claude subscription
 //   codexAuth    → codex chosen, not logged in → device-auth (open URL, enter code)
@@ -19,6 +21,7 @@ export function App() {
     <>
       {state.phase === "connecting" && <Connecting />}
       {state.phase === "onboarding" && <ConnectWallet />}
+      {state.phase === "storageSelect" && <ConnectStorage />}
       {state.phase === "engineSelect" && <PickEngine />}
       {state.phase === "claudeAuth" && <ConnectClaude />}
       {state.phase === "codexAuth" && <ConnectCodex />}

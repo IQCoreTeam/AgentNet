@@ -62,6 +62,9 @@ export { ephemeralKey, persistedKey } from "./account/keyPolicy.js";
 export type { KeyPolicy, KeyVault } from "./account/keyPolicy.js";
 export { agentnetFolderLink } from "./account/storage/gdrive.js";
 export type { CloudStatus } from "./account/storage/mirror.js";
+export { startGoogleLogin } from "./account/storage/oauth.js";
+export type { GoogleLogin } from "./account/storage/oauth.js";
+
 
 
 import type { AgentRuntime, Wallet } from "./runtime/contract.js";

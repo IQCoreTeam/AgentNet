@@ -121,6 +121,93 @@ export async function googleLogin(openBrowser: (url: string) => void): Promise<v
   await exchangeCode(code, verifier, redirect);
 }
 
+export interface GoogleLogin {
+  url: string;
+  submitCode(code: string): Promise<void>;
+  cancel(): void;
+  done: Promise<boolean>;
+}
+
+export function startGoogleLogin(): Promise<GoogleLogin> {
+  const { verifier, challenge } = pkce();
+  const state = base64url(randomBytes(16));
+
+  let settleDone: (ok: boolean) => void;
+  const done = new Promise<boolean>((r) => (settleDone = r));
+
+  let redirect = "";
+  const server = createServer((req, res) => {
+    const url = new URL(req.url || "", "http://127.0.0.1");
+    const code = url.searchParams.get("code");
+    const gotState = url.searchParams.get("state");
+    res.end("AgentNet: Google connected. You can close this tab.");
+    server.close();
+    if (code && gotState === state) {
+      exchangeCode(code, verifier, redirect)
+        .then(() => settleDone(true))
+        .catch(() => settleDone(false));
+    } else {
+      settleDone(false);
+    }
+  });
+
+  return new Promise<GoogleLogin>((resolve, reject) => {
+    server.listen(0, "127.0.0.1", () => {
+      try {
+        const port = (server.address() as { port: number }).port;
+        redirect = `http://127.0.0.1:${port}`;
+        const url = `${AUTH_URL}?${new URLSearchParams({
+          client_id: clientId(),
+          redirect_uri: redirect,
+          response_type: "code",
+          scope: SCOPE,
+          code_challenge: challenge,
+          code_challenge_method: "S256",
+          state,
+          access_type: "offline",
+          prompt: "consent",
+        })}`;
+
+        resolve({
+          url,
+          async submitCode(codeOrUrl: string) {
+            let code = codeOrUrl.trim();
+            if (code.startsWith("http://") || code.startsWith("https://") || code.includes("code=")) {
+              try {
+                const urlParsed = new URL(code);
+                code = urlParsed.searchParams.get("code") || code;
+              } catch {
+                const match = code.match(/[?&]code=([^&]+)/);
+                if (match) {
+                  code = match[1];
+                }
+              }
+            }
+            try {
+              await exchangeCode(code, verifier, redirect);
+              server.close();
+              settleDone(true);
+            } catch (e) {
+              server.close();
+              settleDone(false);
+              throw e;
+            }
+          },
+          cancel() {
+            server.close();
+            settleDone(false);
+          },
+          done,
+        });
+      } catch (e) {
+        server.close();
+        reject(e);
+      }
+    });
+  });
+}
+
+
 async function exchangeCode(code: string, verifier: string, redirect: string): Promise<void> {
   const res = await fetch(TOKEN_URL, {
     method: "POST",

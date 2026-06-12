@@ -40,7 +40,7 @@ export function createRuntime(
 
       // per-session approval channel (each panel passes its own) wins; fall back to
       // the runtime-level default channel.
-      const apiKey = opts.apiKey || (opts.cli === "codex" ? await getCodexApiKey().catch(() => undefined) : undefined);
+      const apiKey = opts.apiKey || (opts.cli === "codex" ? (await getCodexApiKey().catch(() => undefined)) ?? undefined : undefined);
       const cli = spawnCli({ ...opts, sessionId: nativeId, approval: opts.approval ?? approval, apiKey });
 
       // Storage key stays the CANONICAL id while resuming; the cli's emitted (native)
