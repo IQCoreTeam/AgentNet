@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Slow alpha breathing for the splash logo: a calm "alive/loading" cue that replaces a
+     clunky progress bar. Eases in/out, reverses, repeats forever. -->
+<alpha xmlns:android="http://schemas.android.com/apk/res/android"
+    android:fromAlpha="1.0"
+    android:toAlpha="0.35"
+    android:duration="1100"
+    android:repeatMode="reverse"
+    android:repeatCount="infinite"
+    android:interpolator="@android:anim/accelerate_decelerate_interpolator" />

@@ -24,8 +24,17 @@ function run(cmd: string, args: string[]): Promise<{ code: number | null; out: s
 async function checkClaude(): Promise<CliStatus> {
   const v = await run("claude", ["--version"]);
   if (v.missing) return "missing";
-  // claude prints version even when logged out; login state surfaces on first use.
-  // Treat installed = ok for now; refine if claude exposes an auth-status command.
+  // `claude auth status` prints JSON ({ loggedIn, authMethod, apiProvider }) and exits 1
+  // when logged out. Parse loggedIn to tell "installed but no subscription" from "ready".
+  const s = await run("claude", ["auth", "status"]);
+  if (!s.missing) {
+    try {
+      if (JSON.parse(s.out.match(/\{[\s\S]*\}/)?.[0] ?? "{}").loggedIn === true) return "ok";
+      return "no-login";
+    } catch {
+      // older claude without `auth status` JSON: fall back to "ok" (login surfaces on use)
+    }
+  }
   return "ok";
 }
 

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AgentNet</string>
+    <string name="tagline">Your agents, your subscription</string>
+    <string name="booting">Starting up</string>
+</resources>

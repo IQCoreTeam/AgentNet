@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AgentNet brand palette. Dark surface (matches the React UI's zinc-950 feel) with
+         IQLabs green as the single accent. -->
+    <color name="an_bg">#0A0B0D</color>
+    <color name="an_fg">#E8E8EA</color>
+    <color name="an_muted">#8A8A92</color>
+    <color name="an_green">#00E673</color>
+</resources>

@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- WebView over a minimal splash. No progress bar — the logo itself breathes (alpha
+     pulse) as the "loading" cue, with a single quiet status line below. Reads like a
+     real product splash (Linear/Vercel-style), not a system ProgressBar. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/an_bg">
+
+    <WebView
+        android:id="@+id/webview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/an_bg"
+        android:visibility="gone" />
+
+    <!-- One centered column: pulsing logo, wordmark, then a small two-line status. -->
+    <LinearLayout
+        android:id="@+id/bootBox"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:paddingStart="44dp"
+        android:paddingEnd="44dp">
+
+        <ImageView
+            android:id="@+id/logo"
+            android:layout_width="100dp"
+            android:layout_height="76dp"
+            android:src="@drawable/iq_logo_green"
+            android:contentDescription="@string/app_name" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="@string/app_name"
+            android:textColor="@color/an_fg"
+            android:textSize="26sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.01" />
+
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="40dp"
+            android:gravity="center"
+            android:text="@string/booting"
+            android:textColor="@color/an_muted"
+            android:textSize="13.5sp"
+            android:letterSpacing="0.02" />
+
+        <TextView
+            android:id="@+id/statusSub"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
+            android:gravity="center"
+            android:textColor="#5A5A62"
+            android:textSize="12sp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+</FrameLayout>

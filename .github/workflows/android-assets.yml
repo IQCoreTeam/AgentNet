@@ -1,0 +1,72 @@
+# Build the Android runtime assets (proot + Ubuntu rootfs with node/claude/codex +
+# the localhost server bundle) and upload them as a workflow artifact. The shell APK
+# extracts these on first run (see surfaces/android/Installer.kt).
+#
+# Why this shape: the repo is PRIVATE, so native arm64 runners are metered. Instead we
+# run on the free x86 runner and build the aarch64 rootfs inside an arm64 Ubuntu
+# container via QEMU (binfmt) — the container gives us both the target arch AND root
+# (build-assets.sh needs chroot). Slower than a native arm64 runner, but it's a one-off
+# per release and stays in the free tier.
+#
+# It does NOT log into claude/codex — the rootfs ships them INSTALLED but logged-out;
+# the user authenticates on-device (their own subscription/API key). So no credentials
+# ever touch the artifact. Manual trigger only (it's a heavy, occasional build).
+
+name: android-assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      abi:
+        description: "Target ABI"
+        type: choice
+        options: ["arm64", "x86_64"]
+        default: "arm64"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Register QEMU so we can run arm64 containers on the x86 runner.
+      - name: Set up QEMU (binfmt)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      # Build the localhost bundle on the host (node/pnpm, arch-independent JS) so the
+      # container step only has to do the arch-specific rootfs work.
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter agentnet-localhost build
+      - run: pnpm --filter agentnet-webview build   # the React SPA the server serves
+
+      # Run the asset build inside an arm64 Ubuntu container (root + target arch). The
+      # container has the chroot/apt the rootfs step needs; ALLOW_CROSS lets the script
+      # proceed since uname inside the arm64 container already reports aarch64.
+      - name: Build rootfs + pack assets (arm64 container)
+        run: |
+          docker run --rm --platform linux/arm64 \
+            -v "${{ github.workspace }}:/work" -w /work \
+            -e ABI=${{ github.event.inputs.abi }} -e ALLOW_CROSS=1 \
+            ubuntu:24.04 \
+            bash -c '
+              set -e
+              apt-get update
+              apt-get install -y curl ca-certificates xz-utils tar coreutils
+              # build-assets.sh reuses surfaces/localhost/dist (already built on the host
+              # above), so it never needs pnpm inside this arm64 container.
+              bash surfaces/android/scripts/build-assets.sh
+            '
+
+      - name: Upload assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-assets-${{ github.event.inputs.abi }}
+          path: surfaces/android/app/src/main/assets/
+          retention-days: 7
+          if-no-files-found: error

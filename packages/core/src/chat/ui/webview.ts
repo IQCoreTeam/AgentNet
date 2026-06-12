@@ -11,38 +11,22 @@
 //   partial:true  -> append the delta to the CURRENT bubble (streaming)
 //   partial:false -> that bubble is complete (start a new one next time)
 
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
 import { AVATAR_SVG, AVATAR_SCRIPT } from "./avatar.js";
 import { IQ_LOGO_SVG } from "./iqlogo.js";
+import { MD_LIBS } from "./mdLibs.generated.js";
 
 // marked (md → html) + dompurify (XSS sanitize) inlined into the webview <script>.
 // The webview is an isolated browser context, so we ship the libraries' browser
-// builds as text and run them there. Read once (node/extension-host side) and cache.
-// marked.umd.js exposes `marked`; purify.min.js exposes `DOMPurify`.
+// builds as text and run them there. marked.umd.js exposes `marked`; purify.min.js
+// exposes `DOMPurify`.
 //
-// Strict `exports` maps block both ./package.json and ./lib/* subpaths, so we resolve
-// each package's MAIN entry (always allowed), walk up to the package root (the path
-// segment ending in "/<name>/"), then read the browser build by relative path.
-function pkgRoot(req: NodeJS.Require, name: string): string {
-  const main = req.resolve(name); // e.g. .../node_modules/marked/lib/marked.esm.js
-  const marker = `${name}${"/"}`;
-  const i = main.lastIndexOf(marker);
-  return i >= 0 ? main.slice(0, i + marker.length) : dirname(main);
-}
-let mdLibs: string | undefined;
+// These are baked into ./mdLibs.generated.ts (re-run scripts/genMdLibs.mjs after a
+// dep bump) rather than read at runtime: core is consumed as raw .ts and inlined by
+// each surface's bundler, so a runtime readFileSync would break once bundled (the
+// host's dist/ has no marked/dompurify in its node_modules). The generated constant
+// is embedded as text by the bundler — zero runtime file lookup.
 function markdownLibs(): string {
-  if (mdLibs !== undefined) return mdLibs;
-  try {
-    const req = createRequire(__filename);
-    const marked = readFileSync(join(pkgRoot(req, "marked"), "lib", "marked.umd.js"), "utf8");
-    const purify = readFileSync(join(pkgRoot(req, "dompurify"), "dist", "purify.min.js"), "utf8");
-    mdLibs = marked + "\n" + purify;
-  } catch {
-    mdLibs = ""; // graceful fallback: webview renders plain text if libs missing
-  }
-  return mdLibs;
+  return MD_LIBS;
 }
 
 // A small magic-wand glyph (line art, currentColor) — the skills affordance. Drawn
@@ -513,7 +497,11 @@ export function chatHtml(): string {
            color: var(--vscode-input-foreground); border: none; resize: none; font-family: inherit;
            font-size: 0.95em; display: block; }
   #input:focus { outline: none; }
+  #input:disabled { opacity: 0.5; cursor: not-allowed; }
   #inputWrap:focus-within { box-shadow: 0 0 0 2px var(--engSoft); }
+  /* composer frozen while a tool approval is pending (input value is kept, just locked) */
+  #composer.locked #inputWrap { opacity: 0.6; }
+  #composer.locked #send { opacity: 0.4; cursor: not-allowed; }
 
   #controls { display: flex; gap: 8px; align-items: center; padding: 4px 8px 7px; font-size: 0.82em; }
   #model { background: var(--an-bg-1); color: var(--vscode-foreground);
@@ -669,7 +657,49 @@ export function chatHtml(): string {
 <script>
   const AVATAR_SVG = ${JSON.stringify(AVATAR_SVG)};
   ${AVATAR_SCRIPT}
-  const vscode = acquireVsCodeApi();
+  // The host pipe. Inside VSCode it's acquireVsCodeApi(); in a browser/Android WebView
+  // there's no such global, so we fall back to HTTP-RPC + SSE that speaks the SAME
+  // shape: postMessage(obj) → POST /rpc (UI→server commands); the server's SSE stream
+  // (GET /events, server→UI) is re-dispatched as window 'message' events. So every
+  // \`vscode.postMessage(...)\` and \`addEventListener('message',...)\` below works
+  // unchanged on any surface (CODE-RULES: one UI, no per-platform fork). SSE auto-
+  // reconnects; we keep the server-issued client id so a dropped stream replays the
+  // events it missed (steadier than WebSocket in an Android WebView).
+  const vscode = (typeof acquireVsCodeApi === "function")
+    ? acquireVsCodeApi()
+    : (() => {
+        let clientId = null;
+        const outbox = []; // commands queued until we have a client id
+        function post(s) {
+          fetch("/rpc?client=" + encodeURIComponent(clientId), {
+            method: "POST", headers: { "content-type": "application/json" }, body: s,
+          }).catch(() => {}); // a dropped command is recovered by the UI's next action
+        }
+        // Open the SSE stream. On the first connect the server sends {client} which we
+        // tag onto every POST; we then reopen the stream WITH the id in the URL so the
+        // browser's auto-reconnect (carrying Last-Event-ID) lands on the same client
+        // and replays. Inbound data frames become window 'message' events.
+        function open(url) {
+          const es = new EventSource(url);
+          es.addEventListener("client", (e) => {
+            const id = JSON.parse(e.data).client;
+            if (clientId === null) {
+              clientId = id;
+              es.close(); // reopen with the id so reconnects stay on this client
+              open("/events?client=" + encodeURIComponent(id));
+              for (const m of outbox.splice(0)) post(m); // flush queued commands
+            }
+          });
+          es.onmessage = (e) => window.dispatchEvent(new MessageEvent("message", { data: JSON.parse(e.data) }));
+        }
+        open("/events");
+        return {
+          postMessage: (obj) => {
+            const s = JSON.stringify(obj);
+            if (clientId !== null) post(s); else outbox.push(s);
+          },
+        };
+      })();
 
   // ---- markdown rendering (marked + dompurify), with a plain-text fallback ----
   const MD_OK = !!(window.marked && window.DOMPurify);
@@ -1059,6 +1089,7 @@ export function chatHtml(): string {
     const decide = (outcome) => {
       vscode.postMessage({ type: 'approvalDecision', id: req.id, outcome });
       card.remove(); // answered → clear it from the dock
+      syncComposerLock(); // unfreeze once the last pending approval is answered
     };
     const mk = (label, outcome, cls) => {
       const b = document.createElement('button'); b.className = 'apBtn ' + cls; b.textContent = label;
@@ -1078,6 +1109,7 @@ export function chatHtml(): string {
 
     // dock it just above the composer (newest on top), not inside the scrolling log
     approvalDock.insertBefore(card, approvalDock.firstChild);
+    syncComposerLock(); // freeze the input while this (and any other) approval is open
     btns[0].focus(); // default focus on Approve so Enter approves right away
   }
 
@@ -1178,7 +1210,23 @@ export function chatHtml(): string {
   }
   function hideTyping() { if (typingEl) { typingEl.remove(); typingEl = null; } }
 
+  // While a tool approval is pending, freeze the composer: the user must answer the
+  // approval before sending more. We DON'T clear what they've typed — input.value is
+  // left intact, just disabled — so a half-written message survives the wait. Called
+  // whenever the approval dock gains/loses a card. The send button mirrors the lock.
+  const sendBtn = document.getElementById('send');
+  function syncComposerLock() {
+    const locked = approvalDock.childElementCount > 0;
+    input.disabled = locked;
+    if (sendBtn) sendBtn.disabled = locked;
+    composer.classList.toggle('locked', locked);
+    input.placeholder = locked
+      ? 'Answer the approval above to continue…'
+      : 'Message ' + (composer.dataset.cli || 'claude') + '... (Enter to send)';
+  }
+
   function send() {
+    if (input.disabled) return;       // frozen while an approval is pending
     const text = input.value.trim();
     if (!text) return;
     // local slash commands handled in the webview (not sent to the agent).
@@ -1435,7 +1483,7 @@ export function chatHtml(): string {
     if (m.type === 'message') onMessage(m.msg);
     else if (m.type === 'sessions') { allSessions = m.list || []; activeId = m.activeId; renderSessions(); }
     else if (m.type === 'loading') showLoading();
-    else if (m.type === 'clear') { log.innerHTML = ''; approvalDock.innerHTML = ''; streaming = null; openBash = null; tailTurn = null; headTurn = null; hideTyping(); hideActivity(); resetPaging(); syncWatermark(); hideLoading(); }
+    else if (m.type === 'clear') { log.innerHTML = ''; approvalDock.innerHTML = ''; syncComposerLock(); streaming = null; openBash = null; tailTurn = null; headTurn = null; hideTyping(); hideActivity(); resetPaging(); syncWatermark(); hideLoading(); }
     else if (m.type === 'turnEnd') { hideTyping(); hideActivity(); }
     else if (m.type === 'platform') setTab(m.cli); // extension switched CLI (e.g. on session open)
     else if (m.type === 'storage') { renderStorage(m.info, m.options); renderWalletStorage(); }

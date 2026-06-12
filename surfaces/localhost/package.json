@@ -1,0 +1,23 @@
+{
+  "name": "agentnet-localhost",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "bin": { "agentnet-localhost": "./dist/index.js" },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@iqlabs-official/agent-sdk": "workspace:*",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.0",
+    "tsup": "^8.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.0"
+  }
+}
