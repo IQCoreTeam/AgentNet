@@ -16,6 +16,8 @@ export const SLASH_COMMANDS: SlashCmd[] = [
   { name: "engine", desc: "switch engine (carries session)", args: "claude|codex" },
   { name: "model", desc: "change model", args: "<model>" },
   { name: "models", desc: "pick a model from a menu" },
+  { name: "effort", desc: "set reasoning effort", args: "low|medium|high|xhigh|max" },
+  { name: "efforts", desc: "pick effort from a menu" },
   { name: "wallet", desc: "show wallet address" },
   { name: "storage", desc: "show where sessions save" },
   { name: "iq", desc: "a random IQ fact" },

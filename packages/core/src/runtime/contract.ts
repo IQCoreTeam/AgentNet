@@ -107,6 +107,8 @@ export interface AgentRuntime {
     apiKey?: string;
     // Ephemeral (side-channel /btw) session that doesn't save messages to the store.
     ephemeral?: boolean;
+    // Reasoning effort level (claude: adaptive thinking depth; codex: reasoning_effort).
+    effort?: "low" | "medium" | "high" | "xhigh" | "max";
   }): Promise<SessionHandle>;
 
   // list the wallet's saved sessions (for the UI's session list)

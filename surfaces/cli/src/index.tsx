@@ -36,11 +36,12 @@ program
   .option("--cwd <path>", "working directory for the agent")
   .option("--keypair <path>", "Solana keypair file (default: ~/.config/solana/id.json)")
   .option("--model <model>", "model to use")
+  .option("--effort <level>", "reasoning effort: low|medium|high|xhigh|max")
   .option("-c, --continue", "resume your most recent session")
   .option("--yolo", "auto-approve all tool use (skip prompts)")
   .action((opts) => {
     launch(
-      { cli: opts.cli, cwd: opts.cwd, keypair: opts.keypair, model: opts.model, continue: opts.continue, yolo: opts.yolo },
+      { cli: opts.cli, cwd: opts.cwd, keypair: opts.keypair, model: opts.model, effort: opts.effort, continue: opts.continue, yolo: opts.yolo },
       opts.calm,
     );
   });

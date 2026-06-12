@@ -1,13 +1,43 @@
 import React from "react";
 import { Box, Text } from "ink";
 import { highlight } from "cli-highlight";
+import { basename, extname } from "node:path";
 import type { ToolAction } from "@iqlabs-official/agent-sdk/runtime/contract";
 import { glyph, toolTint, colors } from "../theme.js";
 import { TodoPanel } from "./TodoPanel.js";
 import { DiffView } from "./DiffView.js";
 import { stripAnsi, clampLines, lineCount } from "../format.js";
 
-const MAX_OUTPUT_LINES = 14;
+const MAX_OUTPUT_LINES = 12;
+
+// Extension → cli-highlight language name.
+const EXT_LANG: Record<string, string> = {
+  ts: "typescript", tsx: "typescript",
+  js: "javascript", jsx: "javascript",
+  mjs: "javascript", cjs: "javascript",
+  json: "json", json5: "json",
+  py: "python",
+  rs: "rust",
+  go: "go",
+  sh: "bash", bash: "bash", zsh: "bash",
+  css: "css", scss: "css",
+  html: "html",
+  md: "markdown",
+  yaml: "yaml", yml: "yaml",
+  toml: "toml",
+  sql: "sql",
+};
+
+function langFor(file?: string): string | undefined {
+  if (!file) return undefined;
+  return EXT_LANG[extname(file).replace(".", "").toLowerCase()];
+}
+
+// Shorten path: keep last 2 segments so it reads without being huge.
+function shortPath(p: string): string {
+  const parts = p.replace(/\\/g, "/").split("/").filter(Boolean);
+  return parts.length > 2 ? `…/${parts.slice(-2).join("/")}` : p;
+}
 
 // Map an engine tool name to our render kind (and its tint/glyph).
 function kindOf(name: string): keyof typeof toolTint {
@@ -29,17 +59,31 @@ const kindGlyph: Record<string, string> = {
   other: glyph.other,
 };
 
-// Command output / read content: ANSI-stripped, line-clamped, with a fold note.
-// Command output / read content: ANSI-stripped, line-clamped, on a left ⎿ rail so it reads
-// as "the result of the command above". Output stays READABLE (not dimmed) — it's usually
-// the point; failed runs tint it red. Long output folds with a count.
-function Output({ text, failed }: { text: string; failed?: boolean }) {
+// Output block: syntax-highlighted when a language is known, else plain.
+// Clamped to MAX_OUTPUT_LINES; fold note shows hidden count.
+function Output({
+  text,
+  failed,
+  lang,
+}: {
+  text: string;
+  failed?: boolean;
+  lang?: string;
+}) {
   const clean = stripAnsi(text);
   const { shown, hidden } = clampLines(clean, MAX_OUTPUT_LINES);
   if (!shown.trim()) return null;
-  const lines = shown.split("\n");
+
+  let highlighted = shown;
+  if (lang && !failed) {
+    try {
+      highlighted = highlight(shown, { language: lang, ignoreIllegals: true });
+    } catch { /* keep plain */ }
+  }
+
+  const lines = highlighted.split("\n");
   return (
-    <Box>
+    <Box marginTop={0}>
       <Text color={colors.dim}>⎿ </Text>
       <Box flexDirection="column">
         {lines.map((l, i) => (
@@ -47,14 +91,16 @@ function Output({ text, failed }: { text: string; failed?: boolean }) {
             {l || " "}
           </Text>
         ))}
-        {hidden > 0 ? <Text dimColor>+{hidden} more lines</Text> : null}
+        {hidden > 0 ? (
+          <Text dimColor>  +{hidden} more lines</Text>
+        ) : null}
       </Box>
     </Box>
   );
 }
 
-// One tool/agent action as a tinted, bordered card. Substance (command, output, diff) is
-// shown verbatim — the card is just framing, with line-count badges and folds.
+// One tool/agent action as a tinted card. Header: glyph + name + short path + line badge.
+// Body: diff | highlighted bash command. Output: syntax-highlighted, clamped.
 export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: string }) {
   if (!tool) {
     return (
@@ -69,6 +115,7 @@ export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: str
   const tint = toolTint[kind];
   const okExit = tool.exitCode === undefined || tool.exitCode === 0;
   const outLines = tool.output ? lineCount(stripAnsi(tool.output)) : 0;
+  const fileLang = langFor(tool.file);
 
   let body: React.ReactNode = null;
   if (tool.diff) body = <DiffView diff={tool.diff} />;
@@ -76,29 +123,33 @@ export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: str
     let cmd = tool.command;
     try {
       cmd = highlight(tool.command, { language: "bash", ignoreIllegals: true });
-    } catch {
-      /* keep raw */
-    }
-    body = <Text>$ {cmd}</Text>;
+    } catch { /* keep raw */ }
+    body = <Text dimColor>$ {cmd}</Text>;
   }
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={tint} paddingX={1} marginLeft={2}>
+    <Box flexDirection="column" borderStyle="single" borderColor={tint} paddingX={1} marginLeft={1} marginTop={1}>
+      {/* header row */}
       <Box>
-        <Text color={tint} bold>
-          {kindGlyph[kind]} {tool.name}
-        </Text>
-        {tool.file ? <Text dimColor> {tool.file}</Text> : null}
-        {outLines > 0 ? <Text dimColor> · {outLines} line{outLines === 1 ? "" : "s"}</Text> : null}
+        <Text color={tint} bold>{kindGlyph[kind]} {tool.name}</Text>
+        {tool.file ? (
+          <Text dimColor>
+            {"  "}{shortPath(tool.file)}
+          </Text>
+        ) : null}
+        {outLines > 0 ? (
+          <Text dimColor>  ·  {outLines}L</Text>
+        ) : null}
         {tool.exitCode !== undefined ? (
           <Text color={okExit ? colors.ok : colors.err}>
-            {"  "}
-            {okExit ? glyph.ok : glyph.fail} {tool.exitCode}
+            {"  "}{okExit ? glyph.ok : glyph.fail}
           </Text>
         ) : null}
       </Box>
       {body}
-      {tool.output ? <Output text={tool.output} failed={!okExit} /> : null}
+      {tool.output ? (
+        <Output text={tool.output} failed={!okExit} lang={fileLang} />
+      ) : null}
     </Box>
   );
 }

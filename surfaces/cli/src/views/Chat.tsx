@@ -14,8 +14,13 @@ import { StatusLine } from "../components/StatusLine.js";
 import { ApprovalCard } from "../components/ApprovalCard.js";
 import { Celebrate } from "../components/Celebrate.js";
 import { Composer } from "../components/Composer.js";
+import { Header } from "../components/Header.js";
+import { NoticeBanner } from "../components/NoticeBanner.js";
+import { Footer } from "../components/Footer.js";
 import { SessionList } from "./SessionList.js";
 import { ModelPicker } from "./ModelPicker.js";
+import { EffortPicker } from "./EffortPicker.js";
+import type { EffortLevel } from "../prefs.js";
 import { type Mood } from "../components/Iggy.js";
 import { thinkingLabels, colors, copy, pick } from "../theme.js";
 
@@ -46,6 +51,7 @@ export function Chat({
   const chat = useChat(runtime, {
     cli: options.cli ?? "claude",
     model: options.model,
+    effort: options.effort,
     cwd,
     resume: options.resume,
     approval: approval ?? undefined,
@@ -115,6 +121,7 @@ export function Chat({
   const [replyText, setReplyText] = useState("");
   const [showSessions, setShowSessions] = useState(false);
   const [showModels, setShowModels] = useState(false);
+  const [showEfforts, setShowEfforts] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
   const [accountLines, setAccountLines] = useState<string[]>([]);
   const [showSettings, setShowSettings] = useState(false);
@@ -245,7 +252,7 @@ export function Chat({
         konami.current = [];
       }
     },
-    { isActive: !pendingApproval && !showSessions && !showModels && !showBtw && !showAccount && !showSettings },
+    { isActive: !pendingApproval && !showSessions && !showModels && !showEfforts && !showBtw && !showAccount && !showSettings },
   );
 
   useInput(
@@ -304,6 +311,28 @@ export function Chat({
         return;
       case "models":
         setShowModels(true);
+        return;
+      case "effort": {
+        const VALID: EffortLevel[] = ["low", "medium", "high", "xhigh", "max"];
+        if (!arg) {
+          setShowEfforts(true);
+          return;
+        }
+        if (arg === "default") {
+          chat.changeEffort(undefined);
+          setNotice("effort → default");
+          return;
+        }
+        if (VALID.includes(arg as EffortLevel)) {
+          chat.changeEffort(arg as EffortLevel);
+          setNotice(`effort → ${arg}`);
+        } else {
+          setNotice("usage: /effort low|medium|high|xhigh|max|default");
+        }
+        return;
+      }
+      case "efforts":
+        setShowEfforts(true);
         return;
       case "sessions":
       case "ls":
@@ -390,7 +419,7 @@ export function Chat({
         startBtwQuery(arg.trim());
         return;
       case "help":
-        setNotice("/new /sessions /resume /more /compact /clear /copy /models /engine /account /settings /wallet /storage /btw <question> /iq /quit · !cmd shell · Esc cancels · Ctrl+A/E/W/U edit");
+        setNotice("/new /sessions /resume /more /compact /clear /copy /models /engine /effort /account /settings /wallet /storage /btw <question> /iq /quit · !cmd shell · Esc cancels · Ctrl+A/E/W/U edit");
         return;
       default:
         setNotice(`unknown command: /${cmd} — try /help`);
@@ -438,9 +467,10 @@ export function Chat({
           <Text bold color={colors.iqCyan}>settings</Text>
           <Text dimColor>{`engine    ${chat.cli}`}</Text>
           <Text dimColor>{`model     ${chat.model ?? "default"}`}</Text>
+          <Text dimColor>{`effort    ${chat.effort ?? "default"}`}</Text>
           <Text dimColor>{`cwd       ${cwd}`}</Text>
           <Box marginTop={1}>
-            <Text dimColor>{"/engine claude|codex  ·  /model <name>  ·  /models  to change"}</Text>
+            <Text dimColor>{"/engine claude|codex  ·  /model <name>  ·  /models  ·  /effort <level>  ·  /efforts  to change"}</Text>
           </Box>
           <Box marginTop={1}><Text dimColor>Esc / Enter  close</Text></Box>
         </Box>
@@ -460,6 +490,21 @@ export function Chat({
           setShowModels(false);
         }}
         onClose={() => setShowModels(false)}
+      />
+    );
+  }
+
+  // effort picker overlay.
+  if (showEfforts) {
+    return (
+      <EffortPicker
+        current={chat.effort}
+        onPick={(v) => {
+          chat.changeEffort(v);
+          setNotice(`effort → ${v ?? "default"}`);
+          setShowEfforts(false);
+        }}
+        onClose={() => setShowEfforts(false)}
       />
     );
   }
@@ -526,6 +571,10 @@ export function Chat({
 
   return (
     <Box flexDirection="column" paddingX={1}>
+      {/* startup header — shown only on empty session so it doesn't re-appear */}
+      {chat.messages.length === 0 && !chat.busy ? (
+        <Header cli={chat.cli} model={chat.model} cwd={cwd} />
+      ) : null}
       {chat.messages.length === 0 && !chat.busy ? (
         <Text dimColor>{copy.emptySessions}</Text>
       ) : null}
@@ -553,7 +602,7 @@ export function Chat({
       <Celebrate kind={celebrate} />
       {idle && !chat.busy ? <Text dimColor>{copy.idleNudge}</Text> : null}
 
-      <StatusLine mood={mood} cli={chat.cli} model={chat.model} cwd={cwd} elapsed={chat.busy ? chat.elapsed : undefined} ctx={usedFrac} ctxTokens={Math.round(usedTokens)} ctxWindow={WINDOW} ctxApprox={!ctxReal} />
+      <StatusLine mood={mood} cli={chat.cli} model={chat.model} effort={chat.effort} cwd={cwd} elapsed={chat.busy ? chat.elapsed : undefined} ctx={usedFrac} ctxTokens={Math.round(usedTokens)} ctxWindow={WINDOW} ctxApprox={!ctxReal} />
 
       {/* hide the composer while an approval is pending — keys answer the card instead */}
       {!pendingApproval ? (
@@ -566,7 +615,8 @@ export function Chat({
           />
         </Box>
       ) : null}
-      {notice ? <Text dimColor>{notice}</Text> : null}
+      {notice ? <NoticeBanner text={notice} /> : null}
+      <Footer cli={chat.cli} model={chat.model} busy={chat.busy} />
     </Box>
   );
 }

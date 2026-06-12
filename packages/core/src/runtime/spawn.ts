@@ -69,6 +69,7 @@ export interface SpawnOpts {
   stream?: boolean; // emit partial assistant deltas (claude includePartialMessages)
   apiKey?: string; // Stage 1 Codex API Key
   ephemeral?: boolean; // If true, disable tools / auto-deny approvals
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
 }
 
 export function spawnCli(opts: SpawnOpts): Engine {
@@ -191,6 +192,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
       cwd: opts.cwd,
       canUseTool,
       includePartialMessages: !!opts.stream,
+      effort: opts.effort,
       // keep claude's full coding system prompt, append an anti-laziness nudge: some
       // models reply "already done / file exists" on simple asks without acting. This
       // pushes them to verify-or-create with a tool instead of describing.
@@ -577,6 +579,7 @@ function codexEngine(opts: SpawnOpts): Engine {
           cwd: opts.cwd,
           approvalPolicy: "on-request",
           approvalsReviewer: "user",
+          ...(opts.effort ? { reasoning_effort: opts.effort } : {}),
         });
         cb.emitSid(opts.sessionId);
       } else {
@@ -585,6 +588,7 @@ function codexEngine(opts: SpawnOpts): Engine {
           cwd: opts.cwd,
           approvalPolicy: "on-request",
           approvalsReviewer: "user",
+          ...(opts.effort ? { reasoning_effort: opts.effort } : {}),
         });
         const threadId = res?.thread?.id;
         if (threadId) {

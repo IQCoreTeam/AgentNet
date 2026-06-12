@@ -7,11 +7,14 @@ import { join, dirname } from "node:path";
 // user finished first-run setup — so we DON'T re-onboard every launch (the "local only"
 // path writes no storage config, which previously left isInitialized() false forever) —
 // plus the last engine/model/session for a friendly resume.
+export type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
+
 export interface Prefs {
   onboarded?: boolean;
   lastCli?: "claude" | "codex";
   lastModel?: string;
   lastSessionId?: string;
+  lastEffort?: EffortLevel;
   calm?: boolean; // remembered animation preference
 }
 

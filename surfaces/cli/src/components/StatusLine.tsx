@@ -26,6 +26,7 @@ export function StatusLine({
   mood,
   cli,
   model,
+  effort,
   cwd,
   elapsed,
   sync,
@@ -37,6 +38,7 @@ export function StatusLine({
   mood: Mood;
   cli: "claude" | "codex";
   model?: string;
+  effort?: string;
   cwd: string;
   elapsed?: number;
   sync?: { ok: boolean; error?: string } | null;
@@ -58,6 +60,7 @@ export function StatusLine({
         <Iggy mood={mood} />
         <Text color={tint} bold>{"  "}{cli}</Text>
         <Text dimColor>·{model ?? "default"}</Text>
+        {effort ? <Text dimColor> ·{effort}</Text> : null}
         <Text dimColor> · {basename(cwd) || cwd}</Text>
         {elapsed !== undefined ? <Text color={colors.iqCyan}> · {elapsed.toFixed(1)}s</Text> : null}
         {sync ? (

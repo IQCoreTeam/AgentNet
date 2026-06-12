@@ -24,6 +24,7 @@ export interface AppOptions {
   cwd?: string;
   keypair?: string;
   model?: string;
+  effort?: import("./prefs.js").EffortLevel;
   resume?: string;
   continue?: boolean; // resume the most recent session (prefs.lastSessionId)
   yolo?: boolean; // auto-approve all tool use (no prompts)
@@ -136,6 +137,7 @@ export function App({ options }: { options: AppOptions }) {
     ...options,
     cli: options.cli ?? prefs.lastCli ?? "claude",
     model: options.model ?? prefs.lastModel,
+    effort: options.effort ?? prefs.lastEffort,
     resume: options.resume ?? (options.continue ? prefs.lastSessionId : undefined),
   };
   return (

@@ -7,9 +7,10 @@ import type {
   SessionMeta,
 } from "@iqlabs-official/agent-sdk/runtime/contract";
 import type { ApprovalChannel } from "@iqlabs-official/agent-sdk/runtime/approval/channel";
-import { savePrefs } from "../prefs.js";
+import { savePrefs, type EffortLevel } from "../prefs.js";
 
 export type Engine = "claude" | "codex";
+export type { EffortLevel };
 
 // The REPL brain. Mirrors the vscode openChat() loop (extension.ts) but for a single
 // active chat: lazy-spawn a handle on first send, append onMessage to the transcript,
@@ -17,13 +18,14 @@ export type Engine = "claude" | "codex";
 // resume — the runtime re-injects history into the new cli on the next send).
 export function useChat(
   runtime: AgentRuntime,
-  opts: { cli: Engine; model?: string; cwd: string; resume?: string; approval?: ApprovalChannel },
+  opts: { cli: Engine; model?: string; effort?: EffortLevel; cwd: string; resume?: string; approval?: ApprovalChannel },
 ) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   const [busy, setBusy] = useState(false);
   const [cli, setCli] = useState<Engine>(opts.cli);
   const [model, setModel] = useState<string | undefined>(opts.model);
+  const [effort, setEffort] = useState<EffortLevel | undefined>(opts.effort);
   const [pendingId, setPendingId] = useState<string | undefined>(opts.resume);
   const [elapsed, setElapsed] = useState<number | undefined>(undefined);
   const [contextTokens, setContextTokens] = useState<number | undefined>(undefined);
@@ -37,9 +39,11 @@ export function useChat(
   // keep latest cli/model in refs so ensureHandle (created once) reads current values.
   const cliRef = useRef(cli);
   const modelRef = useRef(model);
+  const effortRef = useRef(effort);
   const pendingRef = useRef(pendingId);
   cliRef.current = cli;
   modelRef.current = model;
+  effortRef.current = effort;
   pendingRef.current = pendingId;
 
   const refreshSessions = useCallback(async () => {
@@ -114,6 +118,7 @@ export function useChat(
     const h = await runtime.startSession({
       cli: cliRef.current,
       model: modelRef.current,
+      effort: effortRef.current,
       cwd: opts.cwd,
       sessionId: pendingRef.current,
       approval: opts.approval,
@@ -163,6 +168,15 @@ export function useChat(
       setModel(m);
       setContextTokens(undefined);
       void savePrefs({ lastModel: m });
+    },
+    [dropHandle],
+  );
+
+  const changeEffort = useCallback(
+    (e?: EffortLevel) => {
+      dropHandle();
+      setEffort(e);
+      void savePrefs({ lastEffort: e });
     },
     [dropHandle],
   );
@@ -241,6 +255,7 @@ export function useChat(
     busy,
     cli,
     model,
+    effort,
     pendingId,
     elapsed,
     contextTokens,
@@ -253,6 +268,7 @@ export function useChat(
     runBash,
     switchEngine,
     changeModel,
+    changeEffort,
     openSession,
     newSession,
     deleteSession,
