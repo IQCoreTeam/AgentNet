@@ -59,22 +59,26 @@ export async function prepareResume(
   cli: Cli,
   cwd: string,
   canonicalId: string,
+  ephemeral?: boolean,
 ): Promise<string> {
   const canon = await store.load(canonicalId);
   const messages = replayable(canon?.messages ?? []);
 
   // The canonical id IS the native id for the cli that birthed the session.
   const birthCli = canon?.cli;
-  let nativeId = birthCli === cli ? canonicalId : await getNativeId(canonicalId, cli);
-  if (!nativeId) {
+  let nativeId = ephemeral
+    ? randomUUID()
+    : (birthCli === cli ? canonicalId : await getNativeId(canonicalId, cli));
+  if (!ephemeral && !nativeId) {
     nativeId = randomUUID(); // codex accepts a v4 uuid; claude uses it as the filename
     await setNativeId(canonicalId, cli, nativeId);
   }
+  const resolvedId = nativeId!;
 
   if (cli === "claude") {
-    await injectClaude({ nativeUuid: nativeId, cwd, messages });
+    await injectClaude({ nativeUuid: resolvedId, cwd, messages });
   } else {
-    await injectCodex({ threadId: nativeId, cwd, messages });
+    await injectCodex({ threadId: resolvedId, cwd, messages });
   }
-  return nativeId;
+  return resolvedId;
 }

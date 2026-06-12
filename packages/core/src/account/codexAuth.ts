@@ -13,7 +13,7 @@
 // in ~/.codex/auth.json, device-local.
 
 import { spawn } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, rm } from "node:fs/promises";
 import { tokenFile, tokensDir, ensureDir } from "../core/paths.js";
 
 export interface CodexLogin {
@@ -72,7 +72,27 @@ export function startCodexLogin(codexBin = "codex"): Promise<CodexLogin> {
   });
 }
 
+export async function saveCodexApiKey(key: string): Promise<void> {
+  await ensureDir(tokensDir());
+  await writeFile(tokenFile("codex-key"), JSON.stringify({ apiKey: key }), { mode: 0o600 });
+}
+
+export async function getCodexApiKey(): Promise<string | null> {
+  try {
+    const data = JSON.parse(await readFile(tokenFile("codex-key"), "utf8")) as { apiKey?: string };
+    return data.apiKey || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteCodexApiKey(): Promise<void> {
+  await rm(tokenFile("codex-key"), { force: true });
+}
+
 export async function isCodexLoggedIn(codexBin = "codex"): Promise<boolean> {
+  if (await getCodexApiKey()) return true;
+
   return new Promise((resolve) => {
     let out = "";
     const p = spawn(codexBin, ["login", "status"], { stdio: ["ignore", "pipe", "pipe"] });
