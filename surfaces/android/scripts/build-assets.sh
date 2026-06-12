@@ -93,8 +93,14 @@ echo "    packing this container's / as the rootfs tar (plain tar; TarExtractor 
 # explicitly. Virtual filesystems and tmp dirs are excluded too.
 ROOTFS_TAR="/var/tmp/rootfs-$ABI.tar"
 REPO_REL="./${REPO_ROOT#/}"   # /work -> ./work, for the exclude pattern
+# -p + --numeric-owner: preserve perms, store raw uid/gid (proot fakes root anyway).
+# NO --xattrs: an Ubuntu base has no SELinux labels worth keeping, and security xattrs
+# only cause "permission denied" noise under proot. --one-file-system is safe (same-
+# device bind mounts share st_dev and are still captured); Docker's runtime-managed
+# /etc/resolv.conf + /etc/hosts may be dropped, but Installer.kt rewrites them on the
+# phone (configureGuest), so DNS is covered regardless.
 tar -cpf "$ROOTFS_TAR" \
-  --numeric-owner --xattrs --one-file-system \
+  --numeric-owner --one-file-system \
   --exclude="./proc" --exclude="./sys" --exclude="./dev" --exclude="./run" \
   --exclude="./tmp" --exclude="./var/tmp" --exclude="$REPO_REL" \
   -C / .
