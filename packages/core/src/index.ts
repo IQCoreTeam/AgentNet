@@ -27,6 +27,13 @@ export type { WalletFileState, LoadResult } from "./account/localWallet.js";
 // front-end picks the provider. Local surfaces use localWallet; web uses this.
 export { webWallet, SESSION_KEY_MESSAGE } from "./account/webWallet.js";
 export {
+  startClaudeLogin,
+  isClaudeLoggedIn,
+  markClaudeConnected,
+  isClaudeMarked,
+} from "./account/claudeAuth.js";
+export type { ClaudeLogin } from "./account/claudeAuth.js";
+export {
   initialize,
   isInitialized,
   isCloudConnected,

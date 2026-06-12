@@ -25,9 +25,13 @@ import type {
 // A rendered log entry. We keep messages as-is and stream into the last assistant/
 // thinking bubble when `partial` is set, matching the HTML webview's bubble model.
 export interface State {
-  phase: "connecting" | "onboarding" | "chat";
+  phase: "connecting" | "onboarding" | "claudeAuth" | "chat";
   walletAddress: string | null;
   cli: Cli;
+  // claude subscription login during onboarding: the OAuth URL to open and the status
+  // of the in-flight login (null when no error/pending state to show).
+  claudeLoginUrl: string | null;
+  claudeLoginError: string | null;
   log: ChatMessage[];
   sessions: SessionMeta[];
   activeSessionId?: string;
@@ -45,6 +49,8 @@ const initialState: State = {
   phase: "connecting",
   walletAddress: null,
   cli: "claude",
+  claudeLoginUrl: null,
+  claudeLoginError: null,
   log: [],
   sessions: [],
   approvals: [],
@@ -97,9 +103,20 @@ function reducer(state: State, ev: Action): State {
       // Onboarding handshake: no runtime yet → show ConnectWallet.
       return { ...state, phase: "onboarding" };
     case "walletConnected":
-      // Wallet is in. The dispatcher (chat) attaches on the next /events open; until its
-      // `clear`/`sessions` arrive we're in chat phase with an empty log.
-      return { ...state, phase: "chat", walletAddress: ev.address };
+      // Wallet is in. Don't jump to chat yet — the cliStatus that follows decides whether
+      // claude needs a subscription login first. Stay in onboarding meanwhile.
+      return { ...state, walletAddress: ev.address };
+    case "cliStatus":
+      // After wallet: if claude is installed but logged out, gate on the subscription
+      // login screen; otherwise proceed to chat (the dispatcher attaches on next /events).
+      return { ...state, phase: ev.claude === "no-login" ? "claudeAuth" : "chat" };
+    case "claudeLoginUrl":
+      return { ...state, claudeLoginUrl: ev.url, claudeLoginError: null };
+    case "claudeLoginStatus":
+      // done → proceed to chat; error → surface it on the login screen to retry.
+      return ev.status === "done"
+        ? { ...state, phase: "chat", claudeLoginUrl: null, claudeLoginError: null }
+        : { ...state, claudeLoginUrl: null, claudeLoginError: ev.error ?? "Login failed." };
     case "clear":
       return { ...state, log: [], approvals: [], typing: false, loading: false };
     case "message":
@@ -162,6 +179,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       t.close();
     };
   }, []);
+
+  // When onboarding completes (phase enters "chat"), the first SSE stream is still bound
+  // to the server's ONBOARDING handler — which ignores chat messages. Reopen the stream so
+  // the server, now that a runtime exists, attaches the CHAT dispatcher to a fresh client.
+  // Without this a React SPA (no navigation) would keep the onboarding client and silently
+  // drop every `send`. Guard on the transition so we reopen exactly once.
+  const wasChat = useRef(false);
+  useEffect(() => {
+    if (state.phase === "chat" && !wasChat.current) {
+      wasChat.current = true;
+      transportRef.current?.reopen();
+    } else if (state.phase !== "chat") {
+      wasChat.current = false;
+    }
+  }, [state.phase]);
 
   const store = useMemo<Store>(() => {
     const send = (msg: ClientMessage) => {

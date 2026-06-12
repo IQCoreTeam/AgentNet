@@ -31,6 +31,20 @@ export class Transport {
     this.connect();
   }
 
+  /** Drop the current client and open a brand-new SSE stream. Used after onboarding:
+   *  the first stream attached the ONBOARDING handler (no runtime yet); once the wallet
+   *  is connected the runtime exists, so a fresh stream attaches the CHAT dispatcher.
+   *  (The server keys chat-vs-onboarding on "did a runtime exist when /events opened".)
+   *  A React SPA never navigates, so without this the onboarding client would keep
+   *  handling chat messages — i.e. silently drop every `send`. */
+  reopen(): void {
+    this.es?.close();
+    this.es = null;
+    this.clientId = null;
+    this.lastEventId = 0;
+    this.connect();
+  }
+
   /** Send one UI→server command. No-op until the client id handshake completes. */
   async post(msg: ClientMessage): Promise<void> {
     if (!this.clientId) {

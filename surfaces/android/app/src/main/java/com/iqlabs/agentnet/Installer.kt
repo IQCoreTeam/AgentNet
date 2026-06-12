@@ -45,7 +45,7 @@ class Installer(private val ctx: Context) {
         val p = Paths.layout(ctx)
         val abi = abi()
 
-        onProgress("Unpacking runtime…")
+        onProgress("Preparing your runtime")
         // proot ships as a small dir tree in assets (proot-<abi>/bin/proot +
         // proot-<abi>/libexec/proot/loader). Copy the whole tree to filesDir/proot and
         // mark the binary + loaders executable.
@@ -54,7 +54,7 @@ class Installer(private val ctx: Context) {
         Os.chmod(p.loader, 0b111_101_101)
         runCatching { Os.chmod("${p.loader}32", 0b111_101_101) } // loader32, if present
 
-        onProgress("Installing Linux environment… (one time, a few minutes)")
+        onProgress("Setting up your environment\nFirst launch only — this takes a few minutes")
         // rootfs is large; stream it to disk, then let the guest's tar unpack it. We
         // can't unpack the glibc rootfs with proot until proot exists — which it now
         // does — so we run `proot ... tar xJf` with a minimal busybox-free path. To
@@ -65,7 +65,7 @@ class Installer(private val ctx: Context) {
         TarExtractor.extract(ctx.assets.open("rootfs-$abi.tar"), File(p.rootfs))
         configureGuest(p) // DNS/hosts/tmp — Android doesn't provide these to the guest
 
-        onProgress("Installing AgentNet server…")
+        onProgress("Almost there")
         Paths.dir(p.serverBundle)
         TarExtractor.extract(ctx.assets.open("agentnet-server.tar"), File(p.serverBundle))
 

@@ -69,6 +69,9 @@ export type ClientMessage =
   | { type: "approvalDecision"; id: string; outcome: ApprovalOutcome; reason?: string }
   // onboarding-only:
   | { type: "connectWallet"; address: string; signature: number[] }
+  | { type: "startClaudeLogin" }
+  | { type: "claudeAuthCode"; code: string }
+  | { type: "cancelClaudeLogin" }
   | { type: "toast"; text: string };
 
 // ── server → UI (SSE /events) ──
@@ -89,4 +92,9 @@ export type ServerMessage =
   // onboarding-only:
   | { type: "init"; defaultPath: string | null; cloudKind: string | null }
   | { type: "walletConnected"; address: string | null; storageOptions: unknown }
+  // claude subscription login: server reports whether login is needed, streams the OAuth
+  // URL to open, and the final result after the user pastes their code.
+  | { type: "cliStatus"; claude: "ok" | "no-login" | "missing"; codex: "ok" | "no-login" | "missing" }
+  | { type: "claudeLoginUrl"; url: string }
+  | { type: "claudeLoginStatus"; status: "done" | "error"; error?: string }
   | { type: "toast"; text: string };

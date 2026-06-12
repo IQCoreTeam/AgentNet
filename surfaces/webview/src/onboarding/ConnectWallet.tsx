@@ -8,6 +8,7 @@ import { useMemo, useState } from "react";
 // bundle for the browser. webWallet.ts is browser-safe (only @solana/web3.js + types).
 import { SESSION_KEY_MESSAGE } from "@iqlabs-official/agent-sdk/account/webWallet";
 import { isAndroidWallet, connectAndroidWallet } from "./androidWallet";
+import { OnboardingShell, OnboardingButton } from "./OnboardingShell";
 import { useStore } from "../state/store";
 
 interface SolanaProvider {
@@ -82,41 +83,30 @@ export function ConnectWallet() {
   }
 
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-6 p-6">
-      <div className="text-center">
-        <h1 className="text-xl font-semibold">AgentNet</h1>
-        <p className="mt-1 text-sm text-zinc-400">
-          Connect a wallet to begin. One signature derives your session key.
-        </p>
-      </div>
-
+    <OnboardingShell
+      title="Connect your wallet"
+      subtitle="One signature derives your session key. Your keys stay in your wallet."
+    >
       {android ? (
         // Android shell: one button drives the native wallet picker (Phantom/Solflare/…).
-        <button
-          disabled={busy !== null}
-          onClick={connectAndroid}
-          className="w-full max-w-xs rounded-lg bg-orange-600 px-4 py-3 font-medium text-white disabled:opacity-50"
-        >
+        <OnboardingButton disabled={busy !== null} onClick={connectAndroid}>
           {busy ? "Connecting…" : "Connect Wallet"}
-        </button>
+        </OnboardingButton>
       ) : wallets.length === 0 ? (
-        <p className="max-w-xs text-center text-sm text-zinc-500">
+        <p className="text-center text-sm text-zinc-500">
           No Solana wallet detected. Install Phantom, Solflare, or Backpack and reload.
         </p>
       ) : (
-        <div className="flex w-full max-w-xs flex-col gap-2">
-          {wallets.map(({ name, provider }) => (
-            <button
-              key={name}
-              disabled={busy !== null}
-              onClick={() => connectWith(name, provider)}
-              className="rounded-lg bg-orange-600 px-4 py-3 font-medium text-white disabled:opacity-50"
-            >
-              {busy === name ? `Connecting ${name}…` : `Connect ${name}`}
-            </button>
-          ))}
-        </div>
+        wallets.map(({ name, provider }) => (
+          <OnboardingButton
+            key={name}
+            disabled={busy !== null}
+            onClick={() => connectWith(name, provider)}
+          >
+            {busy === name ? `Connecting ${name}…` : `Connect ${name}`}
+          </OnboardingButton>
+        ))
       )}
-    </div>
+    </OnboardingShell>
   );
 }

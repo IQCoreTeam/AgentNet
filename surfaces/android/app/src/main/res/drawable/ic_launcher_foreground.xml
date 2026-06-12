@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Flat launcher icon for API < 26 (pre-adaptive): green field + black IQLabs logo.
-     API 26+ uses the adaptive icon at mipmap-anydpi-v26/ic_launcher.xml. -->
+<!-- IQLabs logo, black, for the adaptive launcher icon foreground. The logo's native
+     viewBox is 687.88x521.38; a group transform scales+centers it into the 108x108
+     adaptive canvas (within the ~66dp safe zone). Background is the green layer. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="48dp"
-    android:height="48dp"
+    android:width="108dp"
+    android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:fillColor="#00DD66" android:pathData="M0,0h108v108h-108z" />
     <group
         android:scaleX="0.0964"
         android:scaleY="0.0964"

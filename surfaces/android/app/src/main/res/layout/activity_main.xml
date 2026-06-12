@@ -1,23 +1,96 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- One WebView over a centered status line. The status shows install/boot progress;
-     once the server is up it's hidden and the WebView (our React surface) takes over. -->
+<!-- WebView over a branded splash. The splash (logo, wordmark, progress) shows while the
+     runtime installs/boots; once the server answers it's hidden and the React UI takes
+     over. Minimal, centered, dark + IQLabs green — a real product splash, not a debug
+     status line. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="@color/an_bg">
 
     <WebView
         android:id="@+id/webview"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:background="@color/an_bg"
         android:visibility="gone" />
 
-    <TextView
-        android:id="@+id/status"
-        android:layout_width="wrap_content"
+    <!-- Brand block: logo + wordmark, vertically centered. -->
+    <LinearLayout
+        android:id="@+id/bootBox"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:paddingStart="40dp"
+        android:paddingEnd="40dp">
+
+        <ImageView
+            android:layout_width="104dp"
+            android:layout_height="79dp"
+            android:src="@drawable/iq_logo_green"
+            android:contentDescription="@string/app_name" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="22dp"
+            android:text="@string/app_name"
+            android:textColor="@color/an_fg"
+            android:textSize="26sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.01" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="@string/tagline"
+            android:textColor="@color/an_muted"
+            android:textSize="13sp"
+            android:letterSpacing="0.03" />
+    </LinearLayout>
+
+    <!-- Progress block pinned near the bottom: thin indeterminate bar + two-line status
+         (main line bright, sub line muted). Reads as a polished loading state. -->
+    <LinearLayout
+        android:id="@+id/bootProgress"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:padding="24dp"
-        android:textSize="16sp"
-        android:text="@string/booting" />
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="72dp"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:paddingStart="40dp"
+        android:paddingEnd="40dp">
+
+        <ProgressBar
+            android:id="@+id/spinner"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="180dp"
+            android:layout_height="3dp"
+            android:indeterminate="true"
+            android:indeterminateTint="@color/an_green" />
+
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="22dp"
+            android:gravity="center"
+            android:text="@string/booting"
+            android:textColor="@color/an_fg"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/statusSub"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:textColor="@color/an_muted"
+            android:textSize="12.5sp"
+            android:visibility="gone" />
+    </LinearLayout>
 
 </FrameLayout>

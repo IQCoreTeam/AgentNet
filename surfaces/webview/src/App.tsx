@@ -1,11 +1,13 @@
 import { useStore } from "./state/store";
 import { ConnectWallet } from "./onboarding/ConnectWallet";
+import { ConnectClaude } from "./onboarding/ConnectClaude";
 import { ChatScreen } from "./chat/ChatScreen";
 import { Toast } from "./Toast";
 
 // Phase router: the store flips phase on the dispatcher's handshake events.
 //   connecting  → opening the SSE stream / sent `ready`, waiting for init|sessions
 //   onboarding  → no runtime yet → connect a wallet
+//   claudeAuth  → wallet in, claude logged out → connect the Claude subscription
 //   chat        → runtime ready → the chat shell
 export function App() {
   const { state } = useStore();
@@ -13,6 +15,7 @@ export function App() {
     <>
       {state.phase === "connecting" && <Connecting />}
       {state.phase === "onboarding" && <ConnectWallet />}
+      {state.phase === "claudeAuth" && <ConnectClaude />}
       {state.phase === "chat" && <ChatScreen />}
       <Toast />
     </>

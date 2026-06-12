@@ -33,8 +33,12 @@ import {
   webWallet,
   getStorageInfo,
   STORAGE_OPTIONS,
+  detectCli,
+  startClaudeLogin,
+  markClaudeConnected,
   type AgentRuntime,
   type CloudStatus,
+  type ClaudeLogin,
 } from "@iqlabs-official/agent-sdk";
 
 const PORT = Number(process.env.AGENTNET_PORT ?? 4317);
@@ -189,6 +193,10 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
 // / (chat), which opens a FRESH SSE client that finds the runtime ready and attaches
 // chat. So an onboarding client never carries chat itself — clean separation.
 function attachOnboarding(c: Client) {
+  // A claude login in flight for THIS onboarding client (held while the user opens the
+  // OAuth URL on their phone and pastes the code back). One per client.
+  let claudeLogin: ClaudeLogin | null = null;
+
   c.recv = async (m: any) => {
     if (m?.type === "ready") {
       c.send({ type: "init", defaultPath: null, cloudKind: null });
@@ -201,8 +209,39 @@ function attachOnboarding(c: Client) {
         c.send({ type: "toast", text: "Wallet connect failed: " + (e as Error).message });
         return;
       }
-      // Wallet is in → webview navigates to chat (WEB path in onboarding.ts).
+      // Wallet is in. Report CLI auth state so the UI can gate on claude login before
+      // chat; if claude is already logged in (or missing), the UI skips straight through.
+      const cli = await detectCli();
       c.send({ type: "walletConnected", address: walletAddress, storageOptions: STORAGE_OPTIONS });
+      c.send({ type: "cliStatus", claude: cli.claude, codex: cli.codex });
+      return;
+    }
+    // ── claude subscription login: spawn `claude auth login --claudeai`, stream the OAuth
+    // URL to the UI, relay the user's pasted code to the CLI's stdin, report the result.
+    if (m?.type === "startClaudeLogin") {
+      try {
+        claudeLogin?.cancel();
+        claudeLogin = await startClaudeLogin();
+        c.send({ type: "claudeLoginUrl", url: claudeLogin.url });
+        claudeLogin.done.then(async (ok) => {
+          if (ok) await markClaudeConnected();
+          c.send({ type: "claudeLoginStatus", status: ok ? "done" : "error", error: ok ? undefined : "Login was not completed." });
+          claudeLogin = null;
+        });
+      } catch (e) {
+        c.send({ type: "claudeLoginStatus", status: "error", error: (e as Error).message });
+        claudeLogin = null;
+      }
+      return;
+    }
+    if (m?.type === "claudeAuthCode" && typeof m.code === "string") {
+      claudeLogin?.submitCode(m.code);
+      return;
+    }
+    if (m?.type === "cancelClaudeLogin") {
+      claudeLogin?.cancel();
+      claudeLogin = null;
+      return;
     }
   };
 }

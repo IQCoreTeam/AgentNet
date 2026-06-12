@@ -37,6 +37,9 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var status: TextView
+    private lateinit var statusSub: TextView
+    private lateinit var bootBox: android.view.View
+    private lateinit var bootProgress: android.view.View
     private val server by lazy { ServerManager(this) }
 
     // ActivityResultSender registers an activity-result callback in its constructor, which
@@ -56,6 +59,9 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         webView = findViewById(R.id.webview)
         status = findViewById(R.id.status)
+        statusSub = findViewById(R.id.statusSub)
+        bootBox = findViewById(R.id.bootBox)
+        bootProgress = findViewById(R.id.bootProgress)
 
         webView.settings.apply {
             javaScriptEnabled = true
@@ -65,10 +71,19 @@ class MainActivity : AppCompatActivity() {
             mediaPlaybackRequiresUserGesture = false
         }
         webView.webViewClient = object : WebViewClient() {
-            // Keep navigation inside the WebView; the wallet deep-link (window.solana →
-            // Phantom app) is the one case the app should hand off — handled by the
-            // default browsable intent when the page calls it.
-            override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = false
+            // Our app UI is served from the loopback server (127.0.0.1) — keep that inside
+            // the WebView. Any OTHER http(s) link (e.g. the Claude OAuth login page the
+            // ConnectClaude screen surfaces) must open in the EXTERNAL browser: otherwise
+            // claude.ai would take over our WebView and the user couldn't get back to paste
+            // their code. Opening externally lets them authorize, then return to the app.
+            override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
+                val host = runCatching { Uri.parse(url).host }.getOrNull() ?: return false
+                if (host == "127.0.0.1" || host == "localhost") return false // our UI: stay in
+                return runCatching {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    true // handled: opened externally
+                }.getOrDefault(false)
+            }
         }
         webView.webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(m: ConsoleMessage): Boolean {
@@ -88,14 +103,25 @@ class MainActivity : AppCompatActivity() {
         startServerFlow()
     }
 
+    // A status may carry a muted second line after a newline ("main\nsubtitle"); split it
+    // so the splash shows a bright primary line over a dimmer detail line.
     private fun setStatus(text: String) = runOnUiThread {
-        status.text = text
-        status.visibility = android.view.View.VISIBLE
+        val parts = text.split("\n", limit = 2)
+        status.text = parts[0]
+        if (parts.size > 1 && parts[1].isNotBlank()) {
+            statusSub.text = parts[1]
+            statusSub.visibility = android.view.View.VISIBLE
+        } else {
+            statusSub.visibility = android.view.View.GONE
+        }
+        bootBox.visibility = android.view.View.VISIBLE
+        bootProgress.visibility = android.view.View.VISIBLE
         webView.visibility = android.view.View.GONE
     }
 
     private fun showWebView() = runOnUiThread {
-        status.visibility = android.view.View.GONE
+        bootBox.visibility = android.view.View.GONE
+        bootProgress.visibility = android.view.View.GONE
         webView.visibility = android.view.View.VISIBLE
         webView.loadUrl(URL)
     }
@@ -113,9 +139,9 @@ class MainActivity : AppCompatActivity() {
                 val installer = Installer(this)
                 installer.install { setStatus(it) }
 
-                setStatus("Starting AgentNet…")
-                if (!server.start()) { setStatus("Failed to start the server."); return@thread }
-                if (!server.waitForServer()) { setStatus("Server did not come up. Check logs."); return@thread }
+                setStatus("Starting up")
+                if (!server.start()) { setStatus("Couldn't start.\nPlease reopen the app."); return@thread }
+                if (!server.waitForServer()) { setStatus("Taking longer than usual.\nPlease reopen the app."); return@thread }
 
                 showWebView()
             } catch (e: Exception) {
