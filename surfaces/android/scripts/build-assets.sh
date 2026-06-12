@@ -20,8 +20,8 @@ set -euo pipefail
 
 ABI="${ABI:-arm64}"          # arm64 | x86_64
 case "$ABI" in
-  arm64)  PROOT_ARCH="aarch64"; UBUNTU_ARCH="arm64" ;;
-  x86_64) PROOT_ARCH="x86_64"; UBUNTU_ARCH="amd64" ;;
+  arm64)  PROOT_ARCH="aarch64" ;;
+  x86_64) PROOT_ARCH="x86_64" ;;
   *) echo "unsupported ABI: $ABI (use arm64 or x86_64)" >&2; exit 1 ;;
 esac
 
@@ -32,7 +32,7 @@ ASSETS="$ANDROID_DIR/app/src/main/assets"
 WORK="${WORK:-$ANDROID_DIR/.assets-build}"
 mkdir -p "$ASSETS" "$WORK"
 
-echo "==> ABI=$ABI  proot=$PROOT_ARCH  ubuntu=$UBUNTU_ARCH"
+echo "==> ABI=$ABI  proot=$PROOT_ARCH"
 echo "==> assets -> $ASSETS"
 echo "==> work   -> $WORK"
 
@@ -56,54 +56,50 @@ mkdir -p "$ASSETS/proot-$ABI"
 cp -R "$PROOT_STAGE/bin" "$PROOT_STAGE/libexec" "$ASSETS/proot-$ABI/"
 chmod +x "$ASSETS/proot-$ABI/bin/proot" "$ASSETS/proot-$ABI/libexec/proot/loader"* 2>/dev/null || true
 
-# 2) Ubuntu rootfs with the engine installed. We start from proot-distro's published
-#    Ubuntu rootfs, unpack it, then install node + the OFFICIAL claude/codex CLIs +
-#    ripgrep INSIDE it (so they're real glibc Linux binaries), and drop our guest
-#    AGENTS.md at /root/. The in-rootfs steps run under the target arch (see header).
-ROOTFS_DIR="$WORK/rootfs"
-echo "==> [2/3] building rootfs at $ROOTFS_DIR"
+# 2) Ubuntu rootfs with the engine installed. KEY: we don't download a rootfs — this
+#    script runs INSIDE an arm64 ubuntu container (see the workflow), so the container's
+#    own "/" IS the rootfs. We install node + the OFFICIAL claude/codex CLIs + ripgrep
+#    right here, drop the guest AGENTS.md at /root/, then tar "/" (minus virtual fs) as
+#    the rootfs. No download = no 404, and the bits exactly match the pinned base image.
+#    (Requires running as root inside that arm64 container; the workflow does both.)
+echo "==> [2/3] installing engine into this container's rootfs"
 if [ "$PROOT_ARCH" != "$(uname -m)" ] && [ -z "${ALLOW_CROSS:-}" ]; then
-  echo "!! host arch $(uname -m) != target $PROOT_ARCH." >&2
-  echo "!! The in-rootfs install steps need the target arch (qemu-user-static + binfmt," >&2
-  echo "!! or run on an aarch64 runner). Re-run with ALLOW_CROSS=1 once that's set up." >&2
+  echo "!! host arch $(uname -m) != target $PROOT_ARCH — run this inside an arm64" >&2
+  echo "!! container (the CI does). Set ALLOW_CROSS=1 only if you know what you're doing." >&2
   exit 1
 fi
-rm -rf "$ROOTFS_DIR"; mkdir -p "$ROOTFS_DIR"
-# proot-distro Ubuntu rootfs tarball (xz). Pin via PROOT_DISTRO_UBUNTU_URL if needed.
-UBUNTU_URL="${PROOT_DISTRO_UBUNTU_URL:-https://github.com/termux/proot-distro/releases/latest/download/ubuntu-${UBUNTU_ARCH}-pd-v4.x.tar.xz}"
-echo "    fetching ubuntu rootfs: $UBUNTU_URL"
-curl -fSL "$UBUNTU_URL" -o "$WORK/ubuntu.tar.xz"
-tar -xJf "$WORK/ubuntu.tar.xz" -C "$ROOTFS_DIR" --strip-components=0
-
-# Run a setup script inside the rootfs via chroot (needs root/qemu) — installs the engine.
-cat > "$ROOTFS_DIR/root/setup.sh" <<'SETUP'
-#!/bin/sh
-set -e
+if [ "$(id -u)" != "0" ]; then
+  echo "!! must run as root (this writes into / and installs packages)." >&2
+  exit 1
+fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y curl ca-certificates git ripgrep
+apt-get install -y curl ca-certificates git ripgrep xz-utils
 # node (NodeSource LTS)
 curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
 apt-get install -y nodejs
-# official CLIs — their normal installers (NOT the leaked forks)
+# official CLIs — their normal installers (NOT the leaked forks); installed but
+# logged-out, so no credentials end up in the image. The user logs in on-device.
 npm install -g @anthropic-ai/claude-code @openai/codex
 apt-get clean && rm -rf /var/lib/apt/lists/*
-SETUP
-chmod +x "$ROOTFS_DIR/root/setup.sh"
-echo "    running in-rootfs setup (chroot; needs root or qemu binfmt)"
-if command -v chroot >/dev/null && [ "$(id -u)" = "0" ]; then
-  cp /etc/resolv.conf "$ROOTFS_DIR/etc/resolv.conf" 2>/dev/null || true
-  chroot "$ROOTFS_DIR" /root/setup.sh
-else
-  echo "!! need root chroot (or a proot/qemu wrapper) to run setup.sh inside the rootfs." >&2
-  echo "!! Run this script as root on an aarch64 host, or adapt to 'proot-distro login'." >&2
-  exit 1
-fi
-rm -f "$ROOTFS_DIR/root/setup.sh"
 # ship the agent environment guidance into the guest
-cp "$ANDROID_DIR/guest/AGENTS.md" "$ROOTFS_DIR/root/AGENTS.md"
-echo "    packing rootfs tar (plain tar; TarExtractor reads .tar)"
-tar -cf "$ASSETS/rootfs-$ABI.tar" -C "$ROOTFS_DIR" .
+cp "$ANDROID_DIR/guest/AGENTS.md" /root/AGENTS.md
+
+echo "    packing this container's / as the rootfs tar (plain tar; TarExtractor reads .tar)"
+# Write the tar OUTSIDE the tree we're taring (/var/tmp is on the container's own fs and
+# is excluded below), then move it into assets — so the archive never contains itself.
+# -p/--numeric-owner/--xattrs preserve perms+ownership. The repo (REPO_ROOT, a -v mount)
+# is excluded via --one-file-system since it's a separate mount, but we also name it
+# explicitly. Virtual filesystems and tmp dirs are excluded too.
+ROOTFS_TAR="/var/tmp/rootfs-$ABI.tar"
+REPO_REL="./${REPO_ROOT#/}"   # /work -> ./work, for the exclude pattern
+tar -cpf "$ROOTFS_TAR" \
+  --numeric-owner --xattrs --one-file-system \
+  --exclude="./proc" --exclude="./sys" --exclude="./dev" --exclude="./run" \
+  --exclude="./tmp" --exclude="./var/tmp" --exclude="$REPO_REL" \
+  -C / .
+mkdir -p "$ASSETS"
+mv "$ROOTFS_TAR" "$ASSETS/rootfs-$ABI.tar"
 
 # 3) The server bundle = the localhost node server AND the React webview build it
 # serves. Both are arch-independent JS, so a host build is fine to reuse (CI builds them
