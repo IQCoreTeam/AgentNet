@@ -36,9 +36,12 @@ import {
   detectCli,
   startClaudeLogin,
   markClaudeConnected,
+  startCodexLogin,
+  markCodexConnected,
   type AgentRuntime,
   type CloudStatus,
   type ClaudeLogin,
+  type CodexLogin,
 } from "@iqlabs-official/agent-sdk";
 
 const PORT = Number(process.env.AGENTNET_PORT ?? 4317);
@@ -200,9 +203,8 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
 // / (chat), which opens a FRESH SSE client that finds the runtime ready and attaches
 // chat. So an onboarding client never carries chat itself — clean separation.
 function attachOnboarding(c: Client) {
-  // A claude login in flight for THIS onboarding client (held while the user opens the
-  // OAuth URL on their phone and pastes the code back). One per client.
   let claudeLogin: ClaudeLogin | null = null;
+  let codexLogin: CodexLogin | null = null;
 
   c.recvs.push(async (m: any) => {
     if (m?.type === "ready") {
@@ -248,6 +250,29 @@ function attachOnboarding(c: Client) {
     if (m?.type === "cancelClaudeLogin") {
       claudeLogin?.cancel();
       claudeLogin = null;
+      return;
+    }
+    // ── codex device-auth: spawn `codex login --device-auth`, parse URL + one-time code,
+    // stream both to the UI. CLI auto-polls; no code needs to come back from the UI.
+    if (m?.type === "startCodexLogin") {
+      try {
+        codexLogin?.cancel();
+        codexLogin = await startCodexLogin();
+        c.send({ type: "codexLoginChallenge", url: codexLogin.url, code: codexLogin.code });
+        codexLogin.done.then(async (ok) => {
+          if (ok) await markCodexConnected();
+          c.send({ type: "codexLoginStatus", status: ok ? "done" : "error", error: ok ? undefined : "Login was not completed." });
+          codexLogin = null;
+        });
+      } catch (e) {
+        c.send({ type: "codexLoginStatus", status: "error", error: (e as Error).message });
+        codexLogin = null;
+      }
+      return;
+    }
+    if (m?.type === "cancelCodexLogin") {
+      codexLogin?.cancel();
+      codexLogin = null;
       return;
     }
   });
