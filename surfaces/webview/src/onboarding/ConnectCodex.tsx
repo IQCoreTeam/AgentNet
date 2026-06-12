@@ -39,6 +39,7 @@ export function ConnectCodex() {
     if (!apiKey.trim()) return;
     setBusy(true);
     send({ type: "submitCodexApiKey", key: apiKey.trim() });
+    setApiKey(""); // clear from React state immediately; don't let key linger in memory
   }
 
   return (

@@ -73,7 +73,7 @@ export function codexSessionsDir(): string {
   return join(codexHome(), "sessions");
 }
 
-/** Ensure a directory exists (mkdir -p). Call before writing into it. */
+/** Ensure a directory exists (mkdir -p) with 0o700 so only the owner can enter. */
 export async function ensureDir(dir: string): Promise<void> {
-  await mkdir(dir, { recursive: true });
+  await mkdir(dir, { recursive: true, mode: 0o700 });
 }
