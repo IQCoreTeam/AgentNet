@@ -7,7 +7,7 @@ import type { AppOptions } from "../app.js";
 import type { InkApprovalChannel } from "../InkApprovalChannel.js";
 import { useChat, type Engine } from "../hooks/useChat.js";
 import { useFrameLoop } from "../hooks/useFrameLoop.js";
-import { getStorageInfo } from "@iqlabs-official/agent-sdk";
+import { getStorageInfo, getCodexApiKey } from "@iqlabs-official/agent-sdk";
 import { copyToClipboard } from "../clipboard.js";
 import { Message } from "../components/Message.js";
 import { StatusLine } from "../components/StatusLine.js";
@@ -115,6 +115,9 @@ export function Chat({
   const [replyText, setReplyText] = useState("");
   const [showSessions, setShowSessions] = useState(false);
   const [showModels, setShowModels] = useState(false);
+  const [showAccount, setShowAccount] = useState(false);
+  const [accountLines, setAccountLines] = useState<string[]>([]);
+  const [showSettings, setShowSettings] = useState(false);
   const [celebrate, setCelebrate] = useState<"sparkle" | "confetti" | null>(null);
   const [eggMood, setEggMood] = useState<Mood | null>(null);
   const [idle, setIdle] = useState(false);
@@ -242,7 +245,17 @@ export function Chat({
         konami.current = [];
       }
     },
-    { isActive: !pendingApproval && !showSessions && !showModels && !showBtw },
+    { isActive: !pendingApproval && !showSessions && !showModels && !showBtw && !showAccount && !showSettings },
+  );
+
+  useInput(
+    (_input, key) => { if (key.escape || key.return) setShowAccount(false); },
+    { isActive: showAccount },
+  );
+
+  useInput(
+    (_input, key) => { if (key.escape || key.return) setShowSettings(false); },
+    { isActive: showSettings },
   );
 
   // Escape or Return closes the /btw overlay.
@@ -347,6 +360,28 @@ export function Chat({
           setNotice(info ? `storage: ${info.kind}${info.account ? ` (${info.account})` : ""}` : "storage: local only"),
         );
         return;
+      case "account":
+        void (async () => {
+          const lines: string[] = [];
+          if (chat.cli === "codex") {
+            const key = await getCodexApiKey();
+            lines.push(`engine    codex`);
+            lines.push(`auth      ${key ? "API key" : "ChatGPT plan (device auth)"}`);
+          } else {
+            lines.push(`engine    claude`);
+            lines.push(`auth      subscription`);
+          }
+          const win = chat.cli === "codex" ? 256_000 : 200_000;
+          const used = chat.contextTokens ?? Math.round(chat.messages.reduce((n, m) => n + m.text.length, 0) / 4);
+          lines.push(`model     ${chat.model ?? "default"}`);
+          lines.push(`ctx used  ${used.toLocaleString()} / ${win.toLocaleString()} tokens`);
+          setAccountLines(lines);
+          setShowAccount(true);
+        })();
+        return;
+      case "settings":
+        setShowSettings(true);
+        return;
       case "btw":
         if (!arg.trim()) {
           setNotice("usage: /btw <question>");
@@ -355,7 +390,7 @@ export function Chat({
         startBtwQuery(arg.trim());
         return;
       case "help":
-        setNotice("/new /sessions /resume /more /compact /clear /copy /models /engine /wallet /storage /btw <question> /iq /quit · !cmd shell · Esc cancels · Ctrl+A/E/W/U edit");
+        setNotice("/new /sessions /resume /more /compact /clear /copy /models /engine /account /settings /wallet /storage /btw <question> /iq /quit · !cmd shell · Esc cancels · Ctrl+A/E/W/U edit");
         return;
       default:
         setNotice(`unknown command: /${cmd} — try /help`);
@@ -377,8 +412,41 @@ export function Chat({
   const WINDOW = chat.cli === "codex" ? 256_000 : 200_000;
   const usedTokens =
     chat.contextTokens ?? chat.messages.reduce((n, m) => n + m.text.length, 0) / 4;
-  const ctx = Math.max(0, 1 - usedTokens / WINDOW);
+  const usedFrac = Math.min(1, usedTokens / WINDOW); // 0..1 of window consumed
   const ctxReal = chat.contextTokens !== undefined;
+
+  // /account overlay.
+  if (showAccount) {
+    return (
+      <Box flexDirection="column" paddingX={1}>
+        <Box borderStyle="round" borderColor={colors.iqCyan} flexDirection="column" paddingX={2} paddingY={1}>
+          <Text bold color={colors.iqCyan}>account</Text>
+          {accountLines.map((line, i) => (
+            <Text key={i} dimColor>{line}</Text>
+          ))}
+          <Box marginTop={1}><Text dimColor>Esc / Enter  close</Text></Box>
+        </Box>
+      </Box>
+    );
+  }
+
+  // /settings overlay.
+  if (showSettings) {
+    return (
+      <Box flexDirection="column" paddingX={1}>
+        <Box borderStyle="round" borderColor={colors.iqCyan} flexDirection="column" paddingX={2} paddingY={1}>
+          <Text bold color={colors.iqCyan}>settings</Text>
+          <Text dimColor>{`engine    ${chat.cli}`}</Text>
+          <Text dimColor>{`model     ${chat.model ?? "default"}`}</Text>
+          <Text dimColor>{`cwd       ${cwd}`}</Text>
+          <Box marginTop={1}>
+            <Text dimColor>{"/engine claude|codex  ·  /model <name>  ·  /models  to change"}</Text>
+          </Box>
+          <Box marginTop={1}><Text dimColor>Esc / Enter  close</Text></Box>
+        </Box>
+      </Box>
+    );
+  }
 
   // model picker overlay.
   if (showModels) {
@@ -485,7 +553,7 @@ export function Chat({
       <Celebrate kind={celebrate} />
       {idle && !chat.busy ? <Text dimColor>{copy.idleNudge}</Text> : null}
 
-      <StatusLine mood={mood} cli={chat.cli} model={chat.model} cwd={cwd} elapsed={chat.busy ? chat.elapsed : undefined} ctx={ctx} ctxApprox={!ctxReal} />
+      <StatusLine mood={mood} cli={chat.cli} model={chat.model} cwd={cwd} elapsed={chat.busy ? chat.elapsed : undefined} ctx={usedFrac} ctxTokens={Math.round(usedTokens)} ctxWindow={WINDOW} ctxApprox={!ctxReal} />
 
       {/* hide the composer while an approval is pending — keys answer the card instead */}
       {!pendingApproval ? (

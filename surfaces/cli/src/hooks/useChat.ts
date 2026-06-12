@@ -150,7 +150,8 @@ export function useChat(
     (next: Engine) => {
       if (next === cliRef.current) return;
       dropHandle();
-      setCli(next); // keep messages + pendingId → the session carries to the new engine
+      setCli(next);
+      setContextTokens(undefined);
       void savePrefs({ lastCli: next });
     },
     [dropHandle],
@@ -160,6 +161,7 @@ export function useChat(
     (m?: string) => {
       dropHandle();
       setModel(m);
+      setContextTokens(undefined);
       void savePrefs({ lastModel: m });
     },
     [dropHandle],
@@ -169,6 +171,7 @@ export function useChat(
     async (id: string) => {
       dropHandle();
       setPendingId(id);
+      setContextTokens(undefined); // reset bar — new session's usage unknown until first turn
       const p = await runtime.loadSession(id);
       setMessages(p.messages);
       setHasMore(p.hasMore);
@@ -182,6 +185,7 @@ export function useChat(
     dropHandle();
     setPendingId(undefined);
     setMessages([]);
+    setContextTokens(undefined);
     setHasMore(false);
     setCursor(null);
     setEpoch((e) => e + 1);
