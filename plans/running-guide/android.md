@@ -98,8 +98,8 @@ If it prints `Android Debug Bridge version ...`, you're set.
 
 ## Step 2 — Get the asset files
 
-The app needs three files in `app/src/main/assets/` (relative to this `surfaces/android`
-folder):
+The app needs three files in `surfaces/android/app/src/main/assets/` (paths below are from
+the repo root):
 
 ```
 proot-arm64/            (a folder)
@@ -111,7 +111,8 @@ These are **not in git** (too large). **Check if they're already there first** �
 got this folder from someone who built it, you can skip this step.
 
 ```bash
-ls -la app/src/main/assets/
+# from the repo root
+ls -la surfaces/android/app/src/main/assets/
 ```
 If you see all three, jump to [Step 3](#step-3--open-the-project). Otherwise:
 
@@ -124,7 +125,7 @@ Builds the assets in the cloud; you just download the result. No build tools nee
 3. Wait ~10–15 min (it builds the Linux image under emulation).
 4. When green, open the run → **Artifacts** → download **android-assets-arm64** (`.zip`).
 5. Unzip; copy `proot-arm64/`, `rootfs-arm64.tar`, `agentnet-server.tar` into
-   `app/src/main/assets/`.
+   `surfaces/android/app/src/main/assets/`.
 
 ### Option B — build locally with Docker (advanced)
 
@@ -147,7 +148,7 @@ This writes the three files straight into the assets folder.
 
 ## Step 3 — Open the project
 
-⚠️ **Important:** open the **`surfaces/android`** folder (where this file is), **not** the
+⚠️ **Important:** open the **`surfaces/android`** folder inside the repo, **not** the
 repo root, or Android Studio won't recognize it.
 
 1. Open **Android Studio** → **Open** (not "New Project").
@@ -203,7 +204,7 @@ R3CT20DGGEW     device
 
 ### ⚡ Faster: terminal (how it was actually built & tested)
 
-From this `surfaces/android` folder:
+From the `surfaces/android` folder:
 
 ```bash
 # build the APK
