@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #0b0b0d;
+  color: #e8e8ea;
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Rendered markdown (assistant bubbles). DOMPurify-sanitized HTML from core's marked. */
+.md > :first-child {
+  margin-top: 0;
+}
+.md > :last-child {
+  margin-bottom: 0;
+}
+.md p {
+  margin: 0.5em 0;
+}
+.md pre {
+  overflow-x: auto;
+  background: #18181b;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 0.5em 0;
+  font-size: 0.85em;
+}
+.md code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.88em;
+}
+.md :not(pre) > code {
+  background: #27272a;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.md a {
+  color: #7dd3fc;
+  text-decoration: underline;
+}
+.md ul,
+.md ol {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+}
+.md h1,
+.md h2,
+.md h3 {
+  margin: 0.6em 0 0.3em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.md blockquote {
+  border-left: 3px solid #3f3f46;
+  margin: 0.5em 0;
+  padding-left: 0.8em;
+  color: #a1a1aa;
+}
+.md table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+}
+.md th,
+.md td {
+  border: 1px solid #3f3f46;
+  padding: 4px 8px;
+}

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Flat launcher icon for API < 26 (pre-adaptive). API 26+ uses the adaptive icon at
+     mipmap-anydpi-v26/ic_launcher.xml. Both are referenced so every minSdk-24 device
+     has an icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#0B0E14"
+        android:pathData="M0,0h108v108h-108z" />
+    <path
+        android:fillColor="#5B8DEF"
+        android:pathData="M54,30 L72,78 L63,78 L59,66 L49,66 L45,78 L36,78 Z M52,58 L56,58 L54,48 Z" />
+</vector>

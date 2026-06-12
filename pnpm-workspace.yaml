@@ -1,0 +1,6 @@
+# pnpm monorepo: one repo, multiple packages that evolve together.
+#   packages/*  — platform-neutral code (the core SDK; future shared libs)
+#   surfaces/*  — per-platform UIs that import the core (vscode now, android later)
+packages:
+  - "packages/*"
+  - "surfaces/*"

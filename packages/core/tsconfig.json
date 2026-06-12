@@ -1,14 +1,15 @@
 {
   "compilerOptions": {
-    "module": "ESNext",
     "target": "ES2022",
-    "lib": ["ES2022", "DOM"],
-    "outDir": "dist",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "moduleResolution": "Bundler"
+    "declaration": true,
+    "outDir": "dist",
+    "types": ["node"]
   },
-  "include": ["src/**/*"]
+  "include": ["src", "test"]
 }
