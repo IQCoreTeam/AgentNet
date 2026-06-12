@@ -39,7 +39,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var statusSub: TextView
     private lateinit var bootBox: android.view.View
-    private lateinit var bootProgress: android.view.View
     private val server by lazy { ServerManager(this) }
 
     // ActivityResultSender registers an activity-result callback in its constructor, which
@@ -61,7 +60,9 @@ class MainActivity : AppCompatActivity() {
         status = findViewById(R.id.status)
         statusSub = findViewById(R.id.statusSub)
         bootBox = findViewById(R.id.bootBox)
-        bootProgress = findViewById(R.id.bootProgress)
+        // The logo breathes while we boot — our "loading" cue instead of a progress bar.
+        findViewById<android.widget.ImageView>(R.id.logo)
+            .startAnimation(android.view.animation.AnimationUtils.loadAnimation(this, R.anim.logo_pulse))
 
         webView.settings.apply {
             javaScriptEnabled = true
@@ -115,13 +116,11 @@ class MainActivity : AppCompatActivity() {
             statusSub.visibility = android.view.View.GONE
         }
         bootBox.visibility = android.view.View.VISIBLE
-        bootProgress.visibility = android.view.View.VISIBLE
         webView.visibility = android.view.View.GONE
     }
 
     private fun showWebView() = runOnUiThread {
         bootBox.visibility = android.view.View.GONE
-        bootProgress.visibility = android.view.View.GONE
         webView.visibility = android.view.View.VISIBLE
         webView.loadUrl(URL)
     }

@@ -10,7 +10,7 @@ export function Message({ msg }: { msg: ChatMessage }) {
   if (msg.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl bg-zinc-700 px-3.5 py-2 text-sm whitespace-pre-wrap">
+        <div className="max-w-[85%] min-w-0 overflow-hidden rounded-2xl bg-zinc-700 px-3.5 py-2 text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
           {msg.text}
         </div>
       </div>
@@ -35,7 +35,7 @@ export function Message({ msg }: { msg: ChatMessage }) {
 
   // assistant
   return (
-    <div className="text-sm leading-relaxed">
+    <div className="min-w-0 overflow-hidden text-sm leading-relaxed [overflow-wrap:anywhere]">
       <Markdown text={msg.text} />
       {(msg.model || msg.durationMs) && (
         <div className="mt-1 text-[11px] text-zinc-600">

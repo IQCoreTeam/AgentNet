@@ -46,7 +46,7 @@ export function MessageList() {
 
   return (
     <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto px-3 py-3">
-      <div className="mx-auto flex max-w-2xl flex-col gap-3">
+      <div className="mx-auto flex min-w-0 max-w-2xl flex-col gap-3">
         {state.hasMore && (
           <div className="py-1 text-center text-xs text-zinc-600">scroll up for older…</div>
         )}

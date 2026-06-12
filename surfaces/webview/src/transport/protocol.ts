@@ -31,7 +31,15 @@ export interface SessionMeta {
   ts: number;
 }
 
-export type ApprovalKind = "bash" | "edit" | "write" | "read" | "other";
+export type ApprovalKind = "bash" | "edit" | "write" | "read" | "question" | "plan" | "other";
+
+// A choice question (claude's AskUserQuestion) carried inside an ApprovalRequest.
+export interface ApprovalQuestion {
+  question: string;
+  header?: string;
+  multiSelect?: boolean;
+  options: { label: string; description?: string }[];
+}
 
 export interface ApprovalRequest {
   id: string;
@@ -43,6 +51,8 @@ export interface ApprovalRequest {
   command?: string;
   file?: string;
   diff?: string;
+  questions?: ApprovalQuestion[]; // kind === "question"
+  plan?: string;                  // kind === "plan"
   input?: Record<string, unknown>;
 }
 
@@ -66,7 +76,7 @@ export type ClientMessage =
   | { type: "connectCloud"; kind: string; location?: string; authHeader?: string }
   | { type: "disconnectCloud" }
   | { type: "openCloud"; kind: string; location?: string }
-  | { type: "approvalDecision"; id: string; outcome: ApprovalOutcome; reason?: string }
+  | { type: "approvalDecision"; id: string; outcome: ApprovalOutcome; reason?: string; answers?: Record<string, string> }
   // onboarding-only:
   | { type: "connectWallet"; address: string; signature: number[] }
   | { type: "startClaudeLogin" }

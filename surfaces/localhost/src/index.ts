@@ -111,7 +111,12 @@ async function connectWallet(address: string, signature: Uint8Array): Promise<vo
 // reconnect with a cursor can replay what it missed. `res` is the live SSE response.
 interface Client {
   res: ServerResponse;
-  recv: ((m: any) => void) | null;        // set once chat/onboarding attaches
+  // POST fan-out: every onRecv subscriber. The chat dispatcher AND the approval channel
+  // both subscribe (they share one transport), so this MUST be a list — a single slot
+  // would let the dispatcher's handler overwrite the approval channel's, and then
+  // `approvalDecision` would never resolve the parked tool request (the engine hangs
+  // forever waiting on an approval the UI already answered).
+  recvs: ((m: any) => void)[];            // set as chat/onboarding/approval attach
   seq: number;                            // last event id sent
   buffer: { id: number; data: string }[]; // recent events for replay
   reconnectTimer: ReturnType<typeof setTimeout> | null; // grace before teardown
@@ -129,7 +134,7 @@ let clientCounter = 0;
 function makeClient(res: ServerResponse): Client {
   const c: Client = {
     res,
-    recv: null,
+    recvs: [],
     seq: 0,
     buffer: [],
     reconnectTimer: null,
@@ -163,7 +168,9 @@ function scheduleTeardown(id: string, c: Client) {
 function attachChat(id: string, c: Client, rt: AgentRuntime) {
   const transport = {
     send: (msg: unknown) => c.send(msg),
-    onRecv: (cb: (m: any) => void) => { c.recv = cb; },
+    // Subscribe (don't replace): both the dispatcher and the approval channel register a
+    // handler on the same transport. POST fans out to all of them.
+    onRecv: (cb: (m: any) => void) => { c.recvs.push(cb); },
   };
   const approval = new TransportApprovalChannel(transport);
   const chat = createChatSession(rt, transport, {
@@ -197,7 +204,7 @@ function attachOnboarding(c: Client) {
   // OAuth URL on their phone and pastes the code back). One per client.
   let claudeLogin: ClaudeLogin | null = null;
 
-  c.recv = async (m: any) => {
+  c.recvs.push(async (m: any) => {
     if (m?.type === "ready") {
       c.send({ type: "init", defaultPath: null, cloudKind: null });
       return;
@@ -243,7 +250,7 @@ function attachOnboarding(c: Client) {
       claudeLogin = null;
       return;
     }
-  };
+  });
 }
 
 function readBody(req: import("node:http").IncomingMessage): Promise<string> {
@@ -305,12 +312,16 @@ const http = createServer(async (req, res) => {
   if (req.method === "POST" && path === "/rpc") {
     const id = url.searchParams.get("client") ?? "";
     const c = clients.get(id);
-    if (!c || !c.recv) { res.writeHead(409).end("no such client"); return; }
+    if (!c || c.recvs.length === 0) { res.writeHead(409).end("no such client"); return; }
     let msg: unknown;
     try { msg = JSON.parse(await readBody(req)); } catch { res.writeHead(400).end("bad json"); return; }
     // Ack immediately; surface a thrown handler instead of letting it vanish.
     res.writeHead(204).end();
-    Promise.resolve(c.recv(msg)).catch((e) => console.error("[rpc] handler error:", e));
+    // Fan out to every subscriber (dispatcher + approval channel). A handler that doesn't
+    // recognize the message just ignores it (their switches guard each type).
+    for (const recv of c.recvs) {
+      Promise.resolve(recv(msg)).catch((e) => console.error("[rpc] handler error:", e));
+    }
     return;
   }
 

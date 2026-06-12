@@ -26,6 +26,14 @@ export function Composer() {
     if (!t) return;
     send({ type: "send", text: t });
     setText("");
+    if (taRef.current) taRef.current.style.height = "auto"; // collapse back to one row
+  }
+
+  // Grow the textarea with its content (up to the max-height the CSS caps), so a long
+  // message wraps onto multiple lines instead of scrolling a single cramped row.
+  function autoGrow(el: HTMLTextAreaElement) {
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
   }
 
   return (
@@ -75,7 +83,7 @@ export function Composer() {
           rows={1}
           value={text}
           disabled={frozen}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => { setText(e.target.value); autoGrow(e.target); }}
           onKeyDown={(e) => {
             if (e.nativeEvent.isComposing) return; // mid-IME (Korean/JP/CN)
             if (e.key === "Enter" && !e.shiftKey) {
@@ -88,12 +96,12 @@ export function Composer() {
               ? "Answer the approval above to continue…"
               : `Message ${state.cli}… (Enter to send)`
           }
-          className="max-h-40 flex-1 resize-none bg-transparent text-sm outline-none disabled:cursor-not-allowed"
+          className="max-h-40 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-sm leading-relaxed outline-none [overflow-wrap:anywhere] disabled:cursor-not-allowed"
         />
         <button
           onClick={submit}
           disabled={frozen}
-          className="rounded-lg bg-zinc-200 px-3 py-1 text-sm font-medium text-zinc-900 disabled:opacity-40"
+          className="shrink-0 self-end rounded-lg bg-zinc-200 px-3 py-1.5 text-sm font-medium text-zinc-900 disabled:opacity-40"
         >
           Send
         </button>

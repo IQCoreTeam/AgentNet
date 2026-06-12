@@ -19,6 +19,14 @@ import { mapCodexEvent } from "./convert/codex.js";
 import type { ApprovalChannel, ApprovalRequest } from "./approval/channel.js";
 import { autoApprove } from "./approval/channel.js";
 
+// Loosely-typed view of AskUserQuestion's raw input (the SDK hands us `unknown`-ish data).
+type ApprovalQuestionInput = {
+  question?: unknown;
+  header?: unknown;
+  multiSelect?: unknown;
+  options?: { label?: unknown; description?: unknown }[];
+};
+
 // The SDK bundles its own native CLI binary, but when we BUNDLE the extension the
 // SDK can't resolve that binary's path (it's outside the bundle) → "Native CLI binary
 // not found". The fix: point the SDK at the user's installed `claude` (which they're
@@ -104,6 +112,16 @@ function claudeEngine(opts: SpawnOpts): Engine {
     const decision = await approval.request(toApprovalRequest("claude", sessionId, toolName, input));
     if (decision.outcome === "deny") {
       return { behavior: "deny" as const, message: decision.reason ?? "Denied by user" };
+    }
+    // AskUserQuestion isn't a yes/no gate: the user's choice IS the tool result. The SDK
+    // takes it via updatedInput.answers (question text → chosen label). We allow with that
+    // input so claude continues with the answer, instead of trying to render its own
+    // (headless, no-TTY) picker and hanging.
+    if (toolName === "AskUserQuestion" && decision.answers) {
+      return {
+        behavior: "allow" as const,
+        updatedInput: { questions: input.questions, answers: decision.answers },
+      };
     }
     return { behavior: "allow" as const, updatedInput: decision.updatedInput ?? input };
   };
@@ -219,6 +237,23 @@ function toApprovalRequest(
 ): ApprovalRequest {
   const id = randomId();
   const file = strOr(input.file_path);
+  // AskUserQuestion: surface the questions + options so the UI can render a choice list.
+  if (tool === "AskUserQuestion" && Array.isArray(input.questions)) {
+    const questions = (input.questions as ApprovalQuestionInput[]).map((q) => ({
+      question: strOr(q.question),
+      header: typeof q.header === "string" ? q.header : undefined,
+      multiSelect: q.multiSelect === true,
+      options: Array.isArray(q.options)
+        ? q.options.map((o) => ({ label: strOr(o.label), description: typeof o.description === "string" ? o.description : undefined }))
+        : [],
+    }));
+    const title = questions[0]?.question || "A question for you";
+    return { id, cli, sessionId, tool, kind: "question", title, questions, input };
+  }
+  // ExitPlanMode: claude wants the plan approved before implementing.
+  if (tool === "ExitPlanMode") {
+    return { id, cli, sessionId, tool, kind: "plan", title: "Review the plan", plan: strOr(input.plan), input };
+  }
   if (tool === "Bash") {
     const command = strOr(input.command);
     return { id, cli, sessionId, tool, kind: "bash", title: "Run: " + firstLine(command), command, input };
