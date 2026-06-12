@@ -84,6 +84,7 @@ export type ClientMessage =
   | { type: "cancelClaudeLogin" }
   | { type: "startCodexLogin" }
   | { type: "cancelCodexLogin" }
+  | { type: "submitCodexApiKey"; key: string }
   | { type: "toast"; text: string };
 
 // ── server → UI (SSE /events) ──

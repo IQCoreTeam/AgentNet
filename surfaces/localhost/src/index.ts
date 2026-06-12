@@ -38,6 +38,7 @@ import {
   markClaudeConnected,
   startCodexLogin,
   markCodexConnected,
+  saveCodexApiKey,
   type AgentRuntime,
   type CloudStatus,
   type ClaudeLogin,
@@ -273,6 +274,16 @@ function attachOnboarding(c: Client) {
     if (m?.type === "cancelCodexLogin") {
       codexLogin?.cancel();
       codexLogin = null;
+      return;
+    }
+    if (m?.type === "submitCodexApiKey" && typeof m.key === "string") {
+      try {
+        await saveCodexApiKey(m.key);
+        await markCodexConnected();
+        c.send({ type: "codexLoginStatus", status: "done" });
+      } catch (e) {
+        c.send({ type: "codexLoginStatus", status: "error", error: (e as Error).message });
+      }
       return;
     }
   });

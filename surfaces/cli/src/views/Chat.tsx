@@ -52,6 +52,7 @@ export function Chat({
   });
   const [notice, setNotice] = useState("");
   const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
+  const [diffExpanded, setDiffExpanded] = useState(false);
   // approval reply mode: null = y/a/n buttons; "reason" = typing a deny reason;
   // "edit" = editing the bash command before allowing.
   const [replyMode, setReplyMode] = useState<"reason" | "edit" | null>(null);
@@ -121,6 +122,7 @@ export function Chat({
         setPendingApproval(req);
         setReplyMode(null);
         setReplyText("");
+        setDiffExpanded(false);
       }),
     [approval],
   );
@@ -135,6 +137,7 @@ export function Chat({
       if (input === "y") return approval.resolve(pendingApproval.id, { outcome: "once" });
       if (input === "a") return approval.resolve(pendingApproval.id, { outcome: "always" });
       if (input === "r") return setReplyMode("reason");
+      if (input === "d") return setDiffExpanded(!diffExpanded);
       if (input === "e" && pendingApproval.kind === "bash") {
         setReplyText(pendingApproval.command ?? "");
         return setReplyMode("edit");
@@ -348,7 +351,14 @@ export function Chat({
 
       {chat.busy && !pendingApproval ? <ThinkingLine /> : null}
 
-      {pendingApproval ? <ApprovalCard req={pendingApproval} reply={replyMode} replyText={replyText} /> : null}
+      {pendingApproval ? (
+        <ApprovalCard
+          req={pendingApproval}
+          reply={replyMode}
+          replyText={replyText}
+          diffExpanded={diffExpanded}
+        />
+      ) : null}
 
       <Celebrate kind={celebrate} />
       {idle && !chat.busy ? <Text dimColor>{copy.idleNudge}</Text> : null}

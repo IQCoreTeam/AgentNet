@@ -13,10 +13,12 @@ export function ApprovalCard({
   req,
   reply = null,
   replyText = "",
+  diffExpanded = false,
 }: {
   req: ApprovalRequest;
   reply?: "reason" | "edit" | null;
   replyText?: string;
+  diffExpanded?: boolean;
 }) {
   const danger = req.risk === "danger";
   const accent = danger ? colors.err : colors.warn;
@@ -37,7 +39,7 @@ export function ApprovalCard({
       {req.command ? <Text color={colors.iqCyan}>$ {req.command}</Text> : null}
       {req.kind === "bash" && req.cwd ? <Text dimColor>in {req.cwd}</Text> : null}
       {req.file ? <Text dimColor>{req.file}</Text> : null}
-      {req.diff ? <DiffView diff={req.diff} maxLines={20} /> : null}
+      {req.diff ? <DiffView diff={req.diff} maxLines={20} expanded={diffExpanded} /> : null}
 
       {reply ? (
         <Box marginTop={1} flexDirection="column">
@@ -54,7 +56,7 @@ export function ApprovalCard({
           <Text dimColor>↵ submit · esc back</Text>
         </Box>
       ) : (
-        <Box marginTop={1}>
+        <Box marginTop={1} flexWrap="wrap">
           <Text color={colors.ok}>[y]</Text>
           <Text> allow once  </Text>
           <Text color={colors.iqMagenta}>[a]</Text>
@@ -62,10 +64,15 @@ export function ApprovalCard({
           <Text color={colors.err}>[n]</Text>
           <Text> deny  </Text>
           <Text color={colors.iqViolet}>[r]</Text>
-          <Text> deny+reason</Text>
+          <Text> deny+reason  </Text>
+          {req.diff ? (
+            <>
+              <Text color={colors.iqCyan}>[d]</Text>
+              <Text> toggle diff  </Text>
+            </>
+          ) : null}
           {canEdit ? (
             <>
-              <Text>  </Text>
               <Text color={colors.iqCyan}>[e]</Text>
               <Text> edit</Text>
             </>

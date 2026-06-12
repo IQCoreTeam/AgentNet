@@ -103,6 +103,8 @@ export interface AgentRuntime {
     // multiple chat panels sharing one runtime each route approvals to their OWN
     // panel. Omit → the runtime's default channel (or auto-allow).
     approval?: ApprovalChannel;
+    // Optional Codex API Key (Stage 1)
+    apiKey?: string;
   }): Promise<SessionHandle>;
 
   // list the wallet's saved sessions (for the UI's session list)

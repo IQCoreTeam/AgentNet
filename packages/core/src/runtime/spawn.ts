@@ -9,7 +9,8 @@
 // and never imports an SDK type. Output is delivered as already-mapped ChatMessages
 // (convert/* map the SDK events); the runtime just appends + paints.
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import readline from "node:readline";
 import { existsSync } from "node:fs";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { Codex } from "@openai/codex-sdk";
@@ -65,6 +66,7 @@ export interface SpawnOpts {
   model?: string;
   approval?: ApprovalChannel; // how tool approvals get decided; default = auto-allow
   stream?: boolean; // emit partial assistant deltas (claude includePartialMessages)
+  apiKey?: string; // Stage 1 Codex API Key
 }
 
 export function spawnCli(opts: SpawnOpts): Engine {
@@ -207,39 +209,317 @@ function claudeEngine(opts: SpawnOpts): Engine {
   };
 }
 
-// ── codex: SDK thread, one runStreamed() per turn. No interactive callback in the
-// SDK (approvalPolicy only) — so we govern via policy and let the ApprovalChannel
-// pre-decide once (e.g. an auto/sandbox decision). Interactive codex approval needs
-// the app-server protocol, which codex-sdk doesn't expose yet. ────────────────────
+// ── codex: app-server JSON-RPC over stdio. Spawns `codex app-server --stdio`
+// and processes requests and notifications, routing approvals to the ApprovalChannel.
 function codexEngine(opts: SpawnOpts): Engine {
   const cb = callbacks();
   const approval = opts.approval ?? autoApprove();
-  // same bundle-path issue as claude: point the SDK at the user's installed `codex`.
-  const codex = new Codex({ codexPathOverride: resolveExecutable("codex") });
-  // resume an existing thread (our injectCodex wrote it), else start fresh.
-  const thread = opts.sessionId
-    ? codex.resumeThread(opts.sessionId, threadOpts(opts))
-    : codex.startThread(threadOpts(opts));
+
+  const codexPath = resolveExecutable("codex") || "codex";
+  const childEnv = { ...process.env };
+  if (opts.apiKey) {
+    childEnv.OPENAI_API_KEY = opts.apiKey;
+  }
+  const child = spawn(codexPath, ["app-server", "--stdio"], {
+    env: childEnv,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+
+  child.stderr.on("data", (d) => {
+    const text = d.toString().trim();
+    if (text) {
+      cb.emitErr(`[codex app-server stderr] ${text}`);
+    }
+  });
+
+  child.on("error", (err) => {
+    cb.emitErr(`[codex app-server] Failed to start: ${err.message}`);
+    cb.emitTurn();
+  });
+  child.on("exit", (code) => {
+    if (code !== 0 && code !== null) {
+      cb.emitErr(`[codex app-server] Exited with code ${code}`);
+      cb.emitTurn();
+    }
+  });
+
+  let nextRpcId = 1;
+  const pendingRequests = new Map<number | string, { resolve: (res: any) => void; reject: (err: any) => void }>();
+
+  function sendRequest(method: string, params: any): Promise<any> {
+    const id = nextRpcId++;
+    const msg = { jsonrpc: "2.0", id, method, params };
+    return new Promise((resolve, reject) => {
+      pendingRequests.set(id, { resolve, reject });
+      child.stdin.write(JSON.stringify(msg) + "\n");
+    });
+  }
+
+  function sendResponse(id: number | string, result: any) {
+    const msg = { jsonrpc: "2.0", id, result };
+    child.stdin.write(JSON.stringify(msg) + "\n");
+  }
+
+  function sendError(id: number | string, error: any) {
+    const msg = { jsonrpc: "2.0", id, error };
+    child.stdin.write(JSON.stringify(msg) + "\n");
+  }
+
+  const rl = readline.createInterface({
+    input: child.stdout,
+    terminal: false,
+  });
+
   let sessionId = opts.sessionId ?? "";
+  let streamBuf = "";
+  let thinkingBuf = "";
   let running = false;
 
+  rl.on("line", (line) => {
+    if (!line.trim()) return;
+    try {
+      const msg = JSON.parse(line);
+      if (msg.id !== undefined && msg.method !== undefined) {
+        handleServerRequest(msg);
+      } else if (msg.id !== undefined) {
+        const pending = pendingRequests.get(msg.id);
+        if (pending) {
+          pendingRequests.delete(msg.id);
+          if (msg.error) {
+            pending.reject(new Error(msg.error.message || "RPC Error"));
+          } else {
+            pending.resolve(msg.result);
+          }
+        }
+      } else {
+        handleServerNotification(msg);
+      }
+    } catch (e) {
+      console.error("Failed to parse JSON-RPC line:", line, e);
+    }
+  });
+
+  function handleServerNotification(msg: any) {
+    const params = msg.params;
+    if (msg.method === "thread/started" && params?.threadId) {
+      sessionId = params.threadId;
+      cb.emitSid(params.threadId);
+    } else if (msg.method === "item/agentMessage/delta" && params?.delta) {
+      streamBuf += params.delta;
+      cb.emitMsg({ role: "assistant", text: streamBuf, ts: Date.now(), partial: true });
+    } else if (msg.method === "item/reasoning/textDelta" && params?.delta) {
+      thinkingBuf += params.delta;
+      cb.emitMsg({ role: "thinking", text: thinkingBuf, ts: Date.now(), partial: true });
+    } else if (msg.method === "item/completed" && params?.item) {
+      const it = params.item;
+      if ((it.type === "agentMessage" || it.type === "agent_message") && it.text) {
+        cb.emitMsg({ role: "assistant", text: it.text, ts: Date.now() });
+        streamBuf = "";
+      } else if (it.type === "reasoning") {
+        const text = Array.isArray(it.content) ? it.content.join("\n") : (it.text || "");
+        if (text) {
+          cb.emitMsg({ role: "thinking", text, ts: Date.now() });
+          thinkingBuf = "";
+        }
+      } else if ((it.type === "commandExecution" || it.type === "command_execution") && it.command) {
+        const aggregatedOutput = it.aggregatedOutput !== undefined ? it.aggregatedOutput : it.aggregated_output;
+        const exitCode = it.exitCode !== undefined ? it.exitCode : it.exit_code;
+        cb.emitMsg({
+          role: "tool",
+          text: it.command.split("\n")[0]?.slice(0, 80) || "bash",
+          ts: Date.now(),
+          tool: { name: "Bash", command: it.command, output: (aggregatedOutput ?? "").slice(0, 4000), exitCode },
+        });
+      } else if ((it.type === "fileChange" || it.type === "file_change") && Array.isArray(it.changes)) {
+        for (const c of it.changes) {
+          cb.emitMsg({
+            role: "tool",
+            text: c.kind + " " + (c.path.split("/").pop() || c.path),
+            ts: Date.now(),
+            tool: { name: c.kind === "delete" ? "Delete" : "Write", file: c.path },
+          });
+        }
+      }
+    } else if (msg.method === "rawResponseItem/completed" && params?.item) {
+      const it = params.item;
+      if (it.type === "message" && it.role === "assistant" && Array.isArray(it.content)) {
+        const text = it.content
+          .filter((c: any) => c.type === "output_text" || c.type === "input_text")
+          .map((c: any) => c.text)
+          .join("");
+        if (text) {
+          cb.emitMsg({ role: "assistant", text, ts: Date.now() });
+          streamBuf = "";
+        }
+      } else if (it.type === "reasoning" && Array.isArray(it.content)) {
+        const text = it.content
+          .filter((c: any) => c.type === "reasoning_text" || c.type === "text")
+          .map((c: any) => c.text)
+          .join("");
+        if (text) {
+          cb.emitMsg({ role: "thinking", text, ts: Date.now() });
+          thinkingBuf = "";
+        }
+      }
+    } else if (msg.method === "turn/completed") {
+      if (params?.usage) {
+        const usage = params.usage;
+        cb.emitUsage((usage.input_tokens ?? 0) + (usage.cached_input_tokens ?? 0));
+      }
+      cb.emitTurn();
+      running = false;
+    } else if (msg.method === "turn/failed" || msg.method === "error") {
+      const err = params?.error?.message || params?.message || "Turn failed";
+      cb.emitErr(`[codex] ${err}`);
+      cb.emitTurn();
+      running = false;
+    }
+  }
+
+  async function handleServerRequest(msg: any) {
+    const params = msg.params;
+    try {
+      if (msg.method === "execCommandApproval" || msg.method === "item/commandExecution/requestApproval") {
+        let cmdStr = "";
+        if (params.command) {
+          cmdStr = Array.isArray(params.command) ? params.command.join(" ") : String(params.command);
+        }
+        const req = toApprovalRequest("codex", sessionId, "Bash", { command: cmdStr }, params.cwd);
+        const decision = await approval.request(req);
+        
+        if (msg.method === "execCommandApproval") {
+          let reviewDecision: string = "denied";
+          if (decision.outcome === "once") reviewDecision = "approved";
+          else if (decision.outcome === "always") reviewDecision = "approved_for_session";
+          else if (decision.outcome === "deny") reviewDecision = "denied";
+          sendResponse(msg.id, { decision: reviewDecision });
+        } else {
+          let decisionVal: "accept" | "acceptForSession" | "decline" | "cancel" = "decline";
+          if (decision.outcome === "once") decisionVal = "accept";
+          else if (decision.outcome === "always") decisionVal = "acceptForSession";
+          else if (decision.outcome === "deny") decisionVal = "decline";
+          sendResponse(msg.id, { decision: decisionVal });
+        }
+      } else if (msg.method === "applyPatchApproval" || msg.method === "item/fileChange/requestApproval") {
+        if (msg.method === "applyPatchApproval") {
+          const filePaths = Object.keys(params.fileChanges || {});
+          const filePath = filePaths[0] || "";
+          const change = filePath ? params.fileChanges[filePath] : null;
+          let tool = "Write";
+          let diff = "";
+          if (change) {
+            if (change.type === "add") {
+              tool = "Write";
+              diff = (change.content || "").split("\n").map((l: string) => "+" + l).join("\n");
+            } else if (change.type === "delete") {
+              tool = "Delete";
+              diff = (change.content || "").split("\n").map((l: string) => "-" + l).join("\n");
+            } else if (change.type === "update") {
+              tool = "Edit";
+              diff = change.unified_diff || "";
+            }
+          }
+          
+          const req = toApprovalRequest("codex", sessionId, tool, { file_path: filePath }, opts.cwd);
+          if (diff) req.diff = diff;
+          
+          const decision = await approval.request(req);
+          let reviewDecision: string = "denied";
+          if (decision.outcome === "once") reviewDecision = "approved";
+          else if (decision.outcome === "always") reviewDecision = "approved_for_session";
+          else if (decision.outcome === "deny") reviewDecision = "denied";
+          
+          sendResponse(msg.id, { decision: reviewDecision });
+        } else {
+          const pathStr = params.grantRoot || "";
+          const req = toApprovalRequest("codex", sessionId, "Edit", { file_path: pathStr }, opts.cwd);
+          req.title = `Allow file changes under ${pathStr || "workspace"}`;
+          if (params.reason) {
+            req.title += ` (${params.reason})`;
+          }
+          
+          const decision = await approval.request(req);
+          let decisionVal: "accept" | "acceptForSession" | "decline" | "cancel" = "decline";
+          if (decision.outcome === "once") decisionVal = "accept";
+          else if (decision.outcome === "always") decisionVal = "acceptForSession";
+          else if (decision.outcome === "deny") decisionVal = "decline";
+          
+          sendResponse(msg.id, { decision: decisionVal });
+        }
+      } else if (msg.method === "item/permissions/requestApproval") {
+        const req = toApprovalRequest("codex", sessionId, "Permissions", { reason: params.reason }, opts.cwd);
+        req.title = `Grant permissions: ${params.reason || "sandbox access"}`;
+        
+        const decision = await approval.request(req);
+        if (decision.outcome === "deny") {
+          sendError(msg.id, { code: 4001, message: "User declined permissions request" });
+        } else {
+          const permissions: any = {};
+          if (params.permissions?.network) {
+            permissions.network = params.permissions.network;
+          }
+          if (params.permissions?.fileSystem) {
+            permissions.fileSystem = params.permissions.fileSystem;
+          }
+          sendResponse(msg.id, {
+            permissions,
+            scope: decision.outcome === "always" ? "session" : "turn",
+          });
+        }
+      } else {
+        sendError(msg.id, { code: -32601, message: `Method '${msg.method}' not implemented` });
+      }
+    } catch (e: any) {
+      sendError(msg.id, { code: -32000, message: e.message || "Approval handling failed" });
+    }
+  }
+
+  const initPromise = (async () => {
+    try {
+      await sendRequest("initialize", {
+        clientInfo: { name: "AgentNet", title: "AgentNet VSCode", version: "0.1.0" },
+        capabilities: { experimentalApi: true, requestAttestation: false },
+      });
+      
+      if (opts.sessionId) {
+        await sendRequest("thread/resume", {
+          threadId: opts.sessionId,
+          model: opts.model,
+          cwd: opts.cwd,
+          approvalPolicy: "on-request",
+          approvalsReviewer: "user",
+        });
+        cb.emitSid(opts.sessionId);
+      } else {
+        const res = await sendRequest("thread/start", {
+          model: opts.model,
+          cwd: opts.cwd,
+          approvalPolicy: "on-request",
+          approvalsReviewer: "user",
+        });
+        const threadId = res?.thread?.id;
+        if (threadId) {
+          sessionId = threadId;
+          cb.emitSid(threadId);
+        }
+      }
+    } catch (e: any) {
+      cb.emitErr(`[codex init] ${e.message}`);
+      cb.emitTurn();
+    }
+  })();
+
   const runTurn = async (text: string) => {
-    if (running) return; // codex is one-turn-at-a-time
+    if (running) return;
     running = true;
     try {
-      const { events } = await thread.runStreamed(text);
-      for await (const ev of events) {
-        const r = mapCodexEvent(ev);
-        if (r.sessionId && !sessionId) { sessionId = r.sessionId; cb.emitSid(r.sessionId); }
-        // codex partials are already full snapshots (item.updated) → emit as-is.
-        for (const cm of r.messages) cb.emitMsg(cm);
-        if (r.contextTokens !== undefined) cb.emitUsage(r.contextTokens);
-        if (r.turnEnded) cb.emitTurn();
-      }
+      await sendRequest("turn/start", {
+        threadId: sessionId,
+        input: [{ type: "text", text, text_elements: [] }],
+      });
     } catch (e) {
       cb.emitErr(`[codex engine] ${e instanceof Error ? e.message : String(e)}`);
       cb.emitTurn();
-    } finally {
       running = false;
     }
   };
@@ -251,23 +531,11 @@ function codexEngine(opts: SpawnOpts): Engine {
     onError: (c) => cb.err.push(c),
     onUsage: (c) => cb.use.push(c),
     send: (t) => {
-      // codex SDK has no inline approval; surface ONE policy decision per turn so the
-      // ApprovalChannel still sees the action (and can deny up front). On allow, run.
-      void approval
-        .request(toApprovalRequest("codex", sessionId, "turn", { text: t }))
-        .then((d) => { if (d.outcome !== "deny") return runTurn(t); cb.emitTurn(); });
+      void initPromise.then(() => runTurn(t));
     },
-    stop: () => { /* codex turns are short-lived; nothing long-running to kill */ },
-  };
-}
-
-function threadOpts(opts: SpawnOpts) {
-  return {
-    workingDirectory: opts.cwd,
-    skipGitRepoCheck: true,
-    model: opts.model,
-    sandboxMode: "workspace-write" as const,
-    approvalPolicy: "on-failure" as const,
+    stop: () => {
+      child.kill();
+    },
   };
 }
 

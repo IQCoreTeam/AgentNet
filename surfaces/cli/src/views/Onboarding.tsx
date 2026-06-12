@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Box, Text } from "ink";
 import { Select, TextInput } from "@inkjs/ui";
-import { STORAGE_OPTIONS, type StorageConfig, type StorageKind, startCodexLogin, markCodexConnected } from "@iqlabs-official/agent-sdk";
+import { STORAGE_OPTIONS, type StorageConfig, type StorageKind, startCodexLogin, markCodexConnected, saveCodexApiKey } from "@iqlabs-official/agent-sdk";
 import type { CliReport, CliStatus } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../theme.js";
 import { Iggy } from "../components/Iggy.js";
@@ -18,7 +18,7 @@ function statusBadge(s: CliStatus) {
   return <Text color={colors.err}>{glyph.fail} not installed</Text>;
 }
 
-type OnboardStep = "engine" | "codexLogin" | "storage" | "location";
+type OnboardStep = "engine" | "codexAuthChoice" | "codexLogin" | "codexApiKey" | "storage" | "location";
 
 export function Onboarding({
   report,
@@ -42,7 +42,7 @@ export function Onboarding({
   function chooseEngine(e: "claude" | "codex") {
     setEngine(e);
     if (e === "codex" && report.codex === "no-login") {
-      setStep("codexLogin");
+      setStep("codexAuthChoice");
     } else {
       setStep("storage");
     }
@@ -70,6 +70,17 @@ export function Onboarding({
     });
     return () => { cancelled = true; };
   }, [step]);
+
+  async function submitApiKey(key: string) {
+    if (!key.trim()) return;
+    try {
+      await saveCodexApiKey(key.trim());
+      await markCodexConnected();
+      setStep("storage");
+    } catch (e: unknown) {
+      setCodexErr(e instanceof Error ? e.message : String(e));
+    }
+  }
 
   function chooseKind(k: StorageKind) {
     if (k === "local") return onDone(engine);
@@ -101,6 +112,33 @@ export function Onboarding({
             ]}
             onChange={(v) => chooseEngine(v as "claude" | "codex")}
           />
+        </Box>
+      )}
+
+      {step === "codexAuthChoice" && (
+        <Box flexDirection="column">
+          <Text color={colors.iqCyan}>how do you want to connect to Codex?</Text>
+          <Select
+            options={[
+              { label: "ChatGPT Plus Plan (uses device auth)", value: "chatgpt" },
+              { label: "OpenAI API Key (uses direct API access)", value: "apikey" },
+            ]}
+            onChange={(v) => {
+              if (v === "chatgpt") setStep("codexLogin");
+              else setStep("codexApiKey");
+            }}
+          />
+        </Box>
+      )}
+
+      {step === "codexApiKey" && (
+        <Box flexDirection="column">
+          <Text color={colors.iqCyan}>Enter your OpenAI API Key:</Text>
+          <TextInput
+            placeholder="sk-proj-..."
+            onSubmit={submitApiKey}
+          />
+          {codexErr && <Text color={colors.err}>{codexErr}</Text>}
         </Box>
       )}
 

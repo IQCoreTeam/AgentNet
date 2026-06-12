@@ -38,6 +38,8 @@ export {
   isCodexLoggedIn,
   markCodexConnected,
   isCodexMarked,
+  saveCodexApiKey,
+  deleteCodexApiKey,
 } from "./account/codexAuth.js";
 export type { CodexLogin } from "./account/codexAuth.js";
 export {
@@ -60,13 +62,7 @@ export { ephemeralKey, persistedKey } from "./account/keyPolicy.js";
 export type { KeyPolicy, KeyVault } from "./account/keyPolicy.js";
 export { agentnetFolderLink } from "./account/storage/gdrive.js";
 export type { CloudStatus } from "./account/storage/mirror.js";
-export {
-  startCodexLogin,
-  isCodexLoggedIn,
-  markCodexConnected,
-  isCodexMarked,
-} from "./account/codexAuth.js";
-export type { CodexLogin } from "./account/codexAuth.js";
+
 
 import type { AgentRuntime, Wallet } from "./runtime/contract.js";
 import type { CloudStatus } from "./account/storage/mirror.js";

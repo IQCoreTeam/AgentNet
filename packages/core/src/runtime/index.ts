@@ -7,6 +7,7 @@
 import { spawnCli } from "./spawn.js";
 import { SessionStore } from "../account/store.js";
 import { prepareResume } from "./inject/index.js";
+import { getCodexApiKey } from "../account/codexAuth.js";
 import type { ApprovalChannel } from "./approval/channel.js";
 import type {
   AgentRuntime,
@@ -39,7 +40,8 @@ export function createRuntime(
 
       // per-session approval channel (each panel passes its own) wins; fall back to
       // the runtime-level default channel.
-      const cli = spawnCli({ ...opts, sessionId: nativeId, approval: opts.approval ?? approval });
+      const apiKey = opts.apiKey || (opts.cli === "codex" ? await getCodexApiKey().catch(() => undefined) : undefined);
+      const cli = spawnCli({ ...opts, sessionId: nativeId, approval: opts.approval ?? approval, apiKey });
 
       // Storage key stays the CANONICAL id while resuming; the cli's emitted (native)
       // id must NOT overwrite it, or appended turns land in the wrong log.
