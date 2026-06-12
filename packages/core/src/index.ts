@@ -68,6 +68,12 @@ export { TransportApprovalChannel } from "./chat/approvalChannel.js";
 export { chatHtml } from "./chat/ui/webview.js";
 export { onboardingHtml } from "./chat/ui/onboarding.js";
 
+// The marked + dompurify browser builds as one text blob (see mdLibs.generated.ts).
+// The HTML webview inlines this into a <script>; the React web surface evaluates it
+// once to get window.marked / window.DOMPurify, so both surfaces render markdown with
+// the exact same engine — one markdown implementation, no per-surface md library.
+export { MD_LIBS } from "./chat/ui/mdLibs.generated.js";
+
 // Connect a wallet, restore its configured storage, return a ready runtime.
 // (Assumes initialize() was already run once to pick a storage backend.)
 // onCloudStatus (optional): reports whether each drive-mirror write succeeded, so

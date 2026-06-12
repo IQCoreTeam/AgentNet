@@ -23,13 +23,14 @@
 // and every later client (e.g. the chat page after onboarding) shares that runtime.
 
 import { createServer, type ServerResponse } from "node:http";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { dirname, join, normalize, extname } from "node:path";
 import {
   connect,
   createChatSession,
   TransportApprovalChannel,
   webWallet,
-  chatHtml,
-  onboardingHtml,
   getStorageInfo,
   STORAGE_OPTIONS,
   type AgentRuntime,
@@ -37,6 +38,46 @@ import {
 } from "@iqlabs-official/agent-sdk";
 
 const PORT = Number(process.env.AGENTNET_PORT ?? 4317);
+
+// The built React UI (surfaces/webview/dist) this host serves. Default is the sibling
+// surface relative to this bundle; the Android shell can point elsewhere via env. The
+// UI's transport (POST /rpc + SSE /events) is served by this same process.
+const WEBVIEW_DIR =
+  process.env.AGENTNET_WEBVIEW_DIR ??
+  join(dirname(fileURLToPath(import.meta.url)), "..", "..", "webview", "dist");
+
+const MIME: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".json": "application/json",
+  ".woff2": "font/woff2",
+  ".png": "image/png",
+};
+
+// Serve a file from the webview build. Any path that isn't a real asset falls back to
+// index.html — it's a single-page app, so the SPA does its own (wallet → chat) routing.
+async function serveWebview(path: string, res: ServerResponse): Promise<void> {
+  // Strip the leading slash and normalize away any ../ so a request can't escape the dir.
+  const rel = normalize(path).replace(/^(\.\.[/\\])+/, "").replace(/^[/\\]+/, "");
+  const isAsset = rel !== "" && extname(rel) !== "";
+  const file = join(WEBVIEW_DIR, isAsset ? rel : "index.html");
+  try {
+    const body = await readFile(file);
+    res.writeHead(200, { "content-type": MIME[extname(file)] ?? "application/octet-stream" });
+    res.end(body);
+  } catch {
+    if (isAsset) {
+      res.writeHead(404).end("not found");
+      return;
+    }
+    res.writeHead(500).end(
+      "webview build not found — run `pnpm --filter agentnet-webview build` " +
+        "or set AGENTNET_WEBVIEW_DIR",
+    );
+  }
+}
 // How many recent events to keep per client for SSE replay after a reconnect. A turn
 // is well under this; the buffer only needs to cover a brief network drop.
 const REPLAY_BUFFER = 256;
@@ -179,21 +220,6 @@ const http = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
   const path = url.pathname;
 
-  // ── HTML pages ──
-  if (req.method === "GET" && (path === "/" || path === "/chat.html")) {
-    // No wallet yet → connect one first (server knows runtime state, so the chat page
-    // is never reached wallet-less and left hanging).
-    if (!runtime) { res.writeHead(302, { location: "/onboarding" }).end(); return; }
-    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-    res.end(chatHtml());
-    return;
-  }
-  if (req.method === "GET" && path === "/onboarding") {
-    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-    res.end(onboardingHtml());
-    return;
-  }
-
   // ── SSE: open this UI's event stream (server→UI). A fresh connection gets a new
   // client id + chat/onboarding attachment. A RECONNECT (?client=<id>&cursor=<seq>,
   // or Last-Event-ID header) rebinds the existing client to the new response and
@@ -249,9 +275,17 @@ const http = createServer(async (req, res) => {
     return;
   }
 
+  // ── static: anything else GET → the webview SPA (assets directly, every other path
+  // falls back to index.html so the SPA routes wallet→chat itself). Kept last so /events
+  // and /rpc match first. ──
+  if (req.method === "GET") {
+    await serveWebview(path, res);
+    return;
+  }
+
   res.writeHead(404).end("not found");
 });
 
 http.listen(PORT, () => {
-  console.log(`AgentNet localhost → http://localhost:${PORT}/onboarding  (connect a wallet to begin)`);
+  console.log(`AgentNet localhost → http://localhost:${PORT}/  (connect a wallet to begin)`);
 });
