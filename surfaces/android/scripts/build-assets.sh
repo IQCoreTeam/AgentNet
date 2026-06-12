@@ -94,16 +94,28 @@ cp "$ANDROID_DIR/guest/AGENTS.md" "$ROOTFS_DIR/root/AGENTS.md"
 echo "    packing rootfs tar (plain tar; TarExtractor reads .tar)"
 tar -cf "$ASSETS/rootfs-$ABI.tar" -C "$ROOTFS_DIR" .
 
-# 3) Our localhost server bundle. Reuse an existing build if present (the CI builds it
-# on the host before entering the arm64 container, which has no pnpm); otherwise build
-# it here. The bundle is arch-independent JS, so a host build is fine to reuse.
-echo "==> [3/3] packing agentnet-server bundle"
-DIST="$REPO_ROOT/surfaces/localhost/dist"
-if [ ! -f "$DIST/index.js" ]; then
-  echo "    dist not found; building with pnpm"
+# 3) The server bundle = the localhost node server AND the React webview build it
+# serves. Both are arch-independent JS, so a host build is fine to reuse (CI builds them
+# before entering the arm64 container, which has no pnpm). We pack them into one tar
+# laid out as:  ./index.js (+ chunks)   and   ./webview/  (the SPA dist)
+# The shell extracts this to /root/agentnet-server and runs node ./index.js with
+# AGENTNET_WEBVIEW_DIR=/root/agentnet-server/webview (set in ServerManager).
+echo "==> [3/3] packing agentnet-server bundle (localhost server + webview SPA)"
+LH_DIST="$REPO_ROOT/surfaces/localhost/dist"
+WV_DIST="$REPO_ROOT/surfaces/webview/dist"
+if [ ! -f "$LH_DIST/index.js" ]; then
+  echo "    localhost dist not found; building with pnpm"
   ( cd "$REPO_ROOT" && pnpm --filter agentnet-localhost build )
 fi
-tar -cf "$ASSETS/agentnet-server.tar" -C "$DIST" .
+if [ ! -f "$WV_DIST/index.html" ]; then
+  echo "    webview dist not found; building with pnpm"
+  ( cd "$REPO_ROOT" && pnpm --filter agentnet-webview build )
+fi
+STAGE="$WORK/server-bundle"
+rm -rf "$STAGE"; mkdir -p "$STAGE/webview"
+cp -R "$LH_DIST/." "$STAGE/"
+cp -R "$WV_DIST/." "$STAGE/webview/"
+tar -cf "$ASSETS/agentnet-server.tar" -C "$STAGE" .
 
 echo "==> done. assets:"
 ls -lh "$ASSETS"

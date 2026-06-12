@@ -57,6 +57,9 @@ class ServerManager(private val ctx: Context) {
         "LANG=C.UTF-8",
         "TMPDIR=/tmp",
         "AGENTNET_PORT=${Paths.PORT}",
+        // the React SPA ships alongside the server bundle (build-assets.sh packs it at
+        // ./webview); point the host at it so it serves the real UI, not the fallback.
+        "AGENTNET_WEBVIEW_DIR=/root/agentnet-server/webview",
         "/bin/sh", "-lc", cmd,
     )
 
