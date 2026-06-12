@@ -27,16 +27,20 @@ import type {
 export type EngineStatus = "ok" | "no-login" | "missing";
 
 export interface State {
-  phase: "connecting" | "onboarding" | "engineSelect" | "claudeAuth" | "chat";
+  phase: "connecting" | "onboarding" | "engineSelect" | "claudeAuth" | "codexAuth" | "chat";
   walletAddress: string | null;
   cli: Cli;
   // per-engine install/login status from the post-wallet `cliStatus` event, kept so the
   // engine picker can show a live badge next to each choice (null until it arrives).
   cliReport: { claude: EngineStatus; codex: EngineStatus } | null;
-  // claude subscription login during onboarding: the OAuth URL to open and the status
-  // of the in-flight login (null when no error/pending state to show).
+  // claude subscription login during onboarding.
   claudeLoginUrl: string | null;
   claudeLoginError: string | null;
+  // codex device-auth during onboarding: URL + one-time code the user enters on the page.
+  // CLI auto-polls; no code submission from UI side.
+  codexLoginUrl: string | null;
+  codexLoginCode: string | null;
+  codexLoginError: string | null;
   log: ChatMessage[];
   sessions: SessionMeta[];
   activeSessionId?: string;
@@ -57,6 +61,9 @@ const initialState: State = {
   cliReport: null,
   claudeLoginUrl: null,
   claudeLoginError: null,
+  codexLoginUrl: null,
+  codexLoginCode: null,
+  codexLoginError: null,
   log: [],
   sessions: [],
   approvals: [],
@@ -107,13 +114,18 @@ function reducer(state: State, ev: Action): State {
     case "__clearToast":
       return { ...state, toast: null };
     case "__selectEngine": {
-      // User picked which engine to activate. Codex is gated "coming soon" (no login
-      // flow / interactive approvals yet — codex-sdk exposes approvalPolicy only), so it
-      // never advances here; the picker shows its disabled state inline. Claude becomes
-      // the active tab and gates on subscription login only if it's logged out.
-      if (ev.cli === "codex") return state;
-      const needsLogin = state.cliReport?.claude === "no-login";
-      return { ...state, cli: "claude", phase: needsLogin ? "claudeAuth" : "chat" };
+      if (ev.cli === "claude") {
+        const needsLogin = state.cliReport?.claude === "no-login";
+        return { ...state, cli: "claude", phase: needsLogin ? "claudeAuth" : "chat" };
+      }
+      // codex: gate on login state
+      if (state.cliReport?.codex === "missing") {
+        return { ...state, toast: "Codex is not installed. Install it first." };
+      }
+      if (state.cliReport?.codex === "no-login") {
+        return { ...state, cli: "codex", phase: "codexAuth" };
+      }
+      return { ...state, cli: "codex", phase: "chat" };
     }
     case "init":
       // Onboarding handshake: no runtime yet → show ConnectWallet.
@@ -134,10 +146,15 @@ function reducer(state: State, ev: Action): State {
     case "claudeLoginUrl":
       return { ...state, claudeLoginUrl: ev.url, claudeLoginError: null };
     case "claudeLoginStatus":
-      // done → proceed to chat; error → surface it on the login screen to retry.
       return ev.status === "done"
         ? { ...state, phase: "chat", claudeLoginUrl: null, claudeLoginError: null }
         : { ...state, claudeLoginUrl: null, claudeLoginError: ev.error ?? "Login failed." };
+    case "codexLoginChallenge":
+      return { ...state, codexLoginUrl: ev.url, codexLoginCode: ev.code, codexLoginError: null };
+    case "codexLoginStatus":
+      return ev.status === "done"
+        ? { ...state, phase: "chat", codexLoginUrl: null, codexLoginCode: null, codexLoginError: null }
+        : { ...state, codexLoginUrl: null, codexLoginCode: null, codexLoginError: ev.error ?? "Login failed." };
     case "clear":
       return { ...state, log: [], approvals: [], typing: false, loading: false };
     case "message":
