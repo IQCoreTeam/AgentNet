@@ -1,6 +1,7 @@
 package com.iqlabs.agentnet
 
 import android.system.Os
+import android.system.OsConstants
 import java.io.File
 import java.io.InputStream
 
@@ -35,16 +36,20 @@ object TarExtractor {
                     '5' -> target.mkdirs() // directory
                     '2' -> { // symlink
                         target.parentFile?.mkdirs()
-                        target.delete()
+                        clobber(target) // a dir/file may already sit here; remove it first
                         runCatching { Os.symlink(linkName, target.absolutePath) }
                     }
                     '1' -> { // hardlink: fall back to a symlink into the same rootfs
                         target.parentFile?.mkdirs()
-                        target.delete()
+                        clobber(target)
                         runCatching { Os.symlink(File(dest, linkName).absolutePath, target.absolutePath) }
                     }
                     '0', ' ' -> { // regular file
                         target.parentFile?.mkdirs()
+                        // If a directory (or symlink) already occupies this path, opening
+                        // an output stream throws EISDIR — clear it first. (tar archives
+                        // can list the same path as different types across entries.)
+                        clobber(target)
                         target.outputStream().use { out -> copyExactly(stream, out, size) }
                         runCatching { Os.chmod(target.absolutePath, mode) }
                         drained = size
@@ -58,6 +63,16 @@ object TarExtractor {
                 skipFully(stream, (size - drained) + padding(size))
             }
         }
+    }
+
+    // Remove whatever currently sits at `path` so the new entry can take its place.
+    // Use lstat so a SYMLINK is removed as a link (never followed into its target).
+    // A real, non-empty directory is emptied first (File.delete only drops empty dirs).
+    private fun clobber(path: File) {
+        val st = runCatching { Os.lstat(path.absolutePath) }.getOrNull() ?: return // nothing here
+        val isDir = (st.st_mode.toInt() and OsConstants.S_IFMT) == OsConstants.S_IFDIR
+        if (isDir) path.listFiles()?.forEach { clobber(it) }
+        path.delete()
     }
 
     private fun padding(size: Long): Long = (BLOCK - (size % BLOCK)) % BLOCK

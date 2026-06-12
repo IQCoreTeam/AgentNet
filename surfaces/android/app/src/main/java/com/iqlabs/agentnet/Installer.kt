@@ -79,10 +79,21 @@ class Installer(private val ctx: Context) {
     // we bind it to /dev/shm.
     private fun configureGuest(p: Paths.Layout) {
         File(p.rootfs, "etc").mkdirs()
-        File(p.rootfs, "etc/resolv.conf").writeText("nameserver 8.8.8.8\nnameserver 8.8.4.4\n")
-        File(p.rootfs, "etc/hosts").writeText("127.0.0.1 localhost\n::1 localhost\n")
+        // Ubuntu ships /etc/resolv.conf as a SYMLINK (to systemd-resolved); writing over
+        // the link would follow it to a missing/erroring target. Delete the link/file
+        // first, then write a plain file. Same for /etc/hosts.
+        writeFresh(File(p.rootfs, "etc/resolv.conf"), "nameserver 8.8.8.8\nnameserver 8.8.4.4\n")
+        writeFresh(File(p.rootfs, "etc/hosts"), "127.0.0.1 localhost\n::1 localhost\n")
         val tmp = File(p.rootfs, "tmp").apply { mkdirs() }
         runCatching { android.system.Os.chmod(tmp.absolutePath, 0b001_111_111_111) } // 1777
+    }
+
+    // Write `text` to `file`, first removing any existing symlink/file at that path so
+    // we never follow a dangling symlink (e.g. Ubuntu's /etc/resolv.conf link).
+    private fun writeFresh(file: File, text: String) {
+        runCatching { android.system.Os.remove(file.absolutePath) } // unlink (link or file)
+        file.parentFile?.mkdirs()
+        file.writeText(text)
     }
 
     // Recursively copy an assets/ subtree to a destination dir. assets.list(path)

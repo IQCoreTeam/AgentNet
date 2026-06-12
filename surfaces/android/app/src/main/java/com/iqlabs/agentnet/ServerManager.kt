@@ -37,11 +37,10 @@ class ServerManager(private val ctx: Context) {
         p.proot,
         "--kill-on-exit",
         "--link2symlink",           // app storage has no hardlinks; proot fakes them
-        "--sysvipc",
-        "-L",                       // correct lstat for symlinks (a glibc rootfs is full of them)
-        // Fake a plausible kernel release; glibc/tooling reads uname and some choke on
-        // Android's non-standard string. Value mirrors proot-distro's format.
-        "--kernel-release=5.4.0-proot",
+        // NOTE: kept to flags the green-green-avk proot build supports. --sysvipc is NOT
+        // one of them ("unknown option" → exit 1), and node doesn't need SysV IPC, so
+        // it's dropped. -L and --kernel-release are likewise omitted as non-essential
+        // (add back only if a specific build is confirmed to accept them).
         "-r", p.rootfs,
         "-0",                       // present as uid 0 inside the guest (fake root)
         "-b", "/dev",
