@@ -24,6 +24,14 @@ import type { Wallet } from "../runtime/contract.js";
 // a different message → a different key → the wallet can't read its own sessions.
 export const SESSION_KEY_MESSAGE = "iq-sdk-derive-encryption-key-v1";
 
+// Base58-encode a raw 32-byte ed25519 public key into a Solana address string. Used by
+// the Android MWA path, which gets the pubkey as raw bytes over the native bridge and
+// needs the same base58 string the backend will parse back via `new PublicKey(address)`.
+// Encoding here (same @solana/web3.js) guarantees that round-trip matches exactly.
+export function pubkeyToAddress(pubkey: Uint8Array): string {
+  return new PublicKey(pubkey).toBase58();
+}
+
 // address: base58 from the connected wallet (provider.publicKey.toString()).
 // sessionKeySig: the wallet's signature over SESSION_KEY_MESSAGE's bytes.
 export function webWallet(address: string, sessionKeySig: Uint8Array): Wallet {

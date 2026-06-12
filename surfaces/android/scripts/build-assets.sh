@@ -80,7 +80,26 @@ curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
 apt-get install -y nodejs
 # official CLIs — their normal installers (NOT the leaked forks); installed but
 # logged-out, so no credentials end up in the image. The user logs in on-device.
-npm install -g @anthropic-ai/claude-code @openai/codex
+#
+# claude-code is a NATIVE binary: the meta package's postinstall pulls a per-platform
+# optionalDep (@anthropic-ai/claude-code-linux-<arch>) holding the real `claude.exe`.
+# Under QEMU-emulated arm64 that download can silently fail (the postinstall just prints
+# a fallback note and exits 0), leaving claude.exe -> a missing target. So we install the
+# arch-specific native package EXPLICITLY and then HARD-ASSERT the binary exists — better
+# a failed build than an APK whose `claude` is a dangling symlink.
+case "$ABI" in
+  arm64)  CLAUDE_NATIVE="@anthropic-ai/claude-code-linux-arm64" ;;
+  x86_64) CLAUDE_NATIVE="@anthropic-ai/claude-code-linux-x64" ;;
+esac
+npm install -g @anthropic-ai/claude-code @openai/codex "$CLAUDE_NATIVE"
+# Resolve the claude symlink and confirm it points at a real, executable file.
+CLAUDE_BIN="$(command -v claude || true)"
+if [ -z "$CLAUDE_BIN" ] || [ ! -e "$(readlink -f "$CLAUDE_BIN")" ]; then
+  echo "!! claude native binary missing after install ($CLAUDE_NATIVE not resolved)." >&2
+  echo "!! claude -> $(readlink -f "$CLAUDE_BIN" 2>/dev/null || echo '?')" >&2
+  exit 1
+fi
+echo "    claude OK: $CLAUDE_BIN -> $(readlink -f "$CLAUDE_BIN")"
 apt-get clean && rm -rf /var/lib/apt/lists/*
 # ship the agent environment guidance into the guest
 cp "$ANDROID_DIR/guest/AGENTS.md" /root/AGENTS.md
@@ -95,14 +114,20 @@ ROOTFS_TAR="/var/tmp/rootfs-$ABI.tar"
 REPO_REL="./${REPO_ROOT#/}"   # /work -> ./work, for the exclude pattern
 # -p + --numeric-owner: preserve perms, store raw uid/gid (proot fakes root anyway).
 # NO --xattrs: an Ubuntu base has no SELinux labels worth keeping, and security xattrs
-# only cause "permission denied" noise under proot. --one-file-system is safe (same-
-# device bind mounts share st_dev and are still captured); Docker's runtime-managed
-# /etc/resolv.conf + /etc/hosts may be dropped, but Installer.kt rewrites them on the
-# phone (configureGuest), so DNS is covered regardless.
+# only cause "permission denied" noise under proot.
+#
+# NO --one-file-system: under Docker/QEMU the container fs is an overlay and parts of the
+# tree (or NodeSource's /usr/lib/node_modules) can sit on a different st_dev, so
+# --one-file-system silently DROPS files at the boundary — that's what left npm's
+# @sigstore/.../__generated__ out of the rootfs and broke `npm`/claude on-device. We
+# instead exclude only the virtual filesystems and tmp/work dirs explicitly, so the whole
+# real tree (incl. all of node_modules) is captured. Docker's runtime /etc/resolv.conf +
+# /etc/hosts may still be skipped, but Installer.kt rewrites them on the phone.
 tar -cpf "$ROOTFS_TAR" \
-  --numeric-owner --one-file-system \
+  --numeric-owner \
   --exclude="./proc" --exclude="./sys" --exclude="./dev" --exclude="./run" \
-  --exclude="./tmp" --exclude="./var/tmp" --exclude="$REPO_REL" \
+  --exclude="./tmp" --exclude="./var/tmp" --exclude="./var/cache/apt" \
+  --exclude="$REPO_REL" \
   -C / .
 mkdir -p "$ASSETS"
 mv "$ROOTFS_TAR" "$ASSETS/rootfs-$ABI.tar"

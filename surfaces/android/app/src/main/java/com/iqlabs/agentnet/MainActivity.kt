@@ -2,6 +2,7 @@ package com.iqlabs.agentnet
 
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -11,6 +12,10 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import com.solana.mobilewalletadapter.clientlib.ActivityResultSender
+import com.solana.mobilewalletadapter.clientlib.ConnectionIdentity
+import com.solana.mobilewalletadapter.clientlib.MobileWalletAdapter
+import com.solana.mobilewalletadapter.clientlib.Solana
 import kotlin.concurrent.thread
 
 // The shell. On launch it (1) extracts the proot guest + server bundle on first run,
@@ -23,11 +28,27 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "AgentNet/Main"
         private const val URL = "http://127.0.0.1:${Paths.PORT}/"
+        // dApp identity shown in the wallet's approval sheet. Placeholder host for now —
+        // swap to the real product URL once it exists (the wallet may display/verify it).
+        private const val IDENTITY_NAME = "AgentNet"
+        private const val IDENTITY_URI = "https://agentnet.iqlabs.com"
+        private const val IDENTITY_ICON = "favicon.ico" // relative to IDENTITY_URI
     }
 
     private lateinit var webView: WebView
     private lateinit var status: TextView
     private val server by lazy { ServerManager(this) }
+
+    // ActivityResultSender registers an activity-result callback in its constructor, which
+    // must happen before the activity reaches STARTED — so build it as a field, not lazily.
+    private val activityResultSender = ActivityResultSender(this)
+    private val walletAdapter = MobileWalletAdapter(
+        connectionIdentity = ConnectionIdentity(
+            identityUri = Uri.parse(IDENTITY_URI),
+            iconUri = Uri.parse(IDENTITY_ICON),
+            identityName = IDENTITY_NAME,
+        ),
+    ).apply { blockchain = Solana.Mainnet }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,6 +76,14 @@ class MainActivity : AppCompatActivity() {
                 return true
             }
         }
+
+        // Native wallet-connect bridge. The React onboarding probes window.AgentNetWallet
+        // and, when present (i.e. inside this shell), drives MWA instead of looking for a
+        // browser extension that a mobile WebView will never have.
+        webView.addJavascriptInterface(
+            WalletBridge(this, webView, walletAdapter, activityResultSender),
+            "AgentNetWallet",
+        )
 
         startServerFlow()
     }

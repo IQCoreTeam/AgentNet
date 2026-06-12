@@ -60,4 +60,14 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.webkit:webkit:1.12.1")
     implementation("com.google.android.material:material:1.12.0")
+
+    // Solana Mobile Wallet Adapter: lets the dApp ask an installed wallet app
+    // (Phantom/Solflare/…) to authorize + sign. This is how a mobile WebView connects a
+    // wallet — browser-extension injection (window.phantom) doesn't exist here. The ktx
+    // artifact pulls in the base clientlib. lifecycle-runtime-ktx gives lifecycleScope to
+    // launch the suspend transact(); coroutines-android is its runtime.
+    implementation("com.solanamobile:mobile-wallet-adapter-clientlib-ktx:2.0.8")
+    implementation("androidx.activity:activity-ktx:1.9.3")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 }

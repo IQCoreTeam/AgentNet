@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 // Subpath import (not the barrel) — the core index drags in node-only modules that can't
 // bundle for the browser. webWallet.ts is browser-safe (only @solana/web3.js + types).
 import { SESSION_KEY_MESSAGE } from "@iqlabs-official/agent-sdk/account/webWallet";
+import { isAndroidWallet, connectAndroidWallet } from "./androidWallet";
 import { useStore } from "../state/store";
 
 interface SolanaProvider {
@@ -44,6 +45,9 @@ export function ConnectWallet() {
   const { send } = useStore();
   const [busy, setBusy] = useState<string | null>(null);
   const wallets = useMemo(detectWallets, []);
+  // Inside the Android shell there are no injected providers — the native MWA bridge is
+  // the only path. Detect it once and, if present, show a single native connect button.
+  const android = useMemo(isAndroidWallet, []);
 
   async function connectWith(name: string, provider: SolanaProvider) {
     setBusy(name);
@@ -64,6 +68,19 @@ export function ConnectWallet() {
     }
   }
 
+  // Android: hand off to the native MWA flow. It produces the same (address, signature)
+  // shape, so the rest — session-key derivation, backend — is identical to the web path.
+  async function connectAndroid() {
+    setBusy("Wallet");
+    try {
+      const { address, signature } = await connectAndroidWallet(SESSION_KEY_MESSAGE);
+      send({ type: "connectWallet", address, signature });
+    } catch {
+      send({ type: "toast", text: "Wallet connection cancelled." });
+      setBusy(null);
+    }
+  }
+
   return (
     <div className="flex h-full flex-col items-center justify-center gap-6 p-6">
       <div className="text-center">
@@ -73,7 +90,16 @@ export function ConnectWallet() {
         </p>
       </div>
 
-      {wallets.length === 0 ? (
+      {android ? (
+        // Android shell: one button drives the native wallet picker (Phantom/Solflare/…).
+        <button
+          disabled={busy !== null}
+          onClick={connectAndroid}
+          className="w-full max-w-xs rounded-lg bg-orange-600 px-4 py-3 font-medium text-white disabled:opacity-50"
+        >
+          {busy ? "Connecting…" : "Connect Wallet"}
+        </button>
+      ) : wallets.length === 0 ? (
         <p className="max-w-xs text-center text-sm text-zinc-500">
           No Solana wallet detected. Install Phantom, Solflare, or Backpack and reload.
         </p>
