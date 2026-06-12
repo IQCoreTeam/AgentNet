@@ -88,9 +88,9 @@ export function App({ options }: { options: AppOptions }) {
           if (!alive) return;
           set(3, { status: "ok", label: "storage: pick on next screen" });
           setPhase("onboard");
-          onboardFinish.current = async (cfg?: StorageConfig) => {
+          onboardFinish.current = async (engine: "claude" | "codex", cfg?: StorageConfig) => {
             if (cfg) await chooseStorage(cfg);
-            await savePrefs({ onboarded: true });
+            await savePrefs({ onboarded: true, lastCli: engine });
             await go(addr, wallet);
           };
         }
@@ -107,7 +107,7 @@ export function App({ options }: { options: AppOptions }) {
   }, []);
 
   // set by the boot effect so Onboarding can finish with the live wallet in scope.
-  const onboardFinish = React.useRef<(cfg?: StorageConfig) => void>(() => {});
+  const onboardFinish = React.useRef<(engine: "claude" | "codex", cfg?: StorageConfig) => void>(() => {});
 
   if (phase === "error") {
     return (
@@ -127,7 +127,7 @@ export function App({ options }: { options: AppOptions }) {
   }
 
   if (phase === "onboard") {
-    return <Onboarding report={report} address={address} onDone={(cfg) => onboardFinish.current(cfg)} />;
+    return <Onboarding report={report} address={address} onDone={(engine, cfg) => onboardFinish.current(engine, cfg)} />;
   }
 
   // chat — apply remembered prefs as defaults (explicit flags win); --continue resumes

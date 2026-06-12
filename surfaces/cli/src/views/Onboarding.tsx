@@ -7,9 +7,14 @@ import { colors, glyph } from "../theme.js";
 import { Iggy } from "../components/Iggy.js";
 
 // First-run setup. Shows the REAL engine status (detectCli — vscode never does this) so
-// the user fixes a missing/logged-out CLI before starting, then picks where sessions
-// save. "This device only" = skip cloud (local is always on). icloud/custom ask for a
-// path/URL; gdrive opens a browser during connect. onDone(cfg?) → cfg undefined = local.
+// the user fixes a missing/logged-out CLI before starting, then PICKS which engine to
+// activate (claude or codex — not forced through claude), then picks where sessions save.
+// "This device only" = skip cloud (local is always on). icloud/custom ask for a path/URL;
+// gdrive opens a browser during connect. onDone(engine, cfg?) → cfg undefined = local.
+//
+// Codex is gated "coming soon": its login flow + interactive approvals aren't wired yet
+// (codex-sdk exposes approvalPolicy only — see runtime/spawn.ts), so selecting it shows a
+// note and doesn't advance. Claude is the only engine that onboards end-to-end today.
 function statusBadge(s: CliStatus) {
   if (s === "ok") return <Text color={colors.ok}>{glyph.ok} ready</Text>;
   if (s === "no-login") return <Text color={colors.warn}>! not logged in</Text>;
@@ -23,15 +28,28 @@ export function Onboarding({
 }: {
   report: CliReport;
   address: string;
-  onDone: (cfg?: StorageConfig) => void;
+  onDone: (engine: "claude" | "codex", cfg?: StorageConfig) => void;
 }) {
+  // engine pick comes first; null = still choosing. codexNote shows the coming-soon
+  // message after a codex pick (which doesn't advance).
+  const [engine, setEngine] = useState<"claude" | "codex" | null>(null);
+  const [codexNote, setCodexNote] = useState(false);
   const [kind, setKind] = useState<StorageKind | null>(null);
   const [location, setLocation] = useState("");
 
+  // engine chosen → claude advances to storage; codex is coming-soon (show note, stay).
+  function chooseEngine(e: "claude" | "codex") {
+    if (e === "codex") return setCodexNote(true);
+    setCodexNote(false);
+    setEngine("claude");
+  }
+
   // backend chosen → either finish now (gdrive/local) or ask for a path/url first.
+  // engine is locked to claude by the time we reach storage (codex never advances).
   function chooseKind(k: StorageKind) {
-    if (k === "local") return onDone(); // local-only, no cloud mirror
-    if (k === "gdrive") return onDone({ kind: "gdrive" }); // browser opens during connect
+    const eng = engine ?? "claude";
+    if (k === "local") return onDone(eng); // local-only, no cloud mirror
+    if (k === "gdrive") return onDone(eng, { kind: "gdrive" }); // browser opens during connect
     setKind(k); // icloud / custom → collect a location next
   }
 
@@ -56,7 +74,23 @@ export function Onboarding({
         </Box>
       </Box>
 
-      {kind === null ? (
+      {engine === null ? (
+        <Box flexDirection="column">
+          <Text color={colors.iqCyan}>which engine do you want to use?</Text>
+          <Select
+            options={[
+              { label: "Claude", value: "claude" },
+              { label: "Codex (coming soon)", value: "codex" },
+            ]}
+            onChange={(v) => chooseEngine(v as "claude" | "codex")}
+          />
+          {codexNote && (
+            <Text color={colors.warn}>
+              Codex isn't ready yet — login + approvals aren't wired. Pick Claude for now.
+            </Text>
+          )}
+        </Box>
+      ) : kind === null ? (
         <Box flexDirection="column">
           <Text color={colors.iqCyan}>where should your sessions live?</Text>
           <Text dimColor>(local is always on — a cloud just mirrors it)</Text>
@@ -76,7 +110,7 @@ export function Onboarding({
           <TextInput
             placeholder={kind === "icloud" ? "~/Library/Mobile Documents/…" : "https://…"}
             onChange={setLocation}
-            onSubmit={(v) => onDone({ kind, location: v || location })}
+            onSubmit={(v) => onDone(engine ?? "claude", { kind, location: v || location })}
           />
         </Box>
       )}
