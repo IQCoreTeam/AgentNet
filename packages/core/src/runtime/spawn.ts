@@ -11,7 +11,8 @@
 
 import { execFileSync, spawn } from "node:child_process";
 import readline from "node:readline";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { configFile, rootDir } from "../core/paths.js";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { Codex } from "@openai/codex-sdk";
 import type { ChatMessage } from "./contract.js";
@@ -90,6 +91,35 @@ function callbacks() {
   };
 }
 
+function loadPersistentWhitelist(): Set<string> {
+  try {
+    const file = configFile();
+    if (!existsSync(file)) return new Set();
+    const data = JSON.parse(readFileSync(file, "utf8"));
+    return new Set(Array.isArray(data.whitelist) ? data.whitelist : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function savePersistentWhitelist(allowedKeys: Set<string>): void {
+  try {
+    const file = configFile();
+    const rDir = rootDir();
+    if (!existsSync(rDir)) {
+      mkdirSync(rDir, { recursive: true });
+    }
+    let config: any = {};
+    if (existsSync(file)) {
+      config = JSON.parse(readFileSync(file, "utf8"));
+    }
+    config.whitelist = Array.from(allowedKeys);
+    writeFileSync(file, JSON.stringify(config, null, 2), "utf8");
+  } catch (e) {
+    console.error("Failed to save whitelist:", e);
+  }
+}
+
 // ── claude: SDK query with streaming input + canUseTool → ApprovalChannel ─────
 function claudeEngine(opts: SpawnOpts): Engine {
   const cb = callbacks();
@@ -116,7 +146,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
   // canUseTool calls, so we keep one: a set of action keys the user has blanket-approved.
   // Read-only tools are auto-allowed up front (no prompt) — matching Claude Code's
   // default and killing the per-file-read approval spam.
-  const allowed = new Set<string>();
+  const allowed = loadPersistentWhitelist();
   const READONLY = new Set(["Read", "Glob", "Grep", "LS", "NotebookRead", "TodoWrite", "WebFetch", "WebSearch"]);
   const actionKey = (req: ApprovalRequest) =>
     req.kind === "bash" ? `bash:${req.command}` : `${req.tool}:${req.file || ""}`;
@@ -132,7 +162,10 @@ function claudeEngine(opts: SpawnOpts): Engine {
     if (decision.outcome === "deny") {
       return { behavior: "deny" as const, message: decision.reason ?? "Denied by user" };
     }
-    if (decision.outcome === "always") allowed.add(key); // remember for the rest of the session
+    if (decision.outcome === "always") {
+      allowed.add(key); // remember for the rest of the session
+      savePersistentWhitelist(allowed);
+    }
     // AskUserQuestion isn't a yes/no gate: the user's choice IS the tool result. The SDK
     // takes it via updatedInput.answers (question text → chosen label). We allow with that
     // input so claude continues with the answer, instead of trying to render its own
@@ -385,18 +418,36 @@ function codexEngine(opts: SpawnOpts): Engine {
           cmdStr = Array.isArray(params.command) ? params.command.join(" ") : String(params.command);
         }
         const req = toApprovalRequest("codex", sessionId, "Bash", { command: cmdStr }, params.cwd);
+        const key = `bash:${cmdStr}`;
+        const allowed = loadPersistentWhitelist();
+        if (allowed.has(key)) {
+          if (msg.method === "execCommandApproval") {
+            return sendResponse(msg.id, { decision: "approved_for_session" });
+          } else {
+            return sendResponse(msg.id, { decision: "acceptForSession" });
+          }
+        }
+        
         const decision = await approval.request(req);
         
         if (msg.method === "execCommandApproval") {
           let reviewDecision: string = "denied";
           if (decision.outcome === "once") reviewDecision = "approved";
-          else if (decision.outcome === "always") reviewDecision = "approved_for_session";
+          else if (decision.outcome === "always") {
+            reviewDecision = "approved_for_session";
+            allowed.add(key);
+            savePersistentWhitelist(allowed);
+          }
           else if (decision.outcome === "deny") reviewDecision = "denied";
           sendResponse(msg.id, { decision: reviewDecision });
         } else {
           let decisionVal: "accept" | "acceptForSession" | "decline" | "cancel" = "decline";
           if (decision.outcome === "once") decisionVal = "accept";
-          else if (decision.outcome === "always") decisionVal = "acceptForSession";
+          else if (decision.outcome === "always") {
+            decisionVal = "acceptForSession";
+            allowed.add(key);
+            savePersistentWhitelist(allowed);
+          }
           else if (decision.outcome === "deny") decisionVal = "decline";
           sendResponse(msg.id, { decision: decisionVal });
         }
@@ -423,10 +474,20 @@ function codexEngine(opts: SpawnOpts): Engine {
           const req = toApprovalRequest("codex", sessionId, tool, { file_path: filePath }, opts.cwd);
           if (diff) req.diff = diff;
           
+          const key = `${tool}:${filePath}`;
+          const allowed = loadPersistentWhitelist();
+          if (allowed.has(key)) {
+            return sendResponse(msg.id, { decision: "approved_for_session" });
+          }
+          
           const decision = await approval.request(req);
           let reviewDecision: string = "denied";
           if (decision.outcome === "once") reviewDecision = "approved";
-          else if (decision.outcome === "always") reviewDecision = "approved_for_session";
+          else if (decision.outcome === "always") {
+            reviewDecision = "approved_for_session";
+            allowed.add(key);
+            savePersistentWhitelist(allowed);
+          }
           else if (decision.outcome === "deny") reviewDecision = "denied";
           
           sendResponse(msg.id, { decision: reviewDecision });
@@ -438,10 +499,20 @@ function codexEngine(opts: SpawnOpts): Engine {
             req.title += ` (${params.reason})`;
           }
           
+          const key = `Edit:${pathStr}`;
+          const allowed = loadPersistentWhitelist();
+          if (allowed.has(key)) {
+            return sendResponse(msg.id, { decision: "acceptForSession" });
+          }
+          
           const decision = await approval.request(req);
           let decisionVal: "accept" | "acceptForSession" | "decline" | "cancel" = "decline";
           if (decision.outcome === "once") decisionVal = "accept";
-          else if (decision.outcome === "always") decisionVal = "acceptForSession";
+          else if (decision.outcome === "always") {
+            decisionVal = "acceptForSession";
+            allowed.add(key);
+            savePersistentWhitelist(allowed);
+          }
           else if (decision.outcome === "deny") decisionVal = "decline";
           
           sendResponse(msg.id, { decision: decisionVal });

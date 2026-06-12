@@ -26,10 +26,21 @@ export function Composer({
   const [menuIdx, setMenuIdx] = useState(0);
   const [suppress, setSuppress] = useState(false); // esc hides the menu until input changes
   const [histPos, setHistPos] = useState(-1); // -1 = live buffer; 0..n = from newest back
+  const [pathQuery, setPathQuery] = useState<string | null>(null);
 
   useEffect(() => {
     void indexFiles(cwd).then(setFiles);
   }, [cwd]);
+
+  // clear pathQuery when value changes if the trailing word no longer matches it
+  useEffect(() => {
+    if (pathQuery) {
+      const m = /(\S+)$/.exec(value.slice(0, cursor));
+      if (!m || !m[1].startsWith(pathQuery)) {
+        setPathQuery(null);
+      }
+    }
+  }, [value, cursor, pathQuery]);
 
   // what menu (if any) is active for the current buffer/cursor.
   const before = value.slice(0, cursor);
@@ -50,8 +61,17 @@ export function Composer({
       const items = filterFiles(files, at[2]).map((f) => ({ label: f, hint: "", insert: f }));
       return items.length ? { kind: "file" as const, items } : null;
     }
+    if (pathQuery) {
+      const m = /(\S+)$/.exec(before);
+      if (m) {
+        const q = m[1].toLowerCase();
+        const matches = files.filter((f) => f.toLowerCase().startsWith(q));
+        const items = matches.slice(0, 8).map((f) => ({ label: f, hint: "", insert: f }));
+        return items.length ? { kind: "path" as const, items } : null;
+      }
+    }
     return null;
-  }, [slash?.[1], at?.[2], files, suppress, value]);
+  }, [slash?.[1], at?.[2], files, suppress, value, pathQuery, before]);
 
   const sel = menu ? menu.items[Math.min(menuIdx, menu.items.length - 1)] : null;
 
@@ -67,13 +87,21 @@ export function Composer({
     if (menu.kind === "slash") {
       setValue(sel.insert);
       setCursor(sel.insert.length);
-    } else {
+    } else if (menu.kind === "file") {
       // replace the trailing @query with @path + space
       const m = /(^|\s)@(\S*)$/.exec(before)!;
       const start = before.length - m[2].length; // position right after '@'
       const next = value.slice(0, start) + sel.insert + " " + value.slice(cursor);
       setValue(next);
       setCursor(start + sel.insert.length + 1);
+    } else if (menu.kind === "path") {
+      // replace the trailing word with path + space
+      const m = /(\S+)$/.exec(before)!;
+      const start = before.length - m[1].length;
+      const next = value.slice(0, start) + sel.insert + " " + value.slice(cursor);
+      setValue(next);
+      setCursor(start + sel.insert.length + 1);
+      setPathQuery(null);
     }
     setMenuIdx(0);
   }
@@ -107,7 +135,19 @@ export function Composer({
         setCursor(recalled.length);
         return;
       }
-      if (key.tab && menu) return complete();
+      if (key.tab) {
+        if (menu) {
+          complete();
+          return;
+        }
+        const m = /(\S+)$/.exec(before);
+        if (m) {
+          setPathQuery(m[1]);
+          setMenuIdx(0);
+          setSuppress(false);
+          return;
+        }
+      }
       if (key.escape) return setSuppress(true);
 
       // readline-style editing

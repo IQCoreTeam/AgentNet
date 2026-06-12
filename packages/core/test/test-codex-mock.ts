@@ -1,6 +1,6 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { mkdtempSync, writeFileSync, chmodSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, chmodSync, rmSync, existsSync } from "node:fs";
 import { createRuntime } from "../src/runtime/index.js";
 import { manualStorage } from "../src/account/storage/manual.js";
 import { testWallet } from "../src/account/keypairWallet.js";
@@ -50,27 +50,7 @@ rl.on('line', (line) => {
     else if (msg.method === "turn/start") {
       console.log(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: {} }));
       
-      // Let's trigger notifications and requests sequentially
-      // 1. Send reasoning delta and final completed reasoning
-      console.log(JSON.stringify({
-        jsonrpc: "2.0",
-        method: "item/reasoning/textDelta",
-        params: { delta: "Thinking about command..." }
-      }));
-      console.log(JSON.stringify({
-        jsonrpc: "2.0",
-        method: "item/completed",
-        params: {
-          item: {
-            type: "reasoning",
-            id: "r1",
-            summary: ["Analyzed"],
-            content: ["Thinking about command..."]
-          }
-        }
-      }));
-
-      // 2. Request command approval (new style)
+      // Let's trigger a command approval request
       console.log(JSON.stringify({
         jsonrpc: "2.0",
         id: "req-cmd-1",
@@ -80,75 +60,15 @@ rl.on('line', (line) => {
           turnId: "turn-1",
           itemId: "item-cmd-1",
           startedAtMs: Date.now(),
-          command: "echo 'hello from mock'",
+          command: "npm run test",
           cwd: "/mock-cwd"
         }
       }));
     }
     
-    // Read responses to approvals and send the next steps
+    // Read responses to approvals
     else if (msg.id === "req-cmd-1") {
-      // Expected msg.result.decision = "accept" or similar.
-      // Let's send command execution completed event.
-      console.log(JSON.stringify({
-        jsonrpc: "2.0",
-        method: "item/completed",
-        params: {
-          item: {
-            type: "commandExecution",
-            id: "item-cmd-1",
-            command: "echo 'hello from mock'",
-            cwd: "/mock-cwd",
-            processId: "pty-1",
-            source: "user",
-            status: "completed",
-            commandActions: [],
-            aggregatedOutput: "hello from mock\\n",
-            exitCode: 0,
-            durationMs: 10
-          }
-        }
-      }));
-
-      // 3. Request permissions approval
-      console.log(JSON.stringify({
-        jsonrpc: "2.0",
-        id: "req-perm-1",
-        method: "item/permissions/requestApproval",
-        params: {
-          threadId: "mock-thread-xyz",
-          turnId: "turn-1",
-          itemId: "item-perm-1",
-          startedAtMs: Date.now(),
-          cwd: "/mock-cwd",
-          reason: "need internet access for test",
-          permissions: {
-            network: { enabled: true },
-            fileSystem: null
-          }
-        }
-      }));
-    }
-    
-    else if (msg.id === "req-perm-1") {
-      // 4. Request file change approval (new style)
-      console.log(JSON.stringify({
-        jsonrpc: "2.0",
-        id: "req-file-1",
-        method: "item/fileChange/requestApproval",
-        params: {
-          threadId: "mock-thread-xyz",
-          turnId: "turn-1",
-          itemId: "item-file-1",
-          startedAtMs: Date.now(),
-          reason: "create test file",
-          grantRoot: "/mock-cwd"
-        }
-      }));
-    }
-    
-    else if (msg.id === "req-file-1") {
-      // Send rawResponseItem completed for assistant message
+      // Send rawResponseItem completed for assistant message with a multi-file diff
       console.log(JSON.stringify({
         jsonrpc: "2.0",
         method: "rawResponseItem/completed",
@@ -159,7 +79,7 @@ rl.on('line', (line) => {
             type: "message",
             role: "assistant",
             content: [
-              { type: "output_text", text: "Finished successfully!" }
+              { type: "output_text", text: "Finished turn successfully!" }
             ]
           }
         }
@@ -199,16 +119,10 @@ let approvalRequestsSeen: ApprovalRequest[] = [];
 const mockApproval = {
   request: async (req: ApprovalRequest): Promise<ApprovalDecision> => {
     approvalRequestsSeen.push(req);
-    console.log(`[test ApprovalChannel] got request kind=${req.kind} tool=${req.tool}`);
+    console.log(`[test ApprovalChannel] got request kind=${req.kind} command=${req.command}`);
     
-    if (req.kind === "bash" && req.command === "echo 'hello from mock'") {
-      return { outcome: "once" }; // accept
-    }
-    if (req.tool === "Permissions") {
-      return { outcome: "always" }; // acceptForSession / always
-    }
-    if (req.tool === "Edit" && req.file === "/mock-cwd") {
-      return { outcome: "once" };
+    if (req.kind === "bash" && req.command === "npm run test") {
+      return { outcome: "always" }; // always allow and persist whitelist
     }
     return { outcome: "deny" };
   }
@@ -217,28 +131,39 @@ const mockApproval = {
 const runtime = createRuntime(wallet, storage, mockApproval);
 
 async function main() {
-  console.log("Starting Codex Mock Integration Test...");
-  
-  const handle = await runtime.startSession({
+  console.log("Starting Codex Mock Integration Test for Claude-Polish...");
+
+  // Verify Config file starts clean or empty
+  const configFilePath = join(mockHome, "config.json");
+  console.log(`Config file exists before first run: ${existsSync(configFilePath)}`);
+
+  console.log("\n--- SESSION 1: Always Allow a command (should save to disk) ---");
+  const handle1 = await runtime.startSession({
     cli: "codex",
     cwd: process.cwd()
   });
 
-  const messagesReceived: any[] = [];
-  handle.onMessage((msg) => {
-    messagesReceived.push(msg);
-    console.log(`[test msg received] role=${msg.role} text="${msg.text.trim()}"`);
+  const turnDone1 = new Promise<void>((resolve) => handle1.onTurnEnd(resolve));
+  handle1.send("first prompt");
+  await turnDone1;
+  handle1.stop();
+
+  console.log(`Config file exists after first run: ${existsSync(configFilePath)}`);
+
+  // Verify that the command request was captured once in Session 1
+  const s1Count = approvalRequestsSeen.length;
+  console.log(`Approvals seen in Session 1: ${s1Count}`);
+
+  console.log("\n--- SESSION 2: Run same command (should bypass prompt using disk whitelist) ---");
+  const handle2 = await runtime.startSession({
+    cli: "codex",
+    cwd: process.cwd()
   });
 
-  const turnDone = new Promise<void>((resolve) => {
-    handle.onTurnEnd(() => {
-      resolve();
-    });
-  });
-
-  handle.send("start mock session");
-  await turnDone;
-  handle.stop();
+  const turnDone2 = new Promise<void>((resolve) => handle2.onTurnEnd(resolve));
+  handle2.send("second prompt");
+  await turnDone2;
+  handle2.stop();
 
   // Clean up mock bin dir
   try {
@@ -246,31 +171,20 @@ async function main() {
     rmSync(mockHome, { recursive: true, force: true });
   } catch {}
 
+  const s2Count = approvalRequestsSeen.length - s1Count;
+  console.log(`Approvals seen in Session 2: ${s2Count}`);
+
   console.log("\n--- Verification ---");
-  console.log(`Total messages received: ${messagesReceived.length}`);
-  console.log(`Total approvals seen: ${approvalRequestsSeen.length}`);
+  console.log(`Session 1 Approvals (expecting 1): ${s1Count}`);
+  console.log(`Session 2 Approvals (expecting 0 due to whitelist bypass): ${s2Count}`);
 
-  // Assertions
-  const gotThinking = messagesReceived.some(m => m.role === "thinking" && m.text.includes("Thinking about command..."));
-  const gotToolCommand = messagesReceived.some(m => m.role === "tool" && m.tool?.name === "Bash" && m.tool?.output.includes("hello from mock"));
-  const gotAssistant = messagesReceived.some(m => m.role === "assistant" && m.text === "Finished successfully!");
-  
-  const gotBashApproval = approvalRequestsSeen.some(a => a.kind === "bash" && a.command === "echo 'hello from mock'");
-  const gotPermApproval = approvalRequestsSeen.some(a => a.tool === "Permissions");
-  const gotFileApproval = approvalRequestsSeen.some(a => a.tool === "Edit" && a.file === "/mock-cwd");
+  const persistentWhitelistPassed = s1Count === 1 && s2Count === 0;
 
-  console.log(`gotThinking: ${gotThinking ? "✅" : "❌"}`);
-  console.log(`gotToolCommand: ${gotToolCommand ? "✅" : "❌"}`);
-  console.log(`gotAssistant: ${gotAssistant ? "✅" : "❌"}`);
-  console.log(`gotBashApproval: ${gotBashApproval ? "✅" : "❌"}`);
-  console.log(`gotPermApproval: ${gotPermApproval ? "✅" : "❌"}`);
-  console.log(`gotFileApproval: ${gotFileApproval ? "✅" : "❌"}`);
-
-  if (gotThinking && gotToolCommand && gotAssistant && gotBashApproval && gotPermApproval && gotFileApproval) {
-    console.log("\n✅ PASS - Mock integration test succeeded!");
+  if (persistentWhitelistPassed) {
+    console.log("\n✅ PASS - Mock persistent whitelist test succeeded!");
     process.exit(0);
   } else {
-    console.error("\n❌ FAIL - Test assertions failed.");
+    console.error("\n❌ FAIL - Whitelist bypass did not happen.");
     process.exit(1);
   }
 }

@@ -14,11 +14,13 @@ export function ApprovalCard({
   reply = null,
   replyText = "",
   diffExpanded = false,
+  activeDiffFileIdx = 0,
 }: {
   req: ApprovalRequest;
   reply?: "reason" | "edit" | null;
   replyText?: string;
   diffExpanded?: boolean;
+  activeDiffFileIdx?: number;
 }) {
   const danger = req.risk === "danger";
   const accent = danger ? colors.err : colors.warn;
@@ -39,7 +41,14 @@ export function ApprovalCard({
       {req.command ? <Text color={colors.iqCyan}>$ {req.command}</Text> : null}
       {req.kind === "bash" && req.cwd ? <Text dimColor>in {req.cwd}</Text> : null}
       {req.file ? <Text dimColor>{req.file}</Text> : null}
-      {req.diff ? <DiffView diff={req.diff} maxLines={20} expanded={diffExpanded} /> : null}
+      {req.diff ? (
+        <DiffView
+          diff={req.diff}
+          maxLines={20}
+          expanded={diffExpanded}
+          activeFileIdx={activeDiffFileIdx}
+        />
+      ) : null}
 
       {reply ? (
         <Box marginTop={1} flexDirection="column">

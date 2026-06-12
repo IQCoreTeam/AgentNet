@@ -53,6 +53,7 @@ export function Chat({
   const [notice, setNotice] = useState("");
   const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
   const [diffExpanded, setDiffExpanded] = useState(false);
+  const [activeDiffFileIdx, setActiveDiffFileIdx] = useState(0);
   // approval reply mode: null = y/a/n buttons; "reason" = typing a deny reason;
   // "edit" = editing the bash command before allowing.
   const [replyMode, setReplyMode] = useState<"reason" | "edit" | null>(null);
@@ -123,6 +124,7 @@ export function Chat({
         setReplyMode(null);
         setReplyText("");
         setDiffExpanded(false);
+        setActiveDiffFileIdx(0);
       }),
     [approval],
   );
@@ -138,6 +140,11 @@ export function Chat({
       if (input === "a") return approval.resolve(pendingApproval.id, { outcome: "always" });
       if (input === "r") return setReplyMode("reason");
       if (input === "d") return setDiffExpanded(!diffExpanded);
+      if (/^[1-9]$/.test(input)) {
+        const idx = parseInt(input, 10) - 1;
+        setActiveDiffFileIdx(idx);
+        return;
+      }
       if (input === "e" && pendingApproval.kind === "bash") {
         setReplyText(pendingApproval.command ?? "");
         return setReplyMode("edit");
@@ -357,6 +364,7 @@ export function Chat({
           reply={replyMode}
           replyText={replyText}
           diffExpanded={diffExpanded}
+          activeDiffFileIdx={activeDiffFileIdx}
         />
       ) : null}
 
