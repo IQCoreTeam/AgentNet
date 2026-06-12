@@ -177,18 +177,46 @@ Type `/` to open the slash menu (autocomplete). Available commands:
 | `Ctrl+U` | Clear to start |
 | `Ctrl+K` | Clear to end |
 | `Ctrl+W` | Delete word back |
-| `Esc` | Interrupt current turn |
+| `Esc` | Interrupt current turn — or, with an approval card up, **deny** it |
 | `y` / `a` / `n` | Approve tool once / always / deny (in approval prompt) |
+| `r` | Deny **with a reason** — type feedback, `↵` sends it to the model (approval prompt) |
+| `e` | Edit the bash command before running it, then `↵` (approval prompt, bash only) |
 
 ---
 
 ## Tool Approval
 
-When claude wants to run a bash command or edit a file, an **approval card** pops up showing:
-- The exact command or diff
-- `[y] once  [a] always  [n] deny`
+When the agent wants to run a bash command or edit/write a file, an **approval card**
+pops up showing the real action:
 
-Use `--yolo` to skip all prompts (useful for trusted tasks).
+- **Bash** — the exact command, plus the working dir it runs in (`in /path`).
+- **Edit / Write** — a `+`/`−` diff of what changes (truncated at 20 lines, with a
+  `+N more lines` marker).
+- **Danger flag** — destructive commands (`rm -rf`, `sudo`, `git push --force`,
+  pipe-to-shell, fork bombs, …) get a **double red border + ⚠ DANGER** instead of the
+  calm yellow card. It's a cue, not a block — you still decide.
+
+**Keys:**
+
+| Key | What |
+|-----|------|
+| `y` | Allow **once** |
+| `a` | **Always** — remembers this exact action (command, or tool+file) for the rest of the session; won't ask again |
+| `n` / `Esc` | **Deny** (Esc also works, so bailing never blocks the engine) |
+| `r` | Deny **with a reason** — type feedback, `↵` sends it to the model so it can adjust |
+| `e` | **Edit** the bash command before running (bash only) |
+
+**Read-only tools** (`Read`, `Grep`, `Glob`, `LS`, `WebFetch`, …) are **auto-allowed** —
+no prompt — so browsing files doesn't spam you.
+
+> **claude vs codex:** the card above is the **claude** flow (per-tool, interactive via
+> the SDK's `canUseTool`). **Codex** has no inline approval hook in its SDK yet, so it's
+> governed by a sandbox (`workspace-write` + `approvalPolicy: on-failure`) and the channel
+> sees **one decision per turn**, not per tool. `y/a/n` on a codex turn allow/deny the
+> whole turn.
+
+Use `--yolo` to skip **all** prompts (auto-allow everything). Convenient for trusted
+tasks, but there's **no record** of what got auto-run — use with care.
 
 ---
 

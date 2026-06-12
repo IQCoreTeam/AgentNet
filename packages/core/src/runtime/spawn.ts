@@ -102,13 +102,27 @@ function claudeEngine(opts: SpawnOpts): Engine {
   }
   const push = (t: string) => { inbox.push(t); wake?.(); wake = null; };
 
+  // Per-session memory of "always" grants. claude's SDK has no native allowlist across
+  // canUseTool calls, so we keep one: a set of action keys the user has blanket-approved.
+  // Read-only tools are auto-allowed up front (no prompt) — matching Claude Code's
+  // default and killing the per-file-read approval spam.
+  const allowed = new Set<string>();
+  const READONLY = new Set(["Read", "Glob", "Grep", "LS", "NotebookRead", "TodoWrite", "WebFetch", "WebSearch"]);
+  const actionKey = (req: ApprovalRequest) =>
+    req.kind === "bash" ? `bash:${req.command}` : `${req.tool}:${req.file || ""}`;
+
   // canUseTool: claude calls this BEFORE each tool; we translate to a neutral
   // ApprovalRequest, await the channel, and map the decision back to the SDK shape.
   const canUseTool = async (toolName: string, input: Record<string, unknown>) => {
-    const decision = await approval.request(toApprovalRequest("claude", sessionId, toolName, input));
+    if (READONLY.has(toolName)) return { behavior: "allow" as const, updatedInput: input };
+    const req = toApprovalRequest("claude", sessionId, toolName, input, opts.cwd);
+    const key = actionKey(req);
+    if (allowed.has(key)) return { behavior: "allow" as const, updatedInput: input };
+    const decision = await approval.request(req);
     if (decision.outcome === "deny") {
       return { behavior: "deny" as const, message: decision.reason ?? "Denied by user" };
     }
+    if (decision.outcome === "always") allowed.add(key); // remember for the rest of the session
     return { behavior: "allow" as const, updatedInput: decision.updatedInput ?? input };
   };
 
@@ -246,19 +260,64 @@ function toApprovalRequest(
   sessionId: string,
   tool: string,
   input: Record<string, unknown>,
+  cwd?: string,
 ): ApprovalRequest {
   const id = randomId();
   const file = strOr(input.file_path);
   if (tool === "Bash") {
     const command = strOr(input.command);
-    return { id, cli, sessionId, tool, kind: "bash", title: "Run: " + firstLine(command), command, input };
+    return {
+      id, cli, sessionId, tool, kind: "bash", title: "Run: " + firstLine(command),
+      command, cwd, risk: isDangerousCommand(command) ? "danger" : undefined, input,
+    };
   }
   if (tool === "Edit" || tool === "MultiEdit") {
-    return { id, cli, sessionId, tool, kind: "edit", title: "Edit " + baseName(file), file, input };
+    return { id, cli, sessionId, tool, kind: "edit", title: "Edit " + baseName(file), file, diff: buildDiff(tool, input), input };
   }
-  if (tool === "Write") return { id, cli, sessionId, tool, kind: "write", title: "Write " + baseName(file), file, input };
+  if (tool === "Write")
+    return { id, cli, sessionId, tool, kind: "write", title: "Write " + baseName(file), file, diff: buildDiff(tool, input), input };
   if (tool === "Read") return { id, cli, sessionId, tool, kind: "read", title: "Read " + baseName(file), file, input };
   return { id, cli, sessionId, tool, kind: "other", title: tool, input };
+}
+
+// Build a +/- diff from the tool's raw input so the approval card shows WHAT changes,
+// not just a filename. Edit = old→new; MultiEdit = each edit stacked; Write = whole
+// file as additions. Best-effort: missing fields just yield an empty/partial diff.
+function buildDiff(tool: string, input: Record<string, unknown>): string | undefined {
+  if (tool === "Write") {
+    const content = strOr(input.content);
+    if (!content) return undefined;
+    return content.split("\n").map((l) => "+" + l).join("\n");
+  }
+  if (tool === "MultiEdit") {
+    const edits = Array.isArray(input.edits) ? (input.edits as Record<string, unknown>[]) : [];
+    const blocks = edits.map((e) => pairDiff(strOr(e.old_string), strOr(e.new_string))).filter(Boolean);
+    return blocks.length ? blocks.join("\n@@\n") : undefined;
+  }
+  // Edit
+  const diff = pairDiff(strOr(input.old_string), strOr(input.new_string));
+  return diff || undefined;
+}
+
+function pairDiff(oldStr: string, newStr: string): string {
+  const out: string[] = [];
+  if (oldStr) for (const l of oldStr.split("\n")) out.push("-" + l);
+  if (newStr) for (const l of newStr.split("\n")) out.push("+" + l);
+  return out.join("\n");
+}
+
+// Heuristic flag for destructive/irreversible shell actions. Not a security boundary —
+// the user still decides — just a cue for the surface to alarm instead of stay calm.
+const DANGER = [
+  /\brm\s+(-[a-z]*r[a-z]*\s|-[a-z]*f[a-z]*\s|.*\s-[a-z]*[rf])/i, // rm -rf / -r / -f
+  /\bsudo\b/, /\bchmod\s+-R\b/, /\bchown\s+-R\b/, /\bmkfs\b/, /\bdd\s+if=/,
+  /\bgit\s+(push\s+.*--force|reset\s+--hard|clean\s+-[a-z]*f)/i,
+  /\b(shutdown|reboot|halt)\b/, /:\(\)\s*\{.*\}/, // fork bomb
+  /\b(curl|wget)\b.*\|\s*(sudo\s+)?(sh|bash|zsh)\b/, // pipe-to-shell
+  />\s*\/dev\/sd[a-z]/, /\bkillall\b/, /\bnpm\s+publish\b/,
+];
+function isDangerousCommand(cmd: string): boolean {
+  return !!cmd && DANGER.some((re) => re.test(cmd));
 }
 
 function randomId(): string { return "ap_" + Math.random().toString(36).slice(2, 11); }

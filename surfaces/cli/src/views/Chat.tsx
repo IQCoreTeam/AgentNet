@@ -52,6 +52,10 @@ export function Chat({
   });
   const [notice, setNotice] = useState("");
   const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
+  // approval reply mode: null = y/a/n buttons; "reason" = typing a deny reason;
+  // "edit" = editing the bash command before allowing.
+  const [replyMode, setReplyMode] = useState<"reason" | "edit" | null>(null);
+  const [replyText, setReplyText] = useState("");
   const [showSessions, setShowSessions] = useState(false);
   const [showModels, setShowModels] = useState(false);
   const [celebrate, setCelebrate] = useState<"sparkle" | "confetti" | null>(null);
@@ -110,17 +114,56 @@ export function Chat({
     { isActive: chat.busy && !pendingApproval },
   );
 
-  // surface tool-approval requests from the engine and answer them with y/a/n keys.
-  useEffect(() => approval?.subscribe(setPendingApproval), [approval]);
+  // surface tool-approval requests from the engine; reset reply state on each new one.
+  useEffect(
+    () =>
+      approval?.subscribe((req) => {
+        setPendingApproval(req);
+        setReplyMode(null);
+        setReplyText("");
+      }),
+    [approval],
+  );
+
+  // buttons mode: y/a/n decide; r/e open a typed reply; Esc denies (so walking away or
+  // bailing never blocks the engine forever).
   useInput(
-    (input) => {
+    (input, key) => {
       if (!pendingApproval || !approval) return;
-      if (input === "y") approval.resolve(pendingApproval.id, { outcome: "once" });
-      else if (input === "a") approval.resolve(pendingApproval.id, { outcome: "always" });
-      else if (input === "n")
-        approval.resolve(pendingApproval.id, { outcome: "deny", reason: "denied by user" });
+      if (key.escape || input === "n")
+        return approval.resolve(pendingApproval.id, { outcome: "deny", reason: "denied by user" });
+      if (input === "y") return approval.resolve(pendingApproval.id, { outcome: "once" });
+      if (input === "a") return approval.resolve(pendingApproval.id, { outcome: "always" });
+      if (input === "r") return setReplyMode("reason");
+      if (input === "e" && pendingApproval.kind === "bash") {
+        setReplyText(pendingApproval.command ?? "");
+        return setReplyMode("edit");
+      }
     },
-    { isActive: !!pendingApproval },
+    { isActive: !!pendingApproval && !replyMode },
+  );
+
+  // reply mode: minimal line editor for a deny reason or an edited command.
+  useInput(
+    (input, key) => {
+      if (!pendingApproval || !approval) return;
+      if (key.escape) return setReplyMode(null); // back to buttons
+      if (key.return) {
+        const text = replyText.trim();
+        if (replyMode === "reason") {
+          approval.resolve(pendingApproval.id, { outcome: "deny", reason: text || "denied by user" });
+        } else {
+          approval.resolve(pendingApproval.id, {
+            outcome: "once",
+            updatedInput: { ...(pendingApproval.input ?? {}), command: text },
+          });
+        }
+        return;
+      }
+      if (key.backspace || key.delete) return setReplyText((t) => t.slice(0, -1));
+      if (input && !key.ctrl && !key.meta) setReplyText((t) => t + input);
+    },
+    { isActive: !!pendingApproval && !!replyMode },
   );
 
   // hidden: ↑↑↓↓ toggles a playful "turbo glow" acknowledgement.
@@ -305,7 +348,7 @@ export function Chat({
 
       {chat.busy && !pendingApproval ? <ThinkingLine /> : null}
 
-      {pendingApproval ? <ApprovalCard req={pendingApproval} /> : null}
+      {pendingApproval ? <ApprovalCard req={pendingApproval} reply={replyMode} replyText={replyText} /> : null}
 
       <Celebrate kind={celebrate} />
       {idle && !chat.busy ? <Text dimColor>{copy.idleNudge}</Text> : null}
