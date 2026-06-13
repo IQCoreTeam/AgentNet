@@ -94,7 +94,7 @@ export {
   createAgentMcpServer,
   getAgentNetTools,
   handleToolCall,
-} from "./mcp/server.js";
+} from "./skill-market/index.js";
 
 export { createRuntime } from "./runtime/index.js";
 export { detectCli } from "./runtime/detect.js";

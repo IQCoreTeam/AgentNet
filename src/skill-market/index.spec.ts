@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getAgentNetTools, handleToolCall } from "./server.js";
+import { getAgentNetTools, handleToolCall } from "./index.js";
 import { searchSkills } from "../search/search.js";
 import { buySkill } from "../nft/skill.js";
 import { Keypair } from "@solana/web3.js";
@@ -16,7 +16,7 @@ vi.mock("../core/chain.js", () => ({
   signerAddress: vi.fn().mockResolvedValue("mockSignerAddress"),
 }));
 
-describe("mcp/server", () => {
+describe("skill-market", () => {
   let mockConn: any;
   let signer: Keypair;
 
