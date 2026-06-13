@@ -18,44 +18,38 @@ export function mysessionsHint(wallet: string): string {
 }
 
 /**
- * Hint for notes on a skill NFT.
- * input:  skill NFT mint address (base58)
- * output: "notes:<skillNFT>"
+ * Hint for reviews on an item NFT inside a collection.
+ *
+ * The collection is the umbrella (skills / workflows / future kinds); the NFT
+ * mint is the individual item under it. Keying by collection THEN item keeps
+ * reviews partitioned per umbrella, so a new collection kind extends the same
+ * structure without a new table shape.
+ *
+ * input:  collection mint (base58), item NFT mint (base58)
+ * output: "reviews:<collectionId>:<nft>"
  */
-export function notesSkillHint(skillNFT: string): string {
-  return `notes:skill:${skillNFT}`;
+export function reviewsHint(collectionId: string, nft: string): string {
+  return `reviews:${collectionId}:${nft}`;
 }
 
 /**
- * Hint for notes (comments + self-posts) on an agent wallet.
+ * Hint for reviews (comments + self-posts) on an agent wallet.
  * input:  agent wallet address (base58)
- * output: "notes:<agentWallet>"
+ * output: "reviews:agent:<agentWallet>"
  */
-export function notesAgentHint(agentWallet: string): string {
-  return `notes:agent:${agentWallet}`;
+export function reviewsAgentHint(agentWallet: string): string {
+  return `reviews:agent:${agentWallet}`;
 }
-
-/**
- * Skill/workflow discovery index. Per search.md the canonical source is the
- * skill *collection* (scan the NFTs by trait), but until DAS/collection-scan is
- * wired this table is the registry that publish writes to and search/reputation
- * read from. Kept SEPARATE from the audit table — they hold different things.
- */
-export const SKILLS_INDEX_HINT = "skills:index";
 
 /**
  * Table for audit/validation records (the "Q-table" in search.md) — security
- * check results shown ALONGSIDE search results. NOT the skill registry.
+ * check results shown ALONGSIDE search results, partitioned per collection.
+ *
+ * input:  collection mint (base58)
+ * output: "audit:<collectionId>"
  */
-export const AUDIT_HINT = "audit:skills";
-
-/**
- * Hint for per-wallet reputation snapshot.
- * input:  wallet address (base58)
- * output: "reputation:<wallet>"
- */
-export function reputationHint(wallet: string): string {
-  return `reputation:${wallet}`;
+export function auditHint(collectionId: string): string {
+  return `audit:${collectionId}`;
 }
 
 /**
@@ -74,48 +68,33 @@ export function getWorkflowsCollectionMint(): string | null {
   return process.env.AGENTNET_WORKFLOWS_COLLECTION_PUBKEY || null;
 }
 
+/**
+ * The umbrella collection mint for an item type — the ONE place that maps
+ * "skill" / "workflow" → its collection. There are only these two collections;
+ * every item of a given type shares the same collection (a skill is one big
+ * collection, a workflow another). New kinds get a branch here, nowhere else.
+ *
+ * Returns "" when the collection isn't configured yet — reviewsHint still
+ * produces a stable key, so reads/writes work before bootstrap.
+ */
+export function collectionFor(type: "skill" | "workflow" | undefined): string {
+  return (type === "workflow" ? getWorkflowsCollectionMint() : getSkillsCollectionMint()) ?? "";
+}
+
 // ===== Table column declarations =====
 //
 // The SDK's writeRow validates every row key against the table's declared
 // columns (`unknown key: <k>` otherwise), so these MUST be the full superset of
-// every key any writer puts in a row. Skills and workflows share the index
-// table, so SKILLS_INDEX_COLUMNS is the union of both row shapes — whoever
-// publishes first creates the table, and the other type's keys must still pass.
-
-export const SKILLS_INDEX_COLUMNS = [
-  "id",
-  "name",
-  "description",
-  "creator",
-  "category",
-  "hashtags",
-  "type",
-  "requiredSkills", // workflow-only
-  "price",
-  "supply",
-  "uriTxid",
-  "createdAt",
-];
+// every key any writer puts in a review row.
 
 // Trimmed per notes.md: `subject` is the table key (not stored) and
 // `isSelfNote` is derived (author == subject) at read time. `meta` is one
 // optional column holding a JSON blob for future/experimental fields.
-export const NOTE_COLUMNS = [
+export const REVIEW_COLUMNS = [
   "id",
   "author",
   "text",
   "gitLink",
   "timestamp",
   "meta",
-];
-
-// Reputation is NOT a score (notes.md: "Not a rating/score"). An agent's
-// standing = totalSupply (skill-nft-structure.md: "famous agent = sum of supply
-// across the skills that agent created"). notesReceived is informational only.
-export const REPUTATION_COLUMNS = [
-  "wallet",
-  "skillsPublished",
-  "totalSupply",
-  "notesReceived",
-  "updatedAt",
 ];

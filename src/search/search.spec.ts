@@ -1,10 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { searchSkills } from "./search.js";
-import { readRows } from "../core/chain.js";
-
-vi.mock("../core/chain.js", () => ({
-  readRows: vi.fn(),
-}));
+import type { SkillSource } from "../core/skillSource.js";
 
 // Live supply is hydrated from the mint; echo the per-id supply set below.
 const SUPPLY_BY_ID: Record<string, number> = { A: 10, B: 50, C: 5 };
@@ -19,6 +15,17 @@ vi.mock("../nft/token2022.js", () => ({
   ),
 }));
 
+const mockSkills = [
+  { id: "A", name: "Apple", description: "red fruit", category: "food", hashtags: ["sweet"], supply: 10, createdAt: 100, type: "skill" },
+  { id: "B", name: "Banana", description: "yellow fruit", category: "food", hashtags: ["sweet", "potassium"], supply: 50, createdAt: 200, type: "skill" },
+  { id: "C", name: "Carrot", description: "orange veg", category: "veg", hashtags: ["crunchy"], supply: 5, createdAt: 300, type: "workflow" },
+];
+
+// A fresh copy each call (search mutates supply/traits in place during hydration).
+const fakeSource = (): SkillSource => ({
+  listSkills: vi.fn().mockResolvedValue(mockSkills.map((s) => ({ ...s }))),
+});
+
 describe("search/search", () => {
   let mockConn: any;
 
@@ -27,17 +34,9 @@ describe("search/search", () => {
     vi.clearAllMocks();
   });
 
-  const mockSkills = [
-    { id: "A", name: "Apple", description: "red fruit", category: "food", hashtags: ["sweet"], supply: 10, createdAt: 100, type: "skill" },
-    { id: "B", name: "Banana", description: "yellow fruit", category: "food", hashtags: ["sweet", "potassium"], supply: 50, createdAt: 200, type: "skill" },
-    { id: "C", name: "Carrot", description: "orange veg", category: "veg", hashtags: ["crunchy"], supply: 5, createdAt: 300, type: "workflow" },
-  ];
-
   it("should return all skills without filters, sorted by supply by default", async () => {
-    vi.mocked(readRows).mockResolvedValue(mockSkills as any);
+    const results = await searchSkills(mockConn, { source: fakeSource() });
 
-    const results = await searchSkills(mockConn);
-    
     expect(results.length).toBe(3);
     // sorted by supply descending: 50, 10, 5
     expect(results[0].id).toBe("B");
@@ -46,50 +45,40 @@ describe("search/search", () => {
   });
 
   it("should filter by keyword in name or description", async () => {
-    vi.mocked(readRows).mockResolvedValue(mockSkills as any);
+    const results = await searchSkills(mockConn, { source: fakeSource(), filters: { keyword: "fruit" } });
 
-    const results = await searchSkills(mockConn, { filters: { keyword: "fruit" } });
-    
     expect(results.length).toBe(2);
     expect(results.some((s) => s.id === "A")).toBe(true);
     expect(results.some((s) => s.id === "B")).toBe(true);
   });
 
   it("should filter by category", async () => {
-    vi.mocked(readRows).mockResolvedValue(mockSkills as any);
+    const results = await searchSkills(mockConn, { source: fakeSource(), filters: { category: "food" } });
 
-    const results = await searchSkills(mockConn, { filters: { category: "food" } });
-    
     expect(results.length).toBe(2);
     expect(results.some((s) => s.id === "A")).toBe(true);
     expect(results.some((s) => s.id === "B")).toBe(true);
   });
 
   it("should filter by hashtags", async () => {
-    vi.mocked(readRows).mockResolvedValue(mockSkills as any);
-
-    const results = await searchSkills(mockConn, { filters: { hashtags: ["crunchy"] } });
+    const results = await searchSkills(mockConn, { source: fakeSource(), filters: { hashtags: ["crunchy"] } });
     expect(results.length).toBe(1);
     expect(results[0].id).toBe("C");
   });
 
   it("should filter by type", async () => {
-    vi.mocked(readRows).mockResolvedValue(mockSkills as any);
-
-    const skills = await searchSkills(mockConn, { filters: { type: "skill" } });
+    const skills = await searchSkills(mockConn, { source: fakeSource(), filters: { type: "skill" } });
     expect(skills.length).toBe(2);
     expect(skills.map((s) => s.id)).toEqual(expect.arrayContaining(["A", "B"]));
 
-    const workflows = await searchSkills(mockConn, { filters: { type: "workflow" } });
+    const workflows = await searchSkills(mockConn, { source: fakeSource(), filters: { type: "workflow" } });
     expect(workflows.length).toBe(1);
     expect(workflows[0].id).toBe("C");
   });
 
   it("should sort by name", async () => {
-    vi.mocked(readRows).mockResolvedValue(mockSkills as any);
+    const results = await searchSkills(mockConn, { source: fakeSource(), sortBy: "name" });
 
-    const results = await searchSkills(mockConn, { sortBy: "name" });
-    
     expect(results.length).toBe(3);
     expect(results[0].id).toBe("A");
     expect(results[1].id).toBe("B");
@@ -97,9 +86,7 @@ describe("search/search", () => {
   });
 
   it("should sort by recent", async () => {
-    vi.mocked(readRows).mockResolvedValue(mockSkills as any);
-
-    const results = await searchSkills(mockConn, { sortBy: "recent" });
+    const results = await searchSkills(mockConn, { source: fakeSource(), sortBy: "recent" });
 
     expect(results.length).toBe(3);
     // descending by createdAt: 300, 200, 100
@@ -108,25 +95,24 @@ describe("search/search", () => {
     expect(results[2].id).toBe("A");
   });
 
-  it("uses a custom source for enumeration instead of the index table", async () => {
-    const source = { listSkills: vi.fn().mockResolvedValue([mockSkills[2]]) };
+  it("uses the provided source for enumeration", async () => {
+    const source = { listSkills: vi.fn().mockResolvedValue([{ ...mockSkills[2] }]) };
 
     const results = await searchSkills(mockConn, { source });
 
     expect(source.listSkills).toHaveBeenCalled();
-    expect(readRows).not.toHaveBeenCalled(); // index table bypassed
     expect(results.map((s) => s.id)).toEqual(["C"]);
   });
 
-  it("verifyTraits re-reads category from the mint, overriding the stale cache", async () => {
-    vi.mocked(readRows).mockResolvedValue(mockSkills as any);
-    // Chain says A is actually "tech", not the cached "food".
+  it("verifyTraits re-reads category from the mint, overriding the stale snapshot", async () => {
+    // Chain says A is actually "tech", not the snapshot "food".
     META_BY_ID["A"] = { category: "tech", hashtags: ["sweet"] };
 
-    const cached = await searchSkills(mockConn, { filters: { category: "tech" } });
-    expect(cached.length).toBe(0); // cache copy still says "food"
+    const cached = await searchSkills(mockConn, { source: fakeSource(), filters: { category: "tech" } });
+    expect(cached.length).toBe(0); // snapshot copy still says "food"
 
     const verified = await searchSkills(mockConn, {
+      source: fakeSource(),
       filters: { category: "tech" },
       verifyTraits: true,
     });

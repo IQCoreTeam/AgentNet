@@ -1,10 +1,10 @@
 // Search skills by keyword, category, hashtags; sort by supply or recency.
 //
 // Enumeration goes through a SkillSource (core/skillSource.ts) — by default the
-// `skills:index` CacheLayer, swappable for a DAS/gateway enumerator later. The
-// mint stays the source of truth: `supply` is always hydrated from the mint, and
-// with `verifyTraits` category/hashtags are re-read from on-chain metadata
-// instead of the cached table copy.
+// DAS collection scan, swappable for a gateway enumerator later. The mint stays
+// the source of truth: `supply` is always hydrated from the mint, and with
+// `verifyTraits` category/hashtags are re-read from on-chain metadata instead of
+// the enumerator's snapshot.
 //
 // Per search.md the full design also has a SEMANTIC layer that maps a
 // vocabulary-mismatch query onto an existing category/hashtag (e.g. "hotdog" →
@@ -15,7 +15,7 @@
 
 import type { Connection } from "@solana/web3.js";
 import type { Skill } from "../core/types.js";
-import { indexTableSource, type SkillSource } from "../core/skillSource.js";
+import { dasSource, type SkillSource } from "../core/skillSource.js";
 import { getMintSupply, readSkillMintMetadata } from "../nft/token2022.js";
 
 export interface SearchFilters {
@@ -31,12 +31,12 @@ export interface SearchOptions {
   filters?: SearchFilters;
   sortBy?: SortBy;
   limit?: number;
-  /** Enumeration source. Defaults to the `skills:index` CacheLayer. */
+  /** Enumeration source. Defaults to the DAS collection scan. */
   source?: SkillSource;
   /**
    * Re-read category/hashtags from each mint's on-chain TokenMetadata before
-   * filtering, instead of trusting the cached index copy. Costs one extra RPC
-   * per candidate; use when the table may be stale relative to the chain.
+   * filtering, instead of trusting the enumerator's snapshot. Costs one extra
+   * RPC per candidate; use when the snapshot may be stale relative to the chain.
    */
   verifyTraits?: boolean;
 }
@@ -48,9 +48,9 @@ export async function searchSkills(
   const limit = options?.limit ?? 50;
   const sortBy = options?.sortBy ?? "supply";
   const filters = options?.filters ?? {};
-  // Default to the index-table CacheLayer. dasSource stays opt-in until the
-  // Token-2022 getAssetsByGroup assumption is devnet-proven (see skillSource.ts).
-  const source = options?.source ?? indexTableSource;
+  // Enumerate via the DAS collection scan (the only source). Returns an empty
+  // list until the collections are minted / devnet-proven (see skillSource.ts).
+  const source = options?.source ?? dasSource;
 
   let skills = await source.listSkills();
 

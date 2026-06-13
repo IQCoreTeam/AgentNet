@@ -31,6 +31,7 @@ describe("notes/notes", () => {
     vi.mocked(balance.getBalance).mockResolvedValue(1n);
 
     const noteId = await postNote(mockConn as any, signer, {
+      collectionId: "SkillsCollection",
       skillId: "11111111111111111111111111111111",
       text: "This is a test note",
     });
@@ -43,6 +44,7 @@ describe("notes/notes", () => {
     vi.mocked(balance.getBalance).mockResolvedValue(1n);
 
     await postNote(mockConn as any, signer, {
+      collectionId: "SkillsCollection",
       skillId: "11111111111111111111111111111111",
       text: "hi",
       meta: { tag: "v1" },
@@ -61,6 +63,7 @@ describe("notes/notes", () => {
 
     await expect(
       postNote(mockConn as any, signer, {
+        collectionId: "SkillsCollection",
         skillId: "11111111111111111111111111111111",
         text: "This is a test note",
       })
@@ -73,7 +76,7 @@ describe("notes/notes", () => {
       { id: "note1", author: "someBuyer", text: "great", timestamp: 1 },
     ] as any);
 
-    const notes = await readNotes(mockConn as any, skillId);
+    const notes = await readNotes("SkillsCollection", skillId);
     expect(notes.length).toBe(1);
     expect(notes[0].id).toBe("note1");
     expect(notes[0].subject).toBe(skillId); // derived from the table key
@@ -140,10 +143,10 @@ describe("notes/notes", () => {
       { id: "n3", author: "agentX", timestamp: 300 },
     ] as any);
 
-    const all = await readAgentNotes(mockConn as any, "agentX");
+    const all = await readAgentNotes("agentX");
     expect(all.map((n) => n.id)).toEqual(["n3", "n2", "n1"]); // sorted desc
 
-    const self = await readAgentNotes(mockConn as any, "agentX", { selfOnly: true });
+    const self = await readAgentNotes("agentX", { selfOnly: true });
     expect(self.map((n) => n.id)).toEqual(["n3", "n1"]);
   });
 });

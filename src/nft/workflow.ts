@@ -12,8 +12,8 @@ import {
   createMintToInstruction,
 } from "@solana/spl-token";
 
-import { codeIn, signerAddress, ensureDbRoot, ensureTable, writeRow } from "../core/chain.js";
-import { SKILLS_INDEX_HINT, SKILLS_INDEX_COLUMNS, getWorkflowsCollectionMint } from "../core/seed.js";
+import { codeIn, signerAddress, ensureDbRoot } from "../core/chain.js";
+import { getWorkflowsCollectionMint } from "../core/seed.js";
 import { createSkillMint } from "./token2022.js";
 import { resolveMinter } from "./minter.js";
 import { getBalance } from "../notes/balance.js";
@@ -81,27 +81,10 @@ export async function publishWorkflow(
     collectionMint,
   });
 
-  // Index workflow for search + reputation
-  const workflowId = workflowMintAddr.toBase58();
-  const creator = await signerAddress(signer);
-  const row = {
-    id: workflowId,
-    name: input.name,
-    description: input.description,
-    creator,
-    category: input.category ?? "",
-    hashtags: input.hashtags,
-    type: "workflow",
-    requiredSkills: input.requiredSkills,
-    price: input.price?.toString(),
-    supply: 0,
-    uriTxid: workflowTxid,
-    createdAt: Date.now(),
-  };
-  await ensureTable(signer, SKILLS_INDEX_HINT, SKILLS_INDEX_COLUMNS, "id");
-  await writeRow(signer, SKILLS_INDEX_HINT, JSON.stringify(row));
-
-  return workflowId;
+  // The mint itself is the registry — search/reputation enumerate the workflow
+  // collection via DAS (no index table). requiredSkills + traits live in the
+  // mint's TokenMetadata; the recipe lives at uri=txid. Nothing else to write.
+  return workflowMintAddr.toBase58();
 }
 
 export interface UnlockWorkflowInput {

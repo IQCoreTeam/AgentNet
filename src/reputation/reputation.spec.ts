@@ -1,13 +1,16 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { Keypair } from "@solana/web3.js";
-import { getReputation, updateReputation, getLeaderboard } from "./reputation.js";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { getReputation, getLeaderboard } from "./reputation.js";
 import * as chain from "../core/chain.js";
+import { dasSource } from "../core/skillSource.js";
 import { getMintSupply } from "../nft/token2022.js";
 
 vi.mock("../core/chain.js", () => ({
   readRows: vi.fn(),
-  writeRow: vi.fn().mockResolvedValue("mockWriteSig"),
-  ensureTable: vi.fn().mockResolvedValue(null),
+}));
+
+// Skill enumeration comes from the DAS collection scan; each test stubs it.
+vi.mock("../core/skillSource.js", () => ({
+  dasSource: { listSkills: vi.fn() },
 }));
 
 // Live supply is hydrated from the mint; each test sets its own id→supply map.
@@ -23,33 +26,37 @@ function mockSupply(map: Record<string, number>) {
 
 describe("reputation/reputation", () => {
   let mockConn: any;
-  let signer: Keypair;
+  const origEnv = { ...process.env };
 
   beforeEach(() => {
     mockConn = {};
-    signer = Keypair.generate();
     vi.clearAllMocks();
+    // No collection configured → collectionFor returns "" → review key is
+    // "reviews::<id>". That's a stable key the test reads back below.
+    delete process.env.AGENTNET_SKILLS_COLLECTION_PUBKEY;
+    delete process.env.AGENTNET_WORKFLOWS_COLLECTION_PUBKEY;
   });
 
-  it("should compute reputation correctly based on skills and notes", async () => {
-    const mockSkills = [
-      { id: "skill1", creator: "walletA", supply: 5 },
-      { id: "skill2", creator: "walletA", supply: 2 },
-      { id: "skill3", creator: "walletB", supply: 10 },
-    ];
-    
+  afterEach(() => {
+    process.env = { ...origEnv };
+  });
+
+  it("computes reputation from skills (supply) + reviews (count), not a score", async () => {
+    vi.mocked(dasSource.listSkills).mockResolvedValue([
+      { id: "skill1", type: "skill", creator: "walletA", supply: 5 } as any,
+      { id: "skill2", type: "skill", creator: "walletA", supply: 2 } as any,
+      { id: "skill3", type: "skill", creator: "walletB", supply: 10 } as any,
+    ]);
     vi.mocked(chain.readRows).mockImplementation(async (hint: string) => {
-      if (hint === "skills:index") return mockSkills as any;
-      if (hint === "notes:skill:skill1") return [{ id: "note1" }, { id: "note2" }] as any;
-      if (hint === "notes:skill:skill2") return [{ id: "note3" }] as any;
+      if (hint === "reviews::skill1") return [{ id: "n1" }, { id: "n2" }] as any;
+      if (hint === "reviews::skill2") return [{ id: "n3" }] as any;
       return [];
     });
     mockSupply({ skill1: 5, skill2: 2, skill3: 10 });
 
     const rep = await getReputation(mockConn, "walletA");
 
-    // Reputation is NOT a score. Standing = totalSupply (fame); notes informational.
-    // skillsPublished = 2, totalSupply = 5 + 2 = 7, notesReceived = 3
+    // Standing = totalSupply (fame); notes informational.
     expect(rep.wallet).toBe("walletA");
     expect(rep.skillsPublished).toBe(2);
     expect(rep.totalSupply).toBe(7);
@@ -57,26 +64,16 @@ describe("reputation/reputation", () => {
     expect(rep).not.toHaveProperty("score");
   });
 
-  it("should update reputation and write row to chain", async () => {
-    vi.mocked(chain.readRows).mockResolvedValue([]); // empty skills
-    mockSupply({});
-
-    const rep = await updateReputation(mockConn, signer, "walletC");
-
-    expect(rep.totalSupply).toBe(0);
-    expect(chain.writeRow).toHaveBeenCalledWith(signer, "reputation:walletC", expect.any(String));
-  });
-
-  it("should generate leaderboard correctly", async () => {
-    const mockSkills = [
-      { id: "skill1", creator: "walletA", supply: 5 }, // walletA totalSupply: 5
-      { id: "skill2", creator: "walletB", supply: 10 }, // walletB totalSupply: 10
-    ];
-    vi.mocked(chain.readRows).mockResolvedValue(mockSkills as any);
+  it("generates a leaderboard ranked by totalSupply", async () => {
+    vi.mocked(dasSource.listSkills).mockResolvedValue([
+      { id: "skill1", type: "skill", creator: "walletA", supply: 5 } as any,
+      { id: "skill2", type: "skill", creator: "walletB", supply: 10 } as any,
+    ]);
+    vi.mocked(chain.readRows).mockResolvedValue([] as any);
     mockSupply({ skill1: 5, skill2: 10 });
 
     const leaderboard = await getLeaderboard(mockConn, 10);
-    
+
     expect(leaderboard.length).toBe(2);
     expect(leaderboard[0].wallet).toBe("walletB"); // totalSupply 10
     expect(leaderboard[1].wallet).toBe("walletA"); // totalSupply 5

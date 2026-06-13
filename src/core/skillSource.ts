@@ -2,22 +2,16 @@
 //
 // skill-nft-structure.md §2 is emphatic: "No skills registry table. The NFT
 // collection IS the skill list." The canonical truth is each mint's on-chain
-// TokenMetadata (uri + category/hashtags traits) + its `supply`. But there is no
-// collection/group primitive on these standalone Token-2022 mints yet, so the
-// chain cannot be *enumerated* directly — DAS getAssetsByGroup needs a grouping
-// key we don't mint. Until that lands, an off-chain index supplies the SET of
-// mint ids.
+// TokenMetadata (uri + category/hashtags traits) + its `supply`, enumerated by
+// scanning the TokenGroup umbrella collection via DAS.
 //
-// So `skills:index` is NOT the registry of truth — it is a rebuildable
-// CacheLayer (coding-info.md §⑤: "a cache/index that can be rebuilt anytime;
-// data stays on-chain"). This interface makes that explicit and swappable: today
-// it's backed by the index table; a DAS/gateway enumerator can replace it later
-// without changing search or reputation. Drift-prone fields (supply, and traits
-// when verification is requested) are re-read from the mint by the consumer, so
-// the cache only ever provides the id set + a fast metadata snapshot.
+// There is no `skills:index` cache table anymore — the collection scan is the
+// only source. Until a DAS provider proves it indexes the Token-2022 group
+// extension under `getAssetsByGroup` (see the probe + the warning on dasSource),
+// this returns whatever DAS gives (an empty list when collections are unminted
+// is a real, visible answer — not a hidden failure). The seam stays so a
+// gateway enumerator can replace it later without changing search/reviews.
 
-import { readRows } from "./chain.js";
-import { SKILLS_INDEX_HINT } from "./seed.js";
 import type { Skill } from "./types.js";
 
 export interface SkillSource {
@@ -26,34 +20,16 @@ export interface SkillSource {
 }
 
 /**
- * Default source — reads the `skills:index` CacheLayer table.
- *
- * `readTableRows` also returns non-row entries (metadata-shaped {signature,
- * metadata, data} payloads). A real indexed row always has a string `id`; the
- * metadata entries do not — so `id` is the row-vs-metadata discriminator.
- * (Consumers must still tolerate other fields being absent.)
- */
-export const indexTableSource: SkillSource = {
-  async listSkills(limit = 1000): Promise<Skill[]> {
-    const rows = await readRows(SKILLS_INDEX_HINT, { limit });
-    return (rows as unknown as Skill[]).filter((s) => typeof s.id === "string");
-  },
-};
-
-/**
  * DAS (Digital Asset Standard) source — enumerates the TokenGroup umbrella
  * collections via a DAS RPC's `getAssetsByGroup`. This is the §2 "collection IS
- * the skill list" reader; when proven it makes `skills:index` redundant.
+ * the skill list" reader — the single source of truth for enumeration.
  *
  * ⚠️ UNVERIFIED ASSUMPTION: DAS `groupKey:"collection"` is sourced from a
  * Metaplex Token-Metadata `collection`, NOT the Token-2022 `TokenGroup`
  * extension our mints use. Whether a given DAS provider surfaces Token-2022
- * group membership under that key is unconfirmed — it may return nothing. This
- * source therefore does NOT silently fall back to the table (that would hide the
- * failure): it throws on misconfig and surfaces RPC errors, and returns exactly
- * what DAS gives (an empty list is a real, visible answer). Callers who want the
- * table must pass `indexTableSource` explicitly — the seam already allows that.
- * Settle the assumption with a devnet probe before defaulting anything to this.
+ * group membership under that key is unconfirmed — it may return nothing. It
+ * does NOT hide that: it throws on misconfig, surfaces RPC errors, and returns
+ * exactly what DAS gives. Settle the assumption with a devnet probe.
  */
 export const dasSource: SkillSource = {
   async listSkills(limit = 1000): Promise<Skill[]> {

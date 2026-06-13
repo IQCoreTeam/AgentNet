@@ -1,1 +1,1 @@
-export { getReputation, updateReputation, getLeaderboard } from "./reputation.js";
+export { getReputation, getLeaderboard } from "./reputation.js";

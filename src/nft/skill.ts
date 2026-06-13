@@ -20,10 +20,8 @@ import {
   codeIn,
   signerAddress,
   ensureDbRoot,
-  ensureTable,
-  writeRow,
 } from "../core/chain.js";
-import { SKILLS_INDEX_HINT, SKILLS_INDEX_COLUMNS, getSkillsCollectionMint } from "../core/seed.js";
+import { getSkillsCollectionMint } from "../core/seed.js";
 import { createSkillMint, mintSkillToken } from "./token2022.js";
 import { resolveMinter } from "./minter.js";
 import { defaultValidator, ValidationError } from "./validation/index.js";
@@ -74,7 +72,6 @@ export async function publishSkill(
   );
 
   // 2. create the Token-2022 mint
-  const creator = await signerAddress(signer);
   const collectionStr = getSkillsCollectionMint();
   const collectionMint = collectionStr ? new PublicKey(collectionStr) : undefined;
   
@@ -87,26 +84,10 @@ export async function publishSkill(
     collectionMint,
   });
 
-  // 3. Index skill metadata for search + reputation.
-  // price is bigint → serialize to string (JSON.stringify throws on BigInt).
-  const skillId = skillMintAddr.toBase58();
-  const row = {
-    id: skillId,
-    name: input.name,
-    description: input.description,
-    creator,
-    category: input.category ?? "",
-    hashtags: input.hashtags,
-    type: "skill",
-    price: input.price?.toString(),
-    supply: 0,
-    uriTxid: skillTextTxid,
-    createdAt: Date.now(),
-  };
-  await ensureTable(signer, SKILLS_INDEX_HINT, SKILLS_INDEX_COLUMNS, "id");
-  await writeRow(signer, SKILLS_INDEX_HINT, JSON.stringify(row));
-
-  return skillId;
+  // The mint itself is the registry — search/reputation enumerate the collection
+  // via DAS (no index table). Metadata (name/category/traits) lives in the mint's
+  // TokenMetadata; the skill text lives at uri=txid. Nothing else to write.
+  return skillMintAddr.toBase58();
 }
 
 export interface BuySkillInput {

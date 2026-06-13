@@ -39,10 +39,9 @@ export {
 export {
   AGENTNET_ROOT_ID,
   mysessionsHint,
-  notesSkillHint,
-  notesAgentHint,
-  AUDIT_HINT,
-  reputationHint,
+  reviewsHint,
+  reviewsAgentHint,
+  auditHint,
 } from "./core/seed.js";
 
 export {
@@ -80,12 +79,11 @@ export {
 } from "./search/index.js";
 export type { SearchFilters, SortBy, SearchOptions } from "./search/index.js";
 
-export { indexTableSource, dasSource } from "./core/skillSource.js";
+export { dasSource } from "./core/skillSource.js";
 export type { SkillSource } from "./core/skillSource.js";
 
 export {
   getReputation,
-  updateReputation,
   getLeaderboard,
 } from "./reputation/index.js";
 export type { Reputation } from "./core/types.js";

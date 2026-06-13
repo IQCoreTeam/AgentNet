@@ -16,8 +16,8 @@ import {
   ensureTable,
   signerAddress,
 } from "../core/chain.js";
-import { notesSkillHint, notesAgentHint, NOTE_COLUMNS } from "../core/seed.js";
-import { indexTableSource, type SkillSource } from "../core/skillSource.js";
+import { reviewsHint, reviewsAgentHint, REVIEW_COLUMNS } from "../core/seed.js";
+import { dasSource, type SkillSource } from "../core/skillSource.js";
 import type { Note, Row } from "../core/types.js";
 import { getBalance } from "./balance.js";
 
@@ -62,7 +62,8 @@ function hydrateNotes(rows: Row[], subject: string): Note[] {
 }
 
 export interface PostNoteInput {
-  skillId: string; // skill mint address (= the table subject)
+  collectionId: string; // umbrella collection mint (skills / workflows / …)
+  skillId: string; // item NFT mint address (= the table subject, under the collection)
   text: string;
   gitLink?: string;
   meta?: Record<string, unknown>;
@@ -97,11 +98,11 @@ export async function postNote(
     throw new Error(`Must own ≥1 skill token to post note (balance: ${balance})`);
   }
 
-  const hint = notesSkillHint(input.skillId);
+  const hint = reviewsHint(input.collectionId, input.skillId);
   const note = buildNote(author, input.text, input.gitLink, input.meta);
 
   // Open table (no native gate — see the Token-2022 incompatibility above).
-  await ensureTable(signer, hint, NOTE_COLUMNS, "id");
+  await ensureTable(signer, hint, REVIEW_COLUMNS, "id");
   await writeRow(signer, hint, JSON.stringify(note));
   return note.id;
 }
@@ -111,11 +112,11 @@ export interface ReadNotesOptions {
 }
 
 export async function readNotes(
-  conn: Connection,
+  collectionId: string,
   skillId: string,
   options?: ReadNotesOptions,
 ): Promise<Note[]> {
-  const hint = notesSkillHint(skillId);
+  const hint = reviewsHint(collectionId, skillId);
   const rows = await readRows(hint, { limit: options?.limit ?? 100 });
   return hydrateNotes(rows, skillId);
 }
@@ -157,7 +158,7 @@ export async function postAgentNote(
 
   if (!isSelfNote) {
     // Comment gate: must hold ≥1 of any skill this agent created.
-    const source = input.source ?? indexTableSource;
+    const source = input.source ?? dasSource;
     const agentSkills = (await source.listSkills()).filter(
       (s) => s.creator === input.agentWallet,
     );
@@ -173,11 +174,11 @@ export async function postAgentNote(
     }
   }
 
-  const hint = notesAgentHint(input.agentWallet);
+  const hint = reviewsAgentHint(input.agentWallet);
   const note = buildNote(author, input.text, input.gitLink, input.meta);
 
   // Open table (no native gate — see the module header).
-  await ensureTable(signer, hint, NOTE_COLUMNS, "id");
+  await ensureTable(signer, hint, REVIEW_COLUMNS, "id");
   await writeRow(signer, hint, JSON.stringify(note));
   return note.id;
 }
@@ -187,11 +188,10 @@ export async function postAgentNote(
  * owner's posts (the blog view); default returns everything, newest first.
  */
 export async function readAgentNotes(
-  conn: Connection,
   agentWallet: string,
   options?: ReadNotesOptions & { selfOnly?: boolean },
 ): Promise<Note[]> {
-  const hint = notesAgentHint(agentWallet);
+  const hint = reviewsAgentHint(agentWallet);
   const rows = await readRows(hint, { limit: options?.limit ?? 100 });
   let notes = hydrateNotes(rows, agentWallet); // subject + isSelfNote derived
   if (options?.selfOnly) {
