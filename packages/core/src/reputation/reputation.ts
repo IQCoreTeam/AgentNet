@@ -24,10 +24,11 @@ export async function getReputation(
   );
 
   const skillsPublished = mySkills.length;
-  // totalSupply = the documented "fame" metric, read live from each mint.
-  const supplies = await Promise.all(
-    mySkills.map((s) => getMintSupply(conn, s.id)),
-  );
+  // totalSupply = the documented "fame" metric. A hydrated source (indexer)
+  // already carries live supply; otherwise read it per-mint from the chain.
+  const supplies = source.hydrated
+    ? mySkills.map((s) => Number(s.supply))
+    : await Promise.all(mySkills.map((s) => getMintSupply(conn, s.id)));
   const totalSupply = supplies.reduce((acc, n) => acc + n, 0);
 
   // Count reviews across all creator's skills (informational, not a score).
@@ -67,13 +68,14 @@ export async function getLeaderboard(
   }
 
   // Rank by totalSupply (the documented fame metric). Reviews omitted here to
-  // avoid N+1 reads — they're informational, not part of ranking anyway.
+  // avoid N+1 reads — they're informational, not part of ranking anyway. A
+  // hydrated source carries live supply; otherwise read each mint.
   const entries: Reputation[] = [];
   for (const [wallet, creatorSkills] of creatorMap.entries()) {
     const skillsPublished = creatorSkills.length;
-    const supplies = await Promise.all(
-      creatorSkills.map((s) => getMintSupply(conn, s.id)),
-    );
+    const supplies = source.hydrated
+      ? creatorSkills.map((s) => Number(s.supply))
+      : await Promise.all(creatorSkills.map((s) => getMintSupply(conn, s.id)));
     const totalSupply = supplies.reduce((acc, n) => acc + n, 0);
     entries.push({
       wallet,
