@@ -50,8 +50,20 @@ export async function publishSkill(
 
   await ensureDbRoot(signer);
 
-  // code-in the skill text
-  const skillTxid = await codeIn(signer, input.text, `${input.name}.md`, "text/markdown");
+  // code-in the standard NFT JSON (skill-nft-json.md §2): name/description +
+  // standard `attributes` (category once, each hashtag as a repeated "skill"
+  // trait, §4) + the SKILL.md body in `skillText`. One inscription holds
+  // everything search/detail needs — traits do NOT go on the mint.
+  const attributes: { trait_type: string; value: string }[] = [];
+  if (input.category) attributes.push({ trait_type: "category", value: input.category });
+  for (const tag of input.hashtags ?? []) attributes.push({ trait_type: "skill", value: tag });
+  const skillJson = JSON.stringify({
+    name: input.name,
+    description: input.description,
+    attributes,
+    skillText: input.text,
+  });
+  const skillTxid = await codeIn(signer, skillJson, `${input.name}.json`, "application/json");
 
   // Pre-generate the mint → derive the gate PDA that will own the mint authority.
   const skillMintKp = Keypair.generate();
@@ -64,9 +76,7 @@ export async function publishSkill(
   await createSkillMint(conn, signer, {
     name: input.name,
     symbol: input.name.substring(0, 8).toUpperCase(),
-    uri: skillTxid,
-    category: input.category,
-    hashtags: input.hashtags,
+    uri: skillTxid, // points at the JSON above (traits live there, not on the mint)
     collectionMint,
     mintKeypair: skillMintKp,
     minterAuthority: mintAuthority, // gate PDA holds the mint authority

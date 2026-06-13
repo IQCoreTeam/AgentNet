@@ -61,11 +61,26 @@ Workflow body here, long enough to pass the body length check easily.`;
 
     expect(typeof mintAddr).toBe("string");
     expect(chain.ensureDbRoot).toHaveBeenCalled();
-    expect(chain.codeIn).toHaveBeenCalledWith(signer, VALID_WORKFLOW_MD, "test-workflow.md", "text/markdown");
-    // createSkillMint is called with a pre-made mint keypair + a PDA mint authority.
+    // code-in inscribes the standard NFT JSON: category + each requiredSkill as
+    // a repeated trait (§4b), body in skillText.
+    expect(chain.codeIn).toHaveBeenCalledWith(
+      signer,
+      expect.any(String),
+      "test-workflow.json",
+      "application/json",
+    );
+    const json = JSON.parse(vi.mocked(chain.codeIn).mock.calls[0][1] as string);
+    expect(json.attributes).toEqual([
+      { trait_type: "category", value: "ai" },
+      { trait_type: "requiredSkill", value: "So11111111111111111111111111111111111111112" },
+    ]);
+    expect(json.skillText).toBe(VALID_WORKFLOW_MD);
+    // createSkillMint is called with a pre-made mint keypair + a PDA mint
+    // authority, and no traits (they live in the JSON now).
     const call = vi.mocked(token2022.createSkillMint).mock.calls[0][2] as any;
     expect(call.mintKeypair).toBeInstanceOf(Keypair);
     expect(call.minterAuthority).toBeInstanceOf(PublicKey);
+    expect(call.category).toBeUndefined();
     // and the publish_workflow ix was sent.
     expect(mockConn.sendRawTransaction).toHaveBeenCalled();
   });

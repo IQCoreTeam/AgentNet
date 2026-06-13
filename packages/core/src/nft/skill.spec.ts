@@ -61,11 +61,30 @@ This skill teaches agents to reason clearly and break down complex problems.
 
     expect(typeof mintAddr).toBe("string");
     expect(chain.ensureDbRoot).toHaveBeenCalled();
-    expect(chain.codeIn).toHaveBeenCalledWith(signer, VALID_SKILL, "super-skill.md", "text/markdown");
-    // createSkillMint gets a pre-made mint keypair + a PDA mint authority.
+    // code-in inscribes the standard NFT JSON (not raw markdown): name +
+    // description + standard `attributes` (category once, each hashtag a
+    // repeated "skill" trait) + the body in skillText.
+    expect(chain.codeIn).toHaveBeenCalledWith(
+      signer,
+      expect.any(String),
+      "super-skill.json",
+      "application/json",
+    );
+    const codeInArg = vi.mocked(chain.codeIn).mock.calls[0][1] as string;
+    const json = JSON.parse(codeInArg);
+    expect(json.name).toBe("super-skill");
+    expect(json.attributes).toEqual([
+      { trait_type: "category", value: "ai" },
+      { trait_type: "skill", value: "reasoning" },
+    ]);
+    expect(json.skillText).toBe(VALID_SKILL);
+    // createSkillMint gets a pre-made mint keypair + a PDA mint authority, and
+    // NO category/hashtags (traits live in the JSON now, not on the mint).
     const call = vi.mocked(token2022.createSkillMint).mock.calls[0][2] as any;
     expect(call.mintKeypair).toBeInstanceOf(Keypair);
     expect(call.minterAuthority).toBeInstanceOf(PublicKey);
+    expect(call.category).toBeUndefined();
+    expect(call.hashtags).toBeUndefined();
     // and publish_item was sent.
     expect(mockConn.sendRawTransaction).toHaveBeenCalled();
   });
