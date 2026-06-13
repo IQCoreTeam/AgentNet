@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { Connection, Keypair, PublicKey } from "@solana/web3.js";
+import { Keypair, PublicKey } from "@solana/web3.js";
 import { publishSkill, buySkill } from "./skill.js";
 import { FormatError } from "./checkFormat.js";
 import * as chain from "../core/chain.js";
@@ -8,34 +8,20 @@ import * as token2022 from "./token2022.js";
 vi.mock("../core/chain.js", () => ({
   ensureDbRoot: vi.fn().mockResolvedValue("mockDbRootSig"),
   codeIn: vi.fn().mockResolvedValue("mockCodeInSig"),
-  signerAddress: vi.fn().mockImplementation((signer) => Promise.resolve(signer.publicKey?.toBase58() || "mockSigner")),
-  writeRow: vi.fn().mockResolvedValue("mockWriteRowSig"),
-  ensureTable: vi.fn().mockResolvedValue(null),
+  signerAddress: vi.fn().mockImplementation((signer) =>
+    Promise.resolve(signer.publicKey?.toBase58() || "11111111111111111111111111111111"),
+  ),
 }));
 
 vi.mock("../core/seed.js", () => ({
-  SKILLS_INDEX_HINT: "skills:index",
-  SKILLS_INDEX_COLUMNS: ["id", "name", "type", "supply", "createdAt"],
   getSkillsCollectionMint: vi.fn().mockReturnValue(null),
-  getWorkflowsCollectionMint: vi.fn().mockReturnValue(null),
+  getWorkflowGateProgramId: vi.fn().mockReturnValue("3ptXj4yuaQG51WTA3SZZ37jGvYFgMhgXnSKWJLASJNkt"),
 }));
 
 vi.mock("./token2022.js", async () => {
   const { PublicKey } = await import("@solana/web3.js");
   return {
     createSkillMint: vi.fn().mockResolvedValue(new PublicKey("11111111111111111111111111111111")),
-    mintSkillToken: vi.fn().mockResolvedValue("mockMintSig"),
-  };
-});
-
-vi.mock("@solana/spl-token", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@solana/spl-token")>();
-  const { PublicKey } = await import("@solana/web3.js");
-  return {
-    ...actual,
-    createMintToInstruction: vi.fn().mockImplementation((_mint, _ata, authority) => new (require("@solana/web3.js").TransactionInstruction)({ keys: [{ pubkey: authority, isSigner: true, isWritable: false }], programId: new PublicKey("11111111111111111111111111111111"), data: Buffer.alloc(0) })),
-    createAssociatedTokenAccountInstruction: vi.fn().mockReturnValue(new (require("@solana/web3.js").TransactionInstruction)({ keys: [], programId: new PublicKey("11111111111111111111111111111111"), data: Buffer.alloc(0) })),
-    getAssociatedTokenAddressSync: vi.fn().mockReturnValue(new PublicKey("11111111111111111111111111111111")),
   };
 });
 
@@ -48,13 +34,12 @@ describe("nft/skill", () => {
       getLatestBlockhash: vi.fn().mockResolvedValue({ blockhash: "11111111111111111111111111111111", lastValidBlockHeight: 1 }),
       sendRawTransaction: vi.fn().mockResolvedValue("mockTxSig"),
       confirmTransaction: vi.fn().mockResolvedValue({}),
-      getAccountInfo: vi.fn().mockResolvedValue({ data: new Uint8Array() }), // simulate ATA exists
+      getAccountInfo: vi.fn().mockResolvedValue({ data: new Uint8Array() }), // ATA exists
     };
     signer = Keypair.generate();
     vi.clearAllMocks();
   });
 
-  // Use a valid SKILL.md that passes the default onchain validator
   const VALID_SKILL = `---
 name: super-skill
 description: A useful skill that teaches agents to reason step by step
@@ -65,7 +50,7 @@ hashtags: [reasoning]
 This skill teaches agents to reason clearly and break down complex problems.
 `;
 
-  it("should publish a skill successfully", async () => {
+  it("publishes a skill (mint authority = gate PDA, then publish_item with no prereqs)", async () => {
     const mintAddr = await publishSkill(mockConn as any, signer, {
       name: "super-skill",
       description: "A useful skill that teaches agents to reason step by step",
@@ -74,51 +59,36 @@ This skill teaches agents to reason clearly and break down complex problems.
       hashtags: ["reasoning"],
     });
 
-    expect(mintAddr).toBe("11111111111111111111111111111111");
+    expect(typeof mintAddr).toBe("string");
     expect(chain.ensureDbRoot).toHaveBeenCalled();
     expect(chain.codeIn).toHaveBeenCalledWith(signer, VALID_SKILL, "super-skill.md", "text/markdown");
-    expect(token2022.createSkillMint).toHaveBeenCalled();
+    // createSkillMint gets a pre-made mint keypair + a PDA mint authority.
+    const call = vi.mocked(token2022.createSkillMint).mock.calls[0][2] as any;
+    expect(call.mintKeypair).toBeInstanceOf(Keypair);
+    expect(call.minterAuthority).toBeInstanceOf(PublicKey);
+    // and publish_item was sent.
+    expect(mockConn.sendRawTransaction).toHaveBeenCalled();
   });
 
-  it("should buy a skill for free (price 0)", async () => {
+  it("buys a skill via buy_item (no client price/minter — gate is a no-op for skills)", async () => {
     const sig = await buySkill(mockConn as any, signer, {
-      skillId: "11111111111111111111111111111111",
+      skillId: "So11111111111111111111111111111111111111112",
       buyerWallet: signer.publicKey.toBase58(),
       creatorWallet: "11111111111111111111111111111111",
-      price: 0n,
-      minter: Keypair.generate(), // protocol minter co-signs the mintTo (Path A)
     });
 
     expect(sig).toBe("mockTxSig");
     expect(mockConn.sendRawTransaction).toHaveBeenCalled();
   });
 
-  it("should buy a skill with a price and split fees", async () => {
-    const sig = await buySkill(mockConn as any, signer, {
-      skillId: "11111111111111111111111111111111",
-      buyerWallet: signer.publicKey.toBase58(),
-      creatorWallet: "11111111111111111111111111111111",
-      price: 1000n,
-      iqFeePercent: 0.1, // 10%
-      minter: Keypair.generate(), // protocol minter co-signs the mintTo (Path A)
-    });
-
-    expect(sig).toBe("mockTxSig");
-    // Verify that the tx includes transfers (we can't easily assert on the SystemProgram inner workings without deep mocking,
-    // but we can ensure the transaction was sent successfully).
-    expect(mockConn.sendRawTransaction).toHaveBeenCalled();
-  });
-
-  it("should throw FormatError when the format check rejects", async () => {
-    // No frontmatter → missing name/description → format check fails
+  it("throws FormatError when the format check rejects", async () => {
     await expect(
       publishSkill(mockConn as any, signer, {
         name: "test",
         description: "test",
         text: "Just some text with no frontmatter.",
-      })
+      }),
     ).rejects.toThrow(FormatError);
-    // Should NOT have touched the chain
     expect(chain.ensureDbRoot).not.toHaveBeenCalled();
   });
 });

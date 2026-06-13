@@ -104,9 +104,8 @@ export async function handleToolCall(
       throw new Error("Missing required argument: skillId");
     }
     
-    const priceVal = args?.price as number | undefined;
-    const price = priceVal !== undefined ? BigInt(Math.floor(priceVal)) : 0n;
-    
+    // Price is read from the item's on-chain config (set at publish) — the client
+    // doesn't pass it, so it can't be forged.
     const creatorWallet = (args?.creatorWallet as string) || defaultCreatorWallet;
     const buyerWallet = await signerAddress(signer);
 
@@ -115,7 +114,6 @@ export async function handleToolCall(
         skillId,
         buyerWallet,
         creatorWallet,
-        price,
       });
 
       return {

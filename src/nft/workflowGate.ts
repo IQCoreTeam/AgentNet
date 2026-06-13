@@ -1,9 +1,9 @@
 // Calls into the agent-workflow-nft on-chain gate program (raw web3.js, no anchor).
 //
-// Workflows are minted ONLY through this program: the workflow mint's authority is
-// a program PDA, so a workflow token can't be minted without passing the on-chain
-// prerequisite check. publishWorkflowGate registers the prerequisites; buyWorkflowGate
-// runs the gate + mints. Skills do NOT use this — they're bought directly.
+// ONE model for skills AND workflows: every item is minted only through this
+// program (the item mint's authority is a program PDA), so a token can't be minted
+// without going through buy_item. An item's required_skills is empty for a skill
+// (anyone can buy) and filled for a workflow (buyer must hold every listed skill).
 
 import {
   PublicKey,
@@ -17,34 +17,34 @@ import {
 import { getWorkflowGateProgramId } from "../core/seed.js";
 
 // Anchor instruction discriminators (sha256("global:<name>")[0..8]) — from the IDL.
-const DISC_PUBLISH = Buffer.from([67, 53, 166, 229, 64, 38, 9, 215]);
-const DISC_BUY = Buffer.from([245, 235, 217, 127, 91, 196, 97, 19]);
+const DISC_PUBLISH = Buffer.from([125, 80, 203, 31, 0, 230, 147, 33]); // publish_item
+const DISC_BUY = Buffer.from([80, 82, 193, 201, 216, 27, 70, 184]); // buy_item
 
-const WORKFLOW_SEED = Buffer.from("workflow");
+const ITEM_SEED = Buffer.from("item");
 const MINT_AUTH_SEED = Buffer.from("mint-auth");
 
 function programId(): PublicKey {
   return new PublicKey(getWorkflowGateProgramId());
 }
 
-/** Config PDA holding a workflow's required_skills: ["workflow", workflowMint]. */
-export function workflowConfigPda(workflowMint: PublicKey): PublicKey {
-  return PublicKey.findProgramAddressSync([WORKFLOW_SEED, workflowMint.toBuffer()], programId())[0];
+/** Config PDA holding an item's required_skills: ["item", itemMint]. */
+export function itemConfigPda(itemMint: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync([ITEM_SEED, itemMint.toBuffer()], programId())[0];
 }
 
-/** The program's mint-authority PDA for a workflow: ["mint-auth", workflowMint]. */
-export function workflowMintAuthorityPda(workflowMint: PublicKey): PublicKey {
-  return PublicKey.findProgramAddressSync([MINT_AUTH_SEED, workflowMint.toBuffer()], programId())[0];
+/** The program's mint-authority PDA for an item: ["mint-auth", itemMint]. */
+export function itemMintAuthorityPda(itemMint: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync([MINT_AUTH_SEED, itemMint.toBuffer()], programId())[0];
 }
 
 /**
- * publish_workflow instruction — store required_skills + price in the config PDA.
- * Each required skill mint is passed as a remaining account (same order) so the
- * program can verify it belongs to the official skills collection.
+ * publish_item instruction — store creator, price, and required_skills in the
+ * config PDA. required_skills empty = a skill; filled = a workflow (each required
+ * skill mint is passed as a remaining account so the program can verify it).
  */
-export function publishWorkflowIx(args: {
+export function publishItemIx(args: {
   creator: PublicKey;
-  workflowMint: PublicKey;
+  itemMint: PublicKey;
   requiredSkills: PublicKey[];
   price: bigint;
 }): TransactionInstruction {
@@ -59,36 +59,37 @@ export function publishWorkflowIx(args: {
 
   const keys = [
     { pubkey: args.creator, isSigner: true, isWritable: true },
-    { pubkey: args.workflowMint, isSigner: false, isWritable: false },
-    { pubkey: workflowConfigPda(args.workflowMint), isSigner: false, isWritable: true },
+    { pubkey: args.itemMint, isSigner: false, isWritable: false },
+    { pubkey: itemConfigPda(args.itemMint), isSigner: false, isWritable: true },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-    // remaining: the skill mints, one per required_skill.
+    // remaining: the skill mints, one per required_skill (none for a skill).
     ...args.requiredSkills.map((m) => ({ pubkey: m, isSigner: false, isWritable: false })),
   ];
   return new TransactionInstruction({ programId: programId(), keys, data });
 }
 
 /**
- * buy_workflow instruction — the gate. The buyer's skill token accounts are passed
- * as remaining accounts (one per required skill, same order as the config's
- * required_skills); the program checks each holds ≥1, then mints the workflow token.
+ * buy_item instruction — the gate. For a workflow, the buyer's skill token
+ * accounts are passed as remaining accounts (one per required skill, same order as
+ * config.required_skills); the program checks each holds ≥1, then mints the item
+ * token. For a skill (empty required_skills) there are no remaining accounts.
  */
-export function buyWorkflowIx(args: {
+export function buyItemIx(args: {
   buyer: PublicKey;
   creator: PublicKey;
-  workflowMint: PublicKey;
+  itemMint: PublicKey;
   requiredSkills: PublicKey[];
 }): TransactionInstruction {
-  const buyerWorkflowAta = getAssociatedTokenAddressSync(
-    args.workflowMint, args.buyer, false, TOKEN_2022_PROGRAM_ID,
+  const buyerItemAta = getAssociatedTokenAddressSync(
+    args.itemMint, args.buyer, false, TOKEN_2022_PROGRAM_ID,
   );
   const keys = [
     { pubkey: args.buyer, isSigner: true, isWritable: true },
     { pubkey: args.creator, isSigner: false, isWritable: true },
-    { pubkey: workflowConfigPda(args.workflowMint), isSigner: false, isWritable: false },
-    { pubkey: args.workflowMint, isSigner: false, isWritable: true },
-    { pubkey: workflowMintAuthorityPda(args.workflowMint), isSigner: false, isWritable: false },
-    { pubkey: buyerWorkflowAta, isSigner: false, isWritable: true },
+    { pubkey: itemConfigPda(args.itemMint), isSigner: false, isWritable: false },
+    { pubkey: args.itemMint, isSigner: false, isWritable: true },
+    { pubkey: itemMintAuthorityPda(args.itemMint), isSigner: false, isWritable: false },
+    { pubkey: buyerItemAta, isSigner: false, isWritable: true },
     { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     // remaining: the buyer's skill token accounts (ATAs), one per required skill.

@@ -1,30 +1,28 @@
-// Skill NFT operations: publish (code-in → mint) and buy (atomic payment + mint).
+// Skill NFT operations: publish (code-in → mint, authority = gate PDA) and buy
+// (the gate program mints under its PDA authority — no protocol-minter keypair).
 //
-// publishSkill: text → code-in txid → Token-2022 mint with uri=txid + traits
-// buySkill: star = atomic (transfer payment + mint token); price 0 = free equip
+// A skill is an "item" with NO prerequisites (required_skills = []). Publish/buy
+// go through the same gate program as workflows; the gate loop just runs zero
+// times for a skill. See nft/workflowGate.ts + the agent-workflow-nft program.
 
 import {
   PublicKey,
-  SystemProgram,
-  Transaction,
-  type Keypair,
+  Keypair,
+  TransactionInstruction,
   type Connection,
 } from "@solana/web3.js";
-import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
 import {
-  createAssociatedTokenAccountInstruction,
   getAssociatedTokenAddressSync,
-  createMintToInstruction,
+  createAssociatedTokenAccountInstruction,
+  TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
-import {
-  codeIn,
-  signerAddress,
-  ensureDbRoot,
-} from "../core/chain.js";
+import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
+import { codeIn, signerAddress, ensureDbRoot } from "../core/chain.js";
 import { getSkillsCollectionMint } from "../core/seed.js";
-import { createSkillMint, mintSkillToken } from "./token2022.js";
-import { resolveMinter } from "./minter.js";
+import { createSkillMint } from "./token2022.js";
 import { checkFormat, FormatError } from "./checkFormat.js";
+import { publishItemIx, buyItemIx, itemMintAuthorityPda } from "./workflowGate.js";
+import { sendTx } from "./workflow.js";
 
 export interface PublishSkillInput {
   name: string;
@@ -36,180 +34,92 @@ export interface PublishSkillInput {
 }
 
 /**
- * Publish a skill to the on-chain skill hub.
- *
- * Steps:
- * 1. code-in the skill text → get txid
- * 2. create Token-2022 mint with uri=txid, NonTransferable, traits
- * 3. write skill metadata to on-chain
- *
- * Returns: skill ID (mint address)
+ * Publish a skill. The skill mint's authority is the gate program's mint-auth PDA
+ * (so only buy_item can mint it), and its config (price, empty required_skills) is
+ * registered on-chain via publish_item.
  */
 export async function publishSkill(
   conn: Connection,
   signer: SignerInput,
   input: PublishSkillInput,
 ): Promise<string> {
-  // 0. Format-check the skill before touching the chain
   const format = checkFormat(input.text);
   if (!format.ok) {
     throw new FormatError(format.errors);
   }
 
-  // Ensure core structures exist.
   await ensureDbRoot(signer);
 
-  // 1. code-in the skill text
-  const skillTextTxid = await codeIn(
-    signer,
-    input.text,
-    `${input.name}.md`,
-    "text/markdown",
-  );
+  // code-in the skill text
+  const skillTxid = await codeIn(signer, input.text, `${input.name}.md`, "text/markdown");
 
-  // 2. create the Token-2022 mint
+  // Pre-generate the mint → derive the gate PDA that will own the mint authority.
+  const skillMintKp = Keypair.generate();
+  const skillMint = skillMintKp.publicKey;
+  const mintAuthority = itemMintAuthorityPda(skillMint);
+
   const collectionStr = getSkillsCollectionMint();
   const collectionMint = collectionStr ? new PublicKey(collectionStr) : undefined;
-  
-  const skillMintAddr = await createSkillMint(conn, signer, {
+
+  await createSkillMint(conn, signer, {
     name: input.name,
     symbol: input.name.substring(0, 8).toUpperCase(),
-    uri: skillTextTxid,
+    uri: skillTxid,
     category: input.category,
     hashtags: input.hashtags,
     collectionMint,
+    mintKeypair: skillMintKp,
+    minterAuthority: mintAuthority, // gate PDA holds the mint authority
   });
 
-  // The mint itself is the registry — search/reputation enumerate the collection
-  // via DAS (no index table). Metadata (name/category/traits) lives in the mint's
-  // TokenMetadata; the skill text lives at uri=txid. Nothing else to write.
-  return skillMintAddr.toBase58();
+  // Register the item config on-chain. A skill has NO prerequisites.
+  const creator = new PublicKey(await signerAddress(signer));
+  const ix = publishItemIx({
+    creator,
+    itemMint: skillMint,
+    requiredSkills: [],
+    price: input.price ?? 0n,
+  });
+  await sendTx(conn, signer, [ix]);
+
+  return skillMint.toBase58();
 }
 
 export interface BuySkillInput {
   skillId: string; // skill mint address
-  buyerWallet: string; // wallet buying the skill (NOT always = signer)
-  price?: bigint; // price in lamports; 0 = free
-  creatorWallet: string; // for payment routing
-  iqFeePercent?: number; // IQ treasury fee (e.g. 0.05 = 5%)
-  iqTreasuryWallet?: string; // IQ fee recipient (default: protocol treasury)
-  /** Protocol minter (mint authority). Defaults to env AGENTNET_MINTER_SECRET. */
-  minter?: Keypair;
+  buyerWallet: string; // wallet buying the skill
+  creatorWallet: string; // paid the price (read from the item config on-chain)
 }
 
-// Sentinel: the all-1s address is the System Program, NOT a real wallet. When the
-// treasury is unset we must NOT route fee here (transfer to System Program fails /
-// burns) — instead the fee is skipped and the full price goes to the creator.
-const DEFAULT_IQ_TREASURY = "11111111111111111111111111111111";
-
 /**
- * Buy a skill (star = soulbound purchase = equip).
- *
- * Atomic transaction:
- * 1. If price > 0: transfer to creator + iqfee to treasury
- * 2. Mint 1 skill token to buyer (supply++)
- *
- * The same function handles free (price=0) and paid purchases.
- *
- * Returns: tx signature
+ * Buy a skill (star = soulbound purchase = equip). Calls buy_item: there is no
+ * prerequisite gate for a skill, so the program pays the creator (if priced) and
+ * mints 1 token under its PDA authority. No protocol-minter keypair needed.
  */
 export async function buySkill(
   conn: Connection,
   signer: SignerInput,
   input: BuySkillInput,
 ): Promise<string> {
-  const price = input.price ?? 0n;
-  const feePercent = input.iqFeePercent ?? 0.05; // 5% default
   const buyer = new PublicKey(input.buyerWallet);
-  const creator = new PublicKey(input.creatorWallet);
-  const treasuryAddr = input.iqTreasuryWallet ?? DEFAULT_IQ_TREASURY;
-  const hasTreasury = treasuryAddr !== DEFAULT_IQ_TREASURY;
   const skillMint = new PublicKey(input.skillId);
-  const payer = await signerAddress(signer);
-  const payerPk = new PublicKey(payer);
 
-  const tx = new Transaction();
-
-  // 1. If price > 0: transfer payment
-  if (price > 0n) {
-    // Fee only applies when a real treasury is set; otherwise full price → creator.
-    const iqFee = hasTreasury
-      ? BigInt(Math.floor(Number(price) * feePercent))
-      : 0n;
-    const creatorShare = price - iqFee;
-
-    // Creator payment
-    tx.add(
-      SystemProgram.transfer({
-        fromPubkey: payerPk,
-        toPubkey: creator,
-        lamports: Number(creatorShare),
-      }),
-    );
-
-    // IQ fee (only when treasury is real)
-    if (iqFee > 0n) {
-      tx.add(
-        SystemProgram.transfer({
-          fromPubkey: payerPk,
-          toPubkey: new PublicKey(treasuryAddr),
-          lamports: Number(iqFee),
-        }),
-      );
-    }
-  }
-
-  // 2. Mint skill token to buyer (atomic with payment transfer above).
-  // Path A: the mint authority is the protocol minter (handed over at publish in
-  // createSkillMint), so the minter co-signs the mintTo below. The buyer pays +
-  // is fee payer; the minter authorizes issuance. See nft/minter.ts.
-  const minter = resolveMinter(input.minter);
-  const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPvZeJ");
-  const ata = getAssociatedTokenAddressSync(skillMint, buyer, false, TOKEN_2022_PROGRAM_ID);
-
-  // Create ATA if needed (getAccountInfo returns null for missing accounts, never throws)
-  const ataInfo = await conn.getAccountInfo(ata);
-  if (ataInfo === null) {
-    tx.add(
-      createAssociatedTokenAccountInstruction(
-        payerPk,
-        ata,
-        buyer,
-        skillMint,
-        TOKEN_2022_PROGRAM_ID,
-      ),
+  // buy_item needs the buyer's skill ATA to exist; create it if missing.
+  const ixs: TransactionInstruction[] = [];
+  const buyerAta = getAssociatedTokenAddressSync(skillMint, buyer, false, TOKEN_2022_PROGRAM_ID);
+  if ((await conn.getAccountInfo(buyerAta)) === null) {
+    const payer = new PublicKey(await signerAddress(signer));
+    ixs.push(
+      createAssociatedTokenAccountInstruction(payer, buyerAta, buyer, skillMint, TOKEN_2022_PROGRAM_ID),
     );
   }
-
-  // Mint 1 token — authority = protocol minter (co-signs below).
-  tx.add(
-    createMintToInstruction(
-      skillMint,
-      ata,
-      minter.publicKey, // mint authority
-      1,
-      [],
-      TOKEN_2022_PROGRAM_ID,
-    ),
+  ixs.push(
+    buyItemIx({
+      buyer,
+      creator: new PublicKey(input.creatorWallet),
+      itemMint: skillMint,
+      requiredSkills: [], // skills have no gate
+    }),
   );
-
-  // Sign and send. Buyer pays/feePayer; the minter co-signs the mintTo authority.
-  const signerFull = signer as any;
-  const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash();
-  tx.recentBlockhash = blockhash;
-  tx.feePayer = payerPk;
-  tx.partialSign(minter);
-
-  if ("secretKey" in signerFull) {
-    tx.partialSign(signerFull);
-  } else if ("signTransaction" in signerFull) {
-    const signed = await signerFull.signTransaction(tx);
-    const sig = await conn.sendRawTransaction(signed.serialize());
-    await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
-    return sig;
-  }
-
-  const sig = await conn.sendRawTransaction(tx.serialize());
-  await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
-  return sig;
+  return sendTx(conn, signer, ixs);
 }

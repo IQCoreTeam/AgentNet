@@ -51,14 +51,14 @@ describe("skill-market", () => {
 
   it("should handle buy_skill tool call", async () => {
     vi.mocked(buySkill).mockResolvedValue("mockTxSig");
-    const result = await handleToolCall(mockConn, signer, "defaultCreator", "buy_skill", { skillId: "skill1", price: 100 });
+    const result = await handleToolCall(mockConn, signer, "defaultCreator", "buy_skill", { skillId: "skill1" });
     expect(result.content[0].text).toContain("Successfully purchased");
     expect(result.content[0].text).toContain("mockTxSig");
+    // Price is read from the item's on-chain config now — the client doesn't pass it.
     expect(buySkill).toHaveBeenCalledWith(mockConn, signer, {
       skillId: "skill1",
       buyerWallet: "mockSignerAddress",
       creatorWallet: "defaultCreator",
-      price: 100n,
     });
   });
 

@@ -17,9 +17,9 @@ import { getWorkflowsCollectionMint } from "../core/seed.js";
 import { createSkillMint } from "./token2022.js";
 import { checkWorkflowFormat, FormatError } from "./checkFormat.js";
 import {
-  publishWorkflowIx,
-  buyWorkflowIx,
-  workflowMintAuthorityPda,
+  publishItemIx,
+  buyItemIx,
+  itemMintAuthorityPda,
 } from "./workflowGate.js";
 
 export interface PublishWorkflowInput {
@@ -56,7 +56,7 @@ export async function publishWorkflow(
   // OWN the mint authority. Only the gate program can then mint this workflow.
   const workflowMintKp = Keypair.generate();
   const workflowMint = workflowMintKp.publicKey;
-  const mintAuthority = workflowMintAuthorityPda(workflowMint);
+  const mintAuthority = itemMintAuthorityPda(workflowMint);
 
   const collectionStr = getWorkflowsCollectionMint();
   const collectionMint = collectionStr ? new PublicKey(collectionStr) : undefined;
@@ -75,9 +75,9 @@ export async function publishWorkflow(
   // Register the prerequisites on-chain (config PDA). The program verifies each
   // required skill is an official-collection member and rejects duplicates.
   const creator = new PublicKey(await signerAddress(signer));
-  const ix = publishWorkflowIx({
+  const ix = publishItemIx({
     creator,
-    workflowMint,
+    itemMint: workflowMint,
     requiredSkills: input.requiredSkills.map((s) => new PublicKey(s)),
     price: input.price ?? 0n,
   });
@@ -118,14 +118,14 @@ export async function unlockWorkflow(
     );
   }
   ixs.push(
-    buyWorkflowIx({ buyer, creator: new PublicKey(input.creatorWallet), workflowMint, requiredSkills }),
+    buyItemIx({ buyer, creator: new PublicKey(input.creatorWallet), itemMint: workflowMint, requiredSkills }),
   );
   return sendTx(conn, signer, ixs);
 }
 
 // Sign (Keypair or WalletSigner) + send + confirm a set of instructions. The
-// signer is also the fee payer.
-async function sendTx(
+// signer is also the fee payer. Shared by skill.ts (the gate flow is identical).
+export async function sendTx(
   conn: Connection,
   signer: SignerInput,
   ixs: TransactionInstruction[],
