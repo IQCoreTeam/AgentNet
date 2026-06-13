@@ -76,23 +76,64 @@ passes `resume`, `model`, `cwd`, `canUseTool`, `pathToClaudeCodeExecutable`, `st
 issue note: the MCP surface is exported but not wired into runtime spawn. These five
 options are the entire wiring surface for Task 2.
 
+### 1b. The leaked harness — primary-source confirmation (issue's literal ask)
+
+Verified against leaked Claude system prompts (jujumilk3/leaked-system-prompts:
+`anthropic-claude-opus-4.6_20260206.md`, `-4.7`, `-4.5-full`). The harness implements the
+same two-layer model, and — crucially — shows *exactly* how Anthropic force-runs a passive
+skill:
+
+- **Always-on layer** = a `<available_skills>` block in the system prompt. Each entry is a
+  `<skill>` with name, description, and the **path to its SKILL.md** (e.g.
+  `/mnt/skills/public/docx/SKILL.md`). Skill roots: `/mnt/skills/public/` (built-in),
+  `/mnt/skills/user/` (user-uploaded — "attend very closely"), `/mnt/skills/example/`.
+- **On-demand layer** = the model calls the `view` tool on a SKILL.md path *before* doing
+  the task (progressive disclosure, stated explicitly: "read the documentation … BEFORE
+  writing any code").
+- **Passive force-load mechanism (the key finding):** an `<additional_skills_reminder>`
+  block hard-codes *"ALWAYS call `view` on `/mnt/skills/public/pptx/SKILL.md` before …"* —
+  an always-on system-prompt directive that makes a skill run unasked. **This is direct
+  evidence that our passive-`verify` design (a `systemPrompt.append` directive: "always run
+  verify before buy/equip") is exactly the mechanism Anthropic itself uses.** Note the
+  leaked harness (claude.ai computer-use) loads skills from `/mnt/skills`, whereas the
+  shipped Claude Code / agent-SDK (§1) loads from `~/.claude/skills` + project
+  `.claude/skills` via the `skills` option — same model, different surface.
+
 ---
 
 ## 2. Hermes (NousResearch/hermes-agent)
 
-- **SKILL.md-compatible by design.** Skills are markdown + YAML frontmatter (`name`,
-  `description`, `version`, `author`, required env vars / credential files). Same opening
-  `---` YAML block, markdown body convention as Claude.
-- **Discovery:** scans `~/.hermes/skills/` (the primary tree it also writes through via
-  `skill_manage`) plus any `skills.external_dirs` listed in `config.yaml`. So passive
-  presence = drop a skill into a scanned dir.
-- **Cross-agent portability:** skills authored for Claude Code, Cursor, or Codex CLI work
-  in Hermes unmodified; agent-specific frontmatter (e.g. Claude's `context: fork`, Cursor
-  globs) is **ignored**, but the markdown body + supporting files (references, scripts,
-  examples) are used as-is.
-- Takeaway for us: a single canonical `SKILL.md` (frontmatter + body) is portable across
-  Claude + Hermes + Codex/Cursor if we keep extra fields tolerated-and-ignored — which is
-  exactly how `skill-shopping.md` is already written.
+> Verified against the primary source — `website/docs/user-guide/features/skills.md` and
+> `website/docs/guides/work-with-skills.md` in the repo — not just secondary write-ups.
+
+- **SKILL.md + YAML frontmatter.** Required `name`, `description`; optional `version`,
+  `platforms`, and a `metadata.hermes` section (tags, categories, config). Same `---` block
+  + markdown body as Claude.
+- **Discovery:** scans `~/.hermes/skills/` (primary source of truth, organized by category
+  subdirs) plus `skills.external_dirs` in `config.yaml`. Local version wins on name clash.
+- **Loading = three-tier progressive disclosure (its OWN mechanism, like Claude — not
+  always-on):**
+  - **Level 0** `skills_list()` → `[{name, description, category}, …]` (~3k tokens), loaded
+    at session start.
+  - **Level 1** `skill_view(name)` → full SKILL.md body, only when the agent decides it's
+    relevant.
+  - **Level 2** `skill_view(name, file_path)` → specific reference files on demand.
+  - "Skills don't cost tokens until they're actually used."
+- **Activation modes:** built-in skills are **always-on slash commands** (`/skill-name`
+  injects the full SKILL.md into the user message alongside the task); Hub skills are
+  **on-demand**, installed via `hermes skills install official/<cat>/<skill>`. Per-platform
+  enable/disable (CLI / Telegram / Discord) via `hermes skills`.
+- **Config/credentials:** skills declaring needs store under `skills.config.*` in
+  `config.yaml`; prompted on first load.
+- **Cross-agent portability:** follows the open **agentskills.io** standard; skills authored
+  for Claude/Cursor/Codex work unmodified, agent-specific frontmatter ignored, body +
+  supporting files used as-is.
+- **Takeaway for us:** Hermes sits in idiom #2 (discovered-then-pulled, §4) right next to
+  Claude — and it *also* has an always-on lane (built-in slash commands). So the same
+  canonical `SKILL.md` is portable across Claude + Hermes + Codex/Cursor (extra fields
+  tolerated-and-ignored), exactly how `skill-shopping.md` is already written. Its
+  slash-command "inject full body into the user message" is a third concrete pattern for
+  forcing a passive skill in.
 
 ---
 
@@ -100,9 +141,32 @@ options are the entire wiring surface for Task 2.
 
 | Runtime | Mechanism | Always-on vs on-demand | Frontmatter / discovery |
 |---|---|---|---|
-| **Codex CLI** (we drive it via `@openai/codex-sdk`) | Reads **`AGENTS.md`** at the session cwd (global + repo concatenated) at session start. **Inject-only** — stock codex never writes memory (verified in [`memory/convert/codex.ts`](../packages/core/src/memory/convert/codex.ts), codex-cli 0.139.0). No SKILL.md tool / progressive disclosure. | **Always-on only** — whatever is in AGENTS.md is in context every turn; no on-demand pull mechanism. | Plain markdown, no frontmatter discovery. We own a fenced `<!-- agentnet:… -->` block. |
-| **Cursor** | `.cursor/rules/*.mdc` with frontmatter (`description`, `globs`, `alwaysApply`). | `alwaysApply: true` = always-on; otherwise injected when a glob/agent-decision matches = on-demand. | YAML frontmatter; per-rule glob targeting. |
+| **Codex CLI 0.139.0** (the version we pin — `@openai/codex-sdk@^0.139.0`) | Reads **`AGENTS.md`** at the session cwd (global + repo concatenated) at session start. **Inject-only** — stock codex never writes memory (verified in [`memory/convert/codex.ts`](../packages/core/src/memory/convert/codex.ts)). `codex --help` on the pinned binary shows **no `skills` subcommand** → no SKILL.md support at our version. | **Always-on only** — whatever is in AGENTS.md is in context every turn; no on-demand pull. | Plain markdown, no frontmatter discovery. We own a fenced `<!-- agentnet:… -->` block. |
+| **Codex (newer than 0.139.0)** ⚠️ version-gated | Per developers.openai.com/codex/skills: **does** support SKILL.md — scans `.agents/skills` (cwd→repo root), `$HOME/.agents/skills`, `/etc/codex/skills`, built-ins. | Progressive disclosure: name+description+path always-on (list capped ~8k chars), full body on-demand. | `name`+`description` frontmatter; optional `agents/openai.yaml`. | **Only relevant if AgentNet bumps the codex SDK** — then Codex gains the same SKILL.md path as Claude and the AGENTS.md-only workaround can be dropped. |
+| **Cursor** (verified at cursor.com/docs/context/rules) | `.cursor/rules/*.mdc` — YAML frontmatter (`description`, `globs`, `alwaysApply`) + body. **Plain `.md` in `.cursor/rules` is ignored** (no frontmatter); `AGENTS.md` at root is the plain-markdown alternative. Rules apply to Agent/Chat only (not Tab/Inline Edit). | **Four** modes: (1) `alwaysApply:true` = always-on (globs/description ignored); (2) "Apply Intelligently" — `false`+description, agent decides from description; (3) "Apply to Specific Files" — globs, auto-attached when a matching file is in context; (4) "Apply Manually" — `@rule-name` mention only. | YAML frontmatter; per-rule glob targeting. Best practice: keep rules **under 500 lines** (docs give no token figure). |
+| **Aider** (verified aider.chat/docs) | `CONVENTIONS.md` — free-form markdown, no frontmatter. Loaded **read-only** into chat via `/read CONVENTIONS.md`, `--read` flag, or the `read:` key in `.aider.conf.yml`; cached if prompt caching on. | **Manual / config-pinned always-on** (once added it stays in context). No discovery, no on-demand pull. | None; plain markdown. Idiom #1. |
 | **Claude `CLAUDE.md`** (same runtime as §1, different file) | Project/user `CLAUDE.md` concatenated into the system prompt (loaded when `settingSources` includes `'project'`). | **Always-on**, no discovery — closest analog to Codex AGENTS.md. | No frontmatter; plain instructions. |
+| **smolagents** (HF — counter-example) | **No `.md` skill files at all.** Capabilities = Python `Tool` objects (name/description/inputs/output_type) rendered via Jinja2; system prompts = YAML templates (`code_agent.yaml`) loaded from package resources with `importlib.resources`. | n/a — prompt-template + code-object paradigm, not file-discovered skills. | Shows not every framework uses the `.md`-skill model; irrelevant to our two runtimes but bounds the survey. |
+
+### 3b. The portability standard (breadth)
+
+- **agentskills.io** (verified at the canonical site, not a secondary blog) — open SKILL.md
+  standard: a skill is a folder with **`SKILL.md` (required, `name`+`description` min)** plus
+  optional `scripts/`, `references/`, `assets/`. **Originally developed by Anthropic,
+  released as an open standard.** Defines the §4 idiom-#2 pattern explicitly as three stages:
+  **Discovery** (startup: only name+description per skill) → **Activation** (read full
+  SKILL.md when task matches description) → **Execution** (follow + load bundled files on
+  demand). Canonical client list (from the site's showcase) includes: Claude Code, Claude,
+  OpenAI Codex, Cursor, VS Code, GitHub Copilot, Gemini CLI, **OpenHands**, **Goose**, Roo
+  Code, JetBrains Junie, OpenCode, Amp, Letta, Kiro, Factory, Tabnine, Mistral Vibe, and
+  ~30 more. So a plain agentskills.io `SKILL.md` is the maximally-portable authoring format.
+- **AGENTS.md** (agents.md) — minimalist sibling standard: a single root `AGENTS.md`,
+  **parsed as plain natural-language markdown, no required structure/metadata**; closest
+  file to the edit wins; explicit chat prompts override. This is the idiom-#1 lane that
+  Codex 0.139.0 and Cline (issue #5033) implement.
+- Implication: authoring our skills (`verify`, `skill-shopping`, bought skills) as plain
+  agentskills.io `SKILL.md` keeps them portable across every runtime above; the AGENTS.md
+  block is the fallback for runtimes (our pinned Codex) without SKILL.md support.
 
 ---
 
@@ -119,11 +183,13 @@ Every runtime above is one of two shapes:
 
 **Crucial asymmetry for our two target runtimes:**
 - **Claude** has *both* idioms (CLAUDE.md/`systemPrompt.append` for passive; `skills` +
-  Skill tool for active).
-- **Codex** has *only* idiom #1 (AGENTS.md). It has no SKILL.md/progressive-disclosure
-  concept — so for Codex, **both** passive and active skills collapse to "text in
-  AGENTS.md," and "on-demand" can only mean "we splice the active skill's text in before
-  the turn that needs it."
+  Skill tool for active). Leaked-harness confirmed (§1b).
+- **Codex 0.139.0 (pinned)** has *only* idiom #1 (AGENTS.md) — verified no `skills`
+  subcommand (§3). So for our Codex, **both** passive and active skills collapse to "text in
+  AGENTS.md," and "on-demand" can only mean "splice the active skill's text in before the
+  turn that needs it." ⚠️ **Version-gated:** a newer codex (§3, `.agents/skills`) would give
+  Codex idiom #2 too, letting us drop the AGENTS.md workaround — design for AGENTS.md now,
+  leave the door open for the bump.
 
 This mirrors exactly the Claude-rich / Codex-inject-only split already handled for shared
 memory ([`memory/index.ts`](../packages/core/src/memory/index.ts),

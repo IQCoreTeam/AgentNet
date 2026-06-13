@@ -100,12 +100,17 @@ The surface exists but is unwired (research §1, confirmed in `spawn.ts`).
   ([`skill-market/index.ts:151`](../packages/core/src/skill-market/index.ts)) returns a
   low-level `@modelcontextprotocol/sdk` `Server` exposing `search_skills` + `buy_skill`
   (`getAgentNetTools` / `handleToolCall`).
-- **Claude:** pass it through `query()` `mcpServers` and allow the tools via
-  `allowedTools: ['mcp__agentnet-marketplace__search_skills',
-  'mcp__agentnet-marketplace__buy_skill', …]`. Note a bridge is needed: claude-agent-sdk's
-  `mcpServers` takes its own `McpServerConfig` (in-process via `createSdkMcpServer`, or
-  stdio/http) — wrap our `Server`, or re-register the two tools as an SDK MCP server. Decide
-  in implementation; the tool logic (`handleToolCall`) is reused verbatim.
+- **Claude:** pass it through `query()` `mcpServers: Record<string, McpServerConfig>` and
+  allow the tools via `allowedTools: ['mcp__agentnet-marketplace__search_skills',
+  'mcp__agentnet-marketplace__buy_skill', …]`. **Bridge needed (verified in
+  `sdk.d.ts`):** the SDK's in-process MCP config is `McpSdkServerConfigWithInstance`
+  (`type:'sdk'`, `instance: McpServer`), produced by the exported
+  `createSdkMcpServer(opts)` (sdk.d.ts:485). Our `createAgentMcpServer`
+  ([`skill-market/index.ts:151`](../packages/core/src/skill-market/index.ts)) returns a
+  **low-level `@modelcontextprotocol/sdk` `Server`**, not the SDK's high-level `McpServer`,
+  so don't wrap it — **re-register the two tools through `createSdkMcpServer`**, reusing
+  `getAgentNetTools()` for the tool schemas and `handleToolCall(...)` for the logic
+  verbatim. Net: a thin `createAgentSdkMcpServer()` adapter in `skill-market/`.
 - **Codex:** configure the same MCP server through `@openai/codex-sdk` thread options
   (Codex's MCP config), or expose the two operations as local commands the AGENTS.md text
   tells it to call. Claude is the primary target for v1; Codex MCP can follow.
