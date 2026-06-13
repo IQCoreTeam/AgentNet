@@ -34,6 +34,16 @@ export {
 } from "./account/claudeAuth.js";
 export type { ClaudeLogin } from "./account/claudeAuth.js";
 export {
+  startCodexLogin,
+  isCodexLoggedIn,
+  markCodexConnected,
+  isCodexMarked,
+  saveCodexApiKey,
+  getCodexApiKey,
+  deleteCodexApiKey,
+} from "./account/codexAuth.js";
+export type { CodexLogin } from "./account/codexAuth.js";
+export {
   initialize,
   isInitialized,
   isCloudConnected,

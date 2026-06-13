@@ -82,6 +82,9 @@ export type ClientMessage =
   | { type: "startClaudeLogin" }
   | { type: "claudeAuthCode"; code: string }
   | { type: "cancelClaudeLogin" }
+  | { type: "startCodexLogin" }
+  | { type: "cancelCodexLogin" }
+  | { type: "saveCodexApiKey"; key: string }
   | { type: "toast"; text: string };
 
 // ── server → UI (SSE /events) ──
@@ -107,4 +110,7 @@ export type ServerMessage =
   | { type: "cliStatus"; claude: "ok" | "no-login" | "missing"; codex: "ok" | "no-login" | "missing" }
   | { type: "claudeLoginUrl"; url: string }
   | { type: "claudeLoginStatus"; status: "done" | "error"; error?: string }
+  // codex device-auth: server streams the URL + one-time code; CLI auto-polls (no code submittal).
+  | { type: "codexLoginChallenge"; url: string; code: string }
+  | { type: "codexLoginStatus"; status: "done" | "error"; error?: string }
   | { type: "toast"; text: string };
