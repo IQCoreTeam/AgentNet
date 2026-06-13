@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { searchSkills } from "./search.js";
+import { getMintSupply } from "../nft/token2022.js";
 import type { SkillSource } from "../core/skillSource.js";
 
 // Live supply is hydrated from the mint; echo the per-id supply set below.
@@ -119,5 +120,24 @@ describe("search/search", () => {
     expect(verified.map((s) => s.id)).toEqual(["A"]);
 
     delete META_BY_ID["A"];
+  });
+
+  it("a hydrated source skips the per-mint getMintSupply loop", async () => {
+    // Source carries its own (already-live) supply; sort must use it WITHOUT
+    // any getMintSupply call. Use supplies that differ from SUPPLY_BY_ID so a
+    // stray hydration would reorder and be caught.
+    const hydrated: SkillSource = {
+      hydrated: true,
+      listSkills: vi.fn().mockResolvedValue([
+        { ...mockSkills[0], supply: 1 },   // A
+        { ...mockSkills[1], supply: 999 }, // B (highest via source value)
+        { ...mockSkills[2], supply: 2 },   // C
+      ]),
+    };
+
+    const results = await searchSkills(mockConn, { source: hydrated, sortBy: "supply" });
+
+    expect(getMintSupply).not.toHaveBeenCalled();
+    expect(results.map((s) => s.id)).toEqual(["B", "C", "A"]); // 999 > 2 > 1
   });
 });

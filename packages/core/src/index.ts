@@ -48,7 +48,7 @@ export type { PostNoteInput, ReadNotesOptions, PostAgentNoteInput } from "./note
 // search + the enumeration seam
 export { searchSkills } from "./search/index.js";
 export type { SearchFilters, SortBy, SearchOptions } from "./search/index.js";
-export { dasSource } from "./core/skillSource.js";
+export { dasSource, indexerSource } from "./core/skillSource.js";
 export type { SkillSource } from "./core/skillSource.js";
 // reputation (derived live from supply + reviews)
 export { getReputation, getLeaderboard } from "./reputation/index.js";

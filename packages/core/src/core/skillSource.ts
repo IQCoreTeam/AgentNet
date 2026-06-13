@@ -18,6 +18,12 @@ import type { Skill } from "./types.js";
 export interface SkillSource {
   /** Enumerate all known skills/workflows (id set + cached metadata snapshot). */
   listSkills(limit?: number): Promise<Skill[]>;
+  /**
+   * True when listSkills() returns live `supply` already filled (e.g. an indexer
+   * that stored it). Callers then SKIP the per-mint getMintSupply hydration loop.
+   * dasSource leaves it undefined/false — its `supply` is 0 and must be hydrated.
+   */
+  hydrated?: boolean;
 }
 
 /** Pull category (single) + hashtags (repeated "skill" traits) out of a code-in
@@ -114,3 +120,55 @@ export const dasSource: SkillSource = {
     return skills.slice(0, limit);
   },
 };
+
+/** The indexer's item shape (agentnet-nft-indexer GET /items). Declared here so
+ *  core stays independent of the indexer repo — we only depend on its wire JSON. */
+interface IndexerItem {
+  mint: string;
+  type: "skill" | "workflow";
+  name: string;
+  description: string;
+  creator: string | null;
+  supply: number;
+  attributes: { trait_type: string; value: string }[];
+}
+
+/**
+ * Indexer source — enumerates via the NFT indexer's `/items` instead of a raw
+ * DAS scan. The indexer already stored live `supply` + traits from its own scan,
+ * so this is `hydrated: true`: searchSkills / reputation skip their per-mint
+ * getMintSupply loops. It's the fast path; dasSource is the fallback when the
+ * indexer is unreachable (the caller catches and swaps source).
+ *
+ * No dependency on the indexer repo — just its HTTP JSON. baseUrl e.g.
+ * "https://nft-index.iqlabs.dev".
+ */
+export function indexerSource(baseUrl: string): SkillSource {
+  const base = baseUrl.replace(/\/+$/, "");
+  return {
+    hydrated: true,
+    async listSkills(limit = 1000): Promise<Skill[]> {
+      const res = await fetch(`${base}/items?limit=${limit}&sort=supply`, {
+        headers: { accept: "application/json" },
+      });
+      if (!res.ok) throw new Error(`indexer /items → HTTP ${res.status}`);
+      const { items } = (await res.json()) as { items: IndexerItem[] };
+      return items.map((it) => {
+        const { category, hashtags } = traitsFromAttributes(it.attributes);
+        return {
+          id: it.mint,
+          type: it.type,
+          name: it.name,
+          description: it.description,
+          creator: it.creator ?? "",
+          category,
+          hashtags,
+          price: "0",
+          supply: it.supply, // live — already hydrated by the indexer
+          uriTxid: "",
+          createdAt: 0,
+        };
+      });
+    },
+  };
+}

@@ -100,9 +100,12 @@ export async function searchSkills(
     });
   }
 
-  // Hydrate live supply from the mint (indexed supply is stale — always 0).
-  // Done after filtering so we only fetch for the matched set.
-  if (sortBy === "supply") {
+  // Hydrate live supply from the mint, unless the source already filled it.
+  // dasSource leaves supply 0 (the scan doesn't carry the live counter), so a
+  // supply sort needs one getMintSupply per matched skill. A hydrated source
+  // (e.g. the indexer) returns supply already → skip the whole N-RPC loop. Done
+  // after filtering so the fallback only fetches for the matched set.
+  if (sortBy === "supply" && !source.hydrated) {
     await Promise.all(
       skills.map(async (s) => {
         s.supply = await getMintSupply(conn, s.id);
