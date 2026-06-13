@@ -56,6 +56,12 @@ interface MintConfig {
    */
   minterAuthority?: PublicKey;
   collectionMint?: PublicKey; // new field for token group enrollment
+  /**
+   * Use this keypair for the mint (instead of a fresh random one). Pass it when
+   * the caller needs the mint address BEFORE creation — e.g. to derive a PDA that
+   * will be the mint authority (workflow gate). The caller co-signs.
+   */
+  mintKeypair?: Keypair;
 }
 
 /** On-chain skill traits read back from the mint's TokenMetadata extension. */
@@ -97,7 +103,7 @@ export async function createSkillMint(
 ): Promise<PublicKey> {
   const creator = await signerAddress(signer);
   const creatorPk = new PublicKey(creator);
-  const mintKeypair = Keypair.generate();
+  const mintKeypair = config.mintKeypair ?? Keypair.generate();
   const mint = mintKeypair.publicKey;
 
   // Build the TokenMetadata payload. uri = code-in txid; traits go in

@@ -1,30 +1,26 @@
 import {
   PublicKey,
-  SystemProgram,
   Transaction,
-  type Keypair,
+  TransactionInstruction,
+  Keypair,
   type Connection,
 } from "@solana/web3.js";
-import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
 import {
-  createAssociatedTokenAccountInstruction,
   getAssociatedTokenAddressSync,
-  createMintToInstruction,
+  createAssociatedTokenAccountInstruction,
+  TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
+import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
 
 import { codeIn, signerAddress, ensureDbRoot } from "../core/chain.js";
 import { getWorkflowsCollectionMint } from "../core/seed.js";
 import { createSkillMint } from "./token2022.js";
-import { resolveMinter } from "./minter.js";
-import { getBalance } from "../notes/balance.js";
 import { checkWorkflowFormat, FormatError } from "./checkFormat.js";
-
-export class PrerequisiteError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "PrerequisiteError";
-  }
-}
+import {
+  publishWorkflowIx,
+  buyWorkflowIx,
+  workflowMintAuthorityPda,
+} from "./workflowGate.js";
 
 export interface PublishWorkflowInput {
   name: string;
@@ -37,9 +33,9 @@ export interface PublishWorkflowInput {
 }
 
 /**
- * Publish a workflow to the on-chain hub.
- * Identical to publishSkill, but uses WorkflowAdapter by default to ensure
- * requiredSkills is properly configured.
+ * Publish a workflow. The workflow mint's authority is set to the gate program's
+ * mint-auth PDA (so only buy_workflow can mint it), and the prerequisites are
+ * registered on-chain via publish_workflow.
  */
 export async function publishWorkflow(
   conn: Connection,
@@ -53,59 +49,55 @@ export async function publishWorkflow(
 
   await ensureDbRoot(signer);
 
-  // code-in the workflow text
-  const workflowTxid = await codeIn(
-    signer,
-    input.text,
-    `${input.name}.md`,
-    "text/markdown",
-  );
+  // code-in the workflow recipe
+  const workflowTxid = await codeIn(signer, input.text, `${input.name}.md`, "text/markdown");
 
-  // create the Token-2022 mint (soulbound)
-  // Workflows use the same token pattern as skills.
+  // Pre-generate the mint so we know its address → derive the gate PDA that will
+  // OWN the mint authority. Only the gate program can then mint this workflow.
+  const workflowMintKp = Keypair.generate();
+  const workflowMint = workflowMintKp.publicKey;
+  const mintAuthority = workflowMintAuthorityPda(workflowMint);
+
   const collectionStr = getWorkflowsCollectionMint();
   const collectionMint = collectionStr ? new PublicKey(collectionStr) : undefined;
-  
-  const workflowMintAddr = await createSkillMint(conn, signer, {
+
+  await createSkillMint(conn, signer, {
     name: input.name,
     symbol: input.name.substring(0, 8).toUpperCase(),
     uri: workflowTxid,
     category: input.category,
     hashtags: input.hashtags,
     collectionMint,
+    mintKeypair: workflowMintKp,
+    minterAuthority: mintAuthority, // gate PDA holds the mint authority
   });
 
-  // The mint itself is the registry — search/reputation enumerate the workflow
-  // collection via DAS (no index table). requiredSkills + traits live in the
-  // mint's TokenMetadata; the recipe lives at uri=txid. Nothing else to write.
-  return workflowMintAddr.toBase58();
+  // Register the prerequisites on-chain (config PDA). The program verifies each
+  // required skill is an official-collection member and rejects duplicates.
+  const creator = new PublicKey(await signerAddress(signer));
+  const ix = publishWorkflowIx({
+    creator,
+    workflowMint,
+    requiredSkills: input.requiredSkills.map((s) => new PublicKey(s)),
+    price: input.price ?? 0n,
+  });
+  await sendTx(conn, signer, [ix]);
+
+  return workflowMint.toBase58();
 }
 
 export interface UnlockWorkflowInput {
   workflowId: string;
   buyerWallet: string;
   creatorWallet: string;
-  requiredSkills: string[]; // passed by client after fetching workflow metadata
-  price?: bigint;
-  iqFeePercent?: number;
-  iqTreasuryWallet?: string;
-  /** Protocol minter (mint authority). Defaults to env AGENTNET_MINTER_SECRET. */
-  minter?: Keypair;
+  requiredSkills: string[]; // the workflow's prerequisite skill mints (in order)
 }
 
-// Sentinel: the all-1s address is the System Program, NOT a real wallet. When the
-// treasury is unset we must NOT route fee here (transfer to System Program fails /
-// burns) — instead the fee is skipped and the full price goes to the creator.
-const DEFAULT_IQ_TREASURY = "11111111111111111111111111111111";
-
 /**
- * Unlock a workflow (mint workflow token).
- *
- * Checks that the buyer holds ALL required skills (balance >= 1 each). This stays
- * a manual multi-mint check (not the SDK's single-mint table gate) because the
- * gate is an AND over N skill mints at mint time, not a per-table write gate —
- * the native gate_opt can express "hold mint X", not "hold all of X, Y, Z".
- * If it passes, proceeds atomically: transfer payment (if price > 0) and mint.
+ * Buy (unlock) a workflow via the gate program. There is NO client-side balance
+ * check anymore — the program enforces it on-chain (buy_workflow reverts if the
+ * buyer is missing any required skill), and pays the creator + mints the workflow
+ * token under the program's mint-authority PDA. The buyer signs and pays fees.
  */
 export async function unlockWorkflow(
   conn: Connection,
@@ -113,103 +105,46 @@ export async function unlockWorkflow(
   input: UnlockWorkflowInput,
 ): Promise<string> {
   const buyer = new PublicKey(input.buyerWallet);
-
-  // 1. Prerequisite Gate: Verify the buyer holds all required skills.
-  for (const skillMintStr of input.requiredSkills) {
-    const skillMint = new PublicKey(skillMintStr);
-    const bal = await getBalance(conn, skillMint, buyer);
-    if (bal < 1n) {
-      throw new PrerequisiteError(
-        `Wallet does not hold required skill token: ${skillMintStr}`,
-      );
-    }
-  }
-
-  // 2. Prepare atomic payment and mint
-  const price = input.price ?? 0n;
-  const feePercent = input.iqFeePercent ?? 0.05;
-  const creator = new PublicKey(input.creatorWallet);
-  const treasuryAddr = input.iqTreasuryWallet ?? DEFAULT_IQ_TREASURY;
-  const hasTreasury = treasuryAddr !== DEFAULT_IQ_TREASURY;
   const workflowMint = new PublicKey(input.workflowId);
-  const payer = await signerAddress(signer);
-  const payerPk = new PublicKey(payer);
+  const requiredSkills = input.requiredSkills.map((s) => new PublicKey(s));
 
-  const tx = new Transaction();
-
-  if (price > 0n) {
-    // Fee only applies when a real treasury is set; otherwise full price → creator.
-    const iqFee = hasTreasury
-      ? BigInt(Math.floor(Number(price) * feePercent))
-      : 0n;
-    const creatorShare = price - iqFee;
-
-    tx.add(
-      SystemProgram.transfer({
-        fromPubkey: payerPk,
-        toPubkey: creator,
-        lamports: Number(creatorShare),
-      }),
-    );
-
-    if (iqFee > 0n) {
-      tx.add(
-        SystemProgram.transfer({
-          fromPubkey: payerPk,
-          toPubkey: new PublicKey(treasuryAddr),
-          lamports: Number(iqFee),
-        }),
-      );
-    }
-  }
-
-  // Path A: workflow mint authority is the protocol minter (handed over at
-  // publish in createSkillMint), so the minter co-signs the mintTo. Buyer pays.
-  const minter = resolveMinter(input.minter);
-  const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPvZeJ");
-  const ata = getAssociatedTokenAddressSync(workflowMint, buyer, false, TOKEN_2022_PROGRAM_ID);
-
-  const ataInfo = await conn.getAccountInfo(ata);
-  if (ataInfo === null) {
-    tx.add(
-      createAssociatedTokenAccountInstruction(
-        payerPk,
-        ata,
-        buyer,
-        workflowMint,
-        TOKEN_2022_PROGRAM_ID,
-      ),
+  // buy_workflow needs the buyer's workflow ATA to exist; create it if missing.
+  const ixs: TransactionInstruction[] = [];
+  const buyerAta = getAssociatedTokenAddressSync(workflowMint, buyer, false, TOKEN_2022_PROGRAM_ID);
+  if ((await conn.getAccountInfo(buyerAta)) === null) {
+    const payer = new PublicKey(await signerAddress(signer));
+    ixs.push(
+      createAssociatedTokenAccountInstruction(payer, buyerAta, buyer, workflowMint, TOKEN_2022_PROGRAM_ID),
     );
   }
-
-  // Mint 1 token — authority = protocol minter (co-signs below).
-  tx.add(
-    createMintToInstruction(
-      workflowMint,
-      ata,
-      minter.publicKey,
-      1,
-      [],
-      TOKEN_2022_PROGRAM_ID,
-    ),
+  ixs.push(
+    buyWorkflowIx({ buyer, creator: new PublicKey(input.creatorWallet), workflowMint, requiredSkills }),
   );
+  return sendTx(conn, signer, ixs);
+}
 
-  const signerFull = signer as any;
+// Sign (Keypair or WalletSigner) + send + confirm a set of instructions. The
+// signer is also the fee payer.
+async function sendTx(
+  conn: Connection,
+  signer: SignerInput,
+  ixs: TransactionInstruction[],
+): Promise<string> {
+  const payerPk = new PublicKey(await signerAddress(signer));
+  const tx = new Transaction().add(...ixs);
   const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash();
   tx.recentBlockhash = blockhash;
   tx.feePayer = payerPk;
-  tx.partialSign(minter);
 
-  if ("secretKey" in signerFull) {
-    tx.partialSign(signerFull);
-  } else if ("signTransaction" in signerFull) {
-    const signed = await signerFull.signTransaction(tx);
-    const sig = await conn.sendRawTransaction(signed.serialize());
-    await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
-    return sig;
+  const s = signer as any;
+  let raw: Uint8Array;
+  if ("secretKey" in s) {
+    tx.partialSign(s);
+    raw = tx.serialize();
+  } else {
+    raw = (await s.signTransaction(tx)).serialize();
   }
-
-  const sig = await conn.sendRawTransaction(tx.serialize());
+  const sig = await conn.sendRawTransaction(raw);
   await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
   return sig;
 }

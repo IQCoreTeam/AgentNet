@@ -3,6 +3,7 @@ import { getReputation, getLeaderboard } from "./reputation.js";
 import * as chain from "../core/chain.js";
 import { dasSource } from "../core/skillSource.js";
 import { getMintSupply } from "../nft/token2022.js";
+import { reviewsHint, collectionFor } from "../core/seed.js";
 
 vi.mock("../core/chain.js", () => ({
   readRows: vi.fn(),
@@ -47,9 +48,12 @@ describe("reputation/reputation", () => {
       { id: "skill2", type: "skill", creator: "walletA", supply: 2 } as any,
       { id: "skill3", type: "skill", creator: "walletB", supply: 10 } as any,
     ]);
+    // Review hint uses the configured collection — build it the same way the code
+    // does, so it matches regardless of the default collection id.
+    const coll = collectionFor("skill");
     vi.mocked(chain.readRows).mockImplementation(async (hint: string) => {
-      if (hint === "reviews::skill1") return [{ id: "n1" }, { id: "n2" }] as any;
-      if (hint === "reviews::skill2") return [{ id: "n3" }] as any;
+      if (hint === reviewsHint(coll, "skill1")) return [{ id: "n1" }, { id: "n2" }] as any;
+      if (hint === reviewsHint(coll, "skill2")) return [{ id: "n3" }] as any;
       return [];
     });
     mockSupply({ skill1: 5, skill2: 2, skill3: 10 });

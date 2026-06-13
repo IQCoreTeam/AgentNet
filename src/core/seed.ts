@@ -41,20 +41,37 @@ export function reviewsAgentHint(agentWallet: string): string {
   return `reviews:agent:${agentWallet}`;
 }
 
+// ===== On-chain program / collection ids (one place — easy to swap) =====
+//
+// Current values are the DEVNET test deployment. Override any of them with the
+// matching env var when you point at a different network / collection. To move
+// to mainnet, change these three (and the program's constants.rs collection).
+
+/** Devnet test ids — the single source. Swap here (or via env) to retarget. */
+export const SKILLS_COLLECTION_MINT = "4exdqNEcXixiMzenEBts2cE7qLmMvcVtHCjsZUGBm4Gt";
+export const WORKFLOWS_COLLECTION_MINT = "ByrnPfd9DcbpuVxm7J7xo2gnWxNfuTAdvZUPds7ctYN4";
+/** agent-workflow-nft gate program — publish_workflow / buy_workflow. */
+export const WORKFLOW_GATE_PROGRAM_ID = "3ptXj4yuaQG51WTA3SZZ37jGvYFgMhgXnSKWJLASJNkt";
+
 /**
- * Returns the configured TokenGroup mint for skills, if any.
- * This is the umbrella collection that new skills are enrolled into.
+ * The TokenGroup mint skills are enrolled into. Env override wins; otherwise the
+ * configured devnet test collection.
  */
 export function getSkillsCollectionMint(): string | null {
-  return process.env.AGENTNET_SKILLS_COLLECTION_PUBKEY || null;
+  return process.env.AGENTNET_SKILLS_COLLECTION_PUBKEY || SKILLS_COLLECTION_MINT;
 }
 
 /**
- * Returns the configured TokenGroup mint for workflows, if any.
- * This is the umbrella collection that new workflows are enrolled into.
+ * The TokenGroup mint workflows are enrolled into. Env override wins; otherwise
+ * the configured devnet test collection.
  */
 export function getWorkflowsCollectionMint(): string | null {
-  return process.env.AGENTNET_WORKFLOWS_COLLECTION_PUBKEY || null;
+  return process.env.AGENTNET_WORKFLOWS_COLLECTION_PUBKEY || WORKFLOWS_COLLECTION_MINT;
+}
+
+/** The workflow gate program id (env override wins). */
+export function getWorkflowGateProgramId(): string {
+  return process.env.AGENTNET_WORKFLOW_GATE_PROGRAM_ID || WORKFLOW_GATE_PROGRAM_ID;
 }
 
 /**

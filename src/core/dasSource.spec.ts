@@ -22,33 +22,39 @@ describe("core/dasSource", () => {
     await expect(dasSource.listSkills()).rejects.toThrow(/no DAS_RPC_URL/);
   });
 
-  it("throws when no collection mint is configured", async () => {
-    process.env[RPC] = "https://das.example";
-    await expect(dasSource.listSkills()).rejects.toThrow(/no collection mints/);
-  });
+  // (No "no collection mint" test: seed.ts ships default devnet collection ids,
+  // so a collection is always configured unless explicitly overridden.)
 
   it("builds a getAssetsByGroup(collection) request and parses items into Skill[]", async () => {
     process.env[RPC] = "https://das.example";
     process.env[SKILLS] = "SkiLLCoLLecTion1111111111111111111111111111";
 
-    const fetchMock = vi.fn().mockResolvedValue({
-      json: async () => ({
-        result: {
-          items: [
-            {
-              id: "mintA",
-              content: { metadata: { name: "alpha", description: "d" }, json_uri: "txid1" },
-              authorities: [{ address: "creatorA" }],
-            },
-          ],
-        },
-      }),
+    // The skills collection returns one item; the workflows collection (a default)
+    // returns none — so only the skill item is parsed.
+    const fetchMock = vi.fn().mockImplementation(async (_url, opts: any) => {
+      const body = JSON.parse(opts.body);
+      const isSkills = body.params.groupValue === process.env[SKILLS];
+      return {
+        json: async () => ({
+          result: {
+            items: isSkills
+              ? [
+                  {
+                    id: "mintA",
+                    content: { metadata: { name: "alpha", description: "d" }, json_uri: "txid1" },
+                    authorities: [{ address: "creatorA" }],
+                  },
+                ]
+              : [],
+          },
+        }),
+      };
     });
     vi.stubGlobal("fetch", fetchMock);
 
     const skills = await dasSource.listSkills();
 
-    // request shape
+    // request shape (first call = skills collection)
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(body.method).toBe("getAssetsByGroup");
     expect(body.params.groupKey).toBe("collection");

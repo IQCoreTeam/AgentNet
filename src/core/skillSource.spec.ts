@@ -18,17 +18,25 @@ describe("core/skillSource — dasSource", () => {
   });
 
   it("maps DAS items to Skill rows (id from item.id)", async () => {
+    // The skills collection returns these items; the workflows collection (now a
+    // default) returns none — so we only see the skill items.
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        json: async () => ({
-          result: {
-            items: [
-              { id: "skill1", content: { metadata: { name: "A" } }, authorities: [{ address: "w1" }] },
-              { id: "skill2", content: { metadata: {} } },
-            ],
-          },
-        }),
+      vi.fn().mockImplementation(async (_url, opts: any) => {
+        const body = JSON.parse(opts.body);
+        const isSkills = body.params.groupValue === "SkillsCollection";
+        return {
+          json: async () => ({
+            result: {
+              items: isSkills
+                ? [
+                    { id: "skill1", content: { metadata: { name: "A" } }, authorities: [{ address: "w1" }] },
+                    { id: "skill2", content: { metadata: {} } },
+                  ]
+                : [],
+            },
+          }),
+        };
       }),
     );
 
@@ -52,9 +60,6 @@ describe("core/skillSource — dasSource", () => {
     await expect(dasSource.listSkills()).rejects.toThrow(/no DAS_RPC_URL/);
   });
 
-  it("throws when no collection mints are configured", async () => {
-    delete process.env.AGENTNET_SKILLS_COLLECTION_PUBKEY;
-    delete process.env.AGENTNET_WORKFLOWS_COLLECTION_PUBKEY;
-    await expect(dasSource.listSkills()).rejects.toThrow(/no collection mints/);
-  });
+  // (No "no collection mints" test: seed.ts now ships default devnet collection
+  // ids, so a collection is always configured unless explicitly overridden.)
 });
