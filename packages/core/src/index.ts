@@ -12,6 +12,50 @@ export type {
   StorageAdapter,
 } from "./runtime/contract.js";
 
+// ─── On-chain marketplace layer (from Step-0 core PR: nft/search/notes/etc.) ──
+// chain + seed + domain types
+export type { SignerInput, Session, Skill, Workflow, Note, Row, ReadOptions } from "./core/types.js";
+export {
+  init as initChain,
+  ensureDbRoot,
+  createTable,
+  writeRow,
+  readRows,
+  readRowsByPda,
+  codeIn,
+  readCodeIn,
+  tableExists,
+  getTablePdaRef,
+  signerAddress,
+} from "./core/chain.js";
+export { AGENTNET_ROOT_ID, mysessionsHint, reviewsHint, reviewsAgentHint } from "./core/seed.js";
+// skill / workflow NFTs (Token-2022 + code-in)
+export {
+  publishSkill,
+  buySkill,
+  createSkillMint,
+  mintSkillToken,
+  getMintSupply,
+  readSkillMintMetadata,
+  readSkillText,
+} from "./nft/index.js";
+export type { PublishSkillInput, BuySkillInput } from "./nft/skill.js";
+export type { SkillMintMetadata } from "./nft/token2022.js";
+export { resolveMinter, tryMinterPubkey, resetMinterCache } from "./nft/minter.js";
+// notes (reviews)
+export { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes, getBalance } from "./notes/index.js";
+export type { PostNoteInput, ReadNotesOptions, PostAgentNoteInput } from "./notes/index.js";
+// search + the enumeration seam
+export { searchSkills } from "./search/index.js";
+export type { SearchFilters, SortBy, SearchOptions } from "./search/index.js";
+export { dasSource } from "./core/skillSource.js";
+export type { SkillSource } from "./core/skillSource.js";
+// reputation (derived live from supply + reviews)
+export { getReputation, getLeaderboard } from "./reputation/index.js";
+export type { Reputation } from "./core/types.js";
+// skill-market MCP surface (autonomous buy)
+export { createAgentMcpServer, getAgentNetTools, handleToolCall } from "./skill-market/index.js";
+
 export { createRuntime } from "./runtime/index.js";
 export { detectCli } from "./runtime/detect.js";
 export type { CliStatus, CliReport } from "./runtime/detect.js";
