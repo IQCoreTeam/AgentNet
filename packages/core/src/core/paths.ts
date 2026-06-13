@@ -73,6 +73,21 @@ export function codexSessionsDir(): string {
   return join(codexHome(), "sessions");
 }
 
+// ── shared memory (issue #18): the per-runtime memory files we sync ⇄ canonical ──
+// Claude keeps discrete frontmatter records under its per-project memory dir; stock
+// Codex reads a plain-markdown AGENTS.md at the repo root (verified: it never writes
+// memory itself, so Codex is inject-only). See plans/shared-memory.md.
+
+/** Claude per-project auto-memory dir: projects/{cwd "/"->"-"}/memory */
+export function claudeMemoryDir(cwd: string): string {
+  return join(claudeProjectDir(cwd), "memory");
+}
+
+/** Codex's repo-level memory file (AGENTS.md at the session cwd). */
+export function codexAgentsFile(cwd: string): string {
+  return join(cwd, "AGENTS.md");
+}
+
 /** Ensure a directory exists (mkdir -p). Call before writing into it. */
 export async function ensureDir(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });

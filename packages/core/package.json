@@ -12,7 +12,8 @@
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
-    "test:run": "tsx test/test-runtime.ts"
+    "test:run": "tsx test/test-runtime.ts",
+    "test:memory": "tsx test/test-memory.ts"
   },
   "peerDependencies": {
     "@iqlabs-official/solana-sdk": "^0.1.27",
