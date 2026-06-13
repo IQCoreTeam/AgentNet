@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Connection, PublicKey, Keypair } from "@solana/web3.js";
-import { init, ensureDbRoot, createTable, writeRow, codeIn, signerAddress, tableExists } from "./chain.js";
+import { init, ensureDbRoot, createTable, writeRow, codeIn, signerAddress, tableExists, readCodeIn } from "./chain.js";
+import { readCodeIn as sdkReadCodeIn } from "@iqlabs-official/solana-sdk/reader";
 
 // Mock the solana-sdk modules
 vi.mock("@iqlabs-official/solana-sdk/contract", async () => {
@@ -83,5 +84,34 @@ describe("core/chain", () => {
 
   it("should get correct signer address", async () => {
     expect(await signerAddress(signer)).toBe(signer.publicKey.toBase58());
+  });
+
+  describe("readCodeIn — gateway-first", () => {
+    it("returns the gateway's /data result when the gateway responds OK", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: "from gateway", metadata: "{}" }),
+      }));
+      const r = await readCodeIn("sig123");
+      expect(r).toEqual({ data: "from gateway", metadata: "{}" });
+      expect(sdkReadCodeIn).not.toHaveBeenCalled(); // gateway hit → no RPC
+      vi.unstubAllGlobals();
+    });
+
+    it("falls back to the SDK read when the gateway fails", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+      const r = await readCodeIn("sig123");
+      expect(r).toEqual({ data: "mocked code", metadata: "{}" }); // the SDK mock
+      expect(sdkReadCodeIn).toHaveBeenCalledWith("sig123");
+      vi.unstubAllGlobals();
+    });
+
+    it("falls back to the SDK read when the gateway returns non-OK", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
+      const r = await readCodeIn("sig123");
+      expect(r).toEqual({ data: "mocked code", metadata: "{}" });
+      expect(sdkReadCodeIn).toHaveBeenCalled();
+      vi.unstubAllGlobals();
+    });
   });
 });

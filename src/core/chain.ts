@@ -203,7 +203,25 @@ export async function codeIn(
   );
 }
 
+// Gateway base for code-in reads. The gateway caches inscriptions (L1/L2/L3), so
+// `GET /data/{sig}` is far cheaper than an RPC scan. Default to the public
+// gateway; override with AGENTNET_GATEWAY_URL. Pattern mirrors iq-wide-web's
+// readCodeInGW.
+const GATEWAY_URL = process.env.AGENTNET_GATEWAY_URL || "https://gateway.iqlabs.dev";
+
+// Read a code-in inscription by its tx signature. Tries the gateway's cached
+// `/data/{sig}` first; on any failure (network, non-OK, parse), falls back to
+// the SDK's direct RPC read — so it always resolves the same shape.
 export async function readCodeIn(txSig: string): Promise<{ data: string | null; metadata: string }> {
+  try {
+    const res = await fetch(`${GATEWAY_URL}/data/${txSig}`);
+    if (res.ok) {
+      const json = (await res.json()) as { data?: string | null; metadata?: string };
+      return { data: json.data ?? null, metadata: json.metadata ?? "" };
+    }
+  } catch {
+    // fall through to the SDK read
+  }
   return sdkReadCodeIn(txSig);
 }
 
