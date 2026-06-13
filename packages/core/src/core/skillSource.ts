@@ -26,21 +26,24 @@ export interface SkillSource {
   hydrated?: boolean;
 }
 
-/** Pull category (single) + hashtags (repeated "skill" traits) out of a code-in
- *  JSON's standard `attributes` array (skill-nft-json.md §4). DAS surfaces these
- *  under content.metadata.attributes after resolving the mint's uri. */
+/** Pull the standard traits out of a code-in JSON's `attributes` array
+ *  (skill-nft-json.md §4/§4b): `category` (single), `skill` (repeated hashtags),
+ *  and `requiredSkill` (repeated prerequisite mint ids, workflows only). DAS
+ *  surfaces these under content.metadata.attributes after resolving the uri. */
 function traitsFromAttributes(
   attributes: unknown,
-): { category: string; hashtags: string[] } {
-  if (!Array.isArray(attributes)) return { category: "", hashtags: [] };
+): { category: string; hashtags: string[]; requiredSkills: string[] } {
+  if (!Array.isArray(attributes)) return { category: "", hashtags: [], requiredSkills: [] };
   let category = "";
   const hashtags: string[] = [];
+  const requiredSkills: string[] = [];
   for (const a of attributes) {
     if (!a || typeof a.value !== "string") continue;
     if (a.trait_type === "category") category = a.value;
     else if (a.trait_type === "skill") hashtags.push(a.value);
+    else if (a.trait_type === "requiredSkill") requiredSkills.push(a.value);
   }
-  return { category, hashtags };
+  return { category, hashtags, requiredSkills };
 }
 
 /**
@@ -95,7 +98,7 @@ export const dasSource: SkillSource = {
         // hashtags come straight from the scan (skill-nft-json.md §4), no
         // per-mint re-read. supply is the one field DAS doesn't carry live, so
         // search.ts still hydrates that from the mint.
-        const { category, hashtags } = traitsFromAttributes(item.content?.metadata?.attributes);
+        const { category, hashtags, requiredSkills } = traitsFromAttributes(item.content?.metadata?.attributes);
         skills.push({
           id: item.id,
           type,
@@ -106,6 +109,7 @@ export const dasSource: SkillSource = {
           creator: item.authorities?.[0]?.address || "",
           category,
           hashtags,
+          requiredSkills,
           price: "0",
           supply: 0, // hydrated by getMintSupply (live counter, not in the scan)
           uriTxid: item.content?.json_uri || "",
@@ -154,7 +158,7 @@ export function indexerSource(baseUrl: string): SkillSource {
       if (!res.ok) throw new Error(`indexer /items → HTTP ${res.status}`);
       const { items } = (await res.json()) as { items: IndexerItem[] };
       return items.map((it) => {
-        const { category, hashtags } = traitsFromAttributes(it.attributes);
+        const { category, hashtags, requiredSkills } = traitsFromAttributes(it.attributes);
         return {
           id: it.mint,
           type: it.type,
@@ -163,6 +167,7 @@ export function indexerSource(baseUrl: string): SkillSource {
           creator: it.creator ?? "",
           category,
           hashtags,
+          requiredSkills,
           price: "0",
           supply: it.supply, // live — already hydrated by the indexer
           uriTxid: "",
