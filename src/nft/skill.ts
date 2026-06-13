@@ -24,18 +24,15 @@ import {
 import { getSkillsCollectionMint } from "../core/seed.js";
 import { createSkillMint, mintSkillToken } from "./token2022.js";
 import { resolveMinter } from "./minter.js";
-import { defaultValidator, ValidationError } from "./validation/index.js";
-import type { ValidationAdapter } from "./validation/index.js";
+import { checkFormat, FormatError } from "./checkFormat.js";
 
 export interface PublishSkillInput {
   name: string;
   description: string;
-  text: string; // SKILL.md content (≤700B inline or chunked)
+  text: string; // SKILL.md content (codeIn auto-chunks if large)
   category?: string; // e.g. "clean-code"
   hashtags?: string[]; // e.g. ["refactoring"]
   price?: bigint; // lamports (0 = free)
-  /** Validation adapter to run before publishing. Defaults to OnchainAdapter. */
-  validator?: ValidationAdapter;
 }
 
 /**
@@ -54,10 +51,9 @@ export async function publishSkill(
   input: PublishSkillInput,
 ): Promise<string> {
   // 0. Format-check the skill before touching the chain
-  const validator = input.validator ?? defaultValidator;
-  const validation = await validator.checkFormat(input.text);
-  if (!validation.ok) {
-    throw new ValidationError(validation.errors);
+  const format = checkFormat(input.text);
+  if (!format.ok) {
+    throw new FormatError(format.errors);
   }
 
   // Ensure core structures exist.

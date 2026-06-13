@@ -17,11 +17,7 @@ import { getWorkflowsCollectionMint } from "../core/seed.js";
 import { createSkillMint } from "./token2022.js";
 import { resolveMinter } from "./minter.js";
 import { getBalance } from "../notes/balance.js";
-import {
-  defaultWorkflowValidator,
-  ValidationError,
-  type ValidationAdapter,
-} from "./validation/index.js";
+import { checkWorkflowFormat, FormatError } from "./checkFormat.js";
 
 export class PrerequisiteError extends Error {
   constructor(message: string) {
@@ -38,7 +34,6 @@ export interface PublishWorkflowInput {
   category?: string;
   hashtags?: string[];
   price?: bigint;
-  validator?: ValidationAdapter;
 }
 
 /**
@@ -51,10 +46,9 @@ export async function publishWorkflow(
   signer: SignerInput,
   input: PublishWorkflowInput,
 ): Promise<string> {
-  const validator = input.validator ?? defaultWorkflowValidator;
-  const validation = await validator.checkFormat(input.text);
-  if (!validation.ok) {
-    throw new ValidationError(validation.errors);
+  const format = checkWorkflowFormat(input.text);
+  if (!format.ok) {
+    throw new FormatError(format.errors);
   }
 
   await ensureDbRoot(signer);

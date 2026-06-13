@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import { publishWorkflow, unlockWorkflow, PrerequisiteError } from "./workflow.js";
-import { ValidationError } from "./validation/index.js";
+import { FormatError } from "./checkFormat.js";
 import * as chain from "../core/chain.js";
 import * as token2022 from "./token2022.js";
 import * as balance from "../notes/balance.js";
@@ -93,7 +93,7 @@ Workflow body here.`;
         requiredSkills: ["11111111111111111111111111111111"],
         category: "ai",
       })
-    ).rejects.toThrow(ValidationError);
+    ).rejects.toThrow(FormatError);
   });
 
   it("should unlock a workflow successfully if prerequisite is met", async () => {
