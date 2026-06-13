@@ -24,6 +24,10 @@ export interface Skill {
   creator: string; // wallet address
   category: string;
   hashtags?: string[];
+  // Workflows only: the prerequisite skill mint ids (the repeated `requiredSkill`
+  // traits, skill-nft-json.md §4b). Empty/absent for a plain skill. Carried on
+  // Skill so an enumeration result is enough to compute "what can I unlock".
+  requiredSkills?: string[];
   price?: string; // lamports as decimal string (bigint isn't JSON-serializable)
   supply: number; // mint supply = popularity
   uriTxid: string; // codeIn txid holding the skill text
