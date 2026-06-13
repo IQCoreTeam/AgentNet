@@ -17,8 +17,8 @@ export class WorkflowAdapter implements ValidationAdapter {
 
   private readonly onchain = new OnchainAdapter();
 
-  async validate(skillMd: string): Promise<ValidationResult> {
-    const result = await this.onchain.validate(skillMd);
+  async checkFormat(skillMd: string): Promise<ValidationResult> {
+    const result = await this.onchain.checkFormat(skillMd);
 
     const { frontmatter } = (await import("../parse.js")).parseSkillMd(skillMd);
 

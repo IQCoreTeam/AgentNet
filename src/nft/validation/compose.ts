@@ -31,7 +31,7 @@ export function compose(
   let opts: ComposeOptions = { failFast: true };
 
   const last = args[args.length - 1];
-  if (last && typeof (last as ValidationAdapter).validate !== "function") {
+  if (last && typeof (last as ValidationAdapter).checkFormat !== "function") {
     // Last arg is an options object
     opts = last as ComposeOptions;
     adapters = args.slice(0, -1) as ValidationAdapter[];
@@ -44,11 +44,11 @@ export function compose(
   return {
     id: `composed(${adapters.map((a) => a.id).join(",")})`,
 
-    async validate(skillMd: string): Promise<ValidationResult> {
+    async checkFormat(skillMd: string): Promise<ValidationResult> {
       const merged: ValidationResult = emptyResult();
 
       for (const adapter of adapters) {
-        const r = await adapter.validate(skillMd);
+        const r = await adapter.checkFormat(skillMd);
 
         merged.errors.push(...r.errors);
         merged.warnings.push(...r.warnings);

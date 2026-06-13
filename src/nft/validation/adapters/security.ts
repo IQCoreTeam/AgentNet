@@ -31,7 +31,7 @@ export function createSecurityLlmAdapter(reviewFn: ReviewFn): ValidationAdapter 
   return {
     id: "security-llm",
 
-    async validate(skillMd: string): Promise<ValidationResult> {
+    async checkFormat(skillMd: string): Promise<ValidationResult> {
       const result = emptyResult();
 
       try {

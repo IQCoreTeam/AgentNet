@@ -8,7 +8,7 @@ describe("adapters/security — createSecurityLlmAdapter", () => {
     const reviewFn = vi.fn().mockResolvedValue({ safe: true });
     const adapter = createSecurityLlmAdapter(reviewFn);
 
-    const r = await adapter.validate(SKILL_TEXT);
+    const r = await adapter.checkFormat(SKILL_TEXT);
     expect(r.ok).toBe(true);
     expect(r.errors).toHaveLength(0);
     expect(reviewFn).toHaveBeenCalledWith(SKILL_TEXT);
@@ -21,7 +21,7 @@ describe("adapters/security — createSecurityLlmAdapter", () => {
     });
     const adapter = createSecurityLlmAdapter(reviewFn);
 
-    const r = await adapter.validate(SKILL_TEXT);
+    const r = await adapter.checkFormat(SKILL_TEXT);
     expect(r.ok).toBe(false);
     expect(r.errors.some((e) => e.field === "content")).toBe(true);
     expect(r.errors[0].message).toContain("prompt injection");
@@ -31,7 +31,7 @@ describe("adapters/security — createSecurityLlmAdapter", () => {
     const reviewFn = vi.fn().mockResolvedValue({ safe: false });
     const adapter = createSecurityLlmAdapter(reviewFn);
 
-    const r = await adapter.validate(SKILL_TEXT);
+    const r = await adapter.checkFormat(SKILL_TEXT);
     expect(r.ok).toBe(false);
     expect(r.errors[0].message).toContain("malicious");
   });
@@ -40,7 +40,7 @@ describe("adapters/security — createSecurityLlmAdapter", () => {
     const reviewFn = vi.fn().mockRejectedValue(new Error("LLM service timeout"));
     const adapter = createSecurityLlmAdapter(reviewFn);
 
-    const r = await adapter.validate(SKILL_TEXT);
+    const r = await adapter.checkFormat(SKILL_TEXT);
     // Should NOT block publish on LLM outage
     expect(r.ok).toBe(true);
     expect(r.errors).toHaveLength(0);

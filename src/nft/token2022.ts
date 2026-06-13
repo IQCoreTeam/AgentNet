@@ -396,9 +396,8 @@ export async function mintSkillToken(
 /**
  * Read live supply (popularity) from the on-chain mint account.
  *
- * The mint is the single source of truth — the indexed `supply` field in the
- * AUDIT table is written as 0 on publish and never updated, so search/reputation
- * must hydrate from here for accurate popularity ranking.
+ * The mint is the single source of truth for popularity — search/reputation
+ * hydrate `supply` from here (the DAS scan snapshot doesn't carry live supply).
  */
 export async function getMintSupply(
   conn: Connection,

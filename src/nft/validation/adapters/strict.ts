@@ -19,9 +19,9 @@ export class StrictAdapter implements ValidationAdapter {
 
   private readonly compat = new SkillsShCompatAdapter();
 
-  async validate(skillMd: string): Promise<ValidationResult> {
+  async checkFormat(skillMd: string): Promise<ValidationResult> {
     // Run compat layer first
-    const result = await this.compat.validate(skillMd);
+    const result = await this.compat.checkFormat(skillMd);
 
     const { frontmatter, body } = parseSkillMd(skillMd);
     const name = (frontmatter.name as string | undefined) ?? "";

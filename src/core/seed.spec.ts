@@ -4,7 +4,6 @@ import {
   mysessionsHint,
   reviewsHint,
   reviewsAgentHint,
-  auditHint,
 } from "./seed.js";
 
 describe("core/seed", () => {
@@ -26,9 +25,5 @@ describe("core/seed", () => {
 
   it("should format reviewsAgentHint correctly", () => {
     expect(reviewsAgentHint("AgentWallet123")).toBe("reviews:agent:AgentWallet123");
-  });
-
-  it("should format auditHint per collection", () => {
-    expect(auditHint("SkillsCollection")).toBe("audit:SkillsCollection");
   });
 });

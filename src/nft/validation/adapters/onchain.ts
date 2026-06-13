@@ -1,15 +1,15 @@
 // On-chain constraints adapter — the DEFAULT gate used by publishSkill.
 //
 // Extends strict with our on-chain-specific rules:
-//   size:      total skillMd bytes > 700 → error (won't fit an inline 1-tx code-in)
 //   category:  missing → warning (needed for search trait)
 //   hashtags:  any tag with uppercase or spaces → warning
+//
+// NO size limit: codeIn auto-chunks data past the 700B inline threshold (850B
+// chunks linked by on_chain_path) and readCodeIn reads inline or chunked the
+// same way — so skill length is never a publish constraint.
 
 import { type ValidationAdapter, type ValidationResult, addIssue } from "../types.js";
 import { StrictAdapter } from "./strict.js";
-
-/** Max bytes for an inline (single-tx) code-in. From iqlabs-sdk constants. */
-export const INLINE_MAX_BYTES = 700;
 
 /** Hashtag must be lowercase, no spaces, no leading #. */
 const HASHTAG_RE = /^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/;
@@ -19,20 +19,8 @@ export class OnchainAdapter implements ValidationAdapter {
 
   private readonly strict = new StrictAdapter();
 
-  async validate(skillMd: string): Promise<ValidationResult> {
-    const result = await this.strict.validate(skillMd);
-
-    // ── size check ────────────────────────────────────────────────────────────
-    const byteLen = new TextEncoder().encode(skillMd).length;
-    if (byteLen > INLINE_MAX_BYTES) {
-      addIssue(result, {
-        field: "size",
-        severity: "error",
-        message:
-          `Skill is ${byteLen}B, exceeding the ${INLINE_MAX_BYTES}B inline limit. ` +
-          `Split into a smaller skill or set allowChunking: true to allow multi-tx code-in.`,
-      });
-    }
+  async checkFormat(skillMd: string): Promise<ValidationResult> {
+    const result = await this.strict.checkFormat(skillMd);
 
     // ── category check ────────────────────────────────────────────────────────
     const { frontmatter } = (await import("../parse.js").then((m) => ({

@@ -42,17 +42,6 @@ export function reviewsAgentHint(agentWallet: string): string {
 }
 
 /**
- * Table for audit/validation records (the "Q-table" in search.md) — security
- * check results shown ALONGSIDE search results, partitioned per collection.
- *
- * input:  collection mint (base58)
- * output: "audit:<collectionId>"
- */
-export function auditHint(collectionId: string): string {
-  return `audit:${collectionId}`;
-}
-
-/**
  * Returns the configured TokenGroup mint for skills, if any.
  * This is the umbrella collection that new skills are enrolled into.
  */

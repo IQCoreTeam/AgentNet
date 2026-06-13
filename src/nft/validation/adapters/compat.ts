@@ -13,7 +13,7 @@ import { parseSkillMd } from "../parse.js";
 export class SkillsShCompatAdapter implements ValidationAdapter {
   readonly id = "skills-sh-compat";
 
-  async validate(skillMd: string): Promise<ValidationResult> {
+  async checkFormat(skillMd: string): Promise<ValidationResult> {
     const result = emptyResult();
     const { frontmatter } = parseSkillMd(skillMd);
 

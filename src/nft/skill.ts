@@ -53,9 +53,9 @@ export async function publishSkill(
   signer: SignerInput,
   input: PublishSkillInput,
 ): Promise<string> {
-  // 0. Validate skill before touching the chain
+  // 0. Format-check the skill before touching the chain
   const validator = input.validator ?? defaultValidator;
-  const validation = await validator.validate(input.text);
+  const validation = await validator.checkFormat(input.text);
   if (!validation.ok) {
     throw new ValidationError(validation.errors);
   }

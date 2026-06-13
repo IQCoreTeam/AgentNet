@@ -41,7 +41,6 @@ export {
   mysessionsHint,
   reviewsHint,
   reviewsAgentHint,
-  auditHint,
 } from "./core/seed.js";
 
 export {

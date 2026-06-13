@@ -22,7 +22,7 @@ export interface ValidationResult {
 export interface ValidationAdapter {
   /** Unique identifier e.g. "skills-sh-compat" | "strict" | "onchain" | "security-llm" */
   readonly id: string;
-  validate(skillMd: string): Promise<ValidationResult>;
+  checkFormat(skillMd: string): Promise<ValidationResult>;
 }
 
 /** Thrown by publishSkill when the default (or provided) validator rejects. */

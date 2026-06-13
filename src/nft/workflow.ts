@@ -52,7 +52,7 @@ export async function publishWorkflow(
   input: PublishWorkflowInput,
 ): Promise<string> {
   const validator = input.validator ?? defaultWorkflowValidator;
-  const validation = await validator.validate(input.text);
+  const validation = await validator.checkFormat(input.text);
   if (!validation.ok) {
     throw new ValidationError(validation.errors);
   }

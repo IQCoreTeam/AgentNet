@@ -127,7 +127,7 @@ This skill teaches agents to reason clearly and break down complex problems.
   it("should use a custom validator when provided", async () => {
     const alwaysPass: ValidationAdapter = {
       id: "always-pass",
-      validate: async () => ({ ok: true, errors: [], warnings: [], infos: [] }),
+      checkFormat: async () => ({ ok: true, errors: [], warnings: [], infos: [] }),
     };
     // Even an invalid skill passes with a custom always-pass validator
     const mintAddr = await publishSkill(mockConn as any, signer, {
