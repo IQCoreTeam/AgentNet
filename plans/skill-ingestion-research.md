@@ -141,8 +141,8 @@ skill:
 
 | Runtime | Mechanism | Always-on vs on-demand | Frontmatter / discovery |
 |---|---|---|---|
-| **Codex CLI 0.139.0** (the version we pin — `@openai/codex-sdk@^0.139.0`) | Reads **`AGENTS.md`** at the session cwd (global + repo concatenated) at session start. **Inject-only** — stock codex never writes memory (verified in [`memory/convert/codex.ts`](../packages/core/src/memory/convert/codex.ts)). `codex --help` on the pinned binary shows **no `skills` subcommand** → no SKILL.md support at our version. | **Always-on only** — whatever is in AGENTS.md is in context every turn; no on-demand pull. | Plain markdown, no frontmatter discovery. We own a fenced `<!-- agentnet:… -->` block. |
-| **Codex (newer than 0.139.0)** ⚠️ version-gated | Per developers.openai.com/codex/skills: **does** support SKILL.md — scans `.agents/skills` (cwd→repo root), `$HOME/.agents/skills`, `/etc/codex/skills`, built-ins. | Progressive disclosure: name+description+path always-on (list capped ~8k chars), full body on-demand. | `name`+`description` frontmatter; optional `agents/openai.yaml`. | **Only relevant if AgentNet bumps the codex SDK** — then Codex gains the same SKILL.md path as Claude and the AGENTS.md-only workaround can be dropped. |
+| **Codex CLI 0.139.0** (the version we pin — `@openai/codex-sdk@^0.139.0`) — **VERIFIED by inspecting the shipped binary** (`strings` over the vendored `codex`): it bundles a live `core-skills` Rust module (`core-skills/src/loader.rs`, `config_rules.rs`). **It natively supports SKILL.md.** Scans skill roots: `$CODEX_HOME/skills` / `~/.codex/skills`, `.agents/skills`, plus `skills.config` entries (path/name selectors). Injects a `## Skills` system-prompt section. Exposes a `/skills` command. (The top-level `codex --help` doesn't list a `skills` subcommand — skills are auto-discovered + `/skills`, not a subcommand, which is why the earlier `--help` check misread this.) | **Two-layer, same as Claude.** Always-on **Discovery**: the `## Skills` block lists each skill's **name + description + short path** (with a `### Skill roots` alias table). On-demand: the model opens the SKILL.md at the listed path "for full instructions when using a specific skill." Hard **2% context budget** for the skills list ("Exceeded skills context budget of 2%"). | Frontmatter keys: `name`, `description`, `license`, `allowed-tools`, `metadata`; plus `disable-model-invocation` (true = side-effect workflow, manual-invoke only), `interface.*`, `dependencies.tools.*`. |
+| **`AGENTS.md` (Codex, separate lane)** | Still read at session start (global + repo concatenated), **inject-only** — stock codex never *writes* memory (verified in [`memory/convert/codex.ts`](../packages/core/src/memory/convert/codex.ts)). This is the plain-instruction lane, **distinct from skills** — used for our always-on directives + shared memory, not for delivering skill bodies. | **Always-on**, no discovery. | Plain markdown, no frontmatter. We own a fenced `<!-- agentnet:… -->` block. |
 | **Cursor** (verified at cursor.com/docs/context/rules) | `.cursor/rules/*.mdc` — YAML frontmatter (`description`, `globs`, `alwaysApply`) + body. **Plain `.md` in `.cursor/rules` is ignored** (no frontmatter); `AGENTS.md` at root is the plain-markdown alternative. Rules apply to Agent/Chat only (not Tab/Inline Edit). | **Four** modes: (1) `alwaysApply:true` = always-on (globs/description ignored); (2) "Apply Intelligently" — `false`+description, agent decides from description; (3) "Apply to Specific Files" — globs, auto-attached when a matching file is in context; (4) "Apply Manually" — `@rule-name` mention only. | YAML frontmatter; per-rule glob targeting. Best practice: keep rules **under 500 lines** (docs give no token figure). |
 | **Aider** (verified aider.chat/docs) | `CONVENTIONS.md` — free-form markdown, no frontmatter. Loaded **read-only** into chat via `/read CONVENTIONS.md`, `--read` flag, or the `read:` key in `.aider.conf.yml`; cached if prompt caching on. | **Manual / config-pinned always-on** (once added it stays in context). No discovery, no on-demand pull. | None; plain markdown. Idiom #1. |
 | **Claude `CLAUDE.md`** (same runtime as §1, different file) | Project/user `CLAUDE.md` concatenated into the system prompt (loaded when `settingSources` includes `'project'`). | **Always-on**, no discovery — closest analog to Codex AGENTS.md. | No frontmatter; plain instructions. |
@@ -165,8 +165,9 @@ skill:
   file to the edit wins; explicit chat prompts override. This is the idiom-#1 lane that
   Codex 0.139.0 and Cline (issue #5033) implement.
 - Implication: authoring our skills (`verify`, `skill-shopping`, bought skills) as plain
-  agentskills.io `SKILL.md` keeps them portable across every runtime above; the AGENTS.md
-  block is the fallback for runtimes (our pinned Codex) without SKILL.md support.
+  agentskills.io `SKILL.md` keeps them portable across every runtime above — including our
+  pinned Codex 0.139.0, which supports SKILL.md natively (§3). AGENTS.md is **not** a skill
+  fallback; it's only the always-on *instruction* lane for the passive directive.
 
 ---
 
@@ -181,19 +182,25 @@ Every runtime above is one of two shapes:
    `SKILL.md`: only `name`+`description` always-on; full body pulled when the model
    judges it relevant. → This is how an **active** skill (`skill-shopping`) is delivered.
 
-**Crucial asymmetry for our two target runtimes:**
-- **Claude** has *both* idioms (CLAUDE.md/`systemPrompt.append` for passive; `skills` +
-  Skill tool for active). Leaked-harness confirmed (§1b).
-- **Codex 0.139.0 (pinned)** has *only* idiom #1 (AGENTS.md) — verified no `skills`
-  subcommand (§3). So for our Codex, **both** passive and active skills collapse to "text in
-  AGENTS.md," and "on-demand" can only mean "splice the active skill's text in before the
-  turn that needs it." ⚠️ **Version-gated:** a newer codex (§3, `.agents/skills`) would give
-  Codex idiom #2 too, letting us drop the AGENTS.md workaround — design for AGENTS.md now,
-  leave the door open for the bump.
+**Both target runtimes support BOTH idioms — the asymmetry I first assumed does NOT exist:**
+- **Claude** (agent-SDK + leaked harness §1/§1b): `skills` option + Skill tool for active
+  (idiom #2); `systemPrompt.append` / CLAUDE.md for the always-on passive directive (idiom #1).
+- **Codex 0.139.0** (§3, verified in the shipped binary): native SKILL.md discovery +
+  on-demand body load (idiom #2, with a 2% budget); `AGENTS.md` for the always-on passive
+  directive (idiom #1).
 
-This mirrors exactly the Claude-rich / Codex-inject-only split already handled for shared
-memory ([`memory/index.ts`](../packages/core/src/memory/index.ts),
-[`shared-memory.md`](shared-memory.md)).
+So **active skills use the SAME SKILL.md mechanism on both** — write the skill into the
+runtime's skills dir, it's auto-discovered and pulled on demand. The only per-runtime split
+is the **passive always-run directive**: Claude → `systemPrompt.append`; Codex → AGENTS.md
+block. Note: Codex's `disable-model-invocation: true` is the *opposite* of passive (it means
+"manual-invoke only, don't auto-run"), so it can't express "always run verify" — the
+directive must live in AGENTS.md / system instruction, with `verify` left model-invocable.
+
+(Note: the Claude-rich / Codex-inject-only split that shared memory deals with
+([`memory/index.ts`](../packages/core/src/memory/index.ts),
+[`shared-memory.md`](shared-memory.md)) is a **memory** fact — Codex doesn't *write* memory.
+It does NOT carry over to skills: Codex 0.139.0 fully supports SKILL.md ingestion. Only the
+passive *directive* lane reuses the AGENTS.md splice plumbing.)
 
 ---
 
@@ -213,10 +220,12 @@ should mirror it, not build a parallel mechanism.
 
 ## 6. Inputs handed to Task 2 (design)
 
-- Passive `verify`: Claude → `systemPrompt.append` instruction ("always verify before
-  buy/equip") + the verify SKILL.md available via `skills`; Codex → verify text in our
-  AGENTS.md fenced block. Loaded every session via a `SkillSync.injectAtStart` sibling.
-- Active (`skill-shopping` etc.): Claude → `skills` + Skill tool, model pulls on demand;
-  Codex → splice the skill text into AGENTS.md when the task needs it.
+- Passive `verify`: **both runtimes** get `verify/SKILL.md` written into their skills dir
+  (Claude `.claude/skills`, Codex `~/.codex/skills`); the always-run *directive* is the only
+  split — Claude `systemPrompt.append`, Codex AGENTS.md fenced block. Loaded every session
+  via a `SkillSync.injectAtStart` sibling.
+- Active (`skill-shopping`, bought skills): **same mechanism on both** — write SKILL.md into
+  the runtime's skills dir; auto-discovered, body pulled on demand (Claude Skill tool / Codex
+  `## Skills` list). No AGENTS.md splicing for skill bodies.
 - Buy + verify wiring: pass `createAgentMcpServer` via `query()` `mcpServers` + allow
   `search_skills`/`buy_skill` via `allowedTools` (the unwired surface from §1).
