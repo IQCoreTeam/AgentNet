@@ -89,6 +89,55 @@ sequenceDiagram
 - Unlock = `star = pay = equip` unified, exactly like skills (free = price-0).
 - So owning a workflow proves "this agent has the full skill set for this job."
 
+### ✅ Implemented — the gate program (`agent-workflow-nft`)
+
+This is the one thing standard Token-2022 can't do on a mint: a **conditional**
+mint. So workflows (and ONLY workflows — skills are bought freely) go through a
+small Anchor program. **Skills never touch it.**
+
+- Repo: **[IQCoreTeam/agent-workflow-nft](https://github.com/IQCoreTeam/agent-workflow-nft)** (Anchor 0.32.1).
+- Devnet program: `3ptXj4yuaQG51WTA3SZZ37jGvYFgMhgXnSKWJLASJNkt`.
+- Official skills collection it checks against: `4exdqNEcXixiMzenEBts2cE7qLmMvcVtHCjsZUGBm4Gt`
+  (`constants.rs::OFFICIAL_SKILLS_COLLECTION` — swap before mainnet).
+
+```mermaid
+flowchart TB
+    subgraph Publish["publish_workflow (register, once)"]
+        P1["store required_skills in a config PDA"]
+        P2["verify each skill mint ∈ official collection<br/>(read its TokenGroupMember.group — O(1), no scan)"]
+        P3["reject duplicate skills"]
+        P1 --- P2 --- P3
+    end
+    subgraph Buy["buy_workflow (gate + mint)"]
+        B1["read required_skills from the config PDA"]
+        B2["for each: token acct is Token-2022-owned,<br/>right mint, owned by buyer, amount ≥ 1"]
+        B3{"all held?"}
+        B4["pay creator (if priced)"]
+        B5["mint 1 workflow token via mint-authority PDA"]
+        B1 --> B2 --> B3
+        B3 -->|no| BX["🔒 revert"]
+        B3 -->|yes| B4 --> B5
+    end
+    Publish -.->|config PDA| Buy
+    style Buy fill:#efe,stroke:#3a3
+    style BX fill:#fee,stroke:#c33
+```
+
+**Why it can't be bypassed:** the workflow mint's authority is a **program PDA**
+(`["mint-auth", workflowMint]`), so the only path to a workflow token is
+`buy_workflow` — sending a raw `mintTo` fails (no one can sign as the PDA). The
+prerequisite list lives in the config PDA, not a client argument, so it can't be
+forged. **Collection membership is checked at publish (once)**, since mints are
+immutable — keeping `buy_workflow` cheap (no per-purchase collection re-check), so
+cost doesn't grow with the catalog.
+
+> Verified end-to-end on devnet (`tests/workflow-gate.ts`, 4 passing): a holder of
+> all required skills buys successfully; a wallet missing one is rejected on-chain.
+
+> **Note — `unlock` is now `buy_workflow`.** The program instruction is named
+> `buy_workflow` (publish + buy); the SDK's `unlockWorkflow` will call it (see
+> [`coding-info.md`](coding-info.md) §⑥ / the SDK wiring task).
+
 ---
 
 ## 3. Discovery — "what can I unlock?" is free
@@ -135,7 +184,11 @@ flowchart TB
 
 1. ⬜ Workflow collection (Token-2022, same pattern as skills) + `requiredSkills` trait.
 2. ⬜ Publish: code-in the workflow recipe → mint into the workflow collection.
-3. ⬜ `unlock_workflow` — prerequisite check (holds all requiredSkills) + atomic mint.
+3. ✅ **Gate program `agent-workflow-nft`** — `publish_workflow` (store + verify
+   prereqs are official-collection skills, no dups) + `buy_workflow` (on-chain
+   hold-all check + atomic pay/mint via PDA authority). Built, deployed to devnet,
+   4 tests passing (§2). **Next: wire the SDK's `unlockWorkflow` to call it** and
+   move the workflow mint authority to the program PDA at publish.
 4. ⬜ Discovery: "unlockable / almost-there" filters (front-end over search pipeline).
 5. ⬜ Runtime: once unlocked, follow the recipe to chain the skills.
 

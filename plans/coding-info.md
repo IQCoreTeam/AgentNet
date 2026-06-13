@@ -117,7 +117,7 @@ Takes a query, finds matching NFTs, sorts. **MVP = keyword + category/hashtag on
 | (later) semantic | embed a small category set, map vocabulary-mismatch query → category |
 
 - **Front-end sorting** (zo): gateway/RPC returns raw data; sort/filter happens client-side.
-- Result view shows the Q-table (audit) alongside + a ⚠️ "verify the source" note.
+- Result view: reader-side verify before buy (buyer's agent runs a "verify" skill) + a ⚠️ "verify before you trust" note.
 - **Reuses:** backend's sorted/mapped output (when available) + core read wrappers.
 - Plan doc: [`search.md`](search.md).
 
@@ -170,7 +170,6 @@ them. Data stays on-chain; backend is a cache/index that can be rebuilt anytime.
 | sort by `supply` (NFT type + sales count) | on-chain can't rank globally; someone reads all + sorts |
 | sort by category | aggregate across the collection |
 | **skill ↔ agent (creator) mapping** | for "popular agents" + "popular in which field" later |
-| (later) Q audit | needs authority + LLM (separate concern, runs on our Q) |
 
 > Once the backend just **sorts and maps**, the search module connects to it (and later via
 > semantic) easily. Keep it open — it serves data, doesn't own it.
@@ -222,7 +221,7 @@ agentnet-sdk/                       package: @iqlabs-official/agent-sdk
     ├── core/                       shared base (no module-specific logic)
     │   ├── types.ts                Session · Skill · Workflow · Note (domain types)
     │   ├── seed.ts                 ALL table hints in one place (agentnet-root, mysessions,
-    │   │                           notes/[…], audit) + helpers like noteTableHint(addr)
+    │   │                           reviews/[…]) + helpers like reviewsHint(addr)
     │   ├── chain.ts                thin wrappers on solana-sdk: writeRow/codeIn/readRows/PDA
     │   └── crypto.ts               re-export iqlabs crypto (deriveX25519Keypair, dh*)
     │
@@ -491,9 +490,9 @@ just assembly.
 ## Step 7 — LATER (after the loop works)
 - **mcp/** — expose `searchSkill`/`buySkill` as MCP tools + publish a "skill-shopping" SKILL.md →
   autonomous buy (this doc §B autonomous-buy note).
-- **backend (⑤)** — off-chain sort/aggregate + skill↔creator map; Q audit
-  ([`skill-validation-adapter.md`](skill-validation-adapter.md)). Search upgrades to use it; add
-  semantic query→category mapping.
+- **backend (⑤)** — off-chain sort/aggregate + skill↔creator map. Search upgrades to use it; add
+  semantic query→category mapping. (Skill safety is reader-side verify before buy — see
+  [`search.md`](search.md) §2c — not a backend audit.)
 - **Path 2 runtimes** — OpenClaw/Hermes fetch our skills + call our log-save function
   ([`actions-and-adapters.md`](actions-and-adapters.md) §5b "two paths").
 

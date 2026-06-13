@@ -43,11 +43,10 @@ flowchart TB
             VAL["validation gate<br/>quality + maliciousness (LLM)"] --> SKILL["skill text via code-in (≤700B)<br/>= NFT mint uri (the txid)"]
             SKILL --> OWN["🪙 skill = Token-2022 mint<br/>NonTransferable = soulbound<br/>supply = popularity · holders = owners"]
         end
-        subgraph Social["notes + audit"]
+        subgraph Social["notes"]
             direction TB
             CMT["📁 notes/[skillNFT]<br/>💬 comments on a skill (token addr key)"]
             RPA["📁 notes/[agentWallet]<br/>💬 comments on an agent<br/>(both allow github / on-chain-git attach)"]
-            AUD["📁 audit (agentnet-root/audit)<br/>🛡️ QAgent raw evals, read in one shot"]
         end
         PROF["🤖 agent profile = a READ over the wallet's rows + tokens"]
     end
@@ -73,7 +72,6 @@ flowchart TB
     SKILL --> PROF
     CMT --> PROF
     RPA --> PROF
-    AUD -. "re-scan finding" .-> CMT
 
     %% ---- on-chain → derived (down) ----
     OWN -->|mint count| RANK
@@ -104,7 +102,6 @@ one DbRoot, **`agentnet-root`**, as tables:
 | `mysessions/[userWallet]` | session **pointer** (not the blob), keyed by sessionId | owner only |
 | `notes/[skillNFT]` | comments on a skill (token-address key); may attach a github / on-chain-git link | holders of that skill |
 | `notes/[agentWallet]` | comments on an agent; may attach a github / on-chain-git link | (see notes doc) |
-| `audit` | QAgent raw evals, read in one shot | QAgent (official) |
 
 **Skipped on purpose — these are NOT IQLabs tables:**
 - **Skill registry / list** — the **Token-2022 NFT collection** *is* the skill list
@@ -119,10 +116,10 @@ one DbRoot, **`agentnet-root`**, as tables:
 The **profile** is not a table — it's a *read* that aggregates the wallet's rows + tokens.
 Ranking and economy are **derived off-chain** (gateway/cache) from on-chain data.
 
-> **Note on audit:** QAgent's official audit is likely **on-chain** too — Q writes its
-> raw evaluations into an `agentnet-root/audit` table and they're fetched in one shot, rather
-> than living in an off-chain dashboard. (Agents' roaming re-scans still surface as notes
-> comments.)
+> **Note on skill safety:** there is **no on-chain audit table / official QAgent
+> eval.** Publishing is permissionless; safety is verified **reader-side** — before
+> buying, the buyer's own agent runs a "verify" skill over the candidate and
+> decides. No central authority gates what gets published; trust is the buyer's call.
 
 ---
 
@@ -133,7 +130,7 @@ The map above is the full picture; each row points to the doc that details that 
 | Slice | Plan doc |
 |---|---|
 | wallet connect + session sync (off-chain blob + on-chain pointer) | [offchain-session-sync](offchain-session-sync.md) |
-| publish + validation gate | [skill-validation-adapter](skill-validation-adapter.md) |
+| publish (permissionless) + reader-side verify before buy | [search](search.md) §2c |
 | skill NFT: on-chain text + soulbound `buy_skill` + ranking by `supply` | [skill-nft-structure](skill-nft-structure.md) |
 | comments on skills/agents (git link attachable, owner-gated) | [notes](notes.md) |
 | workflow NFT (recipe of skills, game-style unlock) | [workflow-nft](workflow-nft.md) |
@@ -165,7 +162,7 @@ The coding plan lives in [`coding-info.md`](coding-info.md): **§A** module brea
 
 **External references:**
 - IQ6900 NFT (mpl-core + code-in, fully on-chain NFT) — model for optional resellable skills
-- skills.sh / `vercel-labs/skills` — skill file convention, validation PR #509, `/audits` model
+- skills.sh / `vercel-labs/skills` — skill file convention (SKILL.md frontmatter shape)
 - mpl-core docs (collection, PermanentFreezeDelegate, AppData) — Option A
 - mpl-token-metadata (MasterEdition.supply) — Option B
 - DAS API — off-chain per-skill counting
