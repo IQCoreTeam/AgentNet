@@ -49,8 +49,21 @@ export async function publishWorkflow(
 
   await ensureDbRoot(signer);
 
-  // code-in the workflow recipe
-  const workflowTxid = await codeIn(signer, input.text, `${input.name}.md`, "text/markdown");
+  // code-in the standard NFT JSON (skill-nft-json.md §2, §4b): same shape as a
+  // skill — category once, each hashtag a repeated "skill" trait — plus one
+  // "requiredSkill" trait per prerequisite (valued by the skill's mint id, §4b).
+  // The body (recipe) goes in skillText. Traits live here, not on the mint.
+  const attributes: { trait_type: string; value: string }[] = [];
+  if (input.category) attributes.push({ trait_type: "category", value: input.category });
+  for (const tag of input.hashtags ?? []) attributes.push({ trait_type: "skill", value: tag });
+  for (const mint of input.requiredSkills) attributes.push({ trait_type: "requiredSkill", value: mint });
+  const workflowJson = JSON.stringify({
+    name: input.name,
+    description: input.description,
+    attributes,
+    skillText: input.text,
+  });
+  const workflowTxid = await codeIn(signer, workflowJson, `${input.name}.json`, "application/json");
 
   // Pre-generate the mint so we know its address → derive the gate PDA that will
   // OWN the mint authority. Only the gate program can then mint this workflow.
@@ -64,9 +77,7 @@ export async function publishWorkflow(
   await createSkillMint(conn, signer, {
     name: input.name,
     symbol: input.name.substring(0, 8).toUpperCase(),
-    uri: workflowTxid,
-    category: input.category,
-    hashtags: input.hashtags,
+    uri: workflowTxid, // points at the JSON above (traits live there, not on the mint)
     collectionMint,
     mintKeypair: workflowMintKp,
     minterAuthority: mintAuthority, // gate PDA holds the mint authority

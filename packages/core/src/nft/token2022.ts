@@ -28,7 +28,6 @@ import {
 import {
   pack,
   createInitializeInstruction as createInitializeMetadataInstruction,
-  createUpdateFieldInstruction,
   type TokenMetadata,
 } from "@solana/spl-token-metadata";
 import { type SignerInput, type WalletSigner } from "@iqlabs-official/solana-sdk/utils";
@@ -37,18 +36,15 @@ import { resolveMinter, tryMinterPubkey } from "./minter.js";
 
 import { TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 
-// additional_metadata field keys (skill-nft-structure.md §1 traits → search.md).
-// Stored on-chain in the TokenMetadata extension so search can filter by trait
-// and a skill's text resolves from the mint's `uri` (no registry table needed).
-const FIELD_CATEGORY = "category";
-const FIELD_HASHTAGS = "hashtags";
+// Traits (category/hashtags) do NOT live on the mint. They go in the code-in
+// JSON's standard `attributes` (plans/onchain-format/skill-nft-json.md §4), so
+// the mint carries only name/symbol/uri. A reader resolves `uri` → the code-in
+// JSON to get both the skill body and its traits in one read.
 
 interface MintConfig {
   name: string;
   symbol: string;
   uri: string; // code-in txid (IQLabs on-chain path) — TokenMetadata.uri
-  category?: string; // e.g. "clean-code", "design" — additional_metadata trait
-  hashtags?: string[]; // e.g. ["refactoring", "testing"] — additional_metadata trait
   /**
    * Protocol minter to receive mint authority (Path A). Defaults to the env
    * minter (AGENTNET_MINTER_PUBKEY / _SECRET). When null/unset, authority stays
@@ -64,13 +60,42 @@ interface MintConfig {
   mintKeypair?: Keypair;
 }
 
-/** On-chain skill traits read back from the mint's TokenMetadata extension. */
+/** A skill's resolved content: mint name/symbol/uri (on-chain) joined with the
+ *  code-in JSON the `uri` points at (description, traits, body). One round-trip. */
 export interface SkillMintMetadata {
   name: string;
   symbol: string;
-  uri: string; // code-in txid → resolve skill text via readCodeIn
+  uri: string; // code-in txid
+  description?: string;
   category?: string;
   hashtags?: string[];
+  skillText?: string; // the SKILL.md body
+}
+
+/** The standard NFT JSON shape stored via code-in (skill-nft-json.md §2). */
+interface SkillJson {
+  name?: string;
+  image?: string;
+  description?: string;
+  attributes?: { trait_type: string; value: string }[];
+  skillText?: string;
+}
+
+/** Pull category (single) + hashtags (repeated "skill" traits) out of the
+ *  standard `attributes` array (§4). */
+function traitsFromAttributes(attributes: SkillJson["attributes"]): {
+  category?: string;
+  hashtags?: string[];
+} {
+  if (!Array.isArray(attributes)) return {};
+  let category: string | undefined;
+  const hashtags: string[] = [];
+  for (const a of attributes) {
+    if (!a || typeof a.value !== "string") continue;
+    if (a.trait_type === "category") category = a.value;
+    else if (a.trait_type === "skill") hashtags.push(a.value);
+  }
+  return { category, hashtags: hashtags.length ? hashtags : undefined };
 }
 
 /**
@@ -81,13 +106,13 @@ export interface SkillMintMetadata {
  * Extensions, all native Token-2022:
  *   - NonTransferable   → soulbound (§1)
  *   - MetadataPointer   → points at the mint itself (self-hosted metadata)
- *   - TokenMetadata     → uri = code-in txid (§2 "NFT uri = IQLabs on-chain
- *                         path"); category + hashtags as additional_metadata
- *                         traits (§1 → search.md trait filter)
+ *   - TokenMetadata     → name/symbol + uri = code-in txid (§2 "NFT uri =
+ *                         IQLabs on-chain path"). NO traits on the mint — they
+ *                         live in the code-in JSON's `attributes` (§4).
  *
- * So the mint is self-describing: a reader resolves the skill text from
- * `uri` and filters by on-chain traits — no off-chain registry table (§2
- * "No skills registry table"). Caller signs; mint authority = creator.
+ * A reader resolves `uri` → the code-in JSON for both the skill body and its
+ * traits — no off-chain registry table (§2 "No skills registry table"), no
+ * mint-side trait fields. Caller signs; mint authority = creator.
  *
  * ⚠️ KNOWN LIMITATION (buy flow): mint authority = creator here, but `buySkill`
  * has the buyer sign the mintTo. On-chain mintTo requires the mint authority's
@@ -106,20 +131,14 @@ export async function createSkillMint(
   const mintKeypair = config.mintKeypair ?? Keypair.generate();
   const mint = mintKeypair.publicKey;
 
-  // Build the TokenMetadata payload. uri = code-in txid; traits go in
-  // additional_metadata so search can filter on-chain (added via updateField
-  // below — additionalMetadata in the initialize ix is ignored by the program).
-  const additionalMetadata: [string, string][] = [];
-  if (config.category) additionalMetadata.push([FIELD_CATEGORY, config.category]);
-  if (config.hashtags && config.hashtags.length > 0) {
-    additionalMetadata.push([FIELD_HASHTAGS, JSON.stringify(config.hashtags)]);
-  }
+  // TokenMetadata payload: name/symbol/uri only. uri = code-in txid; traits live
+  // in that code-in JSON's `attributes`, not on the mint (§4).
   const metadata: TokenMetadata = {
     mint,
     name: config.name,
     symbol: config.symbol,
     uri: config.uri,
-    additionalMetadata,
+    additionalMetadata: [],
   };
 
   // If enrolling into a collection, we need the GroupMemberPointer and TokenGroupMember extensions.
@@ -211,20 +230,7 @@ export async function createSkillMint(
     }),
   );
 
-  // 6. Write each trait (category, hashtags) as an additional_metadata field.
-  for (const [field, value] of additionalMetadata) {
-    tx.add(
-      createUpdateFieldInstruction({
-        programId: TOKEN_2022_PROGRAM_ID,
-        metadata: mint,
-        updateAuthority: creatorPk,
-        field,
-        value,
-      }),
-    );
-  }
-
-  // 7. Path A authority handoff: give MINT authority to the protocol minter so
+  // 6. Path A authority handoff: give MINT authority to the protocol minter so
   //    buyers can later mint via the minter's co-signature (Token-2022 mintTo
   //    needs the authority's sig).
   if (minterPk && !minterPk.equals(creatorPk)) {
@@ -269,10 +275,14 @@ export async function createSkillMint(
 }
 
 /**
- * Read a skill's on-chain metadata (uri + traits) from the mint's TokenMetadata
- * extension — the §2 path back from NFT → content. `uri` is the code-in txid;
- * pass it to `readCodeIn` to get the skill text. category/hashtags are the
- * search traits. Returns null if the mint has no metadata.
+ * Read a skill's metadata — the §2 path back from NFT → content. Reads the
+ * mint's name/symbol/uri, then resolves `uri` (a code-in txid) to the standard
+ * NFT JSON for description, traits (from `attributes`), and the body (§4). One
+ * round-trip gives everything. Returns null if the mint has no metadata.
+ *
+ * The code-in payload is expected to be JSON; if it isn't parseable (shouldn't
+ * happen for skills published by this SDK) the trait/body fields are simply
+ * absent rather than throwing.
  */
 export async function readSkillMintMetadata(
   conn: Connection,
@@ -286,45 +296,31 @@ export async function readSkillMintMetadata(
   );
   if (!md) return null;
 
-  const fields = new Map(md.additionalMetadata);
-  const rawHashtags = fields.get(FIELD_HASHTAGS);
-  let hashtags: string[] | undefined;
-  if (rawHashtags) {
-    try {
-      const parsed = JSON.parse(rawHashtags);
-      if (Array.isArray(parsed)) hashtags = parsed;
-    } catch {
-      // Stored malformed — surface nothing rather than crash the reader.
-    }
-  }
+  const base: SkillMintMetadata = { name: md.name, symbol: md.symbol, uri: md.uri };
+  if (!md.uri) return base;
 
-  return {
-    name: md.name,
-    symbol: md.symbol,
-    uri: md.uri,
-    category: fields.get(FIELD_CATEGORY),
-    hashtags,
-  };
+  try {
+    const { data } = await readCodeIn(md.uri);
+    if (!data) return base;
+    const json = JSON.parse(data) as SkillJson;
+    const { category, hashtags } = traitsFromAttributes(json.attributes);
+    return { ...base, description: json.description, category, hashtags, skillText: json.skillText };
+  } catch {
+    return base; // uri unresolvable or payload not the expected JSON
+  }
 }
 
 /**
- * Read a published skill's BODY text — the full NFT→content round-trip
- * (skill-nft-structure.md §2). Joins the two halves that otherwise sit
- * disconnected: `readSkillMintMetadata` (mint → uri=txid) then `readCodeIn`
- * (txid → inscribed SKILL.md text). Returns null if the mint has no metadata
- * or the inscription can't be resolved.
- *
- * This is the "show me this NFT's letter" call — search/detail views use it to
- * surface the actual skill content, not just the indexed name/description.
+ * Read a published skill's BODY text — the NFT→content round-trip. The body is
+ * the `skillText` field of the code-in JSON the mint's `uri` points at.
+ * Search/detail views use this to show the actual skill content.
  */
 export async function readSkillText(
   conn: Connection,
   skillMintAddr: string,
 ): Promise<string | null> {
   const md = await readSkillMintMetadata(conn, skillMintAddr);
-  if (!md?.uri) return null;
-  const { data } = await readCodeIn(md.uri);
-  return data;
+  return md?.skillText ?? null;
 }
 
 /**

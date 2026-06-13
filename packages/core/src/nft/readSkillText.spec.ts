@@ -24,15 +24,21 @@ const MINT = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPvZeJ";
 describe("nft/readSkillText", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("resolves mint → uri (txid) → inscribed body text", async () => {
+  it("resolves mint → uri (txid) → skillText in the code-in JSON", async () => {
     vi.mocked(splToken.getTokenMetadata).mockResolvedValue({
       name: "my-skill",
       symbol: "MY",
       uri: "txid123",
       additionalMetadata: [],
     } as any);
+    // The inscription is the standard NFT JSON; the body is its skillText field.
     vi.mocked(chain.readCodeIn).mockResolvedValue({
-      data: "# SKILL body text",
+      data: JSON.stringify({
+        name: "my-skill",
+        description: "d",
+        attributes: [{ trait_type: "category", value: "ai" }],
+        skillText: "# SKILL body text",
+      }),
       metadata: "",
     });
 
