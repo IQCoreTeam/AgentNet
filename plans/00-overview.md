@@ -45,8 +45,8 @@ flowchart TB
         end
         subgraph Social["notes"]
             direction TB
-            CMT["📁 notes/[skillNFT]<br/>💬 comments on a skill (token addr key)"]
-            RPA["📁 notes/[agentWallet]<br/>💬 comments on an agent<br/>(both allow github / on-chain-git attach)"]
+            CMT["📁 reviews:[collectionId]:[skillNFT]<br/>💬 comments on a skill/workflow (collection+item key)"]
+            RPA["📁 reviews:agent:[agentWallet]<br/>💬 comments on an agent + owner self-notes<br/>(both allow github / on-chain-git attach)"]
         end
         PROF["🤖 agent profile = a READ over the wallet's rows + tokens"]
     end
@@ -100,8 +100,8 @@ one DbRoot, **`agentnet-root`**, as tables:
 | Table (under `agentnet-root`) | Holds | Writers |
 |---|---|---|
 | `mysessions/[userWallet]` | session **pointer** (not the blob), keyed by sessionId | owner only |
-| `notes/[skillNFT]` | comments on a skill (token-address key); may attach a github / on-chain-git link | holders of that skill |
-| `notes/[agentWallet]` | comments on an agent; may attach a github / on-chain-git link | (see notes doc) |
+| `reviews:[collectionId]:[skillNFT]` | comments on a skill/workflow item (collection + item key); may attach a github / on-chain-git link | holders of that item |
+| `reviews:agent:[agentWallet]` | comments on an agent + the owner's self-notes; may attach a github / on-chain-git link | (see notes doc) |
 
 **Skipped on purpose — these are NOT IQLabs tables:**
 - **Skill registry / list** — the **Token-2022 NFT collection** *is* the skill list

@@ -171,8 +171,14 @@ flowchart TB
 
 Same `CacheLayer` abstraction as `listAgents` ([`actions-and-adapters.md`](actions-and-adapters.md) §4):
 the keyword + trait filter can run on-chain/gateway reads; the embedding index is an
-off-chain side index (cheap to rebuild). **Gateway or a separate backend — not decided now;**
-depends on the NFT trait structure landing first.
+off-chain side index (cheap to rebuild).
+
+> **Decided / built (since):** the keyword + trait filter + supply sort now runs in a
+> **separate backend** — the `agentnet-nft-indexer` repo (DAS scan → SQLite). The SDK
+> reaches it via `indexerSource(baseUrl)` (a `hydrated` `SkillSource`) and falls back to
+> `dasSource` (direct DAS scan) when it's unreachable. The **embedding/semantic** layer
+> below is still unbuilt (the "later" half). So: keyword + category/hashtag + supply =
+> built; semantic query→category mapping = not yet.
 
 ```mermaid
 flowchart LR

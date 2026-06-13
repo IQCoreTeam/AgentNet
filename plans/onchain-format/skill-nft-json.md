@@ -29,10 +29,15 @@ Enumeration ("which skills exist") is a **DAS scan of the Token-2022 collection*
 `searchSkills` scans the collection, reads each mint's `supply` to sort and the ②
 JSON `attributes` to filter.
 
-> We do **not** design any off-chain index/cache layer into this structure. When
-> we eventually want marketplace-grade search, we'll follow whatever model NFT
-> marketplaces use *then* — so the on-chain format must stand on its own without
-> assuming an indexer exists. Keep that concern out of this doc.
+> We do **not** design any off-chain index/cache layer into *this structure* —
+> the on-chain format stands on its own (a direct DAS scan reads everything).
+> **Update (built since):** that "marketplace-grade search later" has now been
+> built as a **separate, optional accelerator** — the `agentnet-nft-indexer`
+> repo (DAS scan → SQLite, filter-by-trait + sort-by-supply), wired into the SDK
+> via `indexerSource(baseUrl)` (a `hydrated` `SkillSource`). It is **not** part
+> of this format and not required: `dasSource` (the direct scan above) is the
+> fallback, so this doc still describes the standalone truth. Keep indexer design
+> in that repo, not here.
 
 ---
 
@@ -194,8 +199,11 @@ this on-chain format. We don't design it in now.
 5. Enumeration = **DAS scan of the Token-2022 collection**; sort by `supply`,
    filter by `attributes` — read directly, no index/cache layer designed in.
 6. **No off-chain index / gateway / marketplace model designed into this format.**
-   The structure stands alone on-chain; marketplace-grade serving is a later
-   concern, built then by following whatever model marketplaces use at that time.
+   The structure stands alone on-chain (direct DAS scan reads everything).
+   *Built since:* marketplace-grade serving now exists as a **separate optional
+   accelerator** — the `agentnet-nft-indexer` repo, wired via `indexerSource`
+   (`hydrated` `SkillSource`); `dasSource` is the fallback. It sits on top of,
+   not inside, this format. See §0's update note.
 7. Workflow NFT = same ② JSON in its own collection; `requiredSkill` = one
    repeated trait per prerequisite, valued by the skill's **NFT id (mint addr)**,
    not its name (§4b).

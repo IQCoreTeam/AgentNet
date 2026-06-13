@@ -44,10 +44,10 @@ enforced by the token program.
 ```mermaid
 flowchart TB
     GRP["Token-2022 Group (umbrella)<br/>TokenGroup.size = total # of skills"]
-    GRP --> SK["skill = one Token-2022 mint<br/>own mint authority = its creator"]
+    GRP --> SK["skill = one Token-2022 mint<br/>mint authority = gate-program PDA (trustless, no minter key)"]
     SK --> SUP["supply = # of copies owned<br/>(= popularity, on-chain, free)"]
     SK --> NT["NonTransferable ext<br/>= native soulbound"]
-    SK --> MD["TokenMetadata ext<br/>category + hashtags (traits)<br/>uri → IQLabs on-chain path"]
+    SK --> MD["TokenMetadata ext<br/>name/symbol + uri → code-in JSON<br/>(traits live in that JSON's attributes, not on the mint)"]
     style SK fill:#efe,stroke:#3a3,stroke-width:2px
     style SUP fill:#cfc,stroke:#3a3
 ```
@@ -58,11 +58,11 @@ ownership PDA** (the token *is* the ownership record):
 | Requirement | Token-2022 feature | On-chain? |
 |---|---|---|
 | umbrella collection | `TokenGroup` (`size` = # skills) | ✅ enforced count |
-| per-item different creator | each skill = own mint + own authority | ✅ |
-| many copies per item | mint 1 token per owner → `supply`++ | ✅ |
+| per-item different creator | each skill = own mint; mint authority = gate PDA | ✅ |
+| many copies per item | gate program mints 1 token per buyer → `supply`++ | ✅ |
 | **per-skill popularity count** | **`mint.supply`** | ✅ free, enforced |
 | soulbound | **`NonTransferable` extension** | ✅ native (set at mint init) |
-| traits (category/hashtags) | `TokenMetadata` `additional_metadata` | ✅ on-chain |
+| traits (category/hashtags/requiredSkill) | **code-in JSON `attributes`** (uri → JSON), NOT the mint | ✅ on-chain |
 | all holders / user list | DAS `getTokenAccounts` per mint | indexer-fronted |
 
 Two caveats to design around:
