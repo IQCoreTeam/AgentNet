@@ -4,6 +4,8 @@
 > Settled model: reader-side verify, **no on-chain audit** (search.md §2c,
 > onchain-format/tables.md §0). Mirrors the inject-at-start pattern of
 > [`shared-memory.md`](shared-memory.md).
+> The **active** half (§3) is validated against a shipped reference skill — see §8;
+> the open work is the **passive** `verify` mechanism (§2) + the buy/verify gate (§4, §7).
 
 ---
 
@@ -186,7 +188,8 @@ or, for #1–#2, not yet decided. Listed worst-first.
    `verify/SKILL.md` in `injectAtStart` then spawns with `skills:[…]` +
    `settingSources:['project']`. Grounded in `sdk.d.ts`, but **not runtime-tested** that the
    SDK rescans `.claude/skills` after our write on the same spawn. **Verify:** the skill
-   appears in the session's listing.
+   appears in the session's listing. → **Corroborated as real:** last30days ships a STEP 0
+   guard for exactly this (Claude Code's marketplace clone lagging the cache — §8a).
 4. **Codex skills scan via the SDK path.** The 0.139.0 binary has the `core-skills` loader
    (research §3), but it's **assumed** that a `@openai/codex-sdk` `Thread` run triggers the
    same `~/.codex/skills` / `.agents/skills` scan as the interactive CLI. **Verify** with a
@@ -201,3 +204,60 @@ or, for #1–#2, not yet decided. Listed worst-first.
 7. **Codex MCP is heavier than Claude's.** No in-process option — needs an `mcp_servers` TOML
    entry pointing at a stdio MCP binary (§4). The "small AgentNet MCP binary" doesn't exist;
    scope it or defer Codex MCP past v1 (Claude-first).
+
+---
+
+## 8. OSS validation — a shipped reference for the *active* half
+
+Two repos were surveyed for how real skills are built. One confirms our active model end
+to end; the other is a different layer entirely (recorded so we don't mistake it for a skill).
+
+### 8a. `mvanhorn/last30days-skill` — our active model, already shipped (41k★)
+
+A production agentskills.io skill (cross-platform "what people said in the last 30 days"
+research). It is the **active / on-demand** half of §3 **as a working artifact**, so the
+active design needs no further research — only implementation. Point-for-point match:
+
+| Our design (§3) | last30days (verified in-repo) |
+|---|---|
+| agentskills.io folder layout | `skills/last30days/` = `SKILL.md` + `scripts/` + `references/` + `assets/` |
+| active = discovered-then-pulled | frontmatter `name`+`description`+`user-invocable:true`; body Read on `/last30days` or topic match |
+| multi-runtime via skills dir | `npx skills add … -a codex` installs to `~/.codex/skills/`; Claude via `.claude-plugin/` — **confirms Codex 0.139 native SKILL.md discovery (research §3) is real** |
+| progressive disclosure | SKILL.md says *"Read `references/save-html-brief.md` BEFORE proceeding"* — lazy-loads sub-files exactly like research §3b's 3 stages |
+| thin LLM contract + heavy engine | SKILL.md is the contract; `scripts/last30days.py` does the work ("You ARE the planner" — LLM emits a JSON plan, headless engine runs it) |
+
+**New, beyond our design — patterns to adopt when authoring `verify`/`skill-shopping`:**
+- **`SKILL_DIR` self-location.** The engine path is "the dir the harness loaded SKILL.md
+  from — no resolver list, no precedence walk." Lets one skill run on any host without us
+  enumerating each runtime's install path. **Adopt** for any bundled scripts.
+- **STEP 0 stale-clone self-check.** A guard at the top of SKILL.md detects Claude Code's
+  `~/.claude/plugins/marketplaces/` git clone lagging the versioned cache and re-Reads the
+  correct copy. → This is **direct evidence that §7 risk #3 (does the SDK pick up a
+  freshly-dropped skill?) is a real, dated bug**, not a hypothetical. Test it.
+- **Contract hoisted to the top + dated failure log.** Output rules sat ~line 1094 and Opus
+  drifted to blog format, so they hoisted a mandatory first-line contract and log failures
+  with dates ("2026-04-18 v3.0.6 0/8 regression") — a versioned, regression-tested prompt.
+  **Adopt** for `verify` (its instruction is a safety contract — put the rule first, log
+  drift).
+
+**Note — installer ecosystem:** last30days rides the open **`npx skills add`** CLI (one
+command installs to 50+ hosts' skills dirs). Open decision for us: write our own
+manifest-per-host inject (the §1–§3 `SkillSync` path, full control, soulbound-aware) vs lean
+on that CLI for distribution. Our skills are **bought on-chain, not registry-published**, so
+`SkillSync` (write `readSkillText` output into the skills dir ourselves) stays the core path;
+the `npx skills` ecosystem is at most a distribution convenience for our *free/bundled*
+skills (`verify`, `skill-shopping`), not the buy flow.
+
+### 8b. `chopratejas/headroom` — NOT a skill (a context-compression layer)
+
+Recorded to avoid confusion: headroom has **no SKILL.md / no `skills/` dir**. It's an infra
+product (compress tool-outputs/logs/RAG 60–95% before the LLM) that attaches via **plugins +
+hooks** (Claude Code `hooks.json` SessionStart/PreToolUse, OpenClaw context-engine, Hermes
+plugin) — a *different mechanism* from skill ingestion, out of scope for #17.
+
+One idea worth filing for **later, unrelated to #17**: its **CCR (Compress-Cache-Retrieve)**
+pattern — compress content, cache the original under a hash, leave an inline `hash=…` marker,
+and inject a `retrieve(hash)` tool so the model pulls the original on demand. That's
+*progressive disclosure for data*, and could apply if a **bought skill's body is large**
+(code-in chunked > 700B): inject a short summary + a tool to fetch the full `skillText`,
+instead of dumping the whole body. Not part of this design — noted so the pattern isn't lost.
