@@ -13,6 +13,7 @@
 
 import type { AgentRuntime, SessionHandle } from "../runtime/contract.js";
 import type { ApprovalChannel } from "../runtime/approval/channel.js";
+import type { SkillCard, MarketRequest } from "./marketMessages.js";
 
 // The two-way pipe to ONE chat UI (one panel / one socket). Messages both ways are
 // flat {type, ...} JSON — the same shape the webview already speaks.
@@ -44,7 +45,7 @@ export interface ChatEnv {
   // are host-held (the extension owns them), so they're delegated like wallet/cloud.
   // buySkill installs the bought skill's SKILL.md into the runtime skills dir as part
   // of the buy (the host calls SkillSync.installBought), returning the installed slug.
-  searchSkills?(query: string): Promise<Array<{ id: string; name: string; description?: string; supply?: number; creator?: string }>>;
+  searchSkills?(query: string): Promise<SkillCard[]>;
   buySkill?(skillId: string, creatorWallet?: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
   ownedSkills?(): Promise<string[]>; // skill names already installed (panel fill)
   // install every owned skill NFT into the runtime skills dir (session start + after a
@@ -77,6 +78,11 @@ export function createChatSession(
   let cli: "claude" | "codex" = "claude"; // which tab is showing
   const slot = () => slots[cli];
 
+  // typed host->UI marketplace push: the contract (marketMessages.ts) is enforced
+  // here, so a wrong field/type on a market event is a compile error, not a silent
+  // runtime miss. Every surface's UI reads the same shape.
+  const sendMarket = (e: import("./marketMessages.js").MarketEvent) => transport.send(e);
+
   // A handle's output is only painted when ITS cli tab is the active one (so a
   // background reply doesn't bleed into the other tab's log). The message already
   // carries its own .cli (stamped by the runtime), so the UI badges the real engine
@@ -85,7 +91,7 @@ export function createChatSession(
     h.onMessage((msg) => { if (cli === forCli) transport.send({ type: "message", msg }); });
     // a skill firing → the green "Casting <skill>" marquee (issue #17). Transient, not
     // persisted; only painted for the active tab.
-    h.onSkill((name) => { if (cli === forCli) transport.send({ type: "skillActive", name }); });
+    h.onSkill((name) => { if (cli === forCli) sendMarket({ type: "skillActive", name }); });
     h.onTurnEnd(async () => {
       if (cli === forCli) transport.send({ type: "turnEnd" }); // stop the typing dots
       await pushSessions();
@@ -166,7 +172,7 @@ export function createChatSession(
         // refresh the panel once it lands.
         void (async () => {
           await env.loadOwnedSkills?.();
-          transport.send({ type: "ownedSkills", names: env.ownedSkills ? await env.ownedSkills() : [] });
+          sendMarket({ type: "ownedSkills", names: env.ownedSkills ? await env.ownedSkills() : [] });
         })().catch(() => {});
         break;
       case "new":   await open(); await pushSessions(); break;
@@ -231,22 +237,26 @@ export function createChatSession(
       case "openCloud":       await env.openCloud?.(m.kind, m.location); break;
       case "wallet":          transport.send({ type: "wallet", address: env.walletAddress() }); break;
       // ── marketplace: search → buy → install (delegated to the host) ──
+      // payload typed via the shared contract (marketMessages.ts) so a wrong field
+      // is caught here, not at runtime on some surface.
       case "searchSkills": {
-        const results = env.searchSkills ? await env.searchSkills(String(m.query ?? "")) : [];
-        transport.send({ type: "searchResults", results });
+        const req = m as Extract<MarketRequest, { type: "searchSkills" }>;
+        const results = env.searchSkills ? await env.searchSkills(req.query ?? "") : [];
+        sendMarket({ type: "searchResults", results });
         break;
       }
       case "buySkill": {
-        const res = env.buySkill ? await env.buySkill(String(m.skillId), m.creatorWallet) : { ok: false, error: "buy unavailable" };
-        transport.send({ type: "buyResult", skillId: m.skillId, ...res });
+        const req = m as Extract<MarketRequest, { type: "buySkill" }>;
+        const res = env.buySkill ? await env.buySkill(req.skillId, req.creatorWallet) : { ok: false, error: "buy unavailable" };
+        sendMarket({ type: "buyResult", skillId: req.skillId, ...res });
         if (res.ok) {
           await env.loadOwnedSkills?.(); // re-sync the whole owned set after the buy
-          transport.send({ type: "ownedSkills", names: env.ownedSkills ? await env.ownedSkills() : [] });
+          sendMarket({ type: "ownedSkills", names: env.ownedSkills ? await env.ownedSkills() : [] });
         }
         break;
       }
       case "ownedSkills":
-        transport.send({ type: "ownedSkills", names: env.ownedSkills ? await env.ownedSkills() : [] });
+        sendMarket({ type: "ownedSkills", names: env.ownedSkills ? await env.ownedSkills() : [] });
         break;
     }
   }

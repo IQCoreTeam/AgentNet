@@ -45,6 +45,8 @@ export { resolveMinter, tryMinterPubkey, resetMinterCache } from "./nft/minter.j
 // notes (reviews)
 export { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes, getBalance } from "./notes/index.js";
 export type { PostNoteInput, ReadNotesOptions, PostAgentNoteInput } from "./notes/index.js";
+// the marketplace UI<->host message contract (shared by every surface's UI)
+export type { SkillCard, MarketRequest, MarketEvent, MarketMessage } from "./chat/marketMessages.js";
 // active-skill injection (install a bought skill's SKILL.md into a runtime's skills dir)
 export { SkillSync } from "./skill-market/ingest/index.js";
 export { toSkillMd, skillSlug } from "./skill-market/ingest/convert.js";
