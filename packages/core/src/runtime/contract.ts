@@ -79,6 +79,7 @@ export interface SessionHandle {
   send(userText: string): void; // user input → CLI stdin
   onMessage(cb: (msg: ChatMessage) => void): void; // CLI output (UI renders)
   onTurnEnd(cb: () => void): void; // turn finished (runtime auto-saves here)
+  onSkill(cb: (name: string) => void): void; // a skill fired → UI "Casting <skill>" cue
   stop(): void;
 }
 

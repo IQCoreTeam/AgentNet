@@ -16,6 +16,7 @@ import {
   agentnetFolderLink,
   STORAGE_OPTIONS,
   createChatSession,
+  marketplaceEnv,
   TransportApprovalChannel,
   chatHtml,
   onboardingHtml,
@@ -191,6 +192,9 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
     cwd: getCwd,
     approval,
     claimSession,
+    // marketplace search/buy/install — needs the wallet + a chain connection (RPC env);
+    // bundled by the SDK so the surface doesn't re-derive a connection itself.
+    ...marketplaceEnv(wallet!),
     walletAddress: () => wallet?.address ?? null,
     storageInfo: async () => ({ info: await getStorageInfo(), options: STORAGE_OPTIONS }),
     // header "connect" link → native quick-pick of cloud backends, then connect

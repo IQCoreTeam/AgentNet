@@ -88,6 +88,22 @@ export function codexAgentsFile(cwd: string): string {
   return join(cwd, "AGENTS.md");
 }
 
+// ── active skills (issue #17): where we drop a bought skill's SKILL.md so the CLI
+// discovers it. Both runtimes scan a skills dir and read each skill's frontmatter
+// (name + description) at session start, loading the body only on demand — pure
+// filesystem placement, no registry (verified against last30days-skill, see
+// plans/skill-ingestion.md §8a). We write the same minimal shape from an NFT's text.
+
+/** Claude Code user skills dir; a skill lives at {dir}/{name}/SKILL.md. */
+export function claudeSkillsDir(): string {
+  return join(claudeHome(), "skills");
+}
+
+/** Codex user skills dir ($CODEX_HOME/skills); a skill lives at {dir}/{name}/SKILL.md. */
+export function codexSkillsDir(): string {
+  return join(codexHome(), "skills");
+}
+
 /** Ensure a directory exists (mkdir -p). Call before writing into it. */
 export async function ensureDir(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });
