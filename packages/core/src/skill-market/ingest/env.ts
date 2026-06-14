@@ -14,10 +14,22 @@ import type { Wallet } from "../../runtime/contract.js";
 import { searchSkills } from "../../search/index.js";
 import { dasSource, indexerSource } from "../../core/skillSource.js";
 import { buySkill } from "../../nft/skill.js";
+import { readSkillText } from "../../nft/token2022.js";
 import { claudeSkillsDir } from "../../core/paths.js";
 import { resolveRpcUrl } from "../../core/rpc.js";
-import type { SkillCard } from "../../chat/marketMessages.js";
+import type { SkillCard, SkillDetail } from "../../chat/marketMessages.js";
+import type { Skill } from "../../core/types.js";
 import { SkillSync } from "./index.js";
+
+// Skill (enumeration row) -> SkillCard (what the UI renders). One place so search +
+// detail map identically.
+function toCard(s: Skill): SkillCard {
+  return {
+    id: s.id, type: s.type, name: s.name, description: s.description,
+    category: s.category, hashtags: s.hashtags, supply: s.supply,
+    creator: s.creator, requiredSkills: s.requiredSkills,
+  };
+}
 
 // The marketplace half of a surface's ChatEnv. Spread it into the env object the
 // surface passes to createChatSession. RPC comes from resolveRpcUrl() — a registered
@@ -35,20 +47,40 @@ export async function marketplaceEnv(wallet: Wallet) {
   const conn = new Connection(await resolveRpcUrl(), "confirmed");
   const skills = new SkillSync(conn);
 
+  // Run a search via the indexer (fast, has supply+traits); fall back to a direct DAS
+  // scan only if it errors (server down). `kind` = the active Skills/Workflows tab.
+  async function runSearch(query: string, kind?: "skill" | "workflow"): Promise<Skill[]> {
+    const filters = { keyword: query, ...(kind ? { type: kind } : {}) };
+    try {
+      return await searchSkills(conn, { source: indexerSource(INDEXER_URL), filters });
+    } catch {
+      return await searchSkills(conn, { source: dasSource, filters });
+    }
+  }
+
   return {
-    async searchSkills(query: string): Promise<SkillCard[]> {
-      const filters = { keyword: query };
-      // indexer first (fast, has supply+traits); fall back to a direct DAS scan only
-      // if it errors (server down) — that path returns little for a Token-2022 group.
-      let found;
-      try {
-        found = await searchSkills(conn, { source: indexerSource(INDEXER_URL), filters });
-      } catch {
-        found = await searchSkills(conn, { source: dasSource, filters });
-      }
-      return found.map((s) => ({
-        id: s.id, name: s.name, description: s.description, supply: s.supply, creator: s.creator,
-      }));
+    async searchSkills(query: string, kind?: "skill" | "workflow"): Promise<SkillCard[]> {
+      return (await runSearch(query, kind)).map(toCard);
+    },
+
+    // Full detail for one item: its card + the on-chain body (readSkillText) + — for a
+    // workflow — the cards of its required skills, so the UI can render them clickable.
+    async getSkillDetail(mint: string): Promise<SkillDetail> {
+      // find the card among all items (indexer has no single-item-with-traits route we
+      // map; one search covers both kinds since they share the catalog).
+      const all = await runSearch("");
+      const card = all.find((s) => s.id === mint);
+      const skillText = await readSkillText(conn, mint).catch(() => null);
+      const reqIds = card?.requiredSkills ?? [];
+      const requiredCards = reqIds
+        .map((id) => all.find((s) => s.id === id))
+        .filter((s): s is Skill => !!s)
+        .map(toCard);
+      return {
+        card: card ? toCard(card) : { id: mint, name: mint },
+        skillText,
+        requiredCards,
+      };
     },
 
     // creatorWallet comes from the search result (a Skill carries .creator); the

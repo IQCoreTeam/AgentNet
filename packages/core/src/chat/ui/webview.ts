@@ -528,6 +528,41 @@ export function chatHtml(): string {
                      border-radius: var(--an-radius); padding: 6px 14px; cursor: pointer; white-space: nowrap; font-weight: 600; }
   .mktCard .mc-buy[disabled] { opacity: 0.5; cursor: default; }
   .mktGrid .mktEmpty { opacity: 0.5; font-size: 0.9em; padding: 8px 2px; }
+  /* a card body is clickable (opens detail); the Buy button stops propagation */
+  .mktCard .mc-main { cursor: pointer; }
+  .mktCard .mc-main:hover .mc-name { color: var(--an-green); }
+  /* Skills / Workflows segmented tabs */
+  .mktTabs { display: inline-flex; gap: 2px; padding: 2px; margin-bottom: 12px;
+             background: var(--an-bg); border: 1px solid var(--an-line); border-radius: 999px; }
+  .mktTab { background: transparent; border: none; color: var(--vscode-foreground); opacity: 0.6;
+            border-radius: 999px; padding: 4px 16px; font-size: 0.85em; cursor: pointer; }
+  .mktTab.on { background: var(--an-green-dim); color: var(--an-green); opacity: 1; font-weight: 600; }
+  /* detail sub-view */
+  #mktDetailBody .dt-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  #mktDetailBody .dt-img { width: 56px; height: 56px; border-radius: 10px; background: var(--an-green-dim);
+                           display: flex; align-items: center; justify-content: center; flex: none; }
+  #mktDetailBody .dt-img .wand { width: 28px; height: 28px; color: var(--an-green); }
+  #mktDetailBody .dt-name { font-size: 1.15em; font-weight: 700; }
+  #mktDetailBody .dt-kind { font-size: 0.7em; text-transform: uppercase; letter-spacing: 0.05em;
+                            color: var(--an-green); opacity: 0.8; }
+  #mktDetailBody .dt-desc { opacity: 0.85; margin-bottom: 10px; }
+  #mktDetailBody .dt-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  #mktDetailBody .dt-tag { font-size: 0.75em; padding: 2px 9px; border-radius: 999px;
+                           background: var(--an-bg); border: 1px solid var(--an-line); opacity: 0.8; }
+  #mktDetailBody .dt-sec { font-size: 0.7em; text-transform: uppercase; letter-spacing: 0.05em;
+                           opacity: 0.5; margin: 14px 0 6px; }
+  #mktDetailBody .dt-body { white-space: pre-wrap; font-family: var(--vscode-editor-font-family, monospace);
+                            font-size: 0.82em; background: var(--an-bg); border: 1px solid var(--an-line);
+                            border-radius: var(--an-radius); padding: 10px 12px; max-height: 320px; overflow: auto; }
+  #mktDetailBody .dt-buy { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
+                           border-radius: var(--an-radius); padding: 8px 18px; cursor: pointer; font-weight: 600; }
+  #mktDetailBody .dt-buy[disabled] { opacity: 0.5; cursor: default; }
+  /* a required skill row inside a workflow detail — clickable, opens its detail */
+  #mktDetailBody .dt-req { display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: pointer;
+                           border: 1px solid var(--an-line); border-radius: var(--an-radius); margin-bottom: 6px; }
+  #mktDetailBody .dt-req:hover { border-color: var(--an-green-line); background: var(--an-green-dim); }
+  #mktDetailBody .dt-req .rq-name { font-weight: 600; }
+  #mktDetailBody .dt-req .rq-arrow { margin-left: auto; opacity: 0.5; }
 
   /* skill marquee — ONLY shows when an equipped skill fires ("Casting <skill>").
      Plain tool work isn't shown here (it's already in the chat timeline). Green with
@@ -759,16 +794,28 @@ export function chatHtml(): string {
        shared market message contract; the same screens get a mobile design later. -->
   <div id="marketView" class="panel" style="display:none">
     <div class="page">
-      <div id="backToChatM" class="muted" style="cursor:pointer;margin-bottom:10px">‹ Back to chat</div>
-      <div class="mktHead">
-        <div class="mktTitle"><span class="wand">${WAND_SVG}</span> Skill Market</div>
-        <div class="muted small">Popular skills first. Buy a skill (soulbound) and your agent equips it.</div>
+      <!-- LIST sub-view: tabs (Skills/Workflows) + search + grid -->
+      <div id="mktList">
+        <div id="backToChatM" class="muted" style="cursor:pointer;margin-bottom:10px">‹ Back to chat</div>
+        <div class="mktHead">
+          <div class="mktTitle"><span class="wand">${WAND_SVG}</span> Skill Market</div>
+          <div class="muted small">Popular first. Buy an item (soulbound) and your agent equips it.</div>
+        </div>
+        <div class="mktTabs">
+          <button class="mktTab on" data-kind="skill">Skills</button>
+          <button class="mktTab" data-kind="workflow">Workflows</button>
+        </div>
+        <div class="mktSearchRow">
+          <input id="mktSearch" type="text" placeholder="Search…" />
+          <button id="mktSearchBtn">Search</button>
+        </div>
+        <div id="mktResults" class="mktGrid"></div>
       </div>
-      <div class="mktSearchRow">
-        <input id="mktSearch" type="text" placeholder="Search skills…" />
-        <button id="mktSearchBtn">Search</button>
+      <!-- DETAIL sub-view: one item's full info (hidden until a card is clicked) -->
+      <div id="mktDetail" style="display:none">
+        <div id="backToList" class="muted" style="cursor:pointer;margin-bottom:10px">‹ Back to market</div>
+        <div id="mktDetailBody"></div>
       </div>
-      <div id="mktResults" class="mktGrid"></div>
     </div>
   </div>
 <!-- markdown libs (marked + dompurify), inlined; expose window.marked / window.DOMPurify -->
@@ -1539,22 +1586,97 @@ export function chatHtml(): string {
   // ---- Markets full-screen view (same contract, marketplace design) ----
   const mktSearch = document.getElementById('mktSearch');
   const mktResults = document.getElementById('mktResults');
+  const mktListEl = document.getElementById('mktList');
+  const mktDetailEl = document.getElementById('mktDetail');
+  const mktDetailBody = document.getElementById('mktDetailBody');
   let lastMarketResults = []; // last search results, kept to re-render on owned-list change
+  let currentKind = 'skill';  // active tab: Skills | Workflows
   function runMarketSearch() {
     mktResults.innerHTML = '<div class="mktEmpty">Searching…</div>';
-    vscode.postMessage({ type: 'searchSkills', query: mktSearch.value.trim() });
+    vscode.postMessage({ type: 'searchSkills', query: mktSearch.value.trim(), kind: currentKind });
   }
   function openMarket() {
+    showMktList();
     // first open (and re-open) loads the popular list (empty query = supply-sorted)
     mktResults.innerHTML = '<div class="mktEmpty">Loading…</div>';
-    vscode.postMessage({ type: 'searchSkills', query: '' });
+    vscode.postMessage({ type: 'searchSkills', query: '', kind: currentKind });
     vscode.postMessage({ type: 'ownedSkills' });
   }
+  function showMktList() { mktListEl.style.display = 'block'; mktDetailEl.style.display = 'none'; }
+  function showMktDetail() { mktListEl.style.display = 'none'; mktDetailEl.style.display = 'block'; }
   document.getElementById('mktSearchBtn').addEventListener('click', runMarketSearch);
+  document.getElementById('backToList').addEventListener('click', showMktList);
   mktSearch.addEventListener('keydown', (e) => {
     if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Enter') { e.preventDefault(); runMarketSearch(); }
   });
+  // Skills / Workflows tabs — switching re-runs the search filtered to that kind.
+  for (const tab of document.querySelectorAll('.mktTab')) {
+    tab.addEventListener('click', () => {
+      currentKind = tab.getAttribute('data-kind');
+      for (const t of document.querySelectorAll('.mktTab')) t.classList.toggle('on', t === tab);
+      runMarketSearch();
+    });
+  }
+  function openDetail(mint) {
+    showMktDetail();
+    mktDetailBody.innerHTML = '<div class="mktEmpty">Loading…</div>';
+    vscode.postMessage({ type: 'getSkillDetail', mint });
+  }
+  // Render the detail sub-view from a {card, skillText, requiredCards} payload. For a
+  // workflow, each requiredCard is a clickable row that opens ITS detail (re-uses the
+  // same view, so you can drill skill→workflow→skill without leaving the market).
+  function renderDetail(detail) {
+    const c = (detail && detail.card) || {};
+    const owned = ownedSkills.indexOf(c.name) >= 0;
+    mktDetailBody.innerHTML = '';
+    // head: icon + name + kind
+    const head = document.createElement('div'); head.className = 'dt-head';
+    const img = document.createElement('div'); img.className = 'dt-img';
+    img.innerHTML = '<span class="wand">' + ${JSON.stringify(WAND_SVG)} + '</span>';
+    const htxt = document.createElement('div');
+    const kind = document.createElement('div'); kind.className = 'dt-kind'; kind.textContent = (c.type || 'skill');
+    const nm = document.createElement('div'); nm.className = 'dt-name'; nm.textContent = c.name || c.id || '';
+    htxt.appendChild(kind); htxt.appendChild(nm);
+    head.appendChild(img); head.appendChild(htxt);
+    mktDetailBody.appendChild(head);
+    // description
+    if (c.description) { const d = document.createElement('div'); d.className = 'dt-desc'; d.textContent = c.description; mktDetailBody.appendChild(d); }
+    // meta: category + hashtags + supply
+    const meta = document.createElement('div'); meta.className = 'dt-meta';
+    const addTag = (t) => { const s = document.createElement('span'); s.className = 'dt-tag'; s.textContent = t; meta.appendChild(s); };
+    if (c.category) addTag(c.category);
+    for (const h of (c.hashtags || [])) addTag('#' + h);
+    if (typeof c.supply === 'number') addTag(c.supply + '\\u00d7 owned');
+    if (meta.childElementCount) mktDetailBody.appendChild(meta);
+    // buy
+    const buy = document.createElement('button'); buy.className = 'dt-buy';
+    buy.textContent = owned ? 'Owned' : 'Buy'; buy.disabled = owned;
+    buy.addEventListener('click', () => {
+      buy.disabled = true; buy.textContent = 'Buying…';
+      vscode.postMessage({ type: 'buySkill', skillId: c.id, creatorWallet: c.creator });
+    });
+    mktDetailBody.appendChild(buy);
+    // required skills (workflow only) — clickable rows
+    const reqs = (detail && detail.requiredCards) || [];
+    if (reqs.length) {
+      const sec = document.createElement('div'); sec.className = 'dt-sec'; sec.textContent = 'Required skills'; mktDetailBody.appendChild(sec);
+      for (const rc of reqs) {
+        const row = document.createElement('div'); row.className = 'dt-req';
+        const w = document.createElement('span'); w.className = 'wand'; w.style.width = '14px'; w.style.color = 'var(--an-green)'; w.innerHTML = ${JSON.stringify(WAND_SVG)};
+        const rn = document.createElement('span'); rn.className = 'rq-name'; rn.textContent = rc.name || rc.id;
+        const ar = document.createElement('span'); ar.className = 'rq-arrow'; ar.textContent = '\\u203a';
+        row.appendChild(w); row.appendChild(rn); row.appendChild(ar);
+        row.addEventListener('click', () => openDetail(rc.id)); // drill into that skill
+        mktDetailBody.appendChild(row);
+      }
+    }
+    // body (skillText)
+    if (detail && detail.skillText) {
+      const sec = document.createElement('div'); sec.className = 'dt-sec'; sec.textContent = (c.type === 'workflow' ? 'Workflow' : 'Skill') + ' text'; mktDetailBody.appendChild(sec);
+      const body = document.createElement('div'); body.className = 'dt-body'; body.textContent = detail.skillText; mktDetailBody.appendChild(body);
+    }
+  }
   function renderMarketResults(results) {
     results = results || [];
     mktResults.innerHTML = '';
@@ -1574,11 +1696,13 @@ export function chatHtml(): string {
       const nm = document.createElement('div'); nm.className = 'mc-name'; nm.textContent = r.name || r.id;
       const ds = document.createElement('div'); ds.className = 'mc-desc'; ds.textContent = r.description || '';
       main.appendChild(nm); main.appendChild(ds);
+      main.addEventListener('click', () => openDetail(r.id)); // card body → detail view
       const sup = document.createElement('span'); sup.className = 'mc-sup';
       sup.textContent = (typeof r.supply === 'number') ? (r.supply + '\\u00d7') : '';
       const buy = document.createElement('button'); buy.className = 'mc-buy';
       buy.textContent = owned ? 'Owned' : 'Buy'; buy.disabled = owned;
-      buy.addEventListener('click', () => {
+      buy.addEventListener('click', (e) => {
+        e.stopPropagation(); // don't trigger the card-body detail open
         buy.disabled = true; buy.textContent = 'Buying…';
         vscode.postMessage({ type: 'buySkill', skillId: r.id, creatorWallet: r.creator });
       });
@@ -1761,6 +1885,7 @@ export function chatHtml(): string {
       mktResults.innerHTML = '<div class="mktEmpty">' + msg + '</div>';
       skillResults.innerHTML = '<div class="shopEmpty">' + msg + '</div>';
     }
+    else if (m.type === 'skillDetail') renderDetail(m.detail);
     else if (m.type === 'ownedSkills') {
       setSkills(m.names || []);                // updates ownedSkills used by both renders
       if (panels.market.style.display !== 'none') renderMarketResults(lastMarketResults); // refresh Owned badges

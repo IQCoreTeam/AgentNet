@@ -45,7 +45,8 @@ export interface ChatEnv {
   // are host-held (the extension owns them), so they're delegated like wallet/cloud.
   // buySkill installs the bought skill's SKILL.md into the runtime skills dir as part
   // of the buy (the host calls SkillSync.installBought), returning the installed slug.
-  searchSkills?(query: string): Promise<SkillCard[]>;
+  searchSkills?(query: string, kind?: "skill" | "workflow"): Promise<SkillCard[]>;
+  getSkillDetail?(mint: string): Promise<import("./marketMessages.js").SkillDetail>;
   buySkill?(skillId: string, creatorWallet?: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
   ownedSkills?(): Promise<string[]>; // skill names already installed (panel fill)
   // install every owned skill NFT into the runtime skills dir (session start + after a
@@ -258,10 +259,19 @@ export function createChatSession(
       case "searchSkills": {
         const req = m as Extract<MarketRequest, { type: "searchSkills" }>;
         try {
-          const results = env.searchSkills ? await env.searchSkills(req.query ?? "") : [];
+          const results = env.searchSkills ? await env.searchSkills(req.query ?? "", req.kind) : [];
           sendMarket({ type: "searchResults", results });
         } catch (e) {
           // a chain/RPC failure must NOT leave the UI stuck on "Searching…": surface it.
+          sendMarket({ type: "searchError", message: e instanceof Error ? e.message : String(e) });
+        }
+        break;
+      }
+      case "getSkillDetail": {
+        const req = m as Extract<MarketRequest, { type: "getSkillDetail" }>;
+        try {
+          if (env.getSkillDetail) sendMarket({ type: "skillDetail", detail: await env.getSkillDetail(req.mint) });
+        } catch (e) {
           sendMarket({ type: "searchError", message: e instanceof Error ? e.message : String(e) });
         }
         break;
