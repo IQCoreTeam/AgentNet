@@ -56,7 +56,7 @@ async function writeConfig(cfg: StorageConfig): Promise<void> {
 
 /** True once a storage backend has been chosen on this device. */
 export async function isInitialized(): Promise<boolean> {
-  return (await readConfig()) !== null;
+  return (await readConfig())?.kind != null;
 }
 
 // First-run setup: record the chosen backend and (for gdrive) run Google sign-in.
