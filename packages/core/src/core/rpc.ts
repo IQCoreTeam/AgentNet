@@ -32,13 +32,25 @@ export function heliusUrl(apiKey: string, network: Network = getNetwork()): stri
   return `https://${network}.helius-rpc.com/?api-key=${apiKey}`;
 }
 
+// Pull the bare key out of whatever the user pasted. People often paste the whole
+// Helius RPC URL (https://…helius-rpc.com/?api-key=KEY) instead of just the key — accept
+// both: if it's a URL, take the api-key query param; otherwise it's already the key.
+export function normalizeHeliusKey(input: string): string {
+  const s = input.trim();
+  if (/^https?:\/\//i.test(s)) {
+    const m = s.match(/[?&]api-key=([^&\s]+)/i);
+    if (m) return m[1];
+  }
+  return s;
+}
+
 // Save the user's Helius key (secret, 0o600, never synced) — same shape/perm as the
 // google OAuth token. Pass ""/null to clear it (fall back to env/default). Network is
 // NOT stored — it always follows the central NETWORK, so a devnet->mainnet flip needs
-// no per-key change.
+// no per-key change. Input is normalized so pasting the full RPC URL also works.
 export async function saveHeliusKey(apiKey: string): Promise<void> {
   await ensureDir(tokensDir());
-  const data: StoredKey = { api_key: apiKey };
+  const data: StoredKey = { api_key: normalizeHeliusKey(apiKey) };
   await writeFile(tokenFile(PROVIDER), JSON.stringify(data), { mode: 0o600 });
 }
 

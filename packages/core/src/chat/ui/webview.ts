@@ -1719,6 +1719,12 @@ export function chatHtml(): string {
       renderSkillResults(m.results);           // the small skills-panel shop
       renderMarketResults(m.results);          // the full Markets view
     }
+    else if (m.type === 'searchError') {
+      // don't hang on "Searching…" — show the real reason in both views
+      const msg = 'Search failed: ' + escapeHtml(m.message || 'unknown');
+      mktResults.innerHTML = '<div class="mktEmpty">' + msg + '</div>';
+      skillResults.innerHTML = '<div class="shopEmpty">' + msg + '</div>';
+    }
     else if (m.type === 'ownedSkills') {
       setSkills(m.names || []);                // updates ownedSkills used by both renders
       if (panels.market.style.display !== 'none') renderMarketResults(lastMarketResults); // refresh Owned badges

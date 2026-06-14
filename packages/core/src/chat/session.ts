@@ -246,8 +246,13 @@ export function createChatSession(
       // is caught here, not at runtime on some surface.
       case "searchSkills": {
         const req = m as Extract<MarketRequest, { type: "searchSkills" }>;
-        const results = env.searchSkills ? await env.searchSkills(req.query ?? "") : [];
-        sendMarket({ type: "searchResults", results });
+        try {
+          const results = env.searchSkills ? await env.searchSkills(req.query ?? "") : [];
+          sendMarket({ type: "searchResults", results });
+        } catch (e) {
+          // a chain/RPC failure must NOT leave the UI stuck on "Searching…": surface it.
+          sendMarket({ type: "searchError", message: e instanceof Error ? e.message : String(e) });
+        }
         break;
       }
       case "buySkill": {

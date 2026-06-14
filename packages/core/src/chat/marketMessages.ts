@@ -44,6 +44,7 @@ export type MarketRequest =
 // ── host -> UI (responses / pushes) ─────────────────────────────────────────
 export type MarketEvent =
   | { type: "searchResults"; results: SkillCard[] }
+  | { type: "searchError"; message: string } // search threw (RPC/DAS failure) — show why, don't hang
   | { type: "buyResult"; skillId: string; ok: boolean; slug?: string; error?: string }
   | { type: "ownedSkills"; names: string[] } // installed skill names (panel fill)
   | { type: "skillActive"; name: string } // a skill fired -> "Casting <name>" cue

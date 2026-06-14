@@ -205,10 +205,10 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
     setHeliusKey: async () => {
       const key = await vscode.window.showInputBox({
         title: "Helius API key",
-        prompt: "Paste your Helius API key (free devnet tier works). Stored locally, never synced.",
+        prompt: "Paste your Helius API key OR the full Helius RPC URL. Stored locally, never synced.",
         password: true,
         ignoreFocusOut: true,
-        placeHolder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+        placeHolder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx  (or https://…helius-rpc.com/?api-key=…)",
       });
       if (key && key.trim()) await saveHeliusKey(key.trim());
     },
