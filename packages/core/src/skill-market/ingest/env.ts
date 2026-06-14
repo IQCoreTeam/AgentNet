@@ -15,6 +15,7 @@ import { searchSkills } from "../../search/index.js";
 import { dasSource } from "../../core/skillSource.js";
 import { buySkill } from "../../nft/skill.js";
 import { claudeSkillsDir } from "../../core/paths.js";
+import type { SkillCard } from "../../chat/marketMessages.js";
 import { SkillSync } from "./index.js";
 
 // The marketplace half of a surface's ChatEnv. Spread it into the env object the
@@ -26,7 +27,7 @@ export function marketplaceEnv(wallet: Wallet) {
   const skills = new SkillSync(conn);
 
   return {
-    async searchSkills(query: string) {
+    async searchSkills(query: string): Promise<SkillCard[]> {
       const found = await searchSkills(conn, { source: dasSource, filters: { keyword: query } });
       return found.map((s) => ({
         id: s.id, name: s.name, description: s.description, supply: s.supply, creator: s.creator,
