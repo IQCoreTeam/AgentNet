@@ -7,6 +7,7 @@
 import { spawnCli } from "./spawn.js";
 import { SessionStore } from "../account/store.js";
 import { prepareResume } from "./inject/index.js";
+import { MemorySync } from "../memory/index.js";
 import type { ApprovalChannel } from "./approval/channel.js";
 import type {
   AgentRuntime,
@@ -25,6 +26,9 @@ export function createRuntime(
   approval?: ApprovalChannel,
 ): AgentRuntime {
   const store = new SessionStore(wallet, storage);
+  // Shared memory (issue #18): same wallet + storage as sessions. Injected into the
+  // CLI's native memory files before it starts; captured back from Claude after turns.
+  const memory = new MemorySync(wallet, storage);
 
   return {
     async startSession(opts): Promise<SessionHandle> {
@@ -36,6 +40,15 @@ export function createRuntime(
       const nativeId = resuming
         ? await prepareResume(store, opts.cli, opts.cwd, opts.sessionId!)
         : undefined;
+
+      // Inject the project's shared memory into this CLI's native files (Claude's
+      // memory dir / Codex's AGENTS.md) BEFORE it starts so it loads this run. Best
+      // effort — a memory/storage hiccup must not block starting the session.
+      try {
+        await memory.injectAtStart(opts.cli, opts.cwd);
+      } catch (e) {
+        console.warn("[memory] inject failed:", e);
+      }
 
       // per-session approval channel (each panel passes its own) wins; fall back to
       // the runtime-level default channel.
@@ -80,6 +93,13 @@ export function createRuntime(
         void flush().then(() => {
           for (const cb of turnCbs) cb();
         });
+        // Capture any memory Claude wrote this turn back to Drive (stock Codex never
+        // writes memory, so only Claude is captured). Fire-and-forget; best effort.
+        if (opts.cli === "claude") {
+          void memory.captureFromClaude(opts.cwd).catch((e) =>
+            console.warn("[memory] capture failed:", e),
+          );
+        }
       });
 
       // Surface failures instead of going silent: an engine error shows as a tool
