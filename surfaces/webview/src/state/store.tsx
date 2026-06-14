@@ -204,7 +204,7 @@ function reducer(state: State, ev: Action): State {
       return { ...state, storage: { info: ev.info, options: ev.options, googleCredsConfigured: ev.googleCredsConfigured } };
     case "googleCredsStatus":
       return ev.status === "saved"
-        ? { ...state, googleCredsError: null, storage: state.storage ? { ...state.storage, googleCredsConfigured: true } : state.storage }
+        ? { ...state, googleCredsError: null, storage: { ...(state.storage ?? { info: null, options: [] }), googleCredsConfigured: true } }
         : { ...state, googleCredsError: ev.error ?? "Failed to save credentials." };
     case "cloudSync":
       return { ...state, cloudSync: ev.status };
