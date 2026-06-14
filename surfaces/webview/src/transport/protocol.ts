@@ -76,6 +76,9 @@ export type ClientMessage =
   | { type: "connectCloud"; kind: string; location?: string; authHeader?: string }
   | { type: "disconnectCloud" }
   | { type: "openCloud"; kind: string; location?: string }
+  // passive skill-shopping toggle (issue #21)
+  | { type: "getSkillShopping" }
+  | { type: "setSkillShopping"; on: boolean }
   | { type: "approvalDecision"; id: string; outcome: ApprovalOutcome; reason?: string; answers?: Record<string, string> }
   // onboarding-only:
   | { type: "connectWallet"; address: string; signature: number[] }
@@ -101,6 +104,7 @@ export type ServerMessage =
   | { type: "storage"; info: unknown; options: unknown }
   | { type: "cloudSync"; status: { ok: boolean; error?: string } | null }
   | { type: "wallet"; address: string | null }
+  | { type: "skillShopping"; on: boolean }
   | { type: "approval"; req: ApprovalRequest }
   // onboarding-only:
   | { type: "init"; defaultPath: string | null; cloudKind: string | null }

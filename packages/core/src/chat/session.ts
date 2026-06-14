@@ -50,6 +50,11 @@ export interface ChatEnv {
   // install every owned skill NFT into the runtime skills dir (session start + after a
   // buy), so the agent always has its owned skills present + discoverable. Returns slugs.
   loadOwnedSkills?(): Promise<string[]>;
+  // passive skill-shopping toggle (issue #21): ON = agent shops for missing capabilities
+  // (verify → confirm → buy); OFF = owned-only, never buys. Persisted in config.json by
+  // the host (login.ts getSkillShopping/setSkillShopping). Default ON.
+  getSkillShopping?(): Promise<boolean>;
+  setSkillShopping?(on: boolean): Promise<void>;
   // OPTIONAL multi-tab guard: vscode can open the same session in two panels (two
   // tabs writing one log races), so it claims a session before opening and yields
   // false to abort if another panel already holds it. One-socket surfaces (server,
@@ -139,6 +144,12 @@ export function createChatSession(
     transport.send({ type: "storage", info, options });
   }
 
+  async function pushSkillShopping() {
+    // default ON when the host doesn't offer the toggle (matches login.ts default).
+    const on = env.getSkillShopping ? await env.getSkillShopping() : true;
+    transport.send({ type: "skillShopping", on });
+  }
+
   // Process messages STRICTLY in order — each handler runs to completion before the
   // next starts. Without this, two async handlers race: e.g. "ready" (which awaits
   // open()) and a fast "send" overlap, and ready's open() stops the handle send just
@@ -160,7 +171,7 @@ export function createChatSession(
   async function handle(m: any) {
     switch (m?.type) {
       case "ready":
-        await pushSessions(); await pushStorage(); await open();
+        await pushSessions(); await pushStorage(); await pushSkillShopping(); await open();
         // install the wallet's owned skills so they're present + discoverable this
         // session (issue #17). Fire-and-forget: a chain hiccup must not delay the chat;
         // refresh the panel once it lands.
@@ -247,6 +258,14 @@ export function createChatSession(
       }
       case "ownedSkills":
         transport.send({ type: "ownedSkills", names: env.ownedSkills ? await env.ownedSkills() : [] });
+        break;
+      // ── passive skill-shopping toggle (issue #21) ──
+      case "getSkillShopping":
+        await pushSkillShopping();
+        break;
+      case "setSkillShopping":
+        await env.setSkillShopping?.(!!m.on);
+        await pushSkillShopping(); // echo the persisted value back so the switch reflects truth
         break;
     }
   }

@@ -67,6 +67,12 @@ export interface SpawnOpts {
   sessionId?: string; // NATIVE resume id (inject/prepareResume resolved it already)
   model?: string;
   approval?: ApprovalChannel; // how tool approvals get decided; default = auto-allow
+  // Passive skill-shopping (issue #21). Claude-only for now (Codex MCP via TOML deferred).
+  // Built by the runtime per spawn when the toggle is ON: the marketplace SDK MCP server,
+  // the tool ids to allow, and the workflow prose appended to the system prompt.
+  mcpServers?: Record<string, unknown>;
+  allowedTools?: string[];
+  appendSystemPrompt?: string;
 }
 
 export function spawnCli(opts: SpawnOpts): Engine {
@@ -151,6 +157,18 @@ function claudeEngine(opts: SpawnOpts): Engine {
       // need the SDK's own native binary on its (unresolvable) bundle-relative path.
       pathToClaudeCodeExecutable: resolveExecutable("claude"),
       stderr: (d: string) => { if (d.trim()) cb.emitErr(`[claude] ${d.trim()}`); },
+      // Passive skill-shopping wiring (issue #21). Only present when the toggle is ON;
+      // when ON, the runtime hands us the marketplace MCP server + its allowed tool ids,
+      // and appends the workflow prose so the agent shops for missing capabilities.
+      ...(opts.appendSystemPrompt
+        ? { systemPrompt: { type: "preset" as const, preset: "claude_code" as const, append: opts.appendSystemPrompt } }
+        : {}),
+      ...(opts.mcpServers ? { mcpServers: opts.mcpServers as never } : {}),
+      ...(opts.allowedTools ? { allowedTools: opts.allowedTools } : {}),
+      // NOTE: settingSources is deliberately omitted — the SDK then loads ALL sources
+      // (user/project/local), which is what lets skills in the user dir (~/.claude/skills,
+      // where owned NFTs + the passive workflow are installed) be discovered. Passing
+      // settingSources:['project'] would DROP the user dir and break skill discovery.
     },
   });
 

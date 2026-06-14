@@ -453,6 +453,21 @@ export function chatHtml(): string {
   #skillsBtn.casting { color: var(--an-green); }
   .skNote { margin-top: 10px; font-size: 0.76em; opacity: 0.5; line-height: 1.5; }
 
+  /* passive skill-shopping toggle row (issue #21) */
+  #shopToggleRow { display: flex; align-items: center; gap: 7px; margin-top: 10px;
+                   padding-top: 9px; border-top: 1px solid var(--an-line); font-size: 0.82em; }
+  #shopToggleLabel { font-weight: 600; }
+  .shopToggleHint { opacity: 0.5; font-size: 0.92em; flex: 1; min-width: 0;
+                    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #shopToggle { position: relative; width: 32px; height: 18px; flex: none; border-radius: 999px;
+                background: var(--an-bg-2); border: 1px solid var(--an-line); cursor: pointer; padding: 0;
+                transition: background 0.15s, border-color 0.15s; }
+  #shopToggle .knob { position: absolute; top: 1px; left: 1px; width: 14px; height: 14px;
+                      border-radius: 50%; background: var(--an-fg, currentColor); opacity: 0.6;
+                      transition: left 0.15s, opacity 0.15s; }
+  #shopToggle.on { background: var(--an-green-dim); border-color: var(--an-green-line); }
+  #shopToggle.on .knob { left: 15px; background: var(--an-green); opacity: 1; }
+
   /* marketplace shop inside the skills panel */
   #skillShop { margin-top: 10px; }
   #skillShop .shopRow { display: flex; gap: 6px; }
@@ -612,6 +627,13 @@ export function chatHtml(): string {
         </div>
         <!-- marketplace: search the on-chain catalog, buy a soulbound skill, and it's
              installed into the runtime's skills dir (discovered next session). -->
+        <!-- passive skill-shopping toggle (issue #21): ON = the agent shops for a
+             missing capability (verify → confirm → buy); OFF = owned-only, never buys. -->
+        <div id="shopToggleRow">
+          <label id="shopToggleLabel" for="shopToggle">Shop for me</label>
+          <span class="shopToggleHint">agent buys skills it needs (with your OK)</span>
+          <button id="shopToggle" role="switch" aria-checked="true" class="on" title="Toggle passive skill-shopping"><span class="knob"></span></button>
+        </div>
         <div id="skillShop">
           <div class="shopRow">
             <input id="skillSearch" type="text" placeholder="Search skills to buy…" />
@@ -1426,6 +1448,19 @@ export function chatHtml(): string {
   }
   vscode.postMessage({ type: 'ownedSkills' }); // hydrate the panel on load
 
+  // ---- passive skill-shopping toggle (issue #21) ----
+  const shopToggle = document.getElementById('shopToggle');
+  function setShopToggle(on) {
+    shopToggle.classList.toggle('on', !!on);
+    shopToggle.setAttribute('aria-checked', on ? 'true' : 'false');
+  }
+  shopToggle.addEventListener('click', () => {
+    const next = !shopToggle.classList.contains('on');
+    setShopToggle(next); // optimistic; the host echoes the persisted value back
+    vscode.postMessage({ type: 'setSkillShopping', on: next });
+  });
+  vscode.postMessage({ type: 'getSkillShopping' }); // hydrate the switch on load
+
   // ---- activity marquee: advertise what the agent is doing RIGHT NOW ----
   // Map a tool action to a flashy game-verb + object. The verb is picked from a small
   // pool (varied per call so it feels alive); the object is the skill name.
@@ -1553,6 +1588,7 @@ export function chatHtml(): string {
     else if (m.type === 'skillActive') flashSkill(m.name); // a real skill fired (was /mockskill)
     else if (m.type === 'searchResults') renderSkillResults(m.results);
     else if (m.type === 'ownedSkills') setSkills(m.names || []);
+    else if (m.type === 'skillShopping') setShopToggle(m.on);
     else if (m.type === 'buyResult') {
       if (m.ok) { runSkillSearch(); } // refresh the list so the bought item shows "Owned"
       else { skillResults.innerHTML = '<div class="shopEmpty">Buy failed: ' + escapeHtml(m.error || 'unknown') + '</div>'; }

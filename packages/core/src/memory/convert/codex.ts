@@ -27,18 +27,30 @@ export function renderCodexBlock(mem: CanonicalMemory): string {
   return `${START}\n${head}\n\n${body}${END}\n`;
 }
 
-// Splice the managed block into existing AGENTS.md text: replace an existing block,
-// else append one. Content outside the markers is preserved verbatim.
-export function spliceCodexBlock(existing: string, block: string): string {
-  const s = existing.indexOf(START);
-  const e = existing.indexOf(END);
+// Splice a marker-delimited block into existing text: replace an existing block,
+// else append one. Content outside the markers is preserved verbatim. Generic over
+// the marker pair so other managed blocks (e.g. the skills directive, issue #21) can
+// coexist in the same AGENTS.md with their own distinct markers.
+export function spliceMarkedBlock(
+  existing: string,
+  block: string,
+  start: string,
+  end: string,
+): string {
+  const s = existing.indexOf(start);
+  const e = existing.indexOf(end);
   if (s >= 0 && e > s) {
     const before = existing.slice(0, s);
-    const after = existing.slice(e + END.length).replace(/^\n/, "");
+    const after = existing.slice(e + end.length).replace(/^\n/, "");
     return `${before}${block}${after}`;
   }
   if (existing.trim() === "") return block;
   return `${existing.replace(/\n*$/, "")}\n\n${block}`;
+}
+
+// Splice the managed memory block into existing AGENTS.md text.
+export function spliceCodexBlock(existing: string, block: string): string {
+  return spliceMarkedBlock(existing, block, START, END);
 }
 
 // Write canonical into the cwd's AGENTS.md, preserving any human content.

@@ -43,7 +43,7 @@ export type { PublishSkillInput, BuySkillInput } from "./nft/skill.js";
 export type { SkillMintMetadata } from "./nft/token2022.js";
 export { resolveMinter, tryMinterPubkey, resetMinterCache } from "./nft/minter.js";
 // notes (reviews)
-export { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes, getBalance } from "./notes/index.js";
+export { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes, getBalance, getSolBalance, canAffordSkill, TX_FEE_BUFFER_LAMPORTS } from "./notes/index.js";
 export type { PostNoteInput, ReadNotesOptions, PostAgentNoteInput } from "./notes/index.js";
 // active-skill injection (install a bought skill's SKILL.md into a runtime's skills dir)
 export { SkillSync } from "./skill-market/ingest/index.js";
@@ -58,7 +58,16 @@ export type { SkillSource } from "./core/skillSource.js";
 export { getReputation, getLeaderboard } from "./reputation/index.js";
 export type { Reputation } from "./core/types.js";
 // skill-market MCP surface (autonomous buy)
-export { createAgentMcpServer, getAgentNetTools, handleToolCall } from "./skill-market/index.js";
+export { createAgentMcpServer, createAgentSdkMcpServer, getAgentNetTools, handleToolCall, newVerifyGate } from "./skill-market/index.js";
+export type { VerifyGate } from "./skill-market/index.js";
+export {
+  installPassiveSkill,
+  writeCodexSkills,
+  passiveWorkflowProse,
+  renderSkillsBlock,
+  PASSIVE_SKILL_SLUG,
+} from "./skill-market/passive.js";
+export type { PassiveMode } from "./skill-market/passive.js";
 
 export { createRuntime } from "./runtime/index.js";
 export { detectCli } from "./runtime/detect.js";
@@ -101,6 +110,8 @@ export {
   switchStorage,
   currentStorageKind,
   getStorageInfo,
+  getSkillShopping,
+  setSkillShopping,
 } from "./account/login.js";
 export { STORAGE_OPTIONS } from "./account/storage/adapter.js";
 export type { StorageConfig, StorageKind } from "./account/storage/adapter.js";
