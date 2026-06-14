@@ -180,6 +180,15 @@ What this unification gives for free:
 - **iqfee = IQ revenue** — a paid purchase auto-routes a portion to the treasury.
 - **Popularity for free** — `supply` = number of owners; a native token field, no counter.
 
+> **Built since (PR #22):** the fee is now concrete and on-chain. `FEE_BPS` =
+> **6.9%**, taken **out of the price** (treasury gets 6.9%, the creator nets the
+> rest — not added on top). The treasury is a **fixed program constant**
+> (`constants.rs::FEE_TREASURY`, mirrored in `core/seed.ts` `FEE_TREASURY` /
+> `getFeeTreasury()`); the gate program **rejects any other treasury account**, so
+> the split is trustless. `buyItemIx` injects the treasury account automatically
+> (slot after `creator`) — callers like `buySkill` pass nothing extra. Free mints
+> (price 0) skip the transfer entirely, so they pay no fee.
+
 ---
 
 ## 5. Alternatives (heavier — why not)
@@ -232,7 +241,7 @@ Together: **wallet = abilities (on-chain) + memory (off-chain), portable across 
   `GroupMemberPointer`/`TokenGroupMember`; umbrella `TokenGroup`.
 - **Trait schema** — exact category list + hashtag rules (feeds [`search.md`](search.md)).
 - **Price model** — creator sets per-skill price (0 = free); fixed vs free-set.
-- **iqfee split** — IQ treasury share % on a paid purchase; whether free mints pay a minimal fee.
+- ~~**iqfee split**~~ — **decided + built (PR #22):** 6.9% of the price to a fixed program-constant treasury, fee taken out of the price; free (price-0) mints pay nothing. See §4.
 - **Popularity formula + sybil** — total `supply` vs paid-only weighting; defend against
   free-mint bots (make free mints cost something).
 - **Famous-agent score** — supply sum vs followers vs cumulative revenue.

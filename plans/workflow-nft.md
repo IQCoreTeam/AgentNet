@@ -199,6 +199,8 @@ flowchart TB
 - **Recipe format** — what the code-in workflow text actually encodes (ordered steps? a
   graph? which skill at each step).
 - **Versioning** — if a required skill updates, does the workflow break / need a re-mint?
-- **Price model** — free unlock vs paid (creator earns); same `iqfee` question as skills.
+- **Price model** — free unlock vs paid (creator earns). The fee is **settled (PR #22)**:
+  unlock uses the same `buyItemIx`, so a paid unlock takes the same **6.9% out-of-price**
+  cut to the fixed treasury (`skill-nft-structure.md` §4). Open part is only free-vs-paid per workflow.
 - **Nested workflows** — can a workflow require another workflow (not just skills)? Keep
   flat for v1 unless needed.
