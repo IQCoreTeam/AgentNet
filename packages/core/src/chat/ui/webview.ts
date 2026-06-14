@@ -91,6 +91,12 @@ export function chatHtml(): string {
                font-size: 0.78em; cursor: pointer; transition: all 0.12s; }
   #newTabBtn:hover { opacity: 1; color: var(--an-green); border-color: var(--an-green-line);
                      background: var(--an-green-dim); }
+  /* Markets: a green-tinted pill next to the wallet — the entry to the marketplace view */
+  #marketsBtn { margin-left: 8px; background: var(--an-green-dim); color: var(--an-green);
+                border: 1px solid var(--an-green-line); border-radius: 999px; padding: 3px 14px;
+                font-size: 0.78em; font-weight: 600; cursor: pointer; transition: all 0.12s; }
+  #marketsBtn:hover { background: color-mix(in srgb, var(--an-green) 22%, transparent); }
+  #marketsBtn.on { background: var(--an-green); color: #07140d; }
   /* storage block inside the wallet dropdown (moved from the top bar) */
   .wmSection { padding: 4px 8px 8px; border-bottom: 1px solid var(--an-line-soft); margin-bottom: 4px; }
   .wmLabel { font-size: 0.68em; opacity: 0.5; text-transform: uppercase; letter-spacing: 0.06em;
@@ -473,6 +479,31 @@ export function chatHtml(): string {
   .shopItem .si-buy[disabled] { opacity: 0.5; cursor: default; }
   #skillResults .shopEmpty { opacity: 0.5; font-size: 0.8em; padding: 4px 2px; }
 
+  /* Markets full-screen view */
+  .mktHead { margin-bottom: 14px; }
+  .mktTitle { display: flex; align-items: center; gap: 8px; font-size: 1.15em; font-weight: 700; }
+  .mktTitle .wand { width: 18px; height: 18px; color: var(--an-green); }
+  .mktSearchRow { display: flex; gap: 8px; margin-bottom: 16px; }
+  #mktSearch { flex: 1; min-width: 0; background: var(--an-bg); border: 1px solid var(--an-line);
+               border-radius: var(--an-radius); color: inherit; padding: 9px 12px; font-size: 0.92em; outline: none; }
+  #mktSearch:focus { border-color: var(--an-green-line); }
+  #mktSearchBtn { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
+                  border-radius: var(--an-radius); padding: 9px 16px; font-size: 0.92em; font-weight: 600; cursor: pointer; }
+  .mktGrid { display: flex; flex-direction: column; gap: 10px; }
+  .mktCard { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--an-line);
+             border-radius: var(--an-radius); background: var(--an-bg); }
+  .mktCard .mc-img { width: 40px; height: 40px; border-radius: 8px; background: var(--an-green-dim);
+                     display: flex; align-items: center; justify-content: center; flex: none; }
+  .mktCard .mc-img .wand { width: 20px; height: 20px; color: var(--an-green); }
+  .mktCard .mc-main { min-width: 0; flex: 1; }
+  .mktCard .mc-name { font-weight: 600; }
+  .mktCard .mc-desc { opacity: 0.6; font-size: 0.88em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mktCard .mc-sup { opacity: 0.5; font-size: 0.85em; white-space: nowrap; }
+  .mktCard .mc-buy { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
+                     border-radius: var(--an-radius); padding: 6px 14px; cursor: pointer; white-space: nowrap; font-weight: 600; }
+  .mktCard .mc-buy[disabled] { opacity: 0.5; cursor: default; }
+  .mktGrid .mktEmpty { opacity: 0.5; font-size: 0.9em; padding: 8px 2px; }
+
   /* skill marquee — ONLY shows when an equipped skill fires ("Casting <skill>").
      Plain tool work isn't shown here (it's already in the chat timeline). Green with
      a breathing glow so a skill firing feels like the agent wielding its power. */
@@ -550,6 +581,7 @@ export function chatHtml(): string {
       <span id="wName">My Wallet</span>
       <span class="caret">▾</span>
     </button>
+    <button id="marketsBtn" title="Skill marketplace">Markets</button>
     <div class="spacer"></div>
     <button id="histBtn" title="Recent chats">↻ History <span class="caret">▾</span></button>
     <button id="newTabBtn" title="Open another chat in a new tab">+</button>
@@ -677,6 +709,23 @@ export function chatHtml(): string {
       </div>
       <button class="danger" id="disconnectWalletBtn">Disconnect wallet</button>
       <div class="muted small">Disconnecting returns you to the connect screen. Your encrypted local sessions stay on this device.</div>
+    </div>
+  </div>
+
+  <!-- Markets: the full-screen skill marketplace (search → results → buy). Reuses the
+       shared market message contract; the same screens get a mobile design later. -->
+  <div id="marketView" class="panel" style="display:none">
+    <div class="page">
+      <div id="backToChatM" class="muted" style="cursor:pointer;margin-bottom:10px">‹ Back to chat</div>
+      <div class="mktHead">
+        <div class="mktTitle"><span class="wand">${WAND_SVG}</span> Skill Market</div>
+        <div class="muted small">Popular skills first. Buy a skill (soulbound) and your agent equips it.</div>
+      </div>
+      <div class="mktSearchRow">
+        <input id="mktSearch" type="text" placeholder="Search skills…" />
+        <button id="mktSearchBtn">Search</button>
+      </div>
+      <div id="mktResults" class="mktGrid"></div>
     </div>
   </div>
 <!-- markdown libs (marked + dompurify), inlined; expose window.marked / window.DOMPurify -->
@@ -1327,12 +1376,17 @@ export function chatHtml(): string {
   const panels = {
     chat: document.getElementById('chatView'),
     wallet: document.getElementById('walletView'),
+    market: document.getElementById('marketView'),
   };
   function showView(name) {
     for (const k in panels) panels[k].style.display = (k === name) ? 'flex' : 'none';
+    document.getElementById('marketsBtn').classList.toggle('on', name === 'market');
     if (name === 'wallet') vscode.postMessage({ type: 'wallet' }); // refresh address
+    if (name === 'market') openMarket();
   }
   document.getElementById('backToChat').addEventListener('click', () => showView('chat'));
+  document.getElementById('backToChatM').addEventListener('click', () => showView('chat'));
+  document.getElementById('marketsBtn').addEventListener('click', () => { closeMenus(); showView('market'); });
 
   // ---- top-bar dropdowns: History (sessions) + Wallet (agent menu) ----
   const histMenu = document.getElementById('histMenu');
@@ -1425,6 +1479,51 @@ export function chatHtml(): string {
     }
   }
   vscode.postMessage({ type: 'ownedSkills' }); // hydrate the panel on load
+
+  // ---- Markets full-screen view (same contract, marketplace design) ----
+  const mktSearch = document.getElementById('mktSearch');
+  const mktResults = document.getElementById('mktResults');
+  let lastMarketResults = []; // last search results, kept to re-render on owned-list change
+  function runMarketSearch() {
+    mktResults.innerHTML = '<div class="mktEmpty">Searching…</div>';
+    vscode.postMessage({ type: 'searchSkills', query: mktSearch.value.trim() });
+  }
+  function openMarket() {
+    // first open (and re-open) loads the popular list (empty query = supply-sorted)
+    mktResults.innerHTML = '<div class="mktEmpty">Loading…</div>';
+    vscode.postMessage({ type: 'searchSkills', query: '' });
+    vscode.postMessage({ type: 'ownedSkills' });
+  }
+  document.getElementById('mktSearchBtn').addEventListener('click', runMarketSearch);
+  mktSearch.addEventListener('keydown', (e) => {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Enter') { e.preventDefault(); runMarketSearch(); }
+  });
+  function renderMarketResults(results) {
+    results = results || [];
+    mktResults.innerHTML = '';
+    if (!results.length) { mktResults.innerHTML = '<div class="mktEmpty">No skills found.</div>'; return; }
+    for (const r of results) {
+      const owned = ownedSkills.indexOf(r.name) >= 0;
+      const card = document.createElement('div'); card.className = 'mktCard';
+      const img = document.createElement('div'); img.className = 'mc-img';
+      img.innerHTML = '<span class="wand">' + ${JSON.stringify(WAND_SVG)} + '</span>';
+      const main = document.createElement('div'); main.className = 'mc-main';
+      const nm = document.createElement('div'); nm.className = 'mc-name'; nm.textContent = r.name || r.id;
+      const ds = document.createElement('div'); ds.className = 'mc-desc'; ds.textContent = r.description || '';
+      main.appendChild(nm); main.appendChild(ds);
+      const sup = document.createElement('span'); sup.className = 'mc-sup';
+      sup.textContent = (typeof r.supply === 'number') ? (r.supply + '\\u00d7') : '';
+      const buy = document.createElement('button'); buy.className = 'mc-buy';
+      buy.textContent = owned ? 'Owned' : 'Buy'; buy.disabled = owned;
+      buy.addEventListener('click', () => {
+        buy.disabled = true; buy.textContent = 'Buying…';
+        vscode.postMessage({ type: 'buySkill', skillId: r.id, creatorWallet: r.creator });
+      });
+      card.appendChild(img); card.appendChild(main); card.appendChild(sup); card.appendChild(buy);
+      mktResults.appendChild(card);
+    }
+  }
 
   // ---- activity marquee: advertise what the agent is doing RIGHT NOW ----
   // Map a tool action to a flashy game-verb + object. The verb is picked from a small
@@ -1551,11 +1650,23 @@ export function chatHtml(): string {
     else if (m.type === 'clear') { log.innerHTML = ''; approvalDock.innerHTML = ''; syncComposerLock(); streaming = null; openBash = null; tailTurn = null; headTurn = null; hideTyping(); hideActivity(); resetPaging(); syncWatermark(); hideLoading(); }
     else if (m.type === 'turnEnd') { hideTyping(); hideActivity(); }
     else if (m.type === 'skillActive') flashSkill(m.name); // a real skill fired (was /mockskill)
-    else if (m.type === 'searchResults') renderSkillResults(m.results);
-    else if (m.type === 'ownedSkills') setSkills(m.names || []);
+    else if (m.type === 'searchResults') {
+      lastMarketResults = m.results || [];
+      renderSkillResults(m.results);           // the small skills-panel shop
+      renderMarketResults(m.results);          // the full Markets view
+    }
+    else if (m.type === 'ownedSkills') {
+      setSkills(m.names || []);                // updates ownedSkills used by both renders
+      if (panels.market.style.display !== 'none') renderMarketResults(lastMarketResults); // refresh Owned badges
+    }
     else if (m.type === 'buyResult') {
-      if (m.ok) { runSkillSearch(); } // refresh the list so the bought item shows "Owned"
-      else { skillResults.innerHTML = '<div class="shopEmpty">Buy failed: ' + escapeHtml(m.error || 'unknown') + '</div>'; }
+      const marketOpen = panels.market.style.display !== 'none';
+      if (m.ok) { marketOpen ? runMarketSearch() : runSkillSearch(); } // refresh so the bought item shows "Owned"
+      else {
+        const msg = 'Buy failed: ' + escapeHtml(m.error || 'unknown');
+        if (marketOpen) mktResults.innerHTML = '<div class="mktEmpty">' + msg + '</div>';
+        else skillResults.innerHTML = '<div class="shopEmpty">' + msg + '</div>';
+      }
     }
     else if (m.type === 'platform') setTab(m.cli); // extension switched CLI (e.g. on session open)
     else if (m.type === 'storage') { renderStorage(m.info, m.options); renderWalletStorage(); }
