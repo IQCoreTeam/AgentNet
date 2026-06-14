@@ -40,6 +40,13 @@ export interface ChatEnv {
   openCloud?(kind: string, location?: string): Promise<void>;
   walletAddress(): string | null; // for the "My Wallet" view
   storageInfo(): Promise<{ info: unknown; options: unknown }>; // header storage pill
+  // marketplace (issue #17): search + buy need the wallet + a chain connection, which
+  // are host-held (the extension owns them), so they're delegated like wallet/cloud.
+  // buySkill installs the bought skill's SKILL.md into the runtime skills dir as part
+  // of the buy (the host calls SkillSync.installBought), returning the installed slug.
+  searchSkills?(query: string): Promise<Array<{ id: string; name: string; description?: string; supply?: number; creator?: string }>>;
+  buySkill?(skillId: string, creatorWallet?: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
+  ownedSkills?(): Promise<string[]>; // skill names already installed (panel fill)
   // OPTIONAL multi-tab guard: vscode can open the same session in two panels (two
   // tabs writing one log races), so it claims a session before opening and yields
   // false to abort if another panel already holds it. One-socket surfaces (server,
@@ -73,6 +80,9 @@ export function createChatSession(
   // per-message — correct even for a cross-CLI session.
   function wire(forCli: "claude" | "codex", h: SessionHandle) {
     h.onMessage((msg) => { if (cli === forCli) transport.send({ type: "message", msg }); });
+    // a skill firing → the green "Casting <skill>" marquee (issue #17). Transient, not
+    // persisted; only painted for the active tab.
+    h.onSkill((name) => { if (cli === forCli) transport.send({ type: "skillActive", name }); });
     h.onTurnEnd(async () => {
       if (cli === forCli) transport.send({ type: "turnEnd" }); // stop the typing dots
       await pushSessions();
@@ -208,6 +218,21 @@ export function createChatSession(
       case "disconnectWallet": await env.disconnectWallet?.(); break;
       case "openCloud":       await env.openCloud?.(m.kind, m.location); break;
       case "wallet":          transport.send({ type: "wallet", address: env.walletAddress() }); break;
+      // ── marketplace: search → buy → install (delegated to the host) ──
+      case "searchSkills": {
+        const results = env.searchSkills ? await env.searchSkills(String(m.query ?? "")) : [];
+        transport.send({ type: "searchResults", results });
+        break;
+      }
+      case "buySkill": {
+        const res = env.buySkill ? await env.buySkill(String(m.skillId), m.creatorWallet) : { ok: false, error: "buy unavailable" };
+        transport.send({ type: "buyResult", skillId: m.skillId, ...res });
+        if (res.ok) transport.send({ type: "ownedSkills", names: env.ownedSkills ? await env.ownedSkills() : [] });
+        break;
+      }
+      case "ownedSkills":
+        transport.send({ type: "ownedSkills", names: env.ownedSkills ? await env.ownedSkills() : [] });
+        break;
     }
   }
 

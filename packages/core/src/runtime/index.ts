@@ -60,6 +60,7 @@ export function createRuntime(
       let title = "";
       const msgCbs: Array<(m: ChatMessage) => void> = [];
       const turnCbs: Array<() => void> = [];
+      const skillCbs: Array<(name: string) => void> = []; // "Casting <skill>" marquee
       const pending: ChatMessage[] = []; // messages awaiting a known sessionId
 
       const meta = () => ({ sessionId, cli: opts.cli, title, ts: Date.now() });
@@ -89,6 +90,9 @@ export function createRuntime(
         void flush();
       });
       cli.onMessage((m: ChatMessage) => emit(m));
+      // A skill firing is a transient UI cue, not a transcript entry — fan it out to
+      // listeners without persisting it (issue #17).
+      cli.onSkill((name: string) => { for (const cb of skillCbs) cb(name); });
       cli.onTurnEnd(() => {
         void flush().then(() => {
           for (const cb of turnCbs) cb();
@@ -127,6 +131,9 @@ export function createRuntime(
         },
         onTurnEnd(cb) {
           turnCbs.push(cb);
+        },
+        onSkill(cb) {
+          skillCbs.push(cb);
         },
         stop() {
           stopped = true; // mark so the resulting exit isn't reported as a failure

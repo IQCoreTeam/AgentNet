@@ -453,6 +453,26 @@ export function chatHtml(): string {
   #skillsBtn.casting { color: var(--an-green); }
   .skNote { margin-top: 10px; font-size: 0.76em; opacity: 0.5; line-height: 1.5; }
 
+  /* marketplace shop inside the skills panel */
+  #skillShop { margin-top: 10px; }
+  #skillShop .shopRow { display: flex; gap: 6px; }
+  #skillSearch { flex: 1; min-width: 0; background: var(--an-bg); border: 1px solid var(--an-line);
+                 border-radius: var(--an-radius); color: inherit; padding: 5px 9px; font-size: 0.82em; outline: none; }
+  #skillSearch:focus { border-color: var(--an-green-line); }
+  #skillSearchBtn { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
+                    border-radius: var(--an-radius); padding: 5px 11px; font-size: 0.82em; cursor: pointer; }
+  #skillResults { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .shopItem { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--an-line);
+              border-radius: var(--an-radius); font-size: 0.82em; }
+  .shopItem .si-main { min-width: 0; flex: 1; }
+  .shopItem .si-name { font-weight: 600; }
+  .shopItem .si-desc { opacity: 0.6; font-size: 0.92em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .shopItem .si-sup { opacity: 0.5; font-size: 0.92em; white-space: nowrap; }
+  .shopItem .si-buy { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
+                      border-radius: var(--an-radius); padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+  .shopItem .si-buy[disabled] { opacity: 0.5; cursor: default; }
+  #skillResults .shopEmpty { opacity: 0.5; font-size: 0.8em; padding: 4px 2px; }
+
   /* skill marquee — ONLY shows when an equipped skill fires ("Casting <skill>").
      Plain tool work isn't shown here (it's already in the chat timeline). Green with
      a breathing glow so a skill firing feels like the agent wielding its power. */
@@ -590,8 +610,15 @@ export function chatHtml(): string {
           <div class="skSlot empty"></div>
           <div class="skSlot empty"></div>
         </div>
-        <div class="skNote">On-chain skills (Token-2022, soulbound) aren't live yet. When a
-          <code>skill.md</code> is equipped, it appears here as your agent's item.</div>
+        <!-- marketplace: search the on-chain catalog, buy a soulbound skill, and it's
+             installed into the runtime's skills dir (discovered next session). -->
+        <div id="skillShop">
+          <div class="shopRow">
+            <input id="skillSearch" type="text" placeholder="Search skills to buy…" />
+            <button id="skillSearchBtn">Search</button>
+          </div>
+          <div id="skillResults"></div>
+        </div>
       </div>
       <!-- activity marquee: a thin status bar that flashes what the agent is doing
            right now ("Casting cleancode", "Reading auth.ts") with a breathing glow,
@@ -1361,6 +1388,44 @@ export function chatHtml(): string {
   let ownedSkills = [];
   setSkills([]); // idle: grey coming-soon slots
 
+  // ---- marketplace: search → buy → install (host does the chain work) ----
+  const skillSearch = document.getElementById('skillSearch');
+  const skillResults = document.getElementById('skillResults');
+  function runSkillSearch() {
+    const q = skillSearch.value.trim();
+    skillResults.innerHTML = '<div class="shopEmpty">Searching…</div>';
+    vscode.postMessage({ type: 'searchSkills', query: q });
+  }
+  document.getElementById('skillSearchBtn').addEventListener('click', runSkillSearch);
+  skillSearch.addEventListener('keydown', (e) => {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Enter') { e.preventDefault(); runSkillSearch(); }
+  });
+  function renderSkillResults(results) {
+    results = results || [];
+    skillResults.innerHTML = '';
+    if (!results.length) { skillResults.innerHTML = '<div class="shopEmpty">No skills found.</div>'; return; }
+    for (const r of results) {
+      const owned = ownedSkills.indexOf(r.name) >= 0;
+      const item = document.createElement('div'); item.className = 'shopItem';
+      const main = document.createElement('div'); main.className = 'si-main';
+      const nm = document.createElement('div'); nm.className = 'si-name'; nm.textContent = r.name || r.id;
+      const ds = document.createElement('div'); ds.className = 'si-desc'; ds.textContent = r.description || '';
+      main.appendChild(nm); main.appendChild(ds);
+      const sup = document.createElement('span'); sup.className = 'si-sup';
+      sup.textContent = (typeof r.supply === 'number') ? (r.supply + '\\u00d7') : '';
+      const buy = document.createElement('button'); buy.className = 'si-buy';
+      buy.textContent = owned ? 'Owned' : 'Buy'; buy.disabled = owned;
+      buy.addEventListener('click', () => {
+        buy.disabled = true; buy.textContent = 'Buying…';
+        vscode.postMessage({ type: 'buySkill', skillId: r.id, creatorWallet: r.creator });
+      });
+      item.appendChild(main); item.appendChild(sup); item.appendChild(buy);
+      skillResults.appendChild(item);
+    }
+  }
+  vscode.postMessage({ type: 'ownedSkills' }); // hydrate the panel on load
+
   // ---- activity marquee: advertise what the agent is doing RIGHT NOW ----
   // Map a tool action to a flashy game-verb + object. The verb is picked from a small
   // pool (varied per call so it feels alive); the object is the skill name.
@@ -1485,6 +1550,13 @@ export function chatHtml(): string {
     else if (m.type === 'loading') showLoading();
     else if (m.type === 'clear') { log.innerHTML = ''; approvalDock.innerHTML = ''; syncComposerLock(); streaming = null; openBash = null; tailTurn = null; headTurn = null; hideTyping(); hideActivity(); resetPaging(); syncWatermark(); hideLoading(); }
     else if (m.type === 'turnEnd') { hideTyping(); hideActivity(); }
+    else if (m.type === 'skillActive') flashSkill(m.name); // a real skill fired (was /mockskill)
+    else if (m.type === 'searchResults') renderSkillResults(m.results);
+    else if (m.type === 'ownedSkills') setSkills(m.names || []);
+    else if (m.type === 'buyResult') {
+      if (m.ok) { runSkillSearch(); } // refresh the list so the bought item shows "Owned"
+      else { skillResults.innerHTML = '<div class="shopEmpty">Buy failed: ' + escapeHtml(m.error || 'unknown') + '</div>'; }
+    }
     else if (m.type === 'platform') setTab(m.cli); // extension switched CLI (e.g. on session open)
     else if (m.type === 'storage') { renderStorage(m.info, m.options); renderWalletStorage(); }
     else if (m.type === 'cloudSync') renderCloudSync(m.status);

@@ -53,6 +53,10 @@ export interface Engine {
   onSessionId(cb: (id: string) => void): void;
   onTurnEnd(cb: () => void): void;
   onError(cb: (text: string) => void): void;
+  // a skill (an installed SKILL.md) just fired — name is the skill the model invoked.
+  // Transient signal for the "Casting <skill>" activity marquee (issue #17); NOT a
+  // transcript message (it isn't persisted).
+  onSkill(cb: (name: string) => void): void;
   send(text: string): void;
   stop(): void;
 }
@@ -75,12 +79,14 @@ function callbacks() {
   const sid: Array<(id: string) => void> = [];
   const turn: Array<() => void> = [];
   const err: Array<(t: string) => void> = [];
+  const skill: Array<(name: string) => void> = [];
   return {
-    msg, sid, turn, err,
+    msg, sid, turn, err, skill,
     emitMsg: (m: ChatMessage) => { for (const c of msg) c(m); },
     emitSid: (id: string) => { for (const c of sid) c(id); },
     emitTurn: () => { for (const c of turn) c(); },
     emitErr: (t: string) => { for (const c of err) c(t); },
+    emitSkill: (n: string) => { for (const c of skill) c(n); },
   };
 }
 
@@ -109,6 +115,13 @@ function claudeEngine(opts: SpawnOpts): Engine {
   // canUseTool: claude calls this BEFORE each tool; we translate to a neutral
   // ApprovalRequest, await the channel, and map the decision back to the SDK shape.
   const canUseTool = async (toolName: string, input: Record<string, unknown>) => {
+    // A "Skill" tool call = the model is invoking an installed SKILL.md (issue #17).
+    // Surface it as a transient activity signal ("Casting <skill>") — separate from the
+    // approval/transcript flow, fire-and-forget. The skill name is the tool's argument.
+    if (toolName === "Skill") {
+      const n = (input.command ?? input.name ?? input.skill) as string | undefined;
+      if (n) cb.emitSkill(String(n));
+    }
     const decision = await approval.request(toApprovalRequest("claude", sessionId, toolName, input));
     if (decision.outcome === "deny") {
       return { behavior: "deny" as const, message: decision.reason ?? "Denied by user" };
@@ -161,6 +174,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
     onSessionId: (c) => cb.sid.push(c),
     onTurnEnd: (c) => cb.turn.push(c),
     onError: (c) => cb.err.push(c),
+    onSkill: (c) => cb.skill.push(c),
     send: (t) => push(t),
     stop: () => { closed = true; wake?.(); void q.interrupt?.().catch(() => {}); },
   };
@@ -206,6 +220,9 @@ function codexEngine(opts: SpawnOpts): Engine {
     onSessionId: (c) => cb.sid.push(c),
     onTurnEnd: (c) => cb.turn.push(c),
     onError: (c) => cb.err.push(c),
+    // registered for parity; codex's SDK doesn't expose a per-tool hook yet, so no
+    // skill signal fires for codex turns (the marquee only lights up under claude).
+    onSkill: (c) => cb.skill.push(c),
     send: (t) => {
       // codex SDK has no inline approval; surface ONE policy decision per turn so the
       // ApprovalChannel still sees the action (and can deny up front). On allow, run.
