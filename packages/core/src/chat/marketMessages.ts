@@ -20,17 +20,29 @@ export interface SkillCard {
   creator?: string; // wallet (paid on a priced buy)
 }
 
+/** RPC status the UI shows (issue #23). `dasReady` = a DAS-capable RPC (a Helius key
+ *  or explicit env) is configured; on the bare public-devnet default it's false, so
+ *  marketplace reads come back empty and the UI nudges the user to add a Helius key. */
+export interface RpcStatus {
+  dasReady: boolean;
+  source: "helius" | "env" | "default";
+}
+
 // ── UI -> host (requests) ───────────────────────────────────────────────────
 export type MarketRequest =
   | { type: "searchSkills"; query: string }
   | { type: "buySkill"; skillId: string; creatorWallet?: string }
-  | { type: "ownedSkills" }; // ask the host to (re)send the owned list
+  | { type: "ownedSkills" } // ask the host to (re)send the owned list
+  | { type: "setHeliusKey" } // host opens a native input to capture + save the key
+  | { type: "useDefaultRpc" } // clear any key, fall back to the default
+  | { type: "getRpcStatus" }; // ask the host to (re)send rpcStatus
 
 // ── host -> UI (responses / pushes) ─────────────────────────────────────────
 export type MarketEvent =
   | { type: "searchResults"; results: SkillCard[] }
   | { type: "buyResult"; skillId: string; ok: boolean; slug?: string; error?: string }
   | { type: "ownedSkills"; names: string[] } // installed skill names (panel fill)
-  | { type: "skillActive"; name: string }; // a skill fired -> "Casting <name>" cue
+  | { type: "skillActive"; name: string } // a skill fired -> "Casting <name>" cue
+  | { type: "rpcStatus"; status: RpcStatus }; // DAS-ready? which source? (issue #23)
 
 export type MarketMessage = MarketRequest | MarketEvent;

@@ -614,6 +614,17 @@ export function chatHtml(): string {
         <button id="cloudBtn" class="link"></button>
       </div>
     </div>
+    <!-- RPC (issue #23): a Helius key powers the marketplace (DAS); the default can't.
+         Always shows status here so a user can add/swap the key after onboarding. -->
+    <div class="wmSection">
+      <div class="wmLabel">RPC</div>
+      <div class="wmStorage">
+        <span id="rpcState" class="muted">…</span>
+        <button id="rpcSetBtn" class="link">Set Helius key</button>
+        <button id="rpcDefaultBtn" class="link" style="display:none">Use default</button>
+      </div>
+      <div id="rpcHint" class="muted small" style="display:none;margin-top:3px"></div>
+    </div>
     <div class="wmItem" id="openWalletPage">Wallet page</div>
     <div class="wmItem disabled"><span class="wand">${WAND_SVG}</span> Skills <span class="soon">soon</span></div>
   </div>
@@ -1502,7 +1513,13 @@ export function chatHtml(): string {
   function renderMarketResults(results) {
     results = results || [];
     mktResults.innerHTML = '';
-    if (!results.length) { mktResults.innerHTML = '<div class="mktEmpty">No skills found.</div>'; return; }
+    if (!results.length) {
+      // empty can mean "no match" OR "no DAS RPC so reads return nothing" — say which.
+      mktResults.innerHTML = dasReady
+        ? '<div class="mktEmpty">No skills found.</div>'
+        : '<div class="mktEmpty">No skills — the default RPC can\\'t read the marketplace. Add a Helius key (free devnet tier) in the wallet menu \\u2192 RPC.</div>';
+      return;
+    }
     for (const r of results) {
       const owned = ownedSkills.indexOf(r.name) >= 0;
       const card = document.createElement('div'); card.className = 'mktCard';
@@ -1524,6 +1541,35 @@ export function chatHtml(): string {
       mktResults.appendChild(card);
     }
   }
+
+  // ---- RPC status (issue #23): show whether a DAS-capable RPC (Helius) is set ----
+  let dasReady = false;
+  const rpcState = document.getElementById('rpcState');
+  const rpcHint = document.getElementById('rpcHint');
+  const rpcSetBtn = document.getElementById('rpcSetBtn');
+  const rpcDefaultBtn = document.getElementById('rpcDefaultBtn');
+  function renderRpcStatus(s) {
+    s = s || { dasReady: false, source: 'default' };
+    dasReady = !!s.dasReady;
+    if (s.source === 'helius') {
+      rpcState.innerHTML = '<span style="color:var(--an-green)">\\u2713 Helius</span>';
+      rpcSetBtn.textContent = 'Change key';
+      rpcDefaultBtn.style.display = '';
+      rpcHint.style.display = 'none';
+    } else {
+      rpcState.innerHTML = (s.source === 'env')
+        ? '<span style="color:var(--an-green)">\\u2713 Custom RPC</span>'
+        : '<span style="color:#e0a030">\\u26a0 Default</span>';
+      rpcSetBtn.textContent = 'Set Helius key';
+      rpcDefaultBtn.style.display = 'none';
+      // the bare default has no DAS → the marketplace can't list skills; tell the user.
+      rpcHint.style.display = (s.source === 'default') ? 'block' : 'none';
+      rpcHint.textContent = 'The marketplace needs a Helius key (free devnet tier) to load skills.';
+    }
+  }
+  rpcSetBtn.addEventListener('click', () => vscode.postMessage({ type: 'setHeliusKey' }));
+  rpcDefaultBtn.addEventListener('click', () => vscode.postMessage({ type: 'useDefaultRpc' }));
+  vscode.postMessage({ type: 'getRpcStatus' }); // hydrate on load
 
   // ---- activity marquee: advertise what the agent is doing RIGHT NOW ----
   // Map a tool action to a flashy game-verb + object. The verb is picked from a small
@@ -1650,6 +1696,7 @@ export function chatHtml(): string {
     else if (m.type === 'clear') { log.innerHTML = ''; approvalDock.innerHTML = ''; syncComposerLock(); streaming = null; openBash = null; tailTurn = null; headTurn = null; hideTyping(); hideActivity(); resetPaging(); syncWatermark(); hideLoading(); }
     else if (m.type === 'turnEnd') { hideTyping(); hideActivity(); }
     else if (m.type === 'skillActive') flashSkill(m.name); // a real skill fired (was /mockskill)
+    else if (m.type === 'rpcStatus') renderRpcStatus(m.status);
     else if (m.type === 'searchResults') {
       lastMarketResults = m.results || [];
       renderSkillResults(m.results);           // the small skills-panel shop

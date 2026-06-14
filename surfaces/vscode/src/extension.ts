@@ -17,6 +17,9 @@ import {
   STORAGE_OPTIONS,
   createChatSession,
   marketplaceEnv,
+  saveHeliusKey,
+  loadHeliusKey,
+  hasDasRpc,
   TransportApprovalChannel,
   chatHtml,
   onboardingHtml,
@@ -188,13 +191,33 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
   }
   panel.onDidDispose(() => { if (heldSession) openSessions.delete(heldSession); });
 
+  // marketplace search/buy/install — needs the wallet + a chain connection. The RPC is
+  // resolved inside (registered Helius key wins; else env; else public-devnet default).
+  const market = await marketplaceEnv(wallet!);
   const chat = createChatSession(runtime!, transport, {
     cwd: getCwd,
     approval,
     claimSession,
-    // marketplace search/buy/install — needs the wallet + a chain connection (RPC env);
-    // bundled by the SDK so the surface doesn't re-derive a connection itself.
-    ...marketplaceEnv(wallet!),
+    ...market,
+    // RPC config (issue #23): capture the Helius key via a native secret input — it
+    // never passes through the webview as plain text — then save it like an OAuth token.
+    setHeliusKey: async () => {
+      const key = await vscode.window.showInputBox({
+        title: "Helius API key",
+        prompt: "Paste your Helius API key (free devnet tier works). Stored locally, never synced.",
+        password: true,
+        ignoreFocusOut: true,
+        placeHolder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+      });
+      if (key && key.trim()) await saveHeliusKey(key.trim());
+    },
+    useDefaultRpc: async () => { await saveHeliusKey(""); }, // clear → fall back to default
+    rpcStatus: async () => ({
+      dasReady: await hasDasRpc(),
+      source: (await loadHeliusKey()) ? "helius" as const
+            : (process.env.DAS_RPC_URL || process.env.SOLANA_RPC_URL) ? "env" as const
+            : "default" as const,
+    }),
     walletAddress: () => wallet?.address ?? null,
     storageInfo: async () => ({ info: await getStorageInfo(), options: STORAGE_OPTIONS }),
     // header "connect" link → native quick-pick of cloud backends, then connect
