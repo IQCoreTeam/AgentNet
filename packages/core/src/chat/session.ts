@@ -52,6 +52,11 @@ export interface ChatEnv {
   // install every owned skill NFT into the runtime skills dir (session start + after a
   // buy), so the agent always has its owned skills present + discoverable. Returns slugs.
   loadOwnedSkills?(): Promise<string[]>;
+  // passive skill-shopping toggle (issue #21): ON = agent shops for missing capabilities
+  // (verify → confirm → buy); OFF = owned-only, never buys. Persisted in config.json by
+  // the host (login.ts getSkillShopping/setSkillShopping). Default ON.
+  getSkillShopping?(): Promise<boolean>;
+  setSkillShopping?(on: boolean): Promise<void>;
   // RPC config (issue #23). setHeliusKey opens a host-native secret input (the key
   // never goes through the UI as plain text); the others persist/read the choice.
   setHeliusKey?(): Promise<void>;
@@ -151,6 +156,12 @@ export function createChatSession(
     transport.send({ type: "storage", info, options });
   }
 
+  async function pushSkillShopping() {
+    // default ON when the host doesn't offer the toggle (matches login.ts default).
+    const on = env.getSkillShopping ? await env.getSkillShopping() : true;
+    transport.send({ type: "skillShopping", on });
+  }
+
   // Process messages STRICTLY in order — each handler runs to completion before the
   // next starts. Without this, two async handlers race: e.g. "ready" (which awaits
   // open()) and a fast "send" overlap, and ready's open() stops the handle send just
@@ -172,7 +183,7 @@ export function createChatSession(
   async function handle(m: any) {
     switch (m?.type) {
       case "ready":
-        await pushSessions(); await pushStorage(); await open();
+        await pushSessions(); await pushStorage(); await pushSkillShopping(); await open();
         // install the wallet's owned skills so they're present + discoverable this
         // session (issue #17). Fire-and-forget: a chain hiccup must not delay the chat;
         // refresh the panel once it lands.
@@ -289,6 +300,14 @@ export function createChatSession(
         break;
       case "getRpcStatus":
         if (env.rpcStatus) sendMarket({ type: "rpcStatus", status: await env.rpcStatus() });
+        break;
+      // ── passive skill-shopping toggle (issue #21) ──
+      case "getSkillShopping":
+        await pushSkillShopping();
+        break;
+      case "setSkillShopping":
+        await env.setSkillShopping?.(!!m.on);
+        await pushSkillShopping(); // echo the persisted value back so the switch reflects truth
         break;
     }
   }

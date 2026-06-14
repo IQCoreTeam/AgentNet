@@ -59,6 +59,21 @@ export async function isInitialized(): Promise<boolean> {
   return (await readConfig()) !== null;
 }
 
+// Passive skill-shopping toggle (issue #21). Lives in the same config.json as the
+// storage choice, but is NOT part of StorageConfig — so we read/write it raw and
+// preserve everything else (storage fields + google creds) across writes. Default ON:
+// absent flag → true; only an explicit `false` turns it off.
+export async function getSkillShopping(): Promise<boolean> {
+  const raw = await readRawConfig();
+  return raw.skillShopping !== false;
+}
+
+export async function setSkillShopping(on: boolean): Promise<void> {
+  await ensureDir(rootDir());
+  const prev = await readRawConfig();
+  await writeFile(configFile(), JSON.stringify({ ...prev, skillShopping: on }, null, 2));
+}
+
 // First-run setup: record the chosen backend and (for gdrive) run Google sign-in.
 // `openBrowser` is injected by the surface (only used for gdrive).
 export async function initialize(

@@ -4,10 +4,14 @@
 // Messages seen before the real sessionId arrives are queued, then flushed once
 // the CLI reveals its id. The UI just calls startSession + send + onMessage.
 
+import { Connection } from "@solana/web3.js";
 import { spawnCli } from "./spawn.js";
 import { SessionStore } from "../account/store.js";
 import { prepareResume } from "./inject/index.js";
 import { MemorySync } from "../memory/index.js";
+import { getSkillShopping } from "../account/login.js";
+import { setSkillShoppingActive } from "../skill-market/passive.js";
+import { createAgentSdkMcpServer, newVerifyGuard } from "../skill-market/index.js";
 import type { ApprovalChannel } from "./approval/channel.js";
 import type {
   AgentRuntime,
@@ -17,6 +21,47 @@ import type {
   StorageAdapter,
   Wallet,
 } from "./contract.js";
+
+const MARKET_TOOLS = [
+  "mcp__agentnet-marketplace__search_skills",
+  "mcp__agentnet-marketplace__verify_skill",
+  "mcp__agentnet-marketplace__buy_skill",
+];
+
+// Skill-shopping wiring (plans/skill-shopping.md), built fresh per session from the
+// persisted toggle. ON installs the bundled skill-shopping SKILL.md into both runtimes'
+// skills dirs (so either engine discovers it) and — for Claude — wires the marketplace
+// MCP tools so the agent can act on it; OFF moves the skill out to the holding dir and
+// wires no tools (fully quiet, no marketplace surface). All best-effort: a failure here
+// must not block the session, just leave skill-shopping inert this run.
+//
+// Codex gets the SKILL.md but no MCP tools (codex-sdk exposes no mcpServers option yet —
+// deferred); the skill's prose still guides it to the (unavailable) tools, harmlessly.
+async function buildPassiveSpawn(
+  cli: "claude" | "codex",
+  wallet: Wallet,
+): Promise<{ mcpServers?: Record<string, unknown>; allowedTools?: string[] }> {
+  const on = await getSkillShopping().catch(() => true);
+
+  // Move the bundled skill into / out of the scanned skills dirs (both engines).
+  try {
+    await setSkillShoppingActive(on);
+  } catch (e) {
+    console.warn("[skill-shopping] toggle install failed:", e);
+  }
+
+  // OFF, or codex (no MCP option yet): the SKILL.md placement above is all we do.
+  if (!on || cli === "codex") return {};
+
+  // Claude + ON: wire the marketplace MCP tools (search → verify → buy) with a per-spawn
+  // verify guard. Needs a DAS-capable RPC; without one the tools can't read the market, so
+  // leave them off (the skill is present but inert) rather than wire dead tools.
+  const rpcUrl = process.env.DAS_RPC_URL || process.env.SOLANA_RPC_URL;
+  if (!rpcUrl) return {};
+  const conn = new Connection(rpcUrl, "confirmed");
+  const server = createAgentSdkMcpServer(conn, wallet, wallet.address, newVerifyGuard());
+  return { mcpServers: { "agentnet-marketplace": server }, allowedTools: MARKET_TOOLS };
+}
 
 // `approval` is the swappable decision source (webview buttons / auto / push). The
 // surface passes one in; omit it and tool use auto-allows (safe local default).
@@ -50,9 +95,18 @@ export function createRuntime(
         console.warn("[memory] inject failed:", e);
       }
 
+      // Skill-shopping (plans/skill-shopping.md): install/remove the bundled skill per the
+      // toggle + (Claude, ON) wire the marketplace MCP tools. Best-effort.
+      let passive: Awaited<ReturnType<typeof buildPassiveSpawn>> = {};
+      try {
+        passive = await buildPassiveSpawn(opts.cli, wallet);
+      } catch (e) {
+        console.warn("[skill-shopping] setup failed:", e);
+      }
+
       // per-session approval channel (each panel passes its own) wins; fall back to
       // the runtime-level default channel.
-      const cli = spawnCli({ ...opts, sessionId: nativeId, approval: opts.approval ?? approval });
+      const cli = spawnCli({ ...opts, sessionId: nativeId, approval: opts.approval ?? approval, ...passive });
 
       // Storage key stays the CANONICAL id while resuming; the cli's emitted (native)
       // id must NOT overwrite it, or appended turns land in the wrong log.
