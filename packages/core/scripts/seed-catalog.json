@@ -1,0 +1,134 @@
+{
+  "_comment": "Seed catalog for the AgentNet skill marketplace (devnet). Curated from popular, generic, reusable agent skills across skills.sh, awesome-claude/openclaw-skills, anthropics/skills, and real dev-loop workflow research. 50 skills + 5 workflows. Every workflow's requiredSkills name MUST exist in `skills` below (the seed script resolves names -> minted mint ids and verifies all are present before publishing any workflow).",
+  "skills": [
+    { "name": "format-and-lint", "category": "code-quality", "description": "Auto-format the working diff and fix lint violations so the change matches the repository's style and rules.", "hashtags": ["format", "lint", "cleanup"] },
+    { "name": "run-test-suite", "category": "testing", "description": "Run the project's test suite and report pass/fail, surfacing each failing test with its assertion and location.", "hashtags": ["testing", "ci", "verify"] },
+    { "name": "write-conventional-commit", "category": "git", "description": "Generate a Conventional Commits message (type, scope, summary, body) from the staged diff.", "hashtags": ["git", "commits", "conventional"] },
+    { "name": "open-pull-request", "category": "git", "description": "Push the current branch and open a pull request with a generated title, summary, and test results.", "hashtags": ["git", "pr", "github"] },
+    { "name": "triage-issue", "category": "code-quality", "description": "Read a tracker issue and its logs, locate the relevant code, and produce a root-cause plan for the fix.", "hashtags": ["triage", "rootcause", "debug"] },
+    { "name": "write-regression-test", "category": "testing", "description": "Write a failing test that reproduces a reported bug, so the fix can be verified and locked in.", "hashtags": ["testing", "regression", "bugfix"] },
+    { "name": "apply-code-fix", "category": "backend", "description": "Implement the minimal change that makes a failing test pass without breaking the rest of the suite.", "hashtags": ["fix", "patch", "implement"] },
+    { "name": "upgrade-dependency", "category": "devops", "description": "Bump a package to a target or latest version, update the lockfile, and rebuild the project.", "hashtags": ["dependencies", "upgrade", "lockfile"] },
+    { "name": "collect-commits-since-tag", "category": "git", "description": "Gather the merged commits and pull requests since the last release tag for changelog generation.", "hashtags": ["git", "release", "history"] },
+    { "name": "generate-changelog", "category": "documentation", "description": "Group commits by type and rewrite them into human-readable, categorized release notes.", "hashtags": ["changelog", "release", "notes"] },
+    { "name": "bump-version", "category": "devops", "description": "Infer the correct semver level from the changes and update version manifests accordingly.", "hashtags": ["semver", "version", "release"] },
+    { "name": "tag-and-release", "category": "devops", "description": "Commit the version bump, create the git tag, and publish the release with the generated notes.", "hashtags": ["release", "tag", "publish"] },
+    { "name": "write-characterization-tests", "category": "testing", "description": "Generate tests that pin a module's current behavior, bugs and all, as a safety net before refactoring.", "hashtags": ["testing", "legacy", "safety-net"] },
+    { "name": "refactor-module", "category": "code-quality", "description": "Restructure code for readability and maintainability without changing its observable behavior.", "hashtags": ["refactor", "cleancode", "maintainability"] },
+    { "name": "code-review", "category": "code-quality", "description": "Review a diff or file for correctness, performance, and maintainability, and report concrete suggestions.", "hashtags": ["review", "pr", "quality"] },
+    { "name": "explain-code", "category": "code-quality", "description": "Walk through what a piece of code does, step by step, for onboarding or comprehension.", "hashtags": ["explain", "onboarding", "comprehension"] },
+    { "name": "explain-regex", "category": "code-quality", "description": "Decode a regular expression into plain-language meaning, token by token.", "hashtags": ["regex", "explain"] },
+    { "name": "optimize-performance", "category": "code-quality", "description": "Profile bottlenecks and apply algorithmic or resource improvements to slow paths and hot loops.", "hashtags": ["performance", "profiling", "optimize"] },
+    { "name": "code-smell-detector", "category": "code-quality", "description": "Flag anti-patterns, duplication, and overly complex functions that need attention.", "hashtags": ["smells", "antipatterns", "lint"] },
+    { "name": "convert-language", "category": "code-quality", "description": "Translate code from one programming language to another with idiomatic output.", "hashtags": ["convert", "polyglot", "migrate"] },
+    { "name": "systematic-debugging", "category": "code-quality", "description": "Apply a structured four-phase methodology to isolate and fix a bug or unexpected behavior.", "hashtags": ["debugging", "methodology", "rootcause"] },
+    { "name": "verification-before-completion", "category": "code-quality", "description": "Validate fixes and run all relevant checks before marking a task as done.", "hashtags": ["verify", "gates", "quality"] },
+    { "name": "test-driven-development", "category": "testing", "description": "Drive the red-green-refactor loop: write a failing test first, then the minimal code to pass it.", "hashtags": ["tdd", "testing", "quality"] },
+    { "name": "generate-unit-tests", "category": "testing", "description": "Produce unit tests with edge cases for a given function or module.", "hashtags": ["testing", "unit", "coverage"] },
+    { "name": "generate-test-data", "category": "testing", "description": "Create realistic fixtures and mocks for tests.", "hashtags": ["fixtures", "mocks", "testing"] },
+    { "name": "integration-test-writer", "category": "testing", "description": "Author end-to-end and integration tests that exercise multiple components together.", "hashtags": ["integration", "e2e", "testing"] },
+    { "name": "coverage-gap-finder", "category": "testing", "description": "Identify untested branches and suggest the tests needed to close the gaps.", "hashtags": ["coverage", "testing", "gaps"] },
+    { "name": "webapp-testing-playwright", "category": "testing", "description": "Automate browser and UI testing with Playwright, including screenshot verification.", "hashtags": ["playwright", "e2e", "browser"] },
+    { "name": "security-audit", "category": "security", "description": "Scan code for vulnerabilities and unsafe patterns and report findings with severity.", "hashtags": ["security", "audit", "vulnerabilities"] },
+    { "name": "owasp-top-10-review", "category": "security", "description": "Review code against the OWASP Top 10 and ASVS standards using a structured checklist.", "hashtags": ["owasp", "appsec", "checklist"] },
+    { "name": "secret-scanner", "category": "security", "description": "Find hardcoded credentials, API keys, and tokens across a codebase.", "hashtags": ["secrets", "security", "scan"] },
+    { "name": "dependency-vuln-check", "category": "security", "description": "Flag known-vulnerable dependencies with CVE detail and suggest safe upgrades.", "hashtags": ["cve", "supplychain", "deps"] },
+    { "name": "prompt-injection-screen", "category": "security", "description": "Detect prompt-injection and data-exfiltration risks in agent inputs and tool calls.", "hashtags": ["promptinjection", "aisec", "guard"] },
+    { "name": "input-sanitizer", "category": "security", "description": "Add validation and escaping to untrusted-input handling to prevent injection flaws.", "hashtags": ["sanitize", "validation", "security"] },
+    { "name": "resolve-merge-conflict", "category": "git", "description": "Reconcile conflicting hunks during a merge while preserving the intent of both sides.", "hashtags": ["git", "merge", "conflict"] },
+    { "name": "git-workflow-helper", "category": "git", "description": "Advise on branching, rebasing, and repository management best practices.", "hashtags": ["git", "workflow", "branching"] },
+    { "name": "pr-description-writer", "category": "git", "description": "Summarize a diff into a clear, reviewer-friendly pull-request description.", "hashtags": ["git", "pr", "summary"] },
+    { "name": "write-docstrings", "category": "documentation", "description": "Generate function and class docstrings directly from the code.", "hashtags": ["docs", "docstrings", "api"] },
+    { "name": "generate-readme", "category": "documentation", "description": "Produce a project README from the codebase, covering setup, usage, and structure.", "hashtags": ["docs", "readme", "onboarding"] },
+    { "name": "api-doc-generator", "category": "documentation", "description": "Document endpoints, parameters, and responses for an API with OpenAPI output.", "hashtags": ["docs", "api", "openapi"] },
+    { "name": "technical-writer", "category": "documentation", "description": "Turn features into clear step-by-step user guides and reference docs.", "hashtags": ["docs", "writing", "guide"] },
+    { "name": "diagram-generator", "category": "documentation", "description": "Emit Mermaid or Graphviz diagrams of code, data, or system relationships.", "hashtags": ["diagram", "mermaid", "docs"] },
+    { "name": "write-sql-query", "category": "data", "description": "Generate SQL for a described data question against a given schema.", "hashtags": ["sql", "query", "data"] },
+    { "name": "optimize-sql", "category": "data", "description": "Explain a query's execution plan and rewrite it for speed with proper indexing.", "hashtags": ["sql", "optimize", "index"] },
+    { "name": "csv-json-pipeline", "category": "data", "description": "Parse, clean, transform, and summarize CSV and JSON datasets.", "hashtags": ["data", "etl", "csv"] },
+    { "name": "data-visualization", "category": "data", "description": "Create charts, graphs, and interactive visualizations from a dataset.", "hashtags": ["charts", "viz", "data"] },
+    { "name": "write-dockerfile", "category": "devops", "description": "Produce a production-grade Dockerfile for a given stack.", "hashtags": ["docker", "containers", "devops"] },
+    { "name": "ci-cd-pipeline", "category": "devops", "description": "Generate GitHub Actions or CI workflow files for build, test, and deploy.", "hashtags": ["cicd", "githubactions", "deploy"] },
+    { "name": "infra-as-code-helper", "category": "devops", "description": "Author and review Terraform or Kubernetes manifests for infrastructure-as-code.", "hashtags": ["terraform", "iac", "infra"] },
+    { "name": "generate-react-component", "category": "frontend", "description": "Scaffold a React component with modern tooling and styling (Tailwind/shadcn).", "hashtags": ["react", "frontend", "ui"] },
+    { "name": "accessibility-audit", "category": "frontend", "description": "Check a UI against WCAG guidelines and suggest concrete accessibility fixes.", "hashtags": ["a11y", "wcag", "frontend"] },
+    { "name": "design-rest-api", "category": "backend", "description": "Define endpoints, schemas, and status codes for a resource following REST conventions.", "hashtags": ["api", "rest", "backend"] },
+    { "name": "add-auth-flow", "category": "backend", "description": "Implement JWT or session authentication in an application.", "hashtags": ["auth", "jwt", "backend"] },
+    { "name": "database-migration", "category": "backend", "description": "Author safe schema-versioning and migration patterns for a database.", "hashtags": ["migration", "schema", "database"] },
+    { "name": "prompt-enhancer", "category": "ai-ml", "description": "Rewrite a basic prompt into a detailed, well-structured one with clear constraints.", "hashtags": ["prompt", "aiml", "enhance"] },
+    { "name": "build-mcp-server", "category": "ai-ml", "description": "Scaffold a high-quality Model Context Protocol server exposing tools to an agent.", "hashtags": ["mcp", "aiml", "tools"] },
+    { "name": "research-assistant", "category": "ai-ml", "description": "Run multi-step web research, gather sources, and synthesize a cited answer.", "hashtags": ["research", "citations", "synthesis"] },
+    { "name": "skill-creator", "category": "ai-ml", "description": "Meta-skill that scaffolds and validates new SKILL.md skills from a description.", "hashtags": ["meta", "skillmd", "authoring"] },
+    { "name": "writing-plans", "category": "productivity", "description": "Break work into small, verifiable, file-specific implementation tasks before coding.", "hashtags": ["planning", "tasks", "specdriven"] },
+    { "name": "brainstorming", "category": "productivity", "description": "Use Socratic refinement to turn a rough idea into a validated, concrete design.", "hashtags": ["ideation", "planning", "design"] },
+    { "name": "multi-agent-orchestrator", "category": "productivity", "description": "Coordinate sub-agents to decompose and complete a larger task in parallel.", "hashtags": ["agents", "orchestration", "parallel"] },
+    { "name": "pdf-docx-xlsx-pptx", "category": "productivity", "description": "Generate and edit PDF, Word, Excel, and PowerPoint documents.", "hashtags": ["documents", "office", "files"] }
+  ],
+  "workflows": [
+    {
+      "name": "open-a-clean-pr",
+      "category": "git",
+      "description": "Turn uncommitted local changes into a review-ready pull request: formatted, tested, and conventionally committed.",
+      "hashtags": ["pr", "dev-loop", "conventional-commits"],
+      "requiredSkills": ["format-and-lint", "run-test-suite", "write-conventional-commit", "open-pull-request"],
+      "recipe": [
+        "Run format-and-lint on the working tree; stage the resulting changes.",
+        "Run run-test-suite; if any test fails, stop and report the failures (do not open a PR).",
+        "On green, call write-conventional-commit to author the commit from the staged diff.",
+        "Commit, then open-pull-request to push the branch and open a PR with a summary plus test results."
+      ]
+    },
+    {
+      "name": "fix-the-issue",
+      "category": "backend",
+      "description": "Take a tracker issue, reproduce it, write the fix plus a regression test, and open the PR that closes it.",
+      "hashtags": ["bugfix", "issue-to-pr", "regression"],
+      "requiredSkills": ["triage-issue", "write-regression-test", "apply-code-fix", "open-pull-request"],
+      "recipe": [
+        "triage-issue: read the issue and linked logs, search the codebase, write a root-cause plan.",
+        "write-regression-test: add a test that fails on the current code, reproducing the bug.",
+        "apply-code-fix: make the smallest change that turns the failing test green; rerun to confirm no regressions.",
+        "open-pull-request: open a PR linking 'Closes #<issue>' with the root-cause summary and the new test."
+      ]
+    },
+    {
+      "name": "safe-dependency-bump",
+      "category": "devops",
+      "description": "Upgrade a dependency, run the suite, auto-repair any breakage, and open a PR, or back out cleanly if it can't be fixed.",
+      "hashtags": ["dependencies", "upgrade", "self-healing"],
+      "requiredSkills": ["upgrade-dependency", "run-test-suite", "apply-code-fix", "open-pull-request"],
+      "recipe": [
+        "upgrade-dependency: bump the package, update the lockfile, rebuild.",
+        "run-test-suite: run the full suite; if green, skip to the PR step.",
+        "apply-code-fix: read failures, patch broken call sites, rerun, loop up to N times; if still red, revert the bump and report.",
+        "open-pull-request: open a PR with the version delta, what broke, and how it was fixed."
+      ]
+    },
+    {
+      "name": "cut-a-release",
+      "category": "devops",
+      "description": "Roll all merged work since the last tag into a categorized changelog, bump the version, and publish the release.",
+      "hashtags": ["release", "changelog", "semver"],
+      "requiredSkills": ["collect-commits-since-tag", "generate-changelog", "bump-version", "tag-and-release"],
+      "recipe": [
+        "collect-commits-since-tag: list merged commits and PRs since the latest tag.",
+        "generate-changelog: categorize into Features / Fixes / Breaking and rewrite into prose notes.",
+        "bump-version: infer the semver level from the changes and update the manifests.",
+        "tag-and-release: commit the bump, create the tag, and publish the release with the generated notes."
+      ]
+    },
+    {
+      "name": "harden-legacy-module",
+      "category": "code-quality",
+      "description": "Wrap an untested legacy module in a characterization-test safety net, then refactor it without changing behavior.",
+      "hashtags": ["refactor", "legacy", "safety-net"],
+      "requiredSkills": ["write-characterization-tests", "refactor-module", "run-test-suite", "open-pull-request"],
+      "recipe": [
+        "write-characterization-tests: generate tests capturing the module's existing outputs; confirm they pass as-is.",
+        "refactor-module: improve structure and readability with no intended behavior change.",
+        "run-test-suite: rerun the characterization tests; any diff means behavior changed, so revert and retry.",
+        "open-pull-request: open a PR pairing the new safety-net tests with the refactor, noting 'no behavior change, tests green'."
+      ]
+    }
+  ]
+}

@@ -82,15 +82,19 @@ export async function publishSkill(
     minterAuthority: mintAuthority, // gate PDA holds the mint authority
   });
 
-  // Register the item config on-chain. A skill has NO prerequisites.
+  // Register the item config on-chain AND self-mint the first copy to the
+  // creator. publish_item mints 1 into the creator's ATA (supply 0 -> 1), so that
+  // ATA must exist first. A skill has NO prerequisites.
   const creator = new PublicKey(await signerAddress(signer));
+  const creatorAta = getAssociatedTokenAddressSync(skillMint, creator, false, TOKEN_2022_PROGRAM_ID);
+  const ataIx = createAssociatedTokenAccountInstruction(creator, creatorAta, creator, skillMint, TOKEN_2022_PROGRAM_ID);
   const ix = publishItemIx({
     creator,
     itemMint: skillMint,
     requiredSkills: [],
     price: input.price ?? 0n,
   });
-  await sendTx(conn, signer, [ix]);
+  await sendTx(conn, signer, [ataIx, ix]);
 
   return skillMint.toBase58();
 }

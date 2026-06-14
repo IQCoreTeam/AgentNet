@@ -83,16 +83,19 @@ export async function publishWorkflow(
     minterAuthority: mintAuthority, // gate PDA holds the mint authority
   });
 
-  // Register the prerequisites on-chain (config PDA). The program verifies each
-  // required skill is an official-collection member and rejects duplicates.
+  // Register the prerequisites on-chain (config PDA) AND self-mint the first copy
+  // to the creator (supply 0 -> 1), so its ATA must exist first. The program
+  // verifies each required skill is an official-collection member, no duplicates.
   const creator = new PublicKey(await signerAddress(signer));
+  const creatorAta = getAssociatedTokenAddressSync(workflowMint, creator, false, TOKEN_2022_PROGRAM_ID);
+  const ataIx = createAssociatedTokenAccountInstruction(creator, creatorAta, creator, workflowMint, TOKEN_2022_PROGRAM_ID);
   const ix = publishItemIx({
     creator,
     itemMint: workflowMint,
     requiredSkills: input.requiredSkills.map((s) => new PublicKey(s)),
     price: input.price ?? 0n,
   });
-  await sendTx(conn, signer, [ix]);
+  await sendTx(conn, signer, [ataIx, ix]);
 
   return workflowMint.toBase58();
 }

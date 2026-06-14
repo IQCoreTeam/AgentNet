@@ -39,8 +39,13 @@ export function itemMintAuthorityPda(itemMint: PublicKey): PublicKey {
 
 /**
  * publish_item instruction — store creator, price, and required_skills in the
- * config PDA. required_skills empty = a skill; filled = a workflow (each required
- * skill mint is passed as a remaining account so the program can verify it).
+ * config PDA AND mint the first copy to the creator (supply 0 -> 1) via the
+ * mint-auth PDA, so the author owns what they publish. required_skills empty = a
+ * skill; filled = a workflow (each required skill mint is a remaining account so
+ * the program can verify it).
+ *
+ * The creator's item ATA must already exist — callers prepend an ATA-create ix
+ * (see skill.ts / workflow.ts). `creatorItemAta` defaults to the derived ATA.
  */
 export function publishItemIx(args: {
   creator: PublicKey;
@@ -57,10 +62,16 @@ export function publishItemIx(args: {
   for (const s of args.requiredSkills) { s.toBuffer().copy(data, o); o += 32; }
   data.writeBigUInt64LE(args.price, o);
 
+  const creatorItemAta = getAssociatedTokenAddressSync(
+    args.itemMint, args.creator, false, TOKEN_2022_PROGRAM_ID,
+  );
   const keys = [
     { pubkey: args.creator, isSigner: true, isWritable: true },
-    { pubkey: args.itemMint, isSigner: false, isWritable: false },
+    { pubkey: args.itemMint, isSigner: false, isWritable: true }, // mut: self-mint bumps supply
     { pubkey: itemConfigPda(args.itemMint), isSigner: false, isWritable: true },
+    { pubkey: itemMintAuthorityPda(args.itemMint), isSigner: false, isWritable: false },
+    { pubkey: creatorItemAta, isSigner: false, isWritable: true }, // receives the 1 self-copy
+    { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     // remaining: the skill mints, one per required_skill (none for a skill).
     ...args.requiredSkills.map((m) => ({ pubkey: m, isSigner: false, isWritable: false })),
