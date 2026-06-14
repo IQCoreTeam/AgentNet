@@ -47,6 +47,18 @@ export function marketplaceEnv(wallet: Wallet) {
       }
     },
 
+    // Load EVERY skill the wallet owns into both runtimes' skills dirs (issue #17).
+    // Called at session start and again after a buy, so an agent always has its owned
+    // skills present and discoverable — mirrors how last30days is installed before use.
+    // Returns the installed slugs (best-effort; a bad mint is skipped).
+    async loadOwnedSkills() {
+      const [c] = await Promise.all([
+        skills.injectOwned("claude", wallet.address),
+        skills.injectOwned("codex", wallet.address),
+      ]);
+      return c;
+    },
+
     // installed skill names = the dir names under the Claude skills dir (each is a slug).
     async ownedSkills() {
       try {

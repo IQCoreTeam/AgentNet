@@ -47,6 +47,9 @@ export interface ChatEnv {
   searchSkills?(query: string): Promise<Array<{ id: string; name: string; description?: string; supply?: number; creator?: string }>>;
   buySkill?(skillId: string, creatorWallet?: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
   ownedSkills?(): Promise<string[]>; // skill names already installed (panel fill)
+  // install every owned skill NFT into the runtime skills dir (session start + after a
+  // buy), so the agent always has its owned skills present + discoverable. Returns slugs.
+  loadOwnedSkills?(): Promise<string[]>;
   // OPTIONAL multi-tab guard: vscode can open the same session in two panels (two
   // tabs writing one log races), so it claims a session before opening and yields
   // false to abort if another panel already holds it. One-socket surfaces (server,
@@ -156,7 +159,16 @@ export function createChatSession(
 
   async function handle(m: any) {
     switch (m?.type) {
-      case "ready": await pushSessions(); await pushStorage(); await open(); break;
+      case "ready":
+        await pushSessions(); await pushStorage(); await open();
+        // install the wallet's owned skills so they're present + discoverable this
+        // session (issue #17). Fire-and-forget: a chain hiccup must not delay the chat;
+        // refresh the panel once it lands.
+        void (async () => {
+          await env.loadOwnedSkills?.();
+          transport.send({ type: "ownedSkills", names: env.ownedSkills ? await env.ownedSkills() : [] });
+        })().catch(() => {});
+        break;
       case "new":   await open(); await pushSessions(); break;
       // Opening a session resumes it in the CURRENT tab's cli (cross-CLI). The
       // session's own cli is ignored — that's the whole point of cross-CLI resume.
@@ -227,7 +239,10 @@ export function createChatSession(
       case "buySkill": {
         const res = env.buySkill ? await env.buySkill(String(m.skillId), m.creatorWallet) : { ok: false, error: "buy unavailable" };
         transport.send({ type: "buyResult", skillId: m.skillId, ...res });
-        if (res.ok) transport.send({ type: "ownedSkills", names: env.ownedSkills ? await env.ownedSkills() : [] });
+        if (res.ok) {
+          await env.loadOwnedSkills?.(); // re-sync the whole owned set after the buy
+          transport.send({ type: "ownedSkills", names: env.ownedSkills ? await env.ownedSkills() : [] });
+        }
         break;
       }
       case "ownedSkills":

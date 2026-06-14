@@ -125,6 +125,44 @@ export const dasSource: SkillSource = {
   },
 };
 
+/**
+ * The skill/workflow NFT mints a wallet OWNS (issue #17 — auto-load owned skills at
+ * session start). DAS getAssetsByOwner returns every asset the wallet holds; we keep
+ * only members of our skills/workflows collections. Same RPC + collection seeds as
+ * dasSource. Returns [] if RPC/collections aren't configured (best-effort caller).
+ */
+export async function ownedSkillMints(owner: string): Promise<string[]> {
+  const rpcUrl = process.env.DAS_RPC_URL || process.env.SOLANA_RPC_URL;
+  if (!rpcUrl) return [];
+  const { getSkillsCollectionMint, getWorkflowsCollectionMint } = await import("./seed.js");
+  const ours = new Set([getSkillsCollectionMint(), getWorkflowsCollectionMint()].filter(Boolean) as string[]);
+  if (ours.size === 0) return [];
+
+  const mints: string[] = [];
+  for (let page = 1; ; page++) {
+    const res = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0", id: "1", method: "getAssetsByOwner",
+        params: { ownerAddress: owner, page, limit: 1000 },
+      }),
+    });
+    const json = await res.json();
+    if (json.error) throw new Error(`DAS getAssetsByOwner failed: ${JSON.stringify(json.error)}`);
+    const items = json.result?.items ?? [];
+    for (const it of items) {
+      const inOurs = (it.grouping ?? []).some(
+        (g: { group_key?: string; group_value?: string }) =>
+          g.group_key === "collection" && g.group_value && ours.has(g.group_value),
+      );
+      if (inOurs) mints.push(it.id);
+    }
+    if (items.length < 1000) break; // last page
+  }
+  return mints;
+}
+
 /** The indexer's item shape (agentnet-nft-indexer GET /items). Declared here so
  *  core stays independent of the indexer repo — we only depend on its wire JSON. */
 interface IndexerItem {

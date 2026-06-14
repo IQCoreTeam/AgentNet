@@ -13,6 +13,7 @@ import { join } from "node:path";
 import type { Connection } from "@solana/web3.js";
 import { claudeSkillsDir, codexSkillsDir, ensureDir } from "../../core/paths.js";
 import { readSkillMintMetadata } from "../../nft/token2022.js";
+import { ownedSkillMints } from "../../core/skillSource.js";
 import { toSkillMd, skillSlug } from "./convert.js";
 
 export type Cli = "claude" | "codex";
@@ -48,6 +49,21 @@ export class SkillSync {
       this.installBought("codex", skillMint),
     ]);
     return slug;
+  }
+
+  /**
+   * Install ALL skills a wallet owns into a runtime's skills dir (issue #17) — the
+   * "session-start load" + "re-load after a buy" path, mirroring how last30days is
+   * present before the session uses it. Enumerates owned skill NFTs (DAS), then writes
+   * each one's SKILL.md. Best-effort: a single bad mint is skipped, not fatal. Returns
+   * the slugs installed. No RPC / no owned mints → installs nothing.
+   */
+  async injectOwned(cli: Cli, owner: string): Promise<string[]> {
+    const mints = await ownedSkillMints(owner);
+    const slugs = await Promise.all(
+      mints.map((m) => this.installBought(cli, m).catch(() => null)),
+    );
+    return slugs.filter((s): s is string => !!s);
   }
 
   /** Remove an installed skill from a runtime's skills dir (e.g. on un-equip). */
