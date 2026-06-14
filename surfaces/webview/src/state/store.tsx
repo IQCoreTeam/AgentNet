@@ -54,7 +54,8 @@ export interface State {
   sessions: SessionMeta[];
   activeSessionId?: string;
   approvals: ApprovalRequest[];
-  storage: { info: unknown; options: unknown } | null;
+  storage: { info: unknown; options: unknown; googleCredsConfigured?: boolean } | null;
+  googleCredsError: string | null;
   cloudSync: { ok: boolean; error?: string } | null;
   typing: boolean; // a turn is in flight (typing dots)
   loading: boolean; // cross-CLI carry veil
@@ -79,6 +80,7 @@ const initialState: State = {
   sessions: [],
   approvals: [],
   storage: null,
+  googleCredsError: null,
   cloudSync: null,
   typing: false,
   loading: false,
@@ -199,7 +201,11 @@ function reducer(state: State, ev: Action): State {
     case "platform":
       return { ...state, cli: ev.cli };
     case "storage":
-      return { ...state, storage: { info: ev.info, options: ev.options } };
+      return { ...state, storage: { info: ev.info, options: ev.options, googleCredsConfigured: ev.googleCredsConfigured } };
+    case "googleCredsStatus":
+      return ev.status === "saved"
+        ? { ...state, googleCredsError: null, storage: state.storage ? { ...state.storage, googleCredsConfigured: true } : state.storage }
+        : { ...state, googleCredsError: ev.error ?? "Failed to save credentials." };
     case "cloudSync":
       return { ...state, cloudSync: ev.status };
     case "wallet":

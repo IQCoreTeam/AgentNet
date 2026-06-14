@@ -88,6 +88,7 @@ export type ClientMessage =
   | { type: "startGoogleLogin" }
   | { type: "googleAuthCode"; code: string }
   | { type: "cancelGoogleLogin" }
+  | { type: "setGoogleCredentials"; clientId: string; clientSecret: string }
   | { type: "toast"; text: string };
 
 // ── server → UI (SSE /events) ──

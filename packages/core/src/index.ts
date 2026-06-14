@@ -53,6 +53,8 @@ export {
   switchStorage,
   currentStorageKind,
   getStorageInfo,
+  saveGoogleCreds,
+  hasGoogleCreds,
 } from "./account/login.js";
 export { STORAGE_OPTIONS } from "./account/storage/adapter.js";
 export type { StorageConfig, StorageKind } from "./account/storage/adapter.js";

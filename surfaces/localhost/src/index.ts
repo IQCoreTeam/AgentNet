@@ -50,6 +50,8 @@ import {
   disconnectCloud,
   agentnetFolderLink,
   startGoogleLogin,
+  saveGoogleCreds,
+  hasGoogleCreds,
 } from "@iqlabs-official/agent-sdk";
 
 const PORT = Number(process.env.AGENTNET_PORT ?? 4317);
@@ -190,7 +192,7 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
     cwd: () => process.cwd(),
     approval,
     walletAddress: () => walletAddress,
-    storageInfo: async () => ({ info: await getStorageInfo(), options: STORAGE_OPTIONS }),
+    storageInfo: async () => ({ info: await getStorageInfo(), options: STORAGE_OPTIONS, googleCredsConfigured: await hasGoogleCreds() }),
     connectCloud: async (cfg) => {
       if (wallet) {
         await switchStorage(wallet, { kind: cfg.kind, location: cfg.location, authHeader: cfg.authHeader } as StorageConfig);
@@ -221,6 +223,15 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
     },
   });
   c.recvs.push(async (m: any) => {
+    if (m?.type === "setGoogleCredentials" && typeof m.clientId === "string" && typeof m.clientSecret === "string") {
+      try {
+        await saveGoogleCreds(m.clientId, m.clientSecret);
+        c.send({ type: "googleCredsStatus", status: "saved" });
+      } catch (e) {
+        c.send({ type: "googleCredsStatus", status: "error", error: (e as Error).message });
+      }
+      return;
+    }
     if (m?.type === "startGoogleLogin") {
       try {
         googleLoginSession?.cancel();
@@ -346,6 +357,15 @@ function attachOnboarding(c: Client) {
     if (m?.type === "cancelCodexLogin") {
       codexLogin?.cancel();
       codexLogin = null;
+      return;
+    }
+    if (m?.type === "setGoogleCredentials" && typeof m.clientId === "string" && typeof m.clientSecret === "string") {
+      try {
+        await saveGoogleCreds(m.clientId, m.clientSecret);
+        c.send({ type: "googleCredsStatus", status: "saved" });
+      } catch (e) {
+        c.send({ type: "googleCredsStatus", status: "error", error: (e as Error).message });
+      }
       return;
     }
     if (m?.type === "submitCodexApiKey" && typeof m.key === "string") {
