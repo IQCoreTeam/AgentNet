@@ -52,6 +52,13 @@ export const SKILLS_COLLECTION_MINT = "4exdqNEcXixiMzenEBts2cE7qLmMvcVtHCjsZUGBm
 export const WORKFLOWS_COLLECTION_MINT = "ByrnPfd9DcbpuVxm7J7xo2gnWxNfuTAdvZUPds7ctYN4";
 /** agent-workflow-nft gate program — publish_workflow / buy_workflow. */
 export const WORKFLOW_GATE_PROGRAM_ID = "3ptXj4yuaQG51WTA3SZZ37jGvYFgMhgXnSKWJLASJNkt";
+/**
+ * Protocol fee treasury. On every priced buy the gate program sends FEE_BPS of
+ * the price here (out of the price — the buyer pays exactly `price`, the creator
+ * nets the rest) and rejects any other treasury account. Must match the program's
+ * constants.rs::FEE_TREASURY.
+ */
+export const FEE_TREASURY = "EWNSTD8tikwqHMcRNuuNbZrnYJUiJdKq9UXLXSEU4wZ1";
 
 /**
  * The TokenGroup mint skills are enrolled into. Env override wins; otherwise the
@@ -72,6 +79,11 @@ export function getWorkflowsCollectionMint(): string | null {
 /** The workflow gate program id (env override wins). */
 export function getWorkflowGateProgramId(): string {
   return process.env.AGENTNET_WORKFLOW_GATE_PROGRAM_ID || WORKFLOW_GATE_PROGRAM_ID;
+}
+
+/** The protocol fee treasury (env override wins). */
+export function getFeeTreasury(): string {
+  return process.env.AGENTNET_FEE_TREASURY || FEE_TREASURY;
 }
 
 /**

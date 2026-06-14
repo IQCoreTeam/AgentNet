@@ -16,6 +16,7 @@ vi.mock("../core/chain.js", () => ({
 vi.mock("../core/seed.js", () => ({
   getWorkflowsCollectionMint: vi.fn().mockReturnValue(null),
   getWorkflowGateProgramId: vi.fn().mockReturnValue("3ptXj4yuaQG51WTA3SZZ37jGvYFgMhgXnSKWJLASJNkt"),
+  getFeeTreasury: vi.fn().mockReturnValue("EWNSTD8tikwqHMcRNuuNbZrnYJUiJdKq9UXLXSEU4wZ1"),
 }));
 
 vi.mock("./token2022.js", async () => {
