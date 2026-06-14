@@ -14,7 +14,7 @@ import {
   getAssociatedTokenAddressSync,
   TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
-import { getWorkflowGateProgramId } from "../core/seed.js";
+import { getWorkflowGateProgramId, getFeeTreasury } from "../core/seed.js";
 
 // Anchor instruction discriminators (sha256("global:<name>")[0..8]) — from the IDL.
 const DISC_PUBLISH = Buffer.from([125, 80, 203, 31, 0, 230, 147, 33]); // publish_item
@@ -86,6 +86,8 @@ export function buyItemIx(args: {
   const keys = [
     { pubkey: args.buyer, isSigner: true, isWritable: true },
     { pubkey: args.creator, isSigner: false, isWritable: true },
+    // protocol fee treasury — the program requires this exact account on a priced buy.
+    { pubkey: new PublicKey(getFeeTreasury()), isSigner: false, isWritable: true },
     { pubkey: itemConfigPda(args.itemMint), isSigner: false, isWritable: false },
     { pubkey: args.itemMint, isSigner: false, isWritable: true },
     { pubkey: itemMintAuthorityPda(args.itemMint), isSigner: false, isWritable: false },
