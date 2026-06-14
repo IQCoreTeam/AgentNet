@@ -207,6 +207,61 @@ export function startGoogleLogin(): Promise<GoogleLogin> {
   });
 }
 
+// Variant that uses a FIXED redirect URI (provided by caller) instead of spinning
+// up its own random-port server. The caller's HTTP server must handle the redirect
+// and call submitCode(fullUrl). Designed for the Android localhost surface where
+// Chrome can reach the main server port but not a second random proot port.
+export function startGoogleLoginFixed(redirectUri: string): GoogleLogin {
+  const { verifier, challenge } = pkce();
+  const state = base64url(randomBytes(16));
+
+  let settleDone: (ok: boolean) => void;
+  const done = new Promise<boolean>((r) => (settleDone = r));
+
+  const url = `${AUTH_URL}?${new URLSearchParams({
+    client_id: clientId(),
+    redirect_uri: redirectUri,
+    response_type: "code",
+    scope: SCOPE,
+    code_challenge: challenge,
+    code_challenge_method: "S256",
+    state,
+    access_type: "offline",
+    prompt: "consent",
+  })}`;
+
+  return {
+    url,
+    async submitCode(codeOrUrl: string) {
+      let code = codeOrUrl.trim();
+      // The fixed-redirect flow ALWAYS hands back the full callback URL, which carries
+      // ?state=. Validate it unconditionally (fail-closed) to block login-CSRF: a forged
+      // callback with an attacker's code but a wrong/absent state must be rejected, never
+      // exchanged. No regex fallback — if the URL won't parse or the state doesn't match,
+      // refuse rather than salvage a code we can't tie to this request.
+      if (code.startsWith("http://") || code.startsWith("https://") || code.includes("code=")) {
+        const urlParsed = new URL(code); // throws on malformed input → submission refused
+        const gotState = urlParsed.searchParams.get("state");
+        if (!gotState || gotState !== state) throw new Error("oauth: state mismatch");
+        const gotCode = urlParsed.searchParams.get("code");
+        if (!gotCode) throw new Error("oauth: no code in callback");
+        code = gotCode;
+      }
+      try {
+        await exchangeCode(code, verifier, redirectUri);
+        settleDone(true);
+      } catch (e) {
+        settleDone(false);
+        throw e;
+      }
+    },
+    cancel() {
+      settleDone(false);
+    },
+    done,
+  };
+}
+
 
 async function exchangeCode(code: string, verifier: string, redirect: string): Promise<void> {
   const res = await fetch(TOKEN_URL, {

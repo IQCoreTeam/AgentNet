@@ -145,9 +145,11 @@ function reducer(state: State, ev: Action): State {
       // Onboarding handshake: no runtime yet → show ConnectWallet.
       return { ...state, phase: "onboarding" };
     case "walletConnected":
-      // Wallet is in. Don't jump to chat yet — the cliStatus that follows decides whether
-      // claude needs a subscription login first. Stay in onboarding meanwhile.
-      return { ...state, walletAddress: ev.address, phase: "storageSelect" };
+      // Wallet is in. If storage was already configured on this device (returning user),
+      // skip the storage picker entirely and go straight to engine select — the gdrive
+      // choice + token persist, so re-walking it (and re-auth) is pointless. Only a true
+      // first run shows the picker.
+      return { ...state, walletAddress: ev.address, phase: ev.storageConfigured ? "engineSelect" : "storageSelect" };
     case "cliStatus":
       // After wallet: don't force claude. Record both engines' status and show the engine
       // picker so the user chooses which one to activate. The chosen engine then runs its
@@ -258,6 +260,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (state.phase === "chat" && !wasChat.current) {
       wasChat.current = true;
       transportRef.current?.reopen();
+      // reopen() spins up a FRESH client that the server binds to attachChat (runtime now
+      // exists). That handler only pushes sessions + storage on "ready" — and the initial
+      // ready (sent at mount) went to the now-discarded onboarding client. So re-send it,
+      // or the chat lands with no session list and a stale "local only" storage pill.
+      void transportRef.current?.post({ type: "ready" });
     } else if (state.phase !== "chat") {
       wasChat.current = false;
     }

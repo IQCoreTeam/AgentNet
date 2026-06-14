@@ -108,7 +108,7 @@ export type ServerMessage =
   | { type: "approval"; req: ApprovalRequest }
   // onboarding-only:
   | { type: "init"; defaultPath: string | null; cloudKind: string | null }
-  | { type: "walletConnected"; address: string | null; storageOptions: unknown }
+  | { type: "walletConnected"; address: string | null; storageOptions: unknown; storageConfigured?: boolean }
   // claude subscription login: server reports whether login is needed, streams the OAuth
   // URL to open, and the final result after the user pastes their code.
   | { type: "cliStatus"; claude: "ok" | "no-login" | "missing"; codex: "ok" | "no-login" | "missing" }
