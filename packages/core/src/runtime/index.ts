@@ -10,14 +10,8 @@ import { SessionStore } from "../account/store.js";
 import { prepareResume } from "./inject/index.js";
 import { MemorySync } from "../memory/index.js";
 import { getSkillShopping } from "../account/login.js";
-import {
-  installPassiveSkill,
-  writeCodexSkills,
-  passiveWorkflowProse,
-  type PassiveMode,
-} from "../skill-market/passive.js";
-import { createAgentSdkMcpServer, newVerifyGate } from "../skill-market/index.js";
-import { getSolBalance, TX_FEE_BUFFER_LAMPORTS } from "../notes/solBalance.js";
+import { setSkillShoppingActive } from "../skill-market/passive.js";
+import { createAgentSdkMcpServer, newVerifyGuard } from "../skill-market/index.js";
 import type { ApprovalChannel } from "./approval/channel.js";
 import type {
   AgentRuntime,
@@ -30,73 +24,43 @@ import type {
 
 const MARKET_TOOLS = [
   "mcp__agentnet-marketplace__search_skills",
-  "mcp__agentnet-marketplace__wallet_balance",
   "mcp__agentnet-marketplace__verify_skill",
   "mcp__agentnet-marketplace__buy_skill",
 ];
 
-// OFF mode read-only set: price a missing capability + check funds, but never verify/buy.
-const MARKET_TOOLS_READONLY = [
-  "mcp__agentnet-marketplace__search_skills",
-  "mcp__agentnet-marketplace__wallet_balance",
-];
-
-// Passive skill-shopping wiring (issue #21), built fresh per session from the persisted
-// toggle. Force-loads the workflow skill into both runtimes; for Claude it returns the
-// SDK extras (MCP marketplace server + allowed tools + workflow prose); for Codex it
-// splices the directive into AGENTS.md. All best-effort — a failure here must not block
-// the session, just leave skill-shopping inert this run.
+// Skill-shopping wiring (plans/skill-shopping.md), built fresh per session from the
+// persisted toggle. ON installs the bundled skill-shopping SKILL.md into both runtimes'
+// skills dirs (so either engine discovers it) and — for Claude — wires the marketplace
+// MCP tools so the agent can act on it; OFF moves the skill out to the holding dir and
+// wires no tools (fully quiet, no marketplace surface). All best-effort: a failure here
+// must not block the session, just leave skill-shopping inert this run.
+//
+// Codex gets the SKILL.md but no MCP tools (codex-sdk exposes no mcpServers option yet —
+// deferred); the skill's prose still guides it to the (unavailable) tools, harmlessly.
 async function buildPassiveSpawn(
   cli: "claude" | "codex",
-  cwd: string,
   wallet: Wallet,
-): Promise<{ appendSystemPrompt?: string; mcpServers?: Record<string, unknown>; allowedTools?: string[] }> {
+): Promise<{ mcpServers?: Record<string, unknown>; allowedTools?: string[] }> {
   const on = await getSkillShopping().catch(() => true);
 
-  const rpcUrl = process.env.DAS_RPC_URL || process.env.SOLANA_RPC_URL;
-  const conn = rpcUrl ? new Connection(rpcUrl, "confirmed") : null;
-
-  // OFF funds-gate: only allow the single buy-suggestion when the wallet is actually
-  // funded. No RPC or empty wallet → fully silent OFF (never nag an empty wallet).
-  let offCanSuggest = false;
-  if (!on && conn) {
-    try {
-      offCanSuggest = (await getSolBalance(conn, wallet.address)) > TX_FEE_BUFFER_LAMPORTS;
-    } catch {
-      offCanSuggest = false;
-    }
-  }
-  const mode: PassiveMode = { on, offCanSuggest };
-
+  // Move the bundled skill into / out of the scanned skills dirs (both engines).
   try {
-    await installPassiveSkill(mode);
+    await setSkillShoppingActive(on);
   } catch (e) {
-    console.warn("[skill-shopping] install workflow skill failed:", e);
+    console.warn("[skill-shopping] toggle install failed:", e);
   }
 
-  if (cli === "codex") {
-    try {
-      await writeCodexSkills(cwd, mode);
-    } catch (e) {
-      console.warn("[skill-shopping] codex AGENTS.md splice failed:", e);
-    }
-    return {}; // Codex MCP (TOML) is deferred — the directive lives in AGENTS.md.
-  }
+  // OFF, or codex (no MCP option yet): the SKILL.md placement above is all we do.
+  if (!on || cli === "codex") return {};
 
-  // Claude: append the workflow prose, then wire the marketplace MCP tools per mode:
-  //  • ON           → full set (search + verify + buy) with a hard verify gate.
-  //  • OFF + funded  → READ-ONLY set (search + wallet_balance) so the agent can price a
-  //                    missing capability and funds-gate a SUGGESTION; verify/buy absent.
-  //  • OFF + empty   → no tools at all (fully silent).
-  const extra: { appendSystemPrompt?: string; mcpServers?: Record<string, unknown>; allowedTools?: string[] } = {
-    appendSystemPrompt: passiveWorkflowProse(mode),
-  };
-  if (conn && (on || offCanSuggest)) {
-    const server = createAgentSdkMcpServer(conn, wallet, wallet.address, newVerifyGate(), { includeBuy: on });
-    extra.mcpServers = { "agentnet-marketplace": server };
-    extra.allowedTools = on ? MARKET_TOOLS : MARKET_TOOLS_READONLY;
-  }
-  return extra;
+  // Claude + ON: wire the marketplace MCP tools (search → verify → buy) with a per-spawn
+  // verify guard. Needs a DAS-capable RPC; without one the tools can't read the market, so
+  // leave them off (the skill is present but inert) rather than wire dead tools.
+  const rpcUrl = process.env.DAS_RPC_URL || process.env.SOLANA_RPC_URL;
+  if (!rpcUrl) return {};
+  const conn = new Connection(rpcUrl, "confirmed");
+  const server = createAgentSdkMcpServer(conn, wallet, wallet.address, newVerifyGuard());
+  return { mcpServers: { "agentnet-marketplace": server }, allowedTools: MARKET_TOOLS };
 }
 
 // `approval` is the swappable decision source (webview buttons / auto / push). The
@@ -131,11 +95,11 @@ export function createRuntime(
         console.warn("[memory] inject failed:", e);
       }
 
-      // Passive skill-shopping (issue #21): force-load the workflow + (Claude, ON) wire
-      // the marketplace MCP tools, per the persisted toggle. Best-effort.
+      // Skill-shopping (plans/skill-shopping.md): install/remove the bundled skill per the
+      // toggle + (Claude, ON) wire the marketplace MCP tools. Best-effort.
       let passive: Awaited<ReturnType<typeof buildPassiveSpawn>> = {};
       try {
-        passive = await buildPassiveSpawn(opts.cli, opts.cwd, wallet);
+        passive = await buildPassiveSpawn(opts.cli, wallet);
       } catch (e) {
         console.warn("[skill-shopping] setup failed:", e);
       }

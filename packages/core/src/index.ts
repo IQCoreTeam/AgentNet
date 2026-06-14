@@ -64,16 +64,11 @@ export type { SkillSource } from "./core/skillSource.js";
 export { getReputation, getLeaderboard } from "./reputation/index.js";
 export type { Reputation } from "./core/types.js";
 // skill-market MCP surface (autonomous buy)
-export { createAgentMcpServer, createAgentSdkMcpServer, getAgentNetTools, handleToolCall, newVerifyGate } from "./skill-market/index.js";
-export type { VerifyGate } from "./skill-market/index.js";
-export {
-  installPassiveSkill,
-  writeCodexSkills,
-  passiveWorkflowProse,
-  renderSkillsBlock,
-  PASSIVE_SKILL_SLUG,
-} from "./skill-market/passive.js";
-export type { PassiveMode } from "./skill-market/passive.js";
+export { createAgentMcpServer, createAgentSdkMcpServer, getAgentNetTools, handleToolCall, newVerifyGuard, verifyOneSkill, verifySkills } from "./skill-market/index.js";
+export type { VerifyGuard } from "./skill-market/index.js";
+export { browseSkills } from "./skill-market/browse.js";
+export type { BrowseResult } from "./skill-market/browse.js";
+export { setSkillShoppingActive, PASSIVE_SKILL_SLUG } from "./skill-market/passive.js";
 
 export { createRuntime } from "./runtime/index.js";
 export { detectCli } from "./runtime/detect.js";

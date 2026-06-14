@@ -1,55 +1,73 @@
-import { describe, it, expect } from "vitest";
-import { passiveWorkflowProse, renderSkillsBlock } from "./passive.js";
-import { spliceCodexBlock, renderCodexBlock, spliceMarkedBlock } from "../memory/convert/codex.js";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtemp, rm, readFile, access } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { setSkillShoppingActive, PASSIVE_SKILL_SLUG } from "./passive.js";
+import { claudeSkillsDir, codexSkillsDir, inactiveSkillsDir } from "../core/paths.js";
 
-describe("passive skill-shopping prose (issue #21)", () => {
-  it("ON prose drives the shop workflow (verify before buy)", () => {
-    const p = passiveWorkflowProse({ on: true });
-    expect(p).toContain("search_skills");
-    expect(p).toContain("verify_skill");
-    expect(p).toContain("buy_skill");
+// setSkillShoppingActive moves the bundled skill between each runtime's scanned skills dir
+// and a holding dir (plan §6). We point AGENTNET_HOME at a temp dir and assert the file
+// is present in / absent from the scanned dirs as the toggle flips — for BOTH engines.
+const exists = (p: string) => access(p).then(() => true).catch(() => false);
+const skillMd = (base: string) => join(base, PASSIVE_SKILL_SLUG, "SKILL.md");
+
+describe("skill-shopping toggle = file move (plan §6)", () => {
+  let home: string;
+  let prevHome: string | undefined;
+  let prevClaude: string | undefined;
+  let prevCodex: string | undefined;
+
+  beforeEach(async () => {
+    home = await mkdtemp(join(tmpdir(), "agentnet-skillshop-"));
+    // route every path (root + both engine homes) under the temp dir
+    prevHome = process.env.AGENTNET_HOME;
+    prevClaude = process.env.CLAUDE_CONFIG_DIR;
+    prevCodex = process.env.CODEX_HOME;
+    process.env.AGENTNET_HOME = home;
+    process.env.CLAUDE_CONFIG_DIR = join(home, "claude");
+    process.env.CODEX_HOME = join(home, "codex");
   });
 
-  it("OFF funded prose allows a funds-gated suggestion via read-only tools", () => {
-    const p = passiveWorkflowProse({ on: false, offCanSuggest: true });
-    expect(p).toContain("buy it?");
-    expect(p).toContain("search_skills");
-    expect(p).toContain("wallet_balance");
-    expect(p).toContain("NO buy or"); // no buy/verify tools in OFF
+  afterEach(async () => {
+    process.env.AGENTNET_HOME = prevHome;
+    process.env.CLAUDE_CONFIG_DIR = prevClaude;
+    process.env.CODEX_HOME = prevCodex;
+    await rm(home, { recursive: true, force: true });
   });
 
-  it("OFF empty-wallet prose stays fully silent (no suggestion)", () => {
-    const p = passiveWorkflowProse({ on: false, offCanSuggest: false });
-    expect(p).not.toContain("buy it?");
-    expect(p).toContain("fully silent");
-  });
-});
-
-describe("codex skills block splicing", () => {
-  const SKILLS_START = "<!-- agentnet:skills:start -->";
-  const SKILLS_END = "<!-- agentnet:skills:end -->";
-
-  it("re-splicing the skills block is idempotent", () => {
-    const block = renderSkillsBlock({ on: true });
-    const once = spliceMarkedBlock("# human notes\n", block, SKILLS_START, SKILLS_END);
-    const twice = spliceMarkedBlock(once, block, SKILLS_START, SKILLS_END);
-    expect(twice).toBe(once);
-    expect(once).toContain("# human notes");
+  it("ON writes the SKILL.md into both scanned skills dirs", async () => {
+    await setSkillShoppingActive(true);
+    expect(await exists(skillMd(claudeSkillsDir()))).toBe(true);
+    expect(await exists(skillMd(codexSkillsDir()))).toBe(true);
+    const body = await readFile(skillMd(claudeSkillsDir()), "utf8");
+    expect(body).toContain(`name: ${PASSIVE_SKILL_SLUG}`);
+    expect(body).toContain("description:"); // trigger lives in the frontmatter
   });
 
-  it("skills block coexists with the memory block (distinct markers)", () => {
-    const mem = renderCodexBlock({ records: [{ name: "n", description: "d", body: "b" }] } as any);
-    const skills = renderSkillsBlock({ on: true });
-    let doc = spliceCodexBlock("", mem);
-    doc = spliceMarkedBlock(doc, skills, SKILLS_START, SKILLS_END);
+  it("OFF moves it out of the scanned dirs into the holding dir (not deleted)", async () => {
+    await setSkillShoppingActive(true);
+    await setSkillShoppingActive(false);
+    // gone from where the CLI scans …
+    expect(await exists(skillMd(claudeSkillsDir()))).toBe(false);
+    expect(await exists(skillMd(codexSkillsDir()))).toBe(false);
+    // … but preserved in the holding dir
+    expect(await exists(skillMd(inactiveSkillsDir("claude")))).toBe(true);
+    expect(await exists(skillMd(inactiveSkillsDir("codex")))).toBe(true);
+  });
 
-    expect(doc).toContain("agentnet:memory:start");
-    expect(doc).toContain("agentnet:skills:start");
+  it("re-toggling ON brings it back to the scanned dirs", async () => {
+    await setSkillShoppingActive(true);
+    await setSkillShoppingActive(false);
+    await setSkillShoppingActive(true);
+    expect(await exists(skillMd(claudeSkillsDir()))).toBe(true);
+    expect(await exists(skillMd(codexSkillsDir()))).toBe(true);
+  });
 
-    // re-splicing skills must not disturb the memory block
-    const before = doc;
-    doc = spliceMarkedBlock(doc, skills, SKILLS_START, SKILLS_END);
-    expect(doc).toBe(before);
-    expect(doc).toContain("agentnet:memory:start");
+  it("toggling OFF twice is idempotent (no throw, stays inactive)", async () => {
+    await setSkillShoppingActive(true);
+    await setSkillShoppingActive(false);
+    await setSkillShoppingActive(false); // must not throw
+    expect(await exists(skillMd(claudeSkillsDir()))).toBe(false);
+    expect(await exists(skillMd(inactiveSkillsDir("claude")))).toBe(true);
   });
 });
