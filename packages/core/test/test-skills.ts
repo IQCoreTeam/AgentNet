@@ -13,6 +13,7 @@ process.env.CODEX_HOME = join(tmp, "codex");
 
 const { toSkillMd, skillSlug } = await import("../src/skill-market/ingest/convert.js");
 const { claudeSkillsDir, codexSkillsDir, ensureDir } = await import("../src/core/paths.js");
+const { mapCodexEvent } = await import("../src/runtime/convert/codex.js");
 import type { SkillMintMetadata } from "../src/nft/token2022.js";
 
 let failures = 0;
@@ -88,6 +89,30 @@ console.log("4. On-disk placement (both runtimes)");
       readFileSync(target, "utf8").includes("name: trading-bot"));
   }
   check("claude + codex dirs are distinct", claudeSkillsDir() !== codexSkillsDir());
+}
+
+// 5. codex usage cue: a command referencing our skills dir → skill slug (no per-tool
+//    hook on codex, so we detect from the output stream — issue #17 workaround).
+console.log("5. codex skill-firing detection from the output stream");
+{
+  const dir = codexSkillsDir();
+  const fired = mapCodexEvent({
+    type: "item.completed",
+    item: { type: "command_execution", command: `python3 ${dir}/trading-bot/scripts/run.py --go` },
+  });
+  check("command under skills dir → skill slug extracted", fired.skill === "trading-bot");
+
+  const unrelated = mapCodexEvent({
+    type: "item.completed",
+    item: { type: "command_execution", command: "ls -la /tmp" },
+  });
+  check("unrelated command → no skill signal", unrelated.skill === undefined);
+
+  const msgOnly = mapCodexEvent({
+    type: "item.completed",
+    item: { type: "agent_message", text: "done" },
+  });
+  check("plain message → no skill signal", msgOnly.skill === undefined);
 }
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILED`);

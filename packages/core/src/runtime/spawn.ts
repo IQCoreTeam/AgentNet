@@ -205,6 +205,7 @@ function codexEngine(opts: SpawnOpts): Engine {
         const r = mapCodexEvent(ev);
         if (r.sessionId && !sessionId) { sessionId = r.sessionId; cb.emitSid(r.sessionId); }
         for (const cm of r.messages) cb.emitMsg(cm);
+        if (r.skill) cb.emitSkill(r.skill); // a command hit our skills dir → "Casting"
         if (r.turnEnded) cb.emitTurn();
       }
     } catch (e) {
@@ -220,8 +221,8 @@ function codexEngine(opts: SpawnOpts): Engine {
     onSessionId: (c) => cb.sid.push(c),
     onTurnEnd: (c) => cb.turn.push(c),
     onError: (c) => cb.err.push(c),
-    // registered for parity; codex's SDK doesn't expose a per-tool hook yet, so no
-    // skill signal fires for codex turns (the marquee only lights up under claude).
+    // codex has no per-tool hook, so the skill signal comes from the output stream:
+    // mapCodexEvent flags any command/path that references our skills dir (convert/codex).
     onSkill: (c) => cb.skill.push(c),
     send: (t) => {
       // codex SDK has no inline approval; surface ONE policy decision per turn so the
