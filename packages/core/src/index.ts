@@ -50,7 +50,7 @@ export { resolveRpcUrl, saveHeliusKey, loadHeliusKey, hasDasRpc, heliusUrl, mask
 export { getNetwork, NETWORK } from "./core/seed.js";
 export type { Network } from "./core/seed.js";
 // the marketplace UI<->host message contract (shared by every surface's UI)
-export type { SkillCard, MarketRequest, MarketEvent, MarketMessage, RpcStatus } from "./chat/marketMessages.js";
+export type { SkillCard, SkillDetail, MarketRequest, MarketEvent, MarketMessage, RpcStatus } from "./chat/marketMessages.js";
 // active-skill injection (install a bought skill's SKILL.md into a runtime's skills dir)
 export { SkillSync } from "./skill-market/ingest/index.js";
 export { toSkillMd, skillSlug } from "./skill-market/ingest/convert.js";
