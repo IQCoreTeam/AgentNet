@@ -8,6 +8,8 @@ const WORKFLOWS = "AGENTNET_WORKFLOWS_COLLECTION_PUBKEY";
 
 function clearEnv() {
   for (const k of [RPC, SOL, SKILLS, WORKFLOWS]) delete process.env[k];
+  // isolate AGENTNET_HOME so resolveRpcUrl() can't pick up a real ~/.agentnet Helius key
+  process.env.AGENTNET_HOME = "/tmp/agentnet-dassource-test";
 }
 
 describe("core/dasSource", () => {
@@ -17,9 +19,15 @@ describe("core/dasSource", () => {
     vi.unstubAllGlobals();
   });
 
-  it("throws (not silent fallback) when no RPC is configured", async () => {
+  it("falls back to the public-devnet default when no RPC is configured (issue #23)", async () => {
     process.env[SKILLS] = "SkiLLCoLLecTion1111111111111111111111111111";
-    await expect(dasSource.listSkills()).rejects.toThrow(/no DAS_RPC_URL/);
+    let calledUrl = "";
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (url: string) => {
+      calledUrl = url;
+      return { json: async () => ({ result: { items: [] } }) };
+    }));
+    await expect(dasSource.listSkills()).resolves.toEqual([]);
+    expect(calledUrl).toContain("devnet"); // resolveRpcUrl() supplied the default
   });
 
   // (No "no collection mint" test: seed.ts ships default devnet collection ids,

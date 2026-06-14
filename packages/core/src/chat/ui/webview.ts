@@ -91,6 +91,12 @@ export function chatHtml(): string {
                font-size: 0.78em; cursor: pointer; transition: all 0.12s; }
   #newTabBtn:hover { opacity: 1; color: var(--an-green); border-color: var(--an-green-line);
                      background: var(--an-green-dim); }
+  /* Markets: a green-tinted pill next to the wallet — the entry to the marketplace view */
+  #marketsBtn { margin-left: 8px; background: var(--an-green-dim); color: var(--an-green);
+                border: 1px solid var(--an-green-line); border-radius: 999px; padding: 3px 14px;
+                font-size: 0.78em; font-weight: 600; cursor: pointer; transition: all 0.12s; }
+  #marketsBtn:hover { background: color-mix(in srgb, var(--an-green) 22%, transparent); }
+  #marketsBtn.on { background: var(--an-green); color: #07140d; }
   /* storage block inside the wallet dropdown (moved from the top bar) */
   .wmSection { padding: 4px 8px 8px; border-bottom: 1px solid var(--an-line-soft); margin-bottom: 4px; }
   .wmLabel { font-size: 0.68em; opacity: 0.5; text-transform: uppercase; letter-spacing: 0.06em;
@@ -103,6 +109,16 @@ export function chatHtml(): string {
   .wmStorage .dot.cloud-off { color: var(--vscode-disabledForeground, #888); }
   .wmStorage .sep { opacity: 0.3; }
   .wmStorage .acct { opacity: 0.5; }
+  /* RPC row (issue #23): a green key box when set, a warn link when not, + net badge */
+  .rpcKeyBox { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 6px;
+               background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
+               font-family: var(--vscode-editor-font-family, monospace); font-size: 0.9em; }
+  .rpcWarn { color: #e0a030; cursor: pointer; font-weight: 600; }
+  .rpcWarn:hover { text-decoration: underline; }
+  .netBadge { padding: 1px 7px; border-radius: 999px; font-size: 0.66em; font-weight: 700; letter-spacing: 0.04em;
+              text-transform: uppercase; }
+  .netBadge.devnet { background: color-mix(in srgb, #e0a030 22%, transparent); color: #e0a030; }
+  .netBadge.mainnet { background: var(--an-green-dim); color: var(--an-green); }
   .wmStorage .link { background: none; border: none; padding: 0 2px; width: auto;
                      color: var(--an-green); cursor: pointer; font-size: 1em; }
   .wmStorage .link:hover { text-decoration: underline; }
@@ -488,6 +504,31 @@ export function chatHtml(): string {
   .shopItem .si-buy[disabled] { opacity: 0.5; cursor: default; }
   #skillResults .shopEmpty { opacity: 0.5; font-size: 0.8em; padding: 4px 2px; }
 
+  /* Markets full-screen view */
+  .mktHead { margin-bottom: 14px; }
+  .mktTitle { display: flex; align-items: center; gap: 8px; font-size: 1.15em; font-weight: 700; }
+  .mktTitle .wand { width: 18px; height: 18px; color: var(--an-green); }
+  .mktSearchRow { display: flex; gap: 8px; margin-bottom: 16px; }
+  #mktSearch { flex: 1; min-width: 0; background: var(--an-bg); border: 1px solid var(--an-line);
+               border-radius: var(--an-radius); color: inherit; padding: 9px 12px; font-size: 0.92em; outline: none; }
+  #mktSearch:focus { border-color: var(--an-green-line); }
+  #mktSearchBtn { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
+                  border-radius: var(--an-radius); padding: 9px 16px; font-size: 0.92em; font-weight: 600; cursor: pointer; }
+  .mktGrid { display: flex; flex-direction: column; gap: 10px; }
+  .mktCard { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--an-line);
+             border-radius: var(--an-radius); background: var(--an-bg); }
+  .mktCard .mc-img { width: 40px; height: 40px; border-radius: 8px; background: var(--an-green-dim);
+                     display: flex; align-items: center; justify-content: center; flex: none; }
+  .mktCard .mc-img .wand { width: 20px; height: 20px; color: var(--an-green); }
+  .mktCard .mc-main { min-width: 0; flex: 1; }
+  .mktCard .mc-name { font-weight: 600; }
+  .mktCard .mc-desc { opacity: 0.6; font-size: 0.88em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mktCard .mc-sup { opacity: 0.5; font-size: 0.85em; white-space: nowrap; }
+  .mktCard .mc-buy { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
+                     border-radius: var(--an-radius); padding: 6px 14px; cursor: pointer; white-space: nowrap; font-weight: 600; }
+  .mktCard .mc-buy[disabled] { opacity: 0.5; cursor: default; }
+  .mktGrid .mktEmpty { opacity: 0.5; font-size: 0.9em; padding: 8px 2px; }
+
   /* skill marquee — ONLY shows when an equipped skill fires ("Casting <skill>").
      Plain tool work isn't shown here (it's already in the chat timeline). Green with
      a breathing glow so a skill firing feels like the agent wielding its power. */
@@ -565,6 +606,7 @@ export function chatHtml(): string {
       <span id="wName">My Wallet</span>
       <span class="caret">▾</span>
     </button>
+    <button id="marketsBtn" title="Skill marketplace">Markets</button>
     <div class="spacer"></div>
     <button id="histBtn" title="Recent chats">↻ History <span class="caret">▾</span></button>
     <button id="newTabBtn" title="Open another chat in a new tab">+</button>
@@ -596,6 +638,17 @@ export function chatHtml(): string {
         <span id="cloudState"></span>
         <button id="cloudBtn" class="link"></button>
       </div>
+    </div>
+    <!-- RPC (issue #23): a Helius key powers the marketplace (DAS); the default can't.
+         Always shows status here so a user can add/swap the key after onboarding. -->
+    <div class="wmSection">
+      <div class="wmLabel">RPC</div>
+      <div class="wmStorage">
+        <span id="rpcState" class="muted">…</span>
+        <button id="rpcSetBtn" class="link">Set Helius key</button>
+        <button id="rpcDefaultBtn" class="link" style="display:none">Use default</button>
+      </div>
+      <div id="rpcHint" class="muted small" style="display:none;margin-top:3px"></div>
     </div>
     <div class="wmItem" id="openWalletPage">Wallet page</div>
     <div class="wmItem disabled"><span class="wand">${WAND_SVG}</span> Skills <span class="soon">soon</span></div>
@@ -699,6 +752,23 @@ export function chatHtml(): string {
       </div>
       <button class="danger" id="disconnectWalletBtn">Disconnect wallet</button>
       <div class="muted small">Disconnecting returns you to the connect screen. Your encrypted local sessions stay on this device.</div>
+    </div>
+  </div>
+
+  <!-- Markets: the full-screen skill marketplace (search → results → buy). Reuses the
+       shared market message contract; the same screens get a mobile design later. -->
+  <div id="marketView" class="panel" style="display:none">
+    <div class="page">
+      <div id="backToChatM" class="muted" style="cursor:pointer;margin-bottom:10px">‹ Back to chat</div>
+      <div class="mktHead">
+        <div class="mktTitle"><span class="wand">${WAND_SVG}</span> Skill Market</div>
+        <div class="muted small">Popular skills first. Buy a skill (soulbound) and your agent equips it.</div>
+      </div>
+      <div class="mktSearchRow">
+        <input id="mktSearch" type="text" placeholder="Search skills…" />
+        <button id="mktSearchBtn">Search</button>
+      </div>
+      <div id="mktResults" class="mktGrid"></div>
     </div>
   </div>
 <!-- markdown libs (marked + dompurify), inlined; expose window.marked / window.DOMPurify -->
@@ -1349,12 +1419,17 @@ export function chatHtml(): string {
   const panels = {
     chat: document.getElementById('chatView'),
     wallet: document.getElementById('walletView'),
+    market: document.getElementById('marketView'),
   };
   function showView(name) {
     for (const k in panels) panels[k].style.display = (k === name) ? 'flex' : 'none';
+    document.getElementById('marketsBtn').classList.toggle('on', name === 'market');
     if (name === 'wallet') vscode.postMessage({ type: 'wallet' }); // refresh address
+    if (name === 'market') openMarket();
   }
   document.getElementById('backToChat').addEventListener('click', () => showView('chat'));
+  document.getElementById('backToChatM').addEventListener('click', () => showView('chat'));
+  document.getElementById('marketsBtn').addEventListener('click', () => { closeMenus(); showView('market'); });
 
   // ---- top-bar dropdowns: History (sessions) + Wallet (agent menu) ----
   const histMenu = document.getElementById('histMenu');
@@ -1460,6 +1535,93 @@ export function chatHtml(): string {
     vscode.postMessage({ type: 'setSkillShopping', on: next });
   });
   vscode.postMessage({ type: 'getSkillShopping' }); // hydrate the switch on load
+
+  // ---- Markets full-screen view (same contract, marketplace design) ----
+  const mktSearch = document.getElementById('mktSearch');
+  const mktResults = document.getElementById('mktResults');
+  let lastMarketResults = []; // last search results, kept to re-render on owned-list change
+  function runMarketSearch() {
+    mktResults.innerHTML = '<div class="mktEmpty">Searching…</div>';
+    vscode.postMessage({ type: 'searchSkills', query: mktSearch.value.trim() });
+  }
+  function openMarket() {
+    // first open (and re-open) loads the popular list (empty query = supply-sorted)
+    mktResults.innerHTML = '<div class="mktEmpty">Loading…</div>';
+    vscode.postMessage({ type: 'searchSkills', query: '' });
+    vscode.postMessage({ type: 'ownedSkills' });
+  }
+  document.getElementById('mktSearchBtn').addEventListener('click', runMarketSearch);
+  mktSearch.addEventListener('keydown', (e) => {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Enter') { e.preventDefault(); runMarketSearch(); }
+  });
+  function renderMarketResults(results) {
+    results = results || [];
+    mktResults.innerHTML = '';
+    if (!results.length) {
+      // empty can mean "no match" OR "no DAS RPC so reads return nothing" — say which.
+      mktResults.innerHTML = dasReady
+        ? '<div class="mktEmpty">No skills found.</div>'
+        : '<div class="mktEmpty">No skills — the default RPC can\\'t read the marketplace. Add a Helius key (free devnet tier) in the wallet menu \\u2192 RPC.</div>';
+      return;
+    }
+    for (const r of results) {
+      const owned = ownedSkills.indexOf(r.name) >= 0;
+      const card = document.createElement('div'); card.className = 'mktCard';
+      const img = document.createElement('div'); img.className = 'mc-img';
+      img.innerHTML = '<span class="wand">' + ${JSON.stringify(WAND_SVG)} + '</span>';
+      const main = document.createElement('div'); main.className = 'mc-main';
+      const nm = document.createElement('div'); nm.className = 'mc-name'; nm.textContent = r.name || r.id;
+      const ds = document.createElement('div'); ds.className = 'mc-desc'; ds.textContent = r.description || '';
+      main.appendChild(nm); main.appendChild(ds);
+      const sup = document.createElement('span'); sup.className = 'mc-sup';
+      sup.textContent = (typeof r.supply === 'number') ? (r.supply + '\\u00d7') : '';
+      const buy = document.createElement('button'); buy.className = 'mc-buy';
+      buy.textContent = owned ? 'Owned' : 'Buy'; buy.disabled = owned;
+      buy.addEventListener('click', () => {
+        buy.disabled = true; buy.textContent = 'Buying…';
+        vscode.postMessage({ type: 'buySkill', skillId: r.id, creatorWallet: r.creator });
+      });
+      card.appendChild(img); card.appendChild(main); card.appendChild(sup); card.appendChild(buy);
+      mktResults.appendChild(card);
+    }
+  }
+
+  // ---- RPC status (issue #23): show whether a DAS-capable RPC (Helius) is set ----
+  let dasReady = false;
+  const rpcState = document.getElementById('rpcState');
+  const rpcHint = document.getElementById('rpcHint');
+  const rpcSetBtn = document.getElementById('rpcSetBtn');
+  const rpcDefaultBtn = document.getElementById('rpcDefaultBtn');
+  // The default RPC is never shown — the user only sees "key set" (green masked box +
+  // net badge) or "no key" (a warn link to set one). devnet/mainnet is a badge driven
+  // by the central network. (issue #23)
+  function netBadge(network) {
+    const n = network === 'mainnet' ? 'mainnet' : 'devnet';
+    return '<span class="netBadge ' + n + '">' + n + '</span>';
+  }
+  function renderRpcStatus(s) {
+    s = s || { dasReady: false, hasKey: false, masked: null, network: 'devnet' };
+    dasReady = !!s.dasReady;
+    if (s.hasKey && s.masked) {
+      // green box: masked key (last chars only) + the network badge
+      rpcState.innerHTML = '<span class="rpcKeyBox">\\u2713 ' + escapeHtml(s.masked) + '</span> ' + netBadge(s.network);
+      rpcSetBtn.textContent = 'Change'; rpcSetBtn.style.display = '';
+      rpcDefaultBtn.textContent = 'Remove'; rpcDefaultBtn.style.display = '';
+      rpcHint.style.display = 'none';
+    } else {
+      // no key: just a warning that doubles as the set action + the network badge
+      rpcState.innerHTML = '<span class="rpcWarn" id="rpcWarnSet">\\u26a0 Set Helius key</span> ' + netBadge(s.network);
+      const w = document.getElementById('rpcWarnSet');
+      if (w) w.addEventListener('click', () => vscode.postMessage({ type: 'setHeliusKey' }));
+      rpcSetBtn.style.display = 'none';
+      rpcDefaultBtn.style.display = 'none';
+      rpcHint.style.display = 'none';
+    }
+  }
+  rpcSetBtn.addEventListener('click', () => vscode.postMessage({ type: 'setHeliusKey' }));
+  rpcDefaultBtn.addEventListener('click', () => vscode.postMessage({ type: 'useDefaultRpc' }));
+  vscode.postMessage({ type: 'getRpcStatus' }); // hydrate on load
 
   // ---- activity marquee: advertise what the agent is doing RIGHT NOW ----
   // Map a tool action to a flashy game-verb + object. The verb is picked from a small
@@ -1586,12 +1748,31 @@ export function chatHtml(): string {
     else if (m.type === 'clear') { log.innerHTML = ''; approvalDock.innerHTML = ''; syncComposerLock(); streaming = null; openBash = null; tailTurn = null; headTurn = null; hideTyping(); hideActivity(); resetPaging(); syncWatermark(); hideLoading(); }
     else if (m.type === 'turnEnd') { hideTyping(); hideActivity(); }
     else if (m.type === 'skillActive') flashSkill(m.name); // a real skill fired (was /mockskill)
-    else if (m.type === 'searchResults') renderSkillResults(m.results);
-    else if (m.type === 'ownedSkills') setSkills(m.names || []);
+    else if (m.type === 'rpcStatus') renderRpcStatus(m.status);
     else if (m.type === 'skillShopping') setShopToggle(m.on);
+    else if (m.type === 'searchResults') {
+      lastMarketResults = m.results || [];
+      renderSkillResults(m.results);           // the small skills-panel shop
+      renderMarketResults(m.results);          // the full Markets view
+    }
+    else if (m.type === 'searchError') {
+      // don't hang on "Searching…" — show the real reason in both views
+      const msg = 'Search failed: ' + escapeHtml(m.message || 'unknown');
+      mktResults.innerHTML = '<div class="mktEmpty">' + msg + '</div>';
+      skillResults.innerHTML = '<div class="shopEmpty">' + msg + '</div>';
+    }
+    else if (m.type === 'ownedSkills') {
+      setSkills(m.names || []);                // updates ownedSkills used by both renders
+      if (panels.market.style.display !== 'none') renderMarketResults(lastMarketResults); // refresh Owned badges
+    }
     else if (m.type === 'buyResult') {
-      if (m.ok) { runSkillSearch(); } // refresh the list so the bought item shows "Owned"
-      else { skillResults.innerHTML = '<div class="shopEmpty">Buy failed: ' + escapeHtml(m.error || 'unknown') + '</div>'; }
+      const marketOpen = panels.market.style.display !== 'none';
+      if (m.ok) { marketOpen ? runMarketSearch() : runSkillSearch(); } // refresh so the bought item shows "Owned"
+      else {
+        const msg = 'Buy failed: ' + escapeHtml(m.error || 'unknown');
+        if (marketOpen) mktResults.innerHTML = '<div class="mktEmpty">' + msg + '</div>';
+        else skillResults.innerHTML = '<div class="shopEmpty">' + msg + '</div>';
+      }
     }
     else if (m.type === 'platform') setTab(m.cli); // extension switched CLI (e.g. on session open)
     else if (m.type === 'storage') { renderStorage(m.info, m.options); renderWalletStorage(); }

@@ -11,6 +11,8 @@ describe("core/skillSource — dasSource", () => {
     process.env.DAS_RPC_URL = "https://das.example/rpc";
     process.env.AGENTNET_SKILLS_COLLECTION_PUBKEY = "SkillsCollection";
     delete process.env.AGENTNET_WORKFLOWS_COLLECTION_PUBKEY;
+    // isolate AGENTNET_HOME so resolveRpcUrl() can't read a real ~/.agentnet Helius key
+    process.env.AGENTNET_HOME = "/tmp/agentnet-skillsource-test";
   });
 
   afterEach(() => {
@@ -71,10 +73,17 @@ describe("core/skillSource — dasSource", () => {
     await expect(dasSource.listSkills()).rejects.toThrow(/DAS getAssetsByGroup failed/);
   });
 
-  it("throws when no RPC is configured", async () => {
+  it("falls back to the public-devnet default when no RPC is configured (issue #23)", async () => {
     delete process.env.DAS_RPC_URL;
     delete process.env.SOLANA_RPC_URL;
-    await expect(dasSource.listSkills()).rejects.toThrow(/no DAS_RPC_URL/);
+    let calledUrl = "";
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (url: string) => {
+      calledUrl = url;
+      return { json: async () => ({ result: { items: [] } }) };
+    }));
+    // no throw — resolveRpcUrl() supplies the default (a Helius key would win if set)
+    await expect(dasSource.listSkills()).resolves.toEqual([]);
+    expect(calledUrl).toContain("devnet"); // the public-devnet default
   });
 
   // (No "no collection mints" test: seed.ts now ships default devnet collection

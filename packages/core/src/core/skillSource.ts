@@ -14,6 +14,7 @@
 // gateway enumerator can replace it later without changing search/reviews.
 
 import type { Skill } from "./types.js";
+import { resolveRpcUrl } from "./rpc.js";
 
 export interface SkillSource {
   /** Enumerate all known skills/workflows (id set + cached metadata snapshot). */
@@ -60,14 +61,14 @@ function traitsFromAttributes(
  */
 export const dasSource: SkillSource = {
   async listSkills(limit = 1000): Promise<Skill[]> {
-    const rpcUrl = process.env.DAS_RPC_URL || process.env.SOLANA_RPC_URL;
+    // registered Helius key wins; else env; else public-devnet default (issue #23).
+    // Note: the default lacks DAS, so reads come back empty there — a Helius key is
+    // what actually surfaces skills (the UI flags this).
+    const rpcUrl = await resolveRpcUrl();
     const { getSkillsCollectionMint, getWorkflowsCollectionMint } = await import("./seed.js");
     const skillsCollection = getSkillsCollectionMint();
     const workflowsCollection = getWorkflowsCollectionMint();
 
-    if (!rpcUrl) {
-      throw new Error("dasSource: no DAS_RPC_URL / SOLANA_RPC_URL configured");
-    }
     if (!skillsCollection && !workflowsCollection) {
       throw new Error(
         "dasSource: no collection mints configured (AGENTNET_SKILLS_COLLECTION_PUBKEY / _WORKFLOWS_)",
@@ -132,8 +133,7 @@ export const dasSource: SkillSource = {
  * dasSource. Returns [] if RPC/collections aren't configured (best-effort caller).
  */
 export async function ownedSkillMints(owner: string): Promise<string[]> {
-  const rpcUrl = process.env.DAS_RPC_URL || process.env.SOLANA_RPC_URL;
-  if (!rpcUrl) return [];
+  const rpcUrl = await resolveRpcUrl(); // Helius key > env > default (issue #23)
   const { getSkillsCollectionMint, getWorkflowsCollectionMint } = await import("./seed.js");
   const ours = new Set([getSkillsCollectionMint(), getWorkflowsCollectionMint()].filter(Boolean) as string[]);
   if (ours.size === 0) return [];

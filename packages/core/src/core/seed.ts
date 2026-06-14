@@ -45,7 +45,23 @@ export function reviewsAgentHint(agentWallet: string): string {
 //
 // Current values are the DEVNET test deployment. Override any of them with the
 // matching env var when you point at a different network / collection. To move
-// to mainnet, change these three (and the program's constants.rs collection).
+// to mainnet, change NETWORK below + these three (and the program's constants.rs
+// collection).
+
+export type Network = "devnet" | "mainnet";
+
+/**
+ * The single network switch. Everything network-shaped (the default RPC, the Helius
+ * endpoint, the UI badge) derives from this — flip it here (or AGENTNET_NETWORK) and
+ * the whole app retargets. We're on devnet for testing.
+ */
+export const NETWORK: Network = "devnet";
+
+/** The active network (env override wins). */
+export function getNetwork(): Network {
+  const n = process.env.AGENTNET_NETWORK;
+  return n === "mainnet" || n === "devnet" ? n : NETWORK;
+}
 
 /** Devnet test ids — the single source. Swap here (or via env) to retarget. */
 export const SKILLS_COLLECTION_MINT = "4exdqNEcXixiMzenEBts2cE7qLmMvcVtHCjsZUGBm4Gt";

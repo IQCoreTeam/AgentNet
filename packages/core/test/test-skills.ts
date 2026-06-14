@@ -14,6 +14,7 @@ process.env.CODEX_HOME = join(tmp, "codex");
 const { toSkillMd, skillSlug } = await import("../src/skill-market/ingest/convert.js");
 const { claudeSkillsDir, codexSkillsDir, ensureDir } = await import("../src/core/paths.js");
 const { mapCodexEvent } = await import("../src/runtime/convert/codex.js");
+const { chatHtml } = await import("../src/chat/ui/webview.js");
 import type { SkillMintMetadata } from "../src/nft/token2022.js";
 
 let failures = 0;
@@ -113,6 +114,24 @@ console.log("5. codex skill-firing detection from the output stream");
     item: { type: "agent_message", text: "done" },
   });
   check("plain message → no skill signal", msgOnly.skill === undefined);
+}
+
+// 6. Message contract ↔ VSCode webview agreement. The webview is an HTML string
+//    (no compile-time typecheck), so guard that every marketplace `type` it emits/
+//    handles is a real message in the shared contract — a typo or a removed message
+//    fails here instead of silently no-op'ing on that surface.
+console.log("6. webview market messages match the shared contract");
+{
+  const html = chatHtml();
+  // requests the webview SENDS (UI -> host) and events it HANDLES (host -> UI)
+  const REQUESTS = ["searchSkills", "buySkill", "ownedSkills"];
+  const EVENTS = ["searchResults", "buyResult", "ownedSkills", "skillActive"];
+  for (const t of REQUESTS) {
+    check(`webview sends '${t}'`, html.includes(`type: '${t}'`));
+  }
+  for (const t of EVENTS) {
+    check(`webview handles '${t}'`, html.includes(`m.type === '${t}'`));
+  }
 }
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILED`);

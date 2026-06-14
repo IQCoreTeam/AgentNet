@@ -22,7 +22,12 @@ export default defineConfig({
   // require("buffer") at load. esbuild's ESM output has no `require`, so those throw
   // "Dynamic require not supported". Re-create a real `require` from import.meta.url
   // in a banner so the inlined CJS modules resolve Node built-ins natively.
+  //
+  // `exports` shim: @coral-xyz/anchor's ESM dist assigns `exports.workspace` / `.Wallet`
+  // inside an `__esm` lazy-init block when !isBrowser — `exports` is not defined in ESM
+  // scope, causing a ReferenceError at startup. A top-level `exports = {}` makes those
+  // assignments succeed harmlessly (anchor's workspace API is unused by agentnet).
   banner: {
-    js: "import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);",
+    js: "import { createRequire as __cr } from 'node:module'; import { fileURLToPath as __futp } from 'node:url'; import { dirname as __dn } from 'node:path'; const require = __cr(import.meta.url); const exports = {}; const __filename = __futp(import.meta.url); const __dirname = __dn(__filename);",
   },
 });
