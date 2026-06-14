@@ -109,6 +109,16 @@ export function chatHtml(): string {
   .wmStorage .dot.cloud-off { color: var(--vscode-disabledForeground, #888); }
   .wmStorage .sep { opacity: 0.3; }
   .wmStorage .acct { opacity: 0.5; }
+  /* RPC row (issue #23): a green key box when set, a warn link when not, + net badge */
+  .rpcKeyBox { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 6px;
+               background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
+               font-family: var(--vscode-editor-font-family, monospace); font-size: 0.9em; }
+  .rpcWarn { color: #e0a030; cursor: pointer; font-weight: 600; }
+  .rpcWarn:hover { text-decoration: underline; }
+  .netBadge { padding: 1px 7px; border-radius: 999px; font-size: 0.66em; font-weight: 700; letter-spacing: 0.04em;
+              text-transform: uppercase; }
+  .netBadge.devnet { background: color-mix(in srgb, #e0a030 22%, transparent); color: #e0a030; }
+  .netBadge.mainnet { background: var(--an-green-dim); color: var(--an-green); }
   .wmStorage .link { background: none; border: none; padding: 0 2px; width: auto;
                      color: var(--an-green); cursor: pointer; font-size: 1em; }
   .wmStorage .link:hover { text-decoration: underline; }
@@ -1548,23 +1558,30 @@ export function chatHtml(): string {
   const rpcHint = document.getElementById('rpcHint');
   const rpcSetBtn = document.getElementById('rpcSetBtn');
   const rpcDefaultBtn = document.getElementById('rpcDefaultBtn');
+  // The default RPC is never shown — the user only sees "key set" (green masked box +
+  // net badge) or "no key" (a warn link to set one). devnet/mainnet is a badge driven
+  // by the central network. (issue #23)
+  function netBadge(network) {
+    const n = network === 'mainnet' ? 'mainnet' : 'devnet';
+    return '<span class="netBadge ' + n + '">' + n + '</span>';
+  }
   function renderRpcStatus(s) {
-    s = s || { dasReady: false, source: 'default' };
+    s = s || { dasReady: false, hasKey: false, masked: null, network: 'devnet' };
     dasReady = !!s.dasReady;
-    if (s.source === 'helius') {
-      rpcState.innerHTML = '<span style="color:var(--an-green)">\\u2713 Helius</span>';
-      rpcSetBtn.textContent = 'Change key';
-      rpcDefaultBtn.style.display = '';
+    if (s.hasKey && s.masked) {
+      // green box: masked key (last chars only) + the network badge
+      rpcState.innerHTML = '<span class="rpcKeyBox">\\u2713 ' + escapeHtml(s.masked) + '</span> ' + netBadge(s.network);
+      rpcSetBtn.textContent = 'Change'; rpcSetBtn.style.display = '';
+      rpcDefaultBtn.textContent = 'Remove'; rpcDefaultBtn.style.display = '';
       rpcHint.style.display = 'none';
     } else {
-      rpcState.innerHTML = (s.source === 'env')
-        ? '<span style="color:var(--an-green)">\\u2713 Custom RPC</span>'
-        : '<span style="color:#e0a030">\\u26a0 Default</span>';
-      rpcSetBtn.textContent = 'Set Helius key';
+      // no key: just a warning that doubles as the set action + the network badge
+      rpcState.innerHTML = '<span class="rpcWarn" id="rpcWarnSet">\\u26a0 Set Helius key</span> ' + netBadge(s.network);
+      const w = document.getElementById('rpcWarnSet');
+      if (w) w.addEventListener('click', () => vscode.postMessage({ type: 'setHeliusKey' }));
+      rpcSetBtn.style.display = 'none';
       rpcDefaultBtn.style.display = 'none';
-      // the bare default has no DAS → the marketplace can't list skills; tell the user.
-      rpcHint.style.display = (s.source === 'default') ? 'block' : 'none';
-      rpcHint.textContent = 'The marketplace needs a Helius key (free devnet tier) to load skills.';
+      rpcHint.style.display = 'none';
     }
   }
   rpcSetBtn.addEventListener('click', () => vscode.postMessage({ type: 'setHeliusKey' }));

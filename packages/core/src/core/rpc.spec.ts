@@ -31,11 +31,12 @@ describe("core/rpc — resolveRpcUrl priority", () => {
     expect(await resolveRpcUrl()).toBe("https://my.rpc/abc");
   });
 
-  it("a registered Helius key wins over env and templates the devnet URL", async () => {
+  it("a registered Helius key wins over env and templates the central-network URL", async () => {
     process.env.SOLANA_RPC_URL = "https://my.rpc/abc";
     const { saveHeliusKey, resolveRpcUrl } = await import("./rpc.js");
     await saveHeliusKey("KEY123");
     const url = await resolveRpcUrl();
+    // central NETWORK is devnet by default → devnet.helius endpoint
     expect(url).toBe("https://devnet.helius-rpc.com/?api-key=KEY123");
   });
 
@@ -44,5 +45,20 @@ describe("core/rpc — resolveRpcUrl priority", () => {
     expect(await hasDasRpc()).toBe(false);
     await saveHeliusKey("KEY123");
     expect(await hasDasRpc()).toBe(true);
+  });
+
+  it("maskedHeliusKey shows only the last 4 chars (null when no key)", async () => {
+    const { maskedHeliusKey, saveHeliusKey } = await import("./rpc.js");
+    expect(await maskedHeliusKey()).toBeNull();
+    await saveHeliusKey("abcdef1234WXYZ");
+    expect(await maskedHeliusKey()).toBe("••••WXYZ");
+  });
+
+  it("clearing the key (empty string) falls back to the default", async () => {
+    const { saveHeliusKey, resolveRpcUrl, loadHeliusKey } = await import("./rpc.js");
+    await saveHeliusKey("KEY123");
+    await saveHeliusKey(""); // clear
+    expect(await loadHeliusKey()).toBeNull();
+    expect(await resolveRpcUrl()).toContain("api.devnet.solana.com");
   });
 });

@@ -46,7 +46,9 @@ export { resolveMinter, tryMinterPubkey, resetMinterCache } from "./nft/minter.j
 export { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes, getBalance } from "./notes/index.js";
 export type { PostNoteInput, ReadNotesOptions, PostAgentNoteInput } from "./notes/index.js";
 // RPC resolution (issue #23): a registered Helius key wins over env over the default
-export { resolveRpcUrl, saveHeliusKey, loadHeliusKey, hasDasRpc, heliusUrl } from "./core/rpc.js";
+export { resolveRpcUrl, saveHeliusKey, loadHeliusKey, hasDasRpc, heliusUrl, maskedHeliusKey } from "./core/rpc.js";
+export { getNetwork, NETWORK } from "./core/seed.js";
+export type { Network } from "./core/seed.js";
 // the marketplace UI<->host message contract (shared by every surface's UI)
 export type { SkillCard, MarketRequest, MarketEvent, MarketMessage, RpcStatus } from "./chat/marketMessages.js";
 // active-skill injection (install a bought skill's SKILL.md into a runtime's skills dir)

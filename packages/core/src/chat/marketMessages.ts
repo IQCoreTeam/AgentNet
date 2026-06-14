@@ -21,11 +21,15 @@ export interface SkillCard {
 }
 
 /** RPC status the UI shows (issue #23). `dasReady` = a DAS-capable RPC (a Helius key
- *  or explicit env) is configured; on the bare public-devnet default it's false, so
- *  marketplace reads come back empty and the UI nudges the user to add a Helius key. */
+ *  or explicit env) is configured; on the bare public default it's false, so reads
+ *  come back empty and the UI nudges the user to add a Helius key. The default itself
+ *  is never surfaced — the user only ever sees "has key" vs "set a key". `masked` is
+ *  the key's last few chars (rest dotted), null when none. `network` drives the badge. */
 export interface RpcStatus {
   dasReady: boolean;
-  source: "helius" | "env" | "default";
+  hasKey: boolean; // a Helius key is set
+  masked: string | null; // "••••AB12" for the green box, null when no key
+  network: "devnet" | "mainnet"; // the central network badge
 }
 
 // ── UI -> host (requests) ───────────────────────────────────────────────────

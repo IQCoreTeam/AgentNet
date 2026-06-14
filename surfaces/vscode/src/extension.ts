@@ -18,8 +18,9 @@ import {
   createChatSession,
   marketplaceEnv,
   saveHeliusKey,
-  loadHeliusKey,
   hasDasRpc,
+  maskedHeliusKey,
+  getNetwork,
   TransportApprovalChannel,
   chatHtml,
   onboardingHtml,
@@ -211,13 +212,11 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
       });
       if (key && key.trim()) await saveHeliusKey(key.trim());
     },
-    useDefaultRpc: async () => { await saveHeliusKey(""); }, // clear → fall back to default
-    rpcStatus: async () => ({
-      dasReady: await hasDasRpc(),
-      source: (await loadHeliusKey()) ? "helius" as const
-            : (process.env.DAS_RPC_URL || process.env.SOLANA_RPC_URL) ? "env" as const
-            : "default" as const,
-    }),
+    useDefaultRpc: async () => { await saveHeliusKey(""); }, // clear the key
+    rpcStatus: async () => {
+      const masked = await maskedHeliusKey();
+      return { dasReady: await hasDasRpc(), hasKey: !!masked, masked, network: getNetwork() };
+    },
     walletAddress: () => wallet?.address ?? null,
     storageInfo: async () => ({ info: await getStorageInfo(), options: STORAGE_OPTIONS }),
     // header "connect" link → native quick-pick of cloud backends, then connect
