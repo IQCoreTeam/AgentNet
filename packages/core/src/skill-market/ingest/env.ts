@@ -12,23 +12,40 @@ import { Connection } from "@solana/web3.js";
 import { readdir } from "node:fs/promises";
 import type { Wallet } from "../../runtime/contract.js";
 import { searchSkills } from "../../search/index.js";
-import { dasSource } from "../../core/skillSource.js";
+import { dasSource, indexerSource } from "../../core/skillSource.js";
 import { buySkill } from "../../nft/skill.js";
 import { claudeSkillsDir } from "../../core/paths.js";
+import { resolveRpcUrl } from "../../core/rpc.js";
 import type { SkillCard } from "../../chat/marketMessages.js";
 import { SkillSync } from "./index.js";
 
 // The marketplace half of a surface's ChatEnv. Spread it into the env object the
-// surface passes to createChatSession. Returns no-ops only if RPC is unconfigured.
-export function marketplaceEnv(wallet: Wallet) {
-  const rpcUrl = process.env.DAS_RPC_URL || process.env.SOLANA_RPC_URL;
-  if (!rpcUrl) return {}; // market stays inert (search returns []) until RPC is set
-  const conn = new Connection(rpcUrl, "confirmed");
+// surface passes to createChatSession. RPC comes from resolveRpcUrl() — a registered
+// Helius key wins over the env override, which wins over the public-devnet default
+// (issue #23), so the market always has a connection (reads need a DAS-capable RPC,
+// i.e. a Helius key — the default returns empty results, which the UI can flag).
+// The NFT indexer (agentnet-nft-indexer @ nft-index.iqlabs.dev) is the primary read
+// path: it enumerates the Token-2022 collections (which DAS's getAssetsByGroup can't,
+// since our TokenGroup isn't a Metaplex collection) and serves /items with supply +
+// traits already filled. dasSource stays as a last-ditch fallback if the indexer is
+// down. Override the URL with AGENTNET_INDEXER_URL.
+const INDEXER_URL = process.env.AGENTNET_INDEXER_URL || "https://nft-index.iqlabs.dev";
+
+export async function marketplaceEnv(wallet: Wallet) {
+  const conn = new Connection(await resolveRpcUrl(), "confirmed");
   const skills = new SkillSync(conn);
 
   return {
     async searchSkills(query: string): Promise<SkillCard[]> {
-      const found = await searchSkills(conn, { source: dasSource, filters: { keyword: query } });
+      const filters = { keyword: query };
+      // indexer first (fast, has supply+traits); fall back to a direct DAS scan only
+      // if it errors (server down) — that path returns little for a Token-2022 group.
+      let found;
+      try {
+        found = await searchSkills(conn, { source: indexerSource(INDEXER_URL), filters });
+      } catch {
+        found = await searchSkills(conn, { source: dasSource, filters });
+      }
       return found.map((s) => ({
         id: s.id, name: s.name, description: s.description, supply: s.supply, creator: s.creator,
       }));

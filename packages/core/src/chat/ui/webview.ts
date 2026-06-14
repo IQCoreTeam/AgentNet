@@ -109,6 +109,16 @@ export function chatHtml(): string {
   .wmStorage .dot.cloud-off { color: var(--vscode-disabledForeground, #888); }
   .wmStorage .sep { opacity: 0.3; }
   .wmStorage .acct { opacity: 0.5; }
+  /* RPC row (issue #23): a green key box when set, a warn link when not, + net badge */
+  .rpcKeyBox { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 6px;
+               background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
+               font-family: var(--vscode-editor-font-family, monospace); font-size: 0.9em; }
+  .rpcWarn { color: #e0a030; cursor: pointer; font-weight: 600; }
+  .rpcWarn:hover { text-decoration: underline; }
+  .netBadge { padding: 1px 7px; border-radius: 999px; font-size: 0.66em; font-weight: 700; letter-spacing: 0.04em;
+              text-transform: uppercase; }
+  .netBadge.devnet { background: color-mix(in srgb, #e0a030 22%, transparent); color: #e0a030; }
+  .netBadge.mainnet { background: var(--an-green-dim); color: var(--an-green); }
   .wmStorage .link { background: none; border: none; padding: 0 2px; width: auto;
                      color: var(--an-green); cursor: pointer; font-size: 1em; }
   .wmStorage .link:hover { text-decoration: underline; }
@@ -613,6 +623,17 @@ export function chatHtml(): string {
         <span id="cloudState"></span>
         <button id="cloudBtn" class="link"></button>
       </div>
+    </div>
+    <!-- RPC (issue #23): a Helius key powers the marketplace (DAS); the default can't.
+         Always shows status here so a user can add/swap the key after onboarding. -->
+    <div class="wmSection">
+      <div class="wmLabel">RPC</div>
+      <div class="wmStorage">
+        <span id="rpcState" class="muted">…</span>
+        <button id="rpcSetBtn" class="link">Set Helius key</button>
+        <button id="rpcDefaultBtn" class="link" style="display:none">Use default</button>
+      </div>
+      <div id="rpcHint" class="muted small" style="display:none;margin-top:3px"></div>
     </div>
     <div class="wmItem" id="openWalletPage">Wallet page</div>
     <div class="wmItem disabled"><span class="wand">${WAND_SVG}</span> Skills <span class="soon">soon</span></div>
@@ -1502,7 +1523,13 @@ export function chatHtml(): string {
   function renderMarketResults(results) {
     results = results || [];
     mktResults.innerHTML = '';
-    if (!results.length) { mktResults.innerHTML = '<div class="mktEmpty">No skills found.</div>'; return; }
+    if (!results.length) {
+      // empty can mean "no match" OR "no DAS RPC so reads return nothing" — say which.
+      mktResults.innerHTML = dasReady
+        ? '<div class="mktEmpty">No skills found.</div>'
+        : '<div class="mktEmpty">No skills — the default RPC can\\'t read the marketplace. Add a Helius key (free devnet tier) in the wallet menu \\u2192 RPC.</div>';
+      return;
+    }
     for (const r of results) {
       const owned = ownedSkills.indexOf(r.name) >= 0;
       const card = document.createElement('div'); card.className = 'mktCard';
@@ -1524,6 +1551,42 @@ export function chatHtml(): string {
       mktResults.appendChild(card);
     }
   }
+
+  // ---- RPC status (issue #23): show whether a DAS-capable RPC (Helius) is set ----
+  let dasReady = false;
+  const rpcState = document.getElementById('rpcState');
+  const rpcHint = document.getElementById('rpcHint');
+  const rpcSetBtn = document.getElementById('rpcSetBtn');
+  const rpcDefaultBtn = document.getElementById('rpcDefaultBtn');
+  // The default RPC is never shown — the user only sees "key set" (green masked box +
+  // net badge) or "no key" (a warn link to set one). devnet/mainnet is a badge driven
+  // by the central network. (issue #23)
+  function netBadge(network) {
+    const n = network === 'mainnet' ? 'mainnet' : 'devnet';
+    return '<span class="netBadge ' + n + '">' + n + '</span>';
+  }
+  function renderRpcStatus(s) {
+    s = s || { dasReady: false, hasKey: false, masked: null, network: 'devnet' };
+    dasReady = !!s.dasReady;
+    if (s.hasKey && s.masked) {
+      // green box: masked key (last chars only) + the network badge
+      rpcState.innerHTML = '<span class="rpcKeyBox">\\u2713 ' + escapeHtml(s.masked) + '</span> ' + netBadge(s.network);
+      rpcSetBtn.textContent = 'Change'; rpcSetBtn.style.display = '';
+      rpcDefaultBtn.textContent = 'Remove'; rpcDefaultBtn.style.display = '';
+      rpcHint.style.display = 'none';
+    } else {
+      // no key: just a warning that doubles as the set action + the network badge
+      rpcState.innerHTML = '<span class="rpcWarn" id="rpcWarnSet">\\u26a0 Set Helius key</span> ' + netBadge(s.network);
+      const w = document.getElementById('rpcWarnSet');
+      if (w) w.addEventListener('click', () => vscode.postMessage({ type: 'setHeliusKey' }));
+      rpcSetBtn.style.display = 'none';
+      rpcDefaultBtn.style.display = 'none';
+      rpcHint.style.display = 'none';
+    }
+  }
+  rpcSetBtn.addEventListener('click', () => vscode.postMessage({ type: 'setHeliusKey' }));
+  rpcDefaultBtn.addEventListener('click', () => vscode.postMessage({ type: 'useDefaultRpc' }));
+  vscode.postMessage({ type: 'getRpcStatus' }); // hydrate on load
 
   // ---- activity marquee: advertise what the agent is doing RIGHT NOW ----
   // Map a tool action to a flashy game-verb + object. The verb is picked from a small
@@ -1650,10 +1713,17 @@ export function chatHtml(): string {
     else if (m.type === 'clear') { log.innerHTML = ''; approvalDock.innerHTML = ''; syncComposerLock(); streaming = null; openBash = null; tailTurn = null; headTurn = null; hideTyping(); hideActivity(); resetPaging(); syncWatermark(); hideLoading(); }
     else if (m.type === 'turnEnd') { hideTyping(); hideActivity(); }
     else if (m.type === 'skillActive') flashSkill(m.name); // a real skill fired (was /mockskill)
+    else if (m.type === 'rpcStatus') renderRpcStatus(m.status);
     else if (m.type === 'searchResults') {
       lastMarketResults = m.results || [];
       renderSkillResults(m.results);           // the small skills-panel shop
       renderMarketResults(m.results);          // the full Markets view
+    }
+    else if (m.type === 'searchError') {
+      // don't hang on "Searching…" — show the real reason in both views
+      const msg = 'Search failed: ' + escapeHtml(m.message || 'unknown');
+      mktResults.innerHTML = '<div class="mktEmpty">' + msg + '</div>';
+      skillResults.innerHTML = '<div class="shopEmpty">' + msg + '</div>';
     }
     else if (m.type === 'ownedSkills') {
       setSkills(m.names || []);                // updates ownedSkills used by both renders

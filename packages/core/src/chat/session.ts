@@ -51,6 +51,11 @@ export interface ChatEnv {
   // install every owned skill NFT into the runtime skills dir (session start + after a
   // buy), so the agent always has its owned skills present + discoverable. Returns slugs.
   loadOwnedSkills?(): Promise<string[]>;
+  // RPC config (issue #23). setHeliusKey opens a host-native secret input (the key
+  // never goes through the UI as plain text); the others persist/read the choice.
+  setHeliusKey?(): Promise<void>;
+  useDefaultRpc?(): Promise<void>;
+  rpcStatus?(): Promise<import("./marketMessages.js").RpcStatus>;
   // OPTIONAL multi-tab guard: vscode can open the same session in two panels (two
   // tabs writing one log races), so it claims a session before opening and yields
   // false to abort if another panel already holds it. One-socket surfaces (server,
@@ -241,8 +246,13 @@ export function createChatSession(
       // is caught here, not at runtime on some surface.
       case "searchSkills": {
         const req = m as Extract<MarketRequest, { type: "searchSkills" }>;
-        const results = env.searchSkills ? await env.searchSkills(req.query ?? "") : [];
-        sendMarket({ type: "searchResults", results });
+        try {
+          const results = env.searchSkills ? await env.searchSkills(req.query ?? "") : [];
+          sendMarket({ type: "searchResults", results });
+        } catch (e) {
+          // a chain/RPC failure must NOT leave the UI stuck on "Searching…": surface it.
+          sendMarket({ type: "searchError", message: e instanceof Error ? e.message : String(e) });
+        }
         break;
       }
       case "buySkill": {
@@ -257,6 +267,18 @@ export function createChatSession(
       }
       case "ownedSkills":
         sendMarket({ type: "ownedSkills", names: env.ownedSkills ? await env.ownedSkills() : [] });
+        break;
+      // ── RPC config (issue #23): set/clear the Helius key, report status ──
+      case "setHeliusKey":
+        await env.setHeliusKey?.(); // host opens a native secret input + saves
+        if (env.rpcStatus) sendMarket({ type: "rpcStatus", status: await env.rpcStatus() });
+        break;
+      case "useDefaultRpc":
+        await env.useDefaultRpc?.();
+        if (env.rpcStatus) sendMarket({ type: "rpcStatus", status: await env.rpcStatus() });
+        break;
+      case "getRpcStatus":
+        if (env.rpcStatus) sendMarket({ type: "rpcStatus", status: await env.rpcStatus() });
         break;
     }
   }
