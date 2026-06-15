@@ -66,6 +66,9 @@ export interface SpawnOpts {
   cwd: string;
   sessionId?: string; // NATIVE resume id (inject/prepareResume resolved it already)
   model?: string;
+  // permission/approval mode. claude → SDK permissionMode; codex → a sandbox+approval
+  // preset key (readonly | auto | full). Omit → the engine's safe default.
+  mode?: string;
   approval?: ApprovalChannel; // how tool approvals get decided; default = auto-allow
   // Passive skill-shopping (issue #21). Claude-only for now (Codex MCP via TOML deferred).
   // Built by the runtime per spawn when the toggle is ON: the marketplace SDK MCP server,
@@ -73,6 +76,37 @@ export interface SpawnOpts {
   mcpServers?: Record<string, unknown>;
   allowedTools?: string[];
   appendSystemPrompt?: string;
+}
+
+// claude permission modes: how aggressively tools run without a per-call gate.
+//   default        — canUseTool gates every tool (ask before edits/commands)
+//   acceptEdits    — file edits auto-apply; other tools still gated
+//   plan           — read-only until the model proposes a plan (ExitPlanMode)
+//   bypassPermissions — nothing is gated (full auto)
+function claudePermissionMode(
+  mode?: string,
+): "default" | "acceptEdits" | "plan" | "bypassPermissions" {
+  return mode === "acceptEdits" || mode === "plan" || mode === "bypassPermissions"
+    ? mode
+    : "default";
+}
+
+// codex governs via a sandbox + an approval policy (no inline per-tool callback). We
+// expose the three presets the codex CLI itself ships:
+//   readonly — read-only sandbox; codex can't write/network at all
+//   auto     — write inside the workspace, ask only when a command fails (default)
+//   full     — full disk + network, never ask (dangerous)
+// NOTE: the codex SDK has no inline approval callback (see codexEngine), so an
+// approvalPolicy that PAUSES to ask (on-request/untrusted) would hang the turn with no
+// way to answer. We keep "auto" on the established on-failure default but use "never"
+// for readonly (the sandbox already blocks writes — no need, and no way, to ask).
+function codexPolicy(mode?: string): {
+  sandboxMode: "read-only" | "workspace-write" | "danger-full-access";
+  approvalPolicy: "untrusted" | "on-failure" | "on-request" | "never";
+} {
+  if (mode === "readonly") return { sandboxMode: "read-only", approvalPolicy: "never" };
+  if (mode === "full") return { sandboxMode: "danger-full-access", approvalPolicy: "never" };
+  return { sandboxMode: "workspace-write", approvalPolicy: "on-failure" };
 }
 
 export function spawnCli(opts: SpawnOpts): Engine {
@@ -151,6 +185,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
       resume: opts.sessionId || undefined,
       model: opts.model,
       cwd: opts.cwd,
+      permissionMode: claudePermissionMode(opts.mode),
       canUseTool,
       includePartialMessages: false,
       // use the user's installed claude (logged in) so the bundled extension doesn't
@@ -258,8 +293,7 @@ function threadOpts(opts: SpawnOpts) {
     workingDirectory: opts.cwd,
     skipGitRepoCheck: true,
     model: opts.model,
-    sandboxMode: "workspace-write" as const,
-    approvalPolicy: "on-failure" as const,
+    ...codexPolicy(opts.mode),
   };
 }
 

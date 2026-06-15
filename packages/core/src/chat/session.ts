@@ -81,10 +81,10 @@ export function createChatSession(
   // model). Switching tabs just repaints the active slot — nothing is killed, so
   // claude and codex never step on each other. A handle is spawned lazily on first
   // send (spawn costs ~2s); codex re-spawns per turn internally anyway.
-  type Slot = { handle: SessionHandle | null; pendingId?: string; model?: string };
+  type Slot = { handle: SessionHandle | null; pendingId?: string; model?: string; mode?: string };
   const slots: Record<"claude" | "codex", Slot> = {
-    claude: { handle: null },
-    codex: { handle: null },
+    claude: { handle: null, mode: "default" },
+    codex: { handle: null, mode: "auto" },
   };
   let cli: "claude" | "codex" = "claude"; // which tab is showing
   const slot = () => slots[cli];
@@ -140,7 +140,7 @@ export function createChatSession(
     const s = slot();
     if (s.handle) return s.handle;
     const spawnCli = cli; // capture: cli must not change across the await
-    s.handle = await rt.startSession({ cli: spawnCli, model: s.model, cwd: env.cwd(), sessionId: s.pendingId, approval: env.approval });
+    s.handle = await rt.startSession({ cli: spawnCli, model: s.model, mode: s.mode, cwd: env.cwd(), sessionId: s.pendingId, approval: env.approval });
     wire(spawnCli, s.handle);
     return s.handle;
   }
@@ -219,6 +219,16 @@ export function createChatSession(
         // model is per-slot; changing it only re-spawns THAT slot's handle next send.
         slot().model = m.model && m.model !== "default" ? m.model : undefined;
         slot().handle?.stop(); slot().handle = null;
+        break;
+      case "mode":
+        // permission mode is per-slot. Unlike model, the value is always meaningful
+        // (claude "default"/codex "auto" are real modes), so we keep it as-is and let
+        // an undefined fall back to the engine default in spawn. Re-spawn next send so
+        // the new permissionMode/sandbox takes effect.
+        if (typeof m.mode === "string") {
+          slot().mode = m.mode;
+          slot().handle?.stop(); slot().handle = null;
+        }
         break;
       case "send":
         if (typeof m.text === "string") (await ensureHandle()).send(m.text);

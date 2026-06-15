@@ -230,6 +230,15 @@ export function chatHtml(): string {
   .turnHead .uq { color: var(--an-green); font-weight: 700; flex: none; line-height: 1.5; opacity: 0.8; }
   .turnHead .utext { flex: 1; min-width: 0; white-space: pre-wrap; line-height: 1.5; font-size: 0.95em;
                      font-weight: 600; overflow-wrap: anywhere; }
+  /* a long user message collapses to a few lines; "Show more" expands it (capped to
+     ~40vh with an inner scroll so a huge paste never eats the whole screen). */
+  .utextWrap { flex: 1; min-width: 0; }
+  .utextWrap .utext { width: 100%; }
+  .utextWrap.collapsed .utext { max-height: 4.5em; overflow: hidden; }
+  .utextWrap.expanded .utext { max-height: 40vh; overflow-y: auto; }
+  .utextToggle { margin-top: 4px; font-size: 0.8em; font-weight: 600; color: var(--an-green);
+                 opacity: 0.85; cursor: pointer; user-select: none; display: inline-block; }
+  .utextToggle:hover { opacity: 1; text-decoration: underline; }
   /* the timeline body: a left rail; each child item gets a dot via ::before */
   .turnBody { padding: 4px 16px 16px 16px; margin-left: 7px;
               border-left: 1.5px solid var(--an-line-soft); display: flex; flex-direction: column; gap: 2px; }
@@ -389,6 +398,25 @@ export function chatHtml(): string {
   .apResolved { padding: 8px 12px; font-size: 0.82em; border-top: 1px solid var(--an-green-dim); }
   .apResolved.allowed { color: var(--an-green); }
   .apResolved.denied { color: #e07a7a; }
+  /* AskUserQuestion card: one block per question, options as selectable chips. The
+     user's pick becomes the tool result (sent as answers), so there is no Approve/
+     Deny — just option chips + a Send that unlocks once every question is answered. */
+  .qBlock { padding: 9px 12px; border-top: 1px solid var(--an-green-dim); }
+  .qBlock:first-child { border-top: none; }
+  .qHeader { display: inline-block; font-size: 0.7em; font-weight: 600; text-transform: uppercase;
+             letter-spacing: 0.04em; color: var(--an-green); background: var(--an-green-dim);
+             padding: 1px 6px; border-radius: 4px; margin-bottom: 5px; }
+  .qText { font-size: 0.88em; font-weight: 600; margin-bottom: 7px; }
+  .qOpts { display: flex; flex-direction: column; gap: 6px; }
+  .qOpt { text-align: left; padding: 7px 10px; border-radius: 8px; cursor: pointer;
+          border: 1px solid var(--an-line); background: transparent; transition: border-color 0.12s, background 0.12s; }
+  .qOpt:hover { border-color: var(--an-green-line); }
+  .qOpt.on { border-color: var(--an-green); background: var(--an-green-dim); }
+  .qOptLabel { font-size: 0.85em; font-weight: 600; }
+  .qOptDesc { font-size: 0.78em; opacity: 0.7; margin-top: 2px; line-height: 1.35; }
+  .apBtn.ok:disabled { opacity: 0.4; cursor: not-allowed; filter: none; }
+  /* plan card body: wrap prose (not break-all like a path/command) */
+  .apBody.planBody { word-break: normal; overflow-wrap: anywhere; }
   .cursor::after { content: "\\u258B"; opacity: 0.6; animation: blink 1s step-end infinite; }
   @keyframes blink { 50% { opacity: 0; } }
 
@@ -606,7 +634,9 @@ export function chatHtml(): string {
                background: var(--an-bg-2); overflow: hidden; transition: border-color 0.12s; }
   #input { width: 100%; box-sizing: border-box; padding: 11px 12px 8px; background: transparent;
            color: var(--vscode-input-foreground); border: none; resize: none; font-family: inherit;
-           font-size: 0.95em; display: block; }
+           font-size: 0.95em; display: block; line-height: 1.5;
+           /* autoGrow JS caps the height (~2.5x) via inline style; this scrolls past it */
+           overflow-y: auto; }
   #input:focus { outline: none; }
   #input:disabled { opacity: 0.5; cursor: not-allowed; }
   #inputWrap:focus-within { box-shadow: 0 0 0 2px var(--engSoft); }
@@ -617,8 +647,13 @@ export function chatHtml(): string {
   #controls { display: flex; gap: 8px; align-items: center; padding: 4px 8px 7px; font-size: 0.82em; }
   #model { background: var(--an-bg-1); color: var(--vscode-foreground);
            border: 1px solid var(--an-line); border-radius: 6px; padding: 3px 7px; font-size: 0.92em; }
-  #autoEdit { display: flex; align-items: center; gap: 4px; opacity: 0.7; cursor: pointer; font-size: 0.92em; }
-  #autoEdit input { margin: 0; accent-color: var(--eng); }
+  /* permission-mode pill: an accent toggle-button (engine-tinted) rather than a plain
+     checkbox, so the current mode reads at a glance. */
+  #mode { background: var(--engSoft); color: var(--vscode-foreground); font-weight: 600;
+          border: 1px solid var(--engLine); border-radius: 999px; padding: 3px 11px;
+          font-size: 0.92em; cursor: pointer; }
+  #mode:hover { border-color: var(--eng); }
+  #mode:focus { outline: none; box-shadow: 0 0 0 2px var(--engSoft); }
   #send { margin-left: auto; padding: 6px 16px; background: var(--eng); color: #1a1205; font-weight: 600;
           border: none; border-radius: 6px; cursor: pointer; }
   #composer[data-cli="codex"] #send { color: #06231a; }
@@ -751,9 +786,7 @@ export function chatHtml(): string {
           <textarea id="input" rows="1" placeholder="Message claude... (Enter to send)"></textarea>
           <div id="controls">
             <select id="model"></select>
-            <label id="autoEdit" title="Auto-approve edits (skip the approval card for file edits)">
-              <input type="checkbox" id="autoEditChk" /> auto-edit
-            </label>
+            <select id="mode" title="Permission mode — how tools run before asking you"></select>
             <button id="send">Send</button>
           </div>
         </div>
@@ -893,7 +926,7 @@ export function chatHtml(): string {
   const emptyEl = document.getElementById('empty');
   const modelSel = document.getElementById('model');
   const composer = document.getElementById('composer');
-  const autoEditChk = document.getElementById('autoEditChk');
+  const modeSel = document.getElementById('mode');
   const approvalDock = document.getElementById('approvalDock');
   const tabs = Array.from(document.querySelectorAll('.etab'));
 
@@ -921,6 +954,24 @@ export function chatHtml(): string {
       { value: 'o3',           label: 'o3' },
     ],
   };
+  // Permission/approval mode per engine. claude → SDK permissionMode; codex → a
+  // sandbox+approval preset (mapped host-side in spawn). Like MODELS this is just a
+  // wrapper label table — when a CLI changes its modes, only this list needs editing.
+  // English labels mirror what each CLI calls these modes natively.
+  const MODES = {
+    claude: [
+      { value: 'default',     label: 'Ask edits',    title: 'Ask before each file edit (default)' },
+      { value: 'acceptEdits', label: 'Accept edits', title: 'Auto-accept file edits; still ask for other tools' },
+      { value: 'plan',        label: 'Plan',         title: 'Plan mode: read-only until you approve the plan' },
+    ],
+    codex: [
+      { value: 'readonly', label: 'Read only',   title: 'Read-only sandbox; ask before edits, commands, network' },
+      { value: 'auto',     label: 'Auto',        title: 'Edit + run inside the workspace; approve on failure (default)' },
+      { value: 'full',     label: 'Full access', title: 'Full disk + network access, never ask (use with care)' },
+    ],
+  };
+  // remember the chosen mode per engine so switching tabs restores it
+  const modeByCli = { claude: 'default', codex: 'auto' };
   let cli = 'claude';
 
   // ---- platform tabs + model dropdown ----
@@ -932,6 +983,16 @@ export function chatHtml(): string {
       modelSel.appendChild(o);
     }
   }
+  // mirror fillModels for the permission-mode dropdown; restore the engine's remembered mode
+  function fillModes() {
+    modeSel.innerHTML = '';
+    for (const m of (MODES[cli] || [{ value: 'default', label: 'default' }])) {
+      const o = document.createElement('option');
+      o.value = m.value; o.textContent = m.label; if (m.title) o.title = m.title;
+      modeSel.appendChild(o);
+    }
+    modeSel.value = modeByCli[cli] || (modeSel.options[0] && modeSel.options[0].value);
+  }
   function setTab(next) {
     if (next !== 'claude' && next !== 'codex') return;
     cli = next;
@@ -939,16 +1000,23 @@ export function chatHtml(): string {
     composer.dataset.cli = cli;                       // tints the input (claude=orange/codex=green)
     input.placeholder = 'Message ' + cli + '... (Enter to send)';
     fillModels();
+    fillModes();
   }
   function selectTab(next) {
     if (next === cli) return;
     setTab(next);
     vscode.postMessage({ type: 'platform', cli });
     vscode.postMessage({ type: 'model', model: modelSel.value });
+    vscode.postMessage({ type: 'mode', mode: modeSel.value });
   }
   tabs.forEach(t => t.addEventListener('click', () => selectTab(t.dataset.cli)));
   modelSel.addEventListener('change', () => vscode.postMessage({ type: 'model', model: modelSel.value }));
+  modeSel.addEventListener('change', () => {
+    modeByCli[cli] = modeSel.value;
+    vscode.postMessage({ type: 'mode', mode: modeSel.value });
+  });
   fillModels();
+  fillModes();
 
   // ---- relative time ("3개월", "1일", "방금") ----
   function rel(ts) {
@@ -969,12 +1037,31 @@ export function chatHtml(): string {
   let headTurn = null; // the turn prepended (top, older) replies attach to
 
   // Open a new turn at the bottom (a fresh user command). Returns its body element.
+  // Build the user-message block for a turn head. A long message starts COLLAPSED
+  // (a few lines) with a "Show more" toggle; expanded it caps at 40vh and scrolls
+  // inside, so a huge paste never pushes the chat off-screen.
+  function makeUtext(userText) {
+    const wrap = document.createElement('div'); wrap.className = 'utextWrap';
+    const ut = document.createElement('div'); ut.className = 'utext'; ut.textContent = userText;
+    wrap.appendChild(ut);
+    const longMsg = (userText.split('\\n').length > 4) || (userText.length > 280);
+    if (longMsg) {
+      wrap.classList.add('collapsed');
+      const tog = document.createElement('div'); tog.className = 'utextToggle'; tog.textContent = 'Show more';
+      tog.addEventListener('click', () => {
+        const exp = wrap.classList.toggle('expanded');
+        wrap.classList.toggle('collapsed', !exp);
+        tog.textContent = exp ? 'Show less' : 'Show more';
+      });
+      wrap.appendChild(tog);
+    }
+    return wrap;
+  }
   function startTurn(userText, badgeCli) {
     const turn = document.createElement('div'); turn.className = 'turn';
     const head = document.createElement('div'); head.className = 'turnHead';
     head.innerHTML = '<span class="uq">&gt;</span>';
-    const ut = document.createElement('div'); ut.className = 'utext'; ut.textContent = userText;
-    head.appendChild(ut);
+    head.appendChild(makeUtext(userText));
     if (badgeCli) { const b = document.createElement('span'); b.className = 'badge ' + badgeCli;
       b.textContent = badgeCli === 'codex' ? 'codex · gpt' : 'claude'; head.appendChild(b); }
     const body = document.createElement('div'); body.className = 'turnBody';
@@ -990,8 +1077,7 @@ export function chatHtml(): string {
     const turn = document.createElement('div'); turn.className = 'turn';
     const head = document.createElement('div'); head.className = 'turnHead';
     head.innerHTML = '<span class="uq">&gt;</span>';
-    const ut = document.createElement('div'); ut.className = 'utext'; ut.textContent = userText;
-    head.appendChild(ut);
+    head.appendChild(makeUtext(userText));
     if (badgeCli) { const b = document.createElement('span'); b.className = 'badge ' + badgeCli;
       b.textContent = badgeCli === 'codex' ? 'codex · gpt' : 'claude'; head.appendChild(b); }
     const body = document.createElement('div'); body.className = 'turnBody';
@@ -1217,26 +1303,74 @@ export function chatHtml(): string {
   // it wants to do (the command / file / diff) with [Approve] [Always] [Deny] buttons.
   // Clicking posts the decision back; the card then locks to show the resolution.
   function renderApproval(req) {
-    // auto-edit: if the toggle is on and this is a file edit/write, approve it
-    // silently (the tool card the engine emits already shows what changed).
-    if (autoEditChk && autoEditChk.checked && (req.kind === 'edit' || req.kind === 'write')) {
-      vscode.postMessage({ type: 'approvalDecision', id: req.id, outcome: 'once' });
-      return;
-    }
     const card = document.createElement('div');
     card.className = 'approvalCard';
 
+    // ── AskUserQuestion: a multiple-choice prompt (claude/codex both route here). The
+    // user's PICK becomes the tool result, so this card renders options as chips and
+    // sends answers (question text -> chosen label[s]) — no Approve/Deny. Without this
+    // branch the engine never received an answer and the SDK stalled on its own picker.
+    if (req.kind === 'question' && Array.isArray(req.questions) && req.questions.length) {
+      const sel = {}; // qIndex → array of chosen labels
+      const submit = document.createElement('button');
+      submit.className = 'apBtn ok'; submit.textContent = 'Send'; submit.disabled = true;
+      const refresh = () => {
+        submit.disabled = !req.questions.every((q, qi) => sel[qi] && sel[qi].length);
+      };
+      req.questions.forEach((q, qi) => {
+        const block = document.createElement('div'); block.className = 'qBlock';
+        if (q.header) { const h = document.createElement('span'); h.className = 'qHeader'; h.textContent = q.header; block.appendChild(h); }
+        const qt = document.createElement('div'); qt.className = 'qText'; qt.textContent = q.question; block.appendChild(qt);
+        const opts = document.createElement('div'); opts.className = 'qOpts';
+        (q.options || []).forEach((opt) => {
+          const b = document.createElement('button'); b.type = 'button'; b.className = 'qOpt';
+          const t = document.createElement('div'); t.className = 'qOptLabel'; t.textContent = opt.label; b.appendChild(t);
+          if (opt.description) { const d = document.createElement('div'); d.className = 'qOptDesc'; d.textContent = opt.description; b.appendChild(d); }
+          b.addEventListener('click', () => {
+            const cur = sel[qi] || [];
+            if (q.multiSelect) {
+              sel[qi] = cur.indexOf(opt.label) >= 0 ? cur.filter((l) => l !== opt.label) : cur.concat(opt.label);
+            } else {
+              sel[qi] = cur[0] === opt.label ? [] : [opt.label];
+            }
+            Array.from(opts.children).forEach((c, i) => c.classList.toggle('on', (sel[qi] || []).indexOf((q.options[i] || {}).label) >= 0));
+            refresh();
+          });
+          opts.appendChild(b);
+        });
+        block.appendChild(opts);
+        card.appendChild(block);
+      });
+      const actions = document.createElement('div'); actions.className = 'apActions';
+      submit.addEventListener('click', () => {
+        const answers = {};
+        req.questions.forEach((q, qi) => { answers[q.question] = (sel[qi] || []).join(', '); });
+        vscode.postMessage({ type: 'approvalDecision', id: req.id, outcome: 'once', answers });
+        card.remove(); syncComposerLock();
+      });
+      actions.appendChild(submit);
+      card.appendChild(actions);
+      approvalDock.insertBefore(card, approvalDock.firstChild);
+      syncComposerLock();
+      return;
+    }
+
+    // ── plan / bash / edit / read / write: a yes-or-no permission card ──
+    const isPlan = req.kind === 'plan';
     const head = document.createElement('div'); head.className = 'apHead';
-    head.innerHTML = '<span class="apk">' + (req.kind === 'bash' ? '$' : req.kind === 'read' ? '📖' : '✎') + '</span>';
+    head.innerHTML = '<span class="apk">' + (req.kind === 'bash' ? '$' : req.kind === 'read' ? '📖' : isPlan ? '✦' : '✎') + '</span>';
     const ttl = document.createElement('span'); ttl.className = 'apTitle'; ttl.textContent = req.title || req.tool;
     head.appendChild(ttl);
     const tag = document.createElement('span'); tag.className = 'apTag'; tag.textContent = req.cli;
     head.appendChild(tag);
     card.appendChild(head);
 
-    // detail: command for bash, diff for edit, file for read/write
+    // detail: command for bash, plan text for plan, diff for edit, file for read/write
     if (req.command) {
       const pre = document.createElement('pre'); pre.className = 'apBody'; pre.textContent = req.command;
+      card.appendChild(pre);
+    } else if (req.plan) {
+      const pre = document.createElement('pre'); pre.className = 'apBody planBody'; pre.textContent = req.plan;
       card.appendChild(pre);
     } else if (req.diff) {
       const pre = document.createElement('pre'); pre.className = 'apBody diffBody';
@@ -1261,7 +1395,10 @@ export function chatHtml(): string {
       const b = document.createElement('button'); b.className = 'apBtn ' + cls; b.textContent = label;
       b.addEventListener('click', () => decide(outcome)); return b;
     };
-    const btns = [mk('Approve', 'once', 'ok'), mk('Always', 'always', 'always'), mk('Deny', 'deny', 'no')];
+    // plan has no "Always" (you approve THIS plan or send it back to revise)
+    const btns = isPlan
+      ? [mk('Approve plan', 'once', 'ok'), mk('Keep planning', 'deny', 'no')]
+      : [mk('Approve', 'once', 'ok'), mk('Always', 'always', 'always'), mk('Deny', 'deny', 'no')];
     for (const b of btns) actions.appendChild(b);
     card.appendChild(actions);
 
@@ -1412,6 +1549,7 @@ export function chatHtml(): string {
     }
     vscode.postMessage({ type: 'send', text });
     input.value = '';
+    input.style.height = 'auto'; // collapse back to one row after sending
     showTyping();
   }
   document.getElementById('send').addEventListener('click', send);
@@ -1423,6 +1561,14 @@ export function chatHtml(): string {
     if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   });
+  // Grow the textarea with its content; CSS max-height (~2.5x) then scrolls inside.
+  // Reset to auto first so it shrinks when text is deleted; pasting a long message
+  // grows to the cap and scrolls rather than pushing the chat off-screen.
+  function autoGrowInput() {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 220) + 'px';
+  }
+  input.addEventListener('input', autoGrowInput);
 
   // ---- storage pill (Local always on; Cloud optional mirror) ----
   const cloudState = document.getElementById('cloudState');
@@ -1828,8 +1974,7 @@ export function chatHtml(): string {
       const turn = document.createElement('div'); turn.className = 'turn';
       const head = document.createElement('div'); head.className = 'turnHead';
       head.innerHTML = '<span class="uq">&gt;</span>';
-      const ut = document.createElement('div'); ut.className = 'utext'; ut.textContent = userText;
-      head.appendChild(ut);
+      head.appendChild(makeUtext(userText));
       if (badge) { const b = document.createElement('span'); b.className = 'badge ' + badge;
         b.textContent = badge === 'codex' ? 'codex · gpt' : 'claude'; head.appendChild(b); }
       const b = document.createElement('div'); b.className = 'turnBody';

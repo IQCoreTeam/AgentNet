@@ -92,6 +92,10 @@ export interface AgentRuntime {
     cwd: string;
     sessionId?: string; // present = resume, absent = new
     model?: string;
+    // permission/approval mode. claude → SDK permissionMode (default | acceptEdits |
+    // plan | bypassPermissions); codex → a sandbox+approval preset key (readonly |
+    // auto | full). Omit → the engine's safe default (claude "default", codex "auto").
+    mode?: string;
     // who decides tool approvals for THIS session. Per-session (not per-runtime) so
     // multiple chat panels sharing one runtime each route approvals to their OWN
     // panel. Omit → the runtime's default channel (or auto-allow).
