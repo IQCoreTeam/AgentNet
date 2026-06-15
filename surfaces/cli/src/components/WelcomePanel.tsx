@@ -79,8 +79,8 @@ export function WelcomePanel({
   engine: "claude" | "codex";
   // maskedHeliusKey() → "••••AB12", or null when no key is set.
   heliusMasked: string | null;
-  // the wallet's owned skills (hydrated id+name); empty until fetched / if none.
-  skills: OwnedSkill[];
+  // the wallet's owned skills (hydrated id+name). null = still loading; [] = none owned.
+  skills: OwnedSkill[] | null;
   // hasDasRpc(): false on the public default RPC, which can't read owned skills.
   // Lets the empty state say "set a Helius key" instead of a misleading "none yet".
   dasReady: boolean;
@@ -97,8 +97,10 @@ export function WelcomePanel({
   // helius key-entry mode: when set, the panel is a line editor capturing the new key.
   const [keyInput, setKeyInput] = React.useState<string | null>(null);
 
+  // null = still loading; treat as no focusable skill rows until it resolves.
+  const ownedList = skills ?? [];
   // the full focus list: settings rows, then a row per skill, then the market entry.
-  const total = SETTINGS.length + skills.length + 1;
+  const total = SETTINGS.length + ownedList.length + 1;
   const marketIdx = total - 1;
   const skillStart = SETTINGS.length;
 
@@ -207,9 +209,12 @@ export function WelcomePanel({
       {/* my skills (right) */}
       <Box flexDirection="column" justifyContent="center">
         <Box marginBottom={1}>
-          <Text bold color={colors.iqViolet}>my skills{skills.length ? ` (${skills.length})` : ""}</Text>
+          <Text bold color={colors.iqViolet}>my skills{ownedList.length ? ` (${ownedList.length})` : ""}</Text>
         </Box>
-        {skills.length === 0 ? (
+        {skills === null ? (
+          // still fetching — don't show "none yet" before the read resolves.
+          <Text dimColor>loading…</Text>
+        ) : ownedList.length === 0 ? (
           dasReady ? (
             <Text dimColor>none yet</Text>
           ) : (
@@ -220,7 +225,7 @@ export function WelcomePanel({
             </Box>
           )
         ) : (
-          skills.map((s, i) => {
+          ownedList.map((s, i) => {
             const idx = skillStart + i;
             const on = active && focus === idx;
             return (

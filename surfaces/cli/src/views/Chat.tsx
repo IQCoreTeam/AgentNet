@@ -72,7 +72,8 @@ export function Chat({
   // masked Helius key ("••••AB12" or null = default RPC), and the wallet's owned skills.
   const [cloud, setCloud] = useState<{ kind: string; account?: string } | null>(null);
   const [heliusMasked, setHeliusMasked] = useState<string | null>(null);
-  const [skills, setSkills] = useState<OwnedSkill[]>([]);
+  // null = still fetching (the panel shows "loading…"); [] = fetched, none owned.
+  const [skills, setSkills] = useState<OwnedSkill[] | null>(null);
   // Whether a DAS-capable RPC is configured. The public default RPC can't serve
   // getAssetsByOwner, so owned skills come back empty there — the panel uses this to
   // tell "you have no skills" apart from "set a Helius key to read your skills".
@@ -82,6 +83,7 @@ export function Chat({
     void maskedHeliusKey().then(setHeliusMasked);
     void hasDasRpc().then(setDasReady);
     // owned-skills needs a DAS RPC; best-effort, leave empty on failure.
+    setSkills(null);
     void ownedSkills(address).then(setSkills).catch(() => setSkills([]));
   }, [address]);
   const [showBtw, setShowBtw] = useState(false);
@@ -383,7 +385,8 @@ export function Chat({
     void saveHeliusKey(raw).then(async () => {
       setHeliusMasked(await maskedHeliusKey());
       setDasReady(await hasDasRpc());
-      void ownedSkills(address).then(setSkills).catch(() => {});
+      setSkills(null);
+      void ownedSkills(address).then(setSkills).catch(() => setSkills([]));
       setNotice(raw.trim() ? "helius key saved" : "helius key cleared — using default rpc");
     });
     setPanelFocused(false);
