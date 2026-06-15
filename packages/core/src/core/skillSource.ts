@@ -127,10 +127,37 @@ export const dasSource: SkillSource = {
 };
 
 /**
+ * On-chain truth for collection membership: read a mint's Token-2022
+ * TokenGroupMember extension and return its `group` (the collection mint the NFT
+ * was actually enrolled in at mint time). This is the ground truth for "which
+ * collection is this NFT in" — unlike DAS's `grouping.group_value`, which is an
+ * *indexer* projection that, for our Token-2022 TokenGroup mints, surfaces a
+ * synthetic group id instead of the real group mint and so never matches our seed.
+ */
+async function onChainGroup(
+  conn: import("@solana/web3.js").Connection,
+  PublicKey: typeof import("@solana/web3.js").PublicKey,
+  mint: string,
+): Promise<string | null> {
+  const acct = await conn.getParsedAccountInfo(new PublicKey(mint));
+  const data = acct.value?.data as { parsed?: { info?: { extensions?: unknown[] } } } | undefined;
+  const exts = data?.parsed?.info?.extensions ?? [];
+  for (const ext of exts as { extension?: string; state?: { group?: string } }[]) {
+    if (ext.extension === "tokenGroupMember" && ext.state?.group) return ext.state.group;
+  }
+  return null;
+}
+
+/**
  * The skill/workflow NFT mints a wallet OWNS (issue #17 — auto-load owned skills at
- * session start). DAS getAssetsByOwner returns every asset the wallet holds; we keep
- * only members of our skills/workflows collections. Same RPC + collection seeds as
- * dasSource. Returns [] if RPC/collections aren't configured (best-effort caller).
+ * session start). Owned membership is read from on-chain truth, not the indexer or
+ * DAS's group projection: DAS getAssetsByOwner only tells us which assets the wallet
+ * holds (an owner query, unaffected by group representation); each grouped candidate's
+ * real collection is then read from its Token-2022 TokenGroupMember.group and matched
+ * against our seed mints. We deliberately do NOT trust DAS `grouping.group_value` here
+ * — for our TokenGroup mints it's a synthetic id that never equals the seed mint, so
+ * the wallet's real skills would be dropped (verified on devnet). Returns [] if
+ * RPC/collections aren't configured (best-effort caller).
  */
 export async function ownedSkillMints(owner: string): Promise<string[]> {
   const rpcUrl = await resolveRpcUrl(); // Helius key > env > default (issue #23)
@@ -138,7 +165,10 @@ export async function ownedSkillMints(owner: string): Promise<string[]> {
   const ours = new Set([getSkillsCollectionMint(), getWorkflowsCollectionMint()].filter(Boolean) as string[]);
   if (ours.size === 0) return [];
 
-  const mints: string[] = [];
+  // Owner query (cheap, paged): every asset the wallet holds that carries a "collection"
+  // grouping is a candidate. We resolve its REAL collection on-chain below — the DAS
+  // group_value itself is never compared to the seed (it's a synthetic id for our mints).
+  const candidates: string[] = [];
   for (let page = 1; ; page++) {
     const res = await fetch(rpcUrl, {
       method: "POST",
@@ -152,15 +182,24 @@ export async function ownedSkillMints(owner: string): Promise<string[]> {
     if (json.error) throw new Error(`DAS getAssetsByOwner failed: ${JSON.stringify(json.error)}`);
     const items = json.result?.items ?? [];
     for (const it of items) {
-      const inOurs = (it.grouping ?? []).some(
-        (g: { group_key?: string; group_value?: string }) =>
-          g.group_key === "collection" && g.group_value && ours.has(g.group_value),
-      );
-      if (inOurs) mints.push(it.id);
+      const groups = (it.grouping ?? []) as { group_key?: string; group_value?: string }[];
+      if (groups.some((g) => g.group_key === "collection" && g.group_value)) candidates.push(it.id);
     }
     if (items.length < 1000) break; // last page
   }
-  return mints;
+  if (candidates.length === 0) return [];
+
+  // Keep the candidates whose on-chain TokenGroupMember.group is one of our collections.
+  // One Connection, candidates read in parallel (typically a handful).
+  const { Connection, PublicKey } = await import("@solana/web3.js");
+  const conn = new Connection(rpcUrl, "confirmed");
+  const groups = await Promise.all(
+    candidates.map((id) => onChainGroup(conn, PublicKey, id).catch(() => null)),
+  );
+  return candidates.filter((_, i) => {
+    const g = groups[i];
+    return !!g && ours.has(g);
+  });
 }
 
 /**
