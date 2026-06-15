@@ -1,0 +1,37 @@
+AgentNet onboarding changes - apply notes
+=========================================
+DELETE THIS FILE before committing. It is not part of the repo.
+
+HOW TO APPLY
+------------
+Extract this zip at the AgentNet repo ROOT. It overwrites these 9 files in place:
+
+  surfaces/webview/src/App.tsx
+  surfaces/webview/src/state/store.tsx
+  surfaces/webview/src/transport/protocol.ts
+  surfaces/webview/src/onboarding/Welcome.tsx
+  surfaces/webview/src/onboarding/ConnectWallet.tsx
+  surfaces/webview/src/onboarding/PickEngine.tsx
+  surfaces/webview/src/onboarding/ConnectClaude.tsx
+  surfaces/webview/src/onboarding/ConnectCodex.tsx
+  surfaces/localhost/src/index.ts      <-- server, two edits applied
+
+All are full files (not patches). The 8 webview files are pure ASCII. index.ts is your
+original file byte-for-byte EXCEPT the two edited regions (so its pre-existing comment
+glyphs are preserved); the two edited regions are plain ASCII.
+
+SERVER EDITS ALREADY APPLIED in surfaces/localhost/src/index.ts:
+  1. connectWallet() now always builds the runtime (removed the isInitialized gate and the
+     now-unused dynamic import). First-time local-only users get a working runtime.
+  2. attachOnboarding() now handles { type: "checkCliStatus" } by re-emitting cliStatus
+     only (never init), so the engine picker's recheck never bounces back to Welcome.
+
+BUILD / TYPECHECK (run from the repo)
+-------------------------------------
+  pnpm --filter agentnet-webview build
+  pnpm --filter agentnet-localhost build
+(If the package "name" fields differ, substitute the correct ones from each package.json.)
+
+NOTE: builds were NOT run by the tool that produced this zip - the repo/pnpm were not
+available in that environment. Verified only: ASCII (webview), and syntax via esbuild
+transform on all 9 files.

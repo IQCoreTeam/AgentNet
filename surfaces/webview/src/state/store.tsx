@@ -1,6 +1,6 @@
-// The UI state, driven entirely by server→UI events. The dispatcher (packages/core) is
+// The UI state, driven entirely by server->UI events. The dispatcher (packages/core) is
 // the source of truth; this reducer just projects its event stream into render state.
-// One reducer, one action per ServerMessage type — no multi-harness abstraction (we run
+// One reducer, one action per ServerMessage type - no multi-harness abstraction (we run
 // one agent; codex is a tab, not a second backend).
 
 import {
@@ -29,6 +29,7 @@ export type EngineStatus = "ok" | "no-login" | "missing";
 export interface State {
   phase:
     | "connecting"
+    | "welcome"
     | "onboarding"
     | "storageSelect"
     | "engineSelect"
@@ -110,11 +111,12 @@ function appendMessage(log: ChatMessage[], msg: ChatMessage): ChatMessage[] {
 
 // Actions = server events (projected verbatim) + a few local-only UI effects the
 // dispatcher doesn't round-trip (optimistic typing dots, removing an answered approval
-// from the dock, dismissing a toast).
+// from the dock, dismissing a toast, advancing the welcome step, picking an engine).
 type LocalAction =
   | { type: "__typing" }
   | { type: "__removeApproval"; id: string }
   | { type: "__clearToast" }
+  | { type: "__welcomeContinue" }
   | { type: "__selectEngine"; cli: Cli }
   | { type: "__finishStorage" };
 type Action = ServerMessage | LocalAction;
@@ -127,33 +129,34 @@ function reducer(state: State, ev: Action): State {
       return { ...state, approvals: state.approvals.filter((a) => a.id !== ev.id) };
     case "__clearToast":
       return { ...state, toast: null };
+    case "__welcomeContinue":
+      // Leave the compact welcome and go to wallet connect.
+      return { ...state, phase: "onboarding" };
     case "__selectEngine": {
-      if (ev.cli === "claude") {
-        const needsLogin = state.cliReport?.claude === "no-login";
-        return { ...state, cli: "claude", phase: needsLogin ? "claudeAuth" : "chat" };
+      // Activate the chosen engine. "missing" (CLI not installed) and the not-yet-known
+      // state are handled in the picker UI with install guidance - we never route into a
+      // broken runtime or dead-end on a toast here.
+      const status = ev.cli === "claude" ? state.cliReport?.claude : state.cliReport?.codex;
+      if (status == null || status === "missing") return state;
+      if (status === "no-login") {
+        return { ...state, cli: ev.cli, phase: ev.cli === "claude" ? "claudeAuth" : "codexAuth" };
       }
-      // codex: gate on login state
-      if (state.cliReport?.codex === "missing") {
-        return { ...state, toast: "Codex is not installed. Install it first." };
-      }
-      if (state.cliReport?.codex === "no-login") {
-        return { ...state, cli: "codex", phase: "codexAuth" };
-      }
-      return { ...state, cli: "codex", phase: "chat" };
+      return { ...state, cli: ev.cli, phase: "chat" };
     }
     case "init":
-      // Onboarding handshake: no runtime yet → show ConnectWallet.
-      return { ...state, phase: "onboarding" };
+      // First run / no runtime yet -> show the compact welcome, then wallet connect.
+      return { ...state, phase: "welcome" };
     case "walletConnected":
-      // Wallet is in. If storage was already configured on this device (returning user),
-      // skip the storage picker entirely and go straight to engine select — the gdrive
-      // choice + token persist, so re-walking it (and re-auth) is pointless. Only a true
-      // first run shows the picker.
-      return { ...state, walletAddress: ev.address, phase: ev.storageConfigured ? "engineSelect" : "storageSelect" };
+      // Storage is non-blocking. First-time users default to local-only storage and go
+      // straight to AI connection; the cloud mirror is offered later (Settings / nudge),
+      // never as a gate before the first chat. So we skip the storage picker entirely.
+      return { ...state, walletAddress: ev.address, phase: "engineSelect" };
     case "cliStatus":
       // After wallet: don't force claude. Record both engines' status and show the engine
       // picker so the user chooses which one to activate. The chosen engine then runs its
-      // own gate (claude → login if needed; codex → coming-soon) via __selectEngine.
+      // own gate (claude -> login if needed; codex -> device-auth) via __selectEngine.
+      // This event is also re-emitted in response to `checkCliStatus` (the picker's
+      // "recheck" after the user installs a CLI), so the pills refresh in place.
       return {
         ...state,
         cliReport: { claude: ev.claude, codex: ev.codex },
@@ -163,8 +166,16 @@ function reducer(state: State, ev: Action): State {
     case "googleLoginUrl":
       return { ...state, googleLoginUrl: ev.url, googleLoginError: null };
     case "googleLoginStatus":
+      // Storage is now optional and usually configured from Settings (inside chat). Only
+      // advance the onboarding phase if we were on the (no-longer-default) storage step;
+      // otherwise just clear the login UI and stay where we are.
       return ev.status === "done"
-        ? { ...state, googleLoginUrl: null, googleLoginError: null, phase: "engineSelect" }
+        ? {
+            ...state,
+            googleLoginUrl: null,
+            googleLoginError: null,
+            phase: state.phase === "storageSelect" ? "engineSelect" : state.phase,
+          }
         : { ...state, googleLoginUrl: null, googleLoginError: ev.error ?? "Login failed." };
     case "openUrl":
       window.open(ev.url, "_blank");
@@ -228,6 +239,7 @@ interface Store {
   startTyping: () => void;
   resolveApproval: (id: string) => void;
   clearToast: () => void;
+  welcomeContinue: () => void;
   selectEngine: (cli: Cli) => void;
   finishStorage: () => void;
 }
@@ -251,7 +263,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // When onboarding completes (phase enters "chat"), the first SSE stream is still bound
-  // to the server's ONBOARDING handler — which ignores chat messages. Reopen the stream so
+  // to the server's ONBOARDING handler - which ignores chat messages. Reopen the stream so
   // the server, now that a runtime exists, attaches the CHAT dispatcher to a fresh client.
   // Without this a React SPA (no navigation) would keep the onboarding client and silently
   // drop every `send`. Guard on the transition so we reopen exactly once.
@@ -261,7 +273,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       wasChat.current = true;
       transportRef.current?.reopen();
       // reopen() spins up a FRESH client that the server binds to attachChat (runtime now
-      // exists). That handler only pushes sessions + storage on "ready" — and the initial
+      // exists). That handler only pushes sessions + storage on "ready" - and the initial
       // ready (sent at mount) went to the now-discarded onboarding client. So re-send it,
       // or the chat lands with no session list and a stale "local only" storage pill.
       void transportRef.current?.post({ type: "ready" });
@@ -283,6 +295,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // Drop an answered approval from the dock immediately; core won't re-send it.
       resolveApproval: (id) => raw({ type: "__removeApproval", id }),
       clearToast: () => raw({ type: "__clearToast" }),
+      // Leave the welcome step -> wallet connect.
+      welcomeContinue: () => raw({ type: "__welcomeContinue" }),
       // Activate the chosen engine; routing (login gate / chat) is decided in the reducer.
       selectEngine: (cli) => raw({ type: "__selectEngine", cli }),
       finishStorage: () => raw({ type: "__finishStorage" }),

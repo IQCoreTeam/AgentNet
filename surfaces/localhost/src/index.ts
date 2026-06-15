@@ -119,14 +119,10 @@ async function connectWallet(address: string, signature: Uint8Array): Promise<vo
   if (runtime && walletAddress === address) return;
   wallet = webWallet(address, signature);
   walletAddress = address;
-  // Only build the runtime immediately if storage is already configured (returning user).
-  // First-time users go through onboarding (storage picker) before runtime is needed;
-  // building it here with no-cloud config and then rebuilding after Drive OAuth caused
-  // the chat SSE to attach to a stale local runtime while the user was in Chrome.
-  const { isInitialized } = await import("@iqlabs-official/agent-sdk");
-  if (await isInitialized()) {
-    runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
-  }
+  // Always create a runtime after wallet connect. The core connect/login path supports
+  // local-only storage when no cloud config exists, so first-time local-only users get a
+  // working runtime and the chat dispatcher can attach.
+  runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
 }
 
 // ── one connected UI (one SSE stream) ──
@@ -305,6 +301,13 @@ function attachOnboarding(c: Client) {
   c.recvs.push(async (m: any) => {
     if (m?.type === "ready") {
       c.send({ type: "init", defaultPath: null, cloudKind: null });
+      return;
+    }
+    if (m?.type === "checkCliStatus") {
+      // The engine picker's "recheck" after the user installs a CLI. Re-probe and push
+      // fresh status ONLY - never `init`, or the UI would bounce back to the welcome step.
+      const cli = await detectCli();
+      c.send({ type: "cliStatus", claude: cli.claude, codex: cli.codex });
       return;
     }
     if (m?.type === "connectWallet" && typeof m.address === "string" && Array.isArray(m.signature)) {

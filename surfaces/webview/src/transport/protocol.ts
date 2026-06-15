@@ -1,10 +1,10 @@
 // The message contract between this UI and the core chat dispatcher, as it travels over
-// surfaces/localhost's transport (POST /rpc for UI→server, SSE /events for server→UI).
+// surfaces/localhost's transport (POST /rpc for UI->server, SSE /events for server->UI).
 // These mirror what packages/core's createChatSession sends/handles and what the HTML
-// webview already speaks — this surface is a second client of the SAME protocol, not a
+// webview already speaks - this surface is a second client of the SAME protocol, not a
 // new one. Keep these in sync with packages/core/src/chat/session.ts.
 
-// ── shared payload shapes ──
+// -- shared payload shapes --
 
 export type Cli = "claude" | "codex";
 
@@ -58,7 +58,7 @@ export interface ApprovalRequest {
 
 export type ApprovalOutcome = "once" | "always" | "deny";
 
-// ── UI → server (POST /rpc) ──
+// -- UI -> server (POST /rpc) --
 
 export type ClientMessage =
   | { type: "ready" }
@@ -82,6 +82,10 @@ export type ClientMessage =
   | { type: "approvalDecision"; id: string; outcome: ApprovalOutcome; reason?: string; answers?: Record<string, string> }
   // onboarding-only:
   | { type: "connectWallet"; address: string; signature: number[] }
+  // re-query engine install/login status (the engine picker's "recheck" after the user
+  // installs a CLI). The server replies by re-emitting `cliStatus` only - NOT `init` - so
+  // the recheck never bounces the UI back to the welcome step.
+  | { type: "checkCliStatus" }
   | { type: "startClaudeLogin" }
   | { type: "claudeAuthCode"; code: string }
   | { type: "cancelClaudeLogin" }
@@ -94,7 +98,7 @@ export type ClientMessage =
   | { type: "setGoogleCredentials"; clientId: string; clientSecret: string }
   | { type: "toast"; text: string };
 
-// ── server → UI (SSE /events) ──
+// -- server -> UI (SSE /events) --
 
 export type ServerMessage =
   | { type: "clear" }

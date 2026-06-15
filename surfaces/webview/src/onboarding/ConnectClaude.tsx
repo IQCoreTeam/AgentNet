@@ -1,9 +1,7 @@
-// Second onboarding screen (after wallet): connect the user's Claude subscription. The
-// whole point of AgentNet is running on YOUR subscription, so this is where they sign in
-// to Claude — not with an API key. The server runs `claude auth login --claudeai`, sends
-// us the OAuth URL, the user opens it in their phone browser, authorizes, and pastes the
-// returned code back; the CLI then holds the credentials device-local. We never see the
-// token.
+// Sign in with the user's Claude plan. The whole point of AgentNet is running on YOUR
+// subscription, so this is a plan sign-in, not an API key. The server runs the Claude CLI
+// login, sends us the OAuth URL, the user opens it, authorizes, and pastes the returned
+// code back; the CLI then holds the credentials device-local. We never see the token.
 
 import { useState } from "react";
 import { OnboardingShell, OnboardingButton } from "./OnboardingShell";
@@ -48,14 +46,18 @@ export function ConnectClaude() {
 
   return (
     <OnboardingShell
-      title="Connect Claude"
-      subtitle="Sign in with your Claude subscription to run agents on your plan."
+      title="Sign in to Claude"
+      subtitle="Use your Claude plan - no API key needed. AgentNet runs on your existing subscription."
     >
       {!claudeLoginUrl ? (
         <>
           <OnboardingButton disabled={busy} onClick={start}>
-            {busy ? "Opening sign-in…" : "Connect Claude"}
+            {busy ? "Opening sign-in..." : "Use your Claude plan"}
           </OnboardingButton>
+          <p className="text-center text-xs leading-relaxed text-zinc-500">
+            Your Claude login stays in the CLI on this device. AgentNet never sees your
+            password or token.
+          </p>
           {claudeLoginError && (
             <p className="text-center text-sm text-red-400">{claudeLoginError}</p>
           )}
@@ -63,7 +65,7 @@ export function ConnectClaude() {
       ) : (
         <>
           <p className="text-sm text-zinc-400">
-            1. Open this link and authorize (here or on another device):
+            1. Open this link and approve access (here or on another device):
           </p>
           <a
             href={claudeLoginUrl}

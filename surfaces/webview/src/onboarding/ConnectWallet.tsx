@@ -1,10 +1,11 @@
-// First screen when no runtime exists yet: connect a Solana wallet. Mirrors the web path
-// of packages/core's onboarding.ts — detect installed providers (Phantom/Solflare/…),
-// sign the FIXED SESSION_KEY_MESSAGE once (that signature derives the session key), and
-// send {connectWallet, address, signature}. The store flips to chat on `walletConnected`.
+// First step after the welcome: connect a Solana wallet - this is the agent's identity.
+// Mirrors the web path of packages/core's onboarding.ts - detect installed providers
+// (Phantom/Solflare/...), sign the FIXED SESSION_KEY_MESSAGE once (that signature derives
+// the session key), and send {connectWallet, address, signature}. The store flips to the
+// AI-connection step on `walletConnected`.
 
 import { useMemo, useState } from "react";
-// Subpath import (not the barrel) — the core index drags in node-only modules that can't
+// Subpath import (not the barrel) - the core index drags in node-only modules that can't
 // bundle for the browser. webWallet.ts is browser-safe (only @solana/web3.js + types).
 import { SESSION_KEY_MESSAGE } from "@iqlabs-official/agent-sdk/account/webWallet";
 import { isAndroidWallet, connectAndroidWallet } from "./androidWallet";
@@ -22,7 +23,7 @@ interface SolanaProvider {
 }
 
 // Most Solana wallets inject a provider on a well-known global and follow Phantom's
-// connect()/signMessage() shape, so one path handles them all — we just label by which
+// connect()/signMessage() shape, so one path handles them all - we just label by which
 // answered. window.solana is the de-facto standard slot, kept last as a catch-all.
 function detectWallets(): { name: string; provider: SolanaProvider }[] {
   const w = window as unknown as Record<string, any>;
@@ -46,7 +47,7 @@ export function ConnectWallet() {
   const { send } = useStore();
   const [busy, setBusy] = useState<string | null>(null);
   const wallets = useMemo(detectWallets, []);
-  // Inside the Android shell there are no injected providers — the native MWA bridge is
+  // Inside the Android shell there are no injected providers - the native MWA bridge is
   // the only path. Detect it once and, if present, show a single native connect button.
   const android = useMemo(isAndroidWallet, []);
 
@@ -56,7 +57,7 @@ export function ConnectWallet() {
       const res = await provider.connect();
       const pk = res?.publicKey || provider.publicKey;
       const address = pk!.toString();
-      // Off-chain signMessage over the fixed bytes — one prompt; reused per session.
+      // Off-chain signMessage over the fixed bytes - one prompt; reused per session.
       const signed = await provider.signMessage(
         new TextEncoder().encode(SESSION_KEY_MESSAGE),
         "utf8",
@@ -70,7 +71,7 @@ export function ConnectWallet() {
   }
 
   // Android: hand off to the native MWA flow. It produces the same (address, signature)
-  // shape, so the rest — session-key derivation, backend — is identical to the web path.
+  // shape, so the rest - session-key derivation, backend - is identical to the web path.
   async function connectAndroid() {
     setBusy("Wallet");
     try {
@@ -85,16 +86,22 @@ export function ConnectWallet() {
   return (
     <OnboardingShell
       title="Connect your wallet"
-      subtitle="One signature derives your session key. Your keys stay in your wallet."
+      subtitle="This is your agent's identity. You'll sign one short message to continue."
     >
+      <p className="text-center text-xs leading-relaxed text-zinc-500">
+        Signing proves this agent is yours and unlocks encrypted session sync. Your keys
+        never leave your wallet.
+      </p>
+
       {android ? (
-        // Android shell: one button drives the native wallet picker (Phantom/Solflare/…).
+        // Android shell: one button drives the native wallet picker (Phantom/Solflare/...).
         <OnboardingButton disabled={busy !== null} onClick={connectAndroid}>
-          {busy ? "Connecting…" : "Connect Wallet"}
+          {busy ? "Connecting..." : "Connect Wallet"}
         </OnboardingButton>
       ) : wallets.length === 0 ? (
         <p className="text-center text-sm text-zinc-500">
-          No Solana wallet detected. Install Phantom, Solflare, or Backpack and reload.
+          No Solana wallet found. Install Phantom, Solflare, or Backpack, then reload this
+          page.
         </p>
       ) : (
         wallets.map(({ name, provider }) => (
@@ -103,7 +110,7 @@ export function ConnectWallet() {
             disabled={busy !== null}
             onClick={() => connectWith(name, provider)}
           >
-            {busy === name ? `Connecting ${name}…` : `Connect ${name}`}
+            {busy === name ? `Connecting ${name}...` : `Connect ${name}`}
           </OnboardingButton>
         ))
       )}
