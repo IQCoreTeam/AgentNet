@@ -7,14 +7,24 @@ import type { AppOptions } from "../app.js";
 import type { InkApprovalChannel } from "../InkApprovalChannel.js";
 import { useChat, type Engine } from "../hooks/useChat.js";
 import { useFrameLoop } from "../hooks/useFrameLoop.js";
-import { getStorageInfo, getCodexApiKey } from "@iqlabs-official/agent-sdk";
+import {
+  getStorageInfo,
+  getCodexApiKey,
+  STORAGE_OPTIONS,
+  type StorageKind,
+  maskedHeliusKey,
+  saveHeliusKey,
+  ownedSkills,
+} from "@iqlabs-official/agent-sdk";
+import { Select } from "@inkjs/ui";
+import { chooseStorage } from "../bootstrap.js";
 import { copyToClipboard } from "../clipboard.js";
 import { Message } from "../components/Message.js";
 import { StatusLine } from "../components/StatusLine.js";
 import { ApprovalCard } from "../components/ApprovalCard.js";
 import { Celebrate } from "../components/Celebrate.js";
 import { Composer } from "../components/Composer.js";
-import { Header } from "../components/Header.js";
+import { WelcomePanel, type PanelField, type OwnedSkill } from "../components/WelcomePanel.js";
 import { NoticeBanner } from "../components/NoticeBanner.js";
 import { Footer } from "../components/Footer.js";
 import { SessionList } from "./SessionList.js";
@@ -57,6 +67,17 @@ export function Chat({
     approval: approval ?? undefined,
   });
   const [notice, setNotice] = useState("");
+  // Welcome-panel data, fetched once on mount: cloud/storage (local-only → null), the
+  // masked Helius key ("••••AB12" or null = default RPC), and the wallet's owned skills.
+  const [cloud, setCloud] = useState<{ kind: string; account?: string } | null>(null);
+  const [heliusMasked, setHeliusMasked] = useState<string | null>(null);
+  const [skills, setSkills] = useState<OwnedSkill[]>([]);
+  useEffect(() => {
+    void getStorageInfo().then((info) => setCloud(info ?? null));
+    void maskedHeliusKey().then(setHeliusMasked);
+    // owned-skills needs a DAS RPC; best-effort, leave empty on failure.
+    void ownedSkills(address).then(setSkills).catch(() => setSkills([]));
+  }, [address]);
   const [showBtw, setShowBtw] = useState(false);
   const [btwQuestion, setBtwQuestion] = useState("");
   const [btwAnswer, setBtwAnswer] = useState("");
@@ -134,6 +155,10 @@ export function Chat({
   const [showAccount, setShowAccount] = useState(false);
   const [accountLines, setAccountLines] = useState<string[]>([]);
   const [showSettings, setShowSettings] = useState(false);
+  // welcome control panel: focus stays on the composer by default; Ctrl+S moves focus into
+  // the panel to edit settings. showCloud opens the storage picker from the panel's cloud row.
+  const [panelFocused, setPanelFocused] = useState(false);
+  const [showCloud, setShowCloud] = useState(false);
   const [celebrate, setCelebrate] = useState<"sparkle" | "confetti" | null>(null);
   const [eggMood, setEggMood] = useState<Mood | null>(null);
   const [idle, setIdle] = useState(false);
@@ -264,6 +289,28 @@ export function Chat({
     { isActive: !pendingApproval && !showSessions && !showModels && !showEfforts && !showBtw && !showAccount && !showSettings },
   );
 
+  // Ctrl+S moves focus from the composer into the welcome panel (only while the panel is
+  // showing: empty, idle session, no overlay open). Esc inside the panel returns focus.
+  useInput(
+    (input, key) => {
+      if (key.ctrl && input === "s") setPanelFocused(true);
+    },
+    {
+      isActive:
+        chat.messages.length === 0 &&
+        !chat.busy &&
+        !panelFocused &&
+        !pendingApproval &&
+        !showSessions &&
+        !showModels &&
+        !showEfforts &&
+        !showBtw &&
+        !showAccount &&
+        !showSettings &&
+        !showCloud,
+    },
+  );
+
   useInput(
     (_input, key) => { if (key.escape || key.return) setShowAccount(false); },
     { isActive: showAccount },
@@ -272,6 +319,12 @@ export function Chat({
   useInput(
     (_input, key) => { if (key.escape || key.return) setShowSettings(false); },
     { isActive: showSettings },
+  );
+
+  // Esc closes the cloud/storage picker (Select handles its own arrows + enter).
+  useInput(
+    (_input, key) => { if (key.escape) setShowCloud(false); },
+    { isActive: showCloud },
   );
 
   // Escape or Return closes the /btw overlay.
@@ -291,6 +344,64 @@ export function Chat({
     { isActive: showBtw },
   );
 
+  // welcome-panel [enter] on a field: edit it. engine toggles in place; cloud opens the
+  // storage picker; wallet copies the address; github is not wired yet.
+  function editPanelField(field: PanelField) {
+    if (field === "engine") {
+      const next: Engine = chat.cli === "claude" ? "codex" : "claude";
+      chat.switchEngine(next);
+      setNotice(`engine → ${next} (session carries over)`);
+      setPanelFocused(false);
+      return;
+    }
+    if (field === "cloud") {
+      setShowCloud(true); // hands off to the storage picker; focus returns after applyCloud
+      return;
+    }
+    if (field === "wallet") {
+      void copyToClipboard(address).then((ok) =>
+        setNotice(ok ? `copied wallet ${address}` : `wallet ${address}`),
+      );
+      setPanelFocused(false);
+      return;
+    }
+    // github
+    setNotice("github linking — coming soon");
+    setPanelFocused(false);
+  }
+
+  // commit a Helius key from the panel's key editor. "" clears it (back to default RPC).
+  // re-read the mask so the row reflects the new state; refresh owned skills now that a
+  // DAS-capable RPC may be available.
+  function setHelius(raw: string) {
+    void saveHeliusKey(raw).then(async () => {
+      setHeliusMasked(await maskedHeliusKey());
+      void ownedSkills(address).then(setSkills).catch(() => {});
+      setNotice(raw.trim() ? "helius key saved" : "helius key cleared — using default rpc");
+    });
+    setPanelFocused(false);
+  }
+
+  function openMarket() {
+    setPanelFocused(false);
+    setNotice("skill market — coming soon (search / buy)");
+  }
+
+  // apply a storage choice picked from the panel. local applies in place; a cloud (gdrive)
+  // needs the OAuth flow, which lives in onboarding — point there rather than half-doing it.
+  function applyCloud(kind: StorageKind) {
+    setShowCloud(false);
+    setPanelFocused(false);
+    if (kind === "local") {
+      void chooseStorage({ kind: "local" }).then(() => {
+        setCloud(null);
+        setNotice("storage → local only");
+      });
+      return;
+    }
+    setNotice(`${kind} needs sign-in — re-run onboarding to connect (rm ~/.config/agentnet to reset)`);
+  }
+
   function runSlash(raw: string) {
     const [cmd, ...rest] = raw.slice(1).trim().split(/\s+/);
     const arg = rest.join(" ");
@@ -302,6 +413,7 @@ export function Chat({
         return;
       case "new":
         chat.newSession();
+        setPanelFocused(false); // empty session again → panel shows, focus back on composer
         setNotice("fresh session — say hi");
         return;
       case "engine":
@@ -492,6 +604,25 @@ export function Chat({
     );
   }
 
+  // cloud/storage picker overlay — opened from the welcome panel's cloud row.
+  if (showCloud) {
+    return (
+      <Box flexDirection="column" paddingX={1}>
+        <Box borderStyle="round" borderColor={colors.iqCyan} flexDirection="column" paddingX={2} paddingY={1}>
+          <Text bold color={colors.iqCyan}>storage</Text>
+          <Text dimColor>where your sessions live (local is always on — a cloud just mirrors it)</Text>
+          <Box marginTop={1}>
+            <Select
+              options={STORAGE_OPTIONS.map((o) => ({ label: `${o.label} — ${o.needs}`, value: o.kind }))}
+              onChange={(v) => applyCloud(v as StorageKind)}
+            />
+          </Box>
+          <Box marginTop={1}><Text dimColor>Esc  close</Text></Box>
+        </Box>
+      </Box>
+    );
+  }
+
   // model picker overlay.
   if (showModels) {
     return (
@@ -583,15 +714,32 @@ export function Chat({
   const committed = streaming ? chat.messages.slice(0, -1) : chat.messages;
   const liveMsg = streaming ? lastMsg : null;
 
+  // the welcome control panel shows on an empty, idle session. Focus stays on the composer
+  // by default; Ctrl+S moves focus INTO the panel (panelActive), which then owns
+  // tab/arrow/enter and disables the composer until Esc hands focus back.
+  const showPanel = chat.messages.length === 0 && !chat.busy;
+  const panelActive = showPanel && panelFocused;
+
   return (
     <Box flexDirection="column" paddingX={1}>
-      {/* startup header — shown only on empty session so it doesn't re-appear */}
-      {chat.messages.length === 0 && !chat.busy ? (
-        <Header cli={chat.cli} model={chat.model} cwd={cwd} />
+      {/* startup welcome panel — shown only on empty session so it doesn't re-appear.
+          Logo-left / editable settings-right: wallet, cloud, engine + github. The composer
+          keeps focus until Ctrl+S; then tab/enter control the panel, Esc returns to chat. */}
+      {showPanel ? (
+        <WelcomePanel
+          walletAddr={address}
+          cloud={cloud}
+          engine={chat.cli}
+          heliusMasked={heliusMasked}
+          skills={skills}
+          active={panelActive}
+          onEdit={editPanelField}
+          onSetHelius={setHelius}
+          onOpenMarket={openMarket}
+          onExit={() => setPanelFocused(false)}
+        />
       ) : null}
-      {chat.messages.length === 0 && !chat.busy ? (
-        <Text dimColor>{copy.emptySessions}</Text>
-      ) : null}
+      {showPanel ? <Text dimColor>{copy.emptySessions}</Text> : null}
 
       <Static key={chat.epoch} items={committed.map((m, i) => ({ m, i }))}>
         {({ m, i }) => <Message key={`${m.ts}-${i}`} msg={m} />}
@@ -624,7 +772,7 @@ export function Chat({
           <Composer
             cwd={cwd}
             onSubmit={onSubmit}
-            disabled={showSessions}
+            disabled={showSessions || panelActive}
             history={chat.messages.filter((m) => m.role === "user").map((m) => m.text)}
           />
         </Box>

@@ -1,25 +1,22 @@
 import React from "react";
 import { Box, Text } from "ink";
-import Gradient from "ink-gradient";
-import BigText from "ink-big-text";
-import { gradients, copy } from "../theme.js";
-import { useFrameLoop } from "../hooks/useFrameLoop.js";
+import { colors, copy } from "../theme.js";
+import { MASCOT } from "./logo.js";
 import { useTypewriter } from "../hooks/useTypewriter.js";
 
-// The wake-up animation: the IQ mark with a gradient whose colors ROTATE (a sweep),
-// and the wordmark typed out beneath it. Both settle to static when delight is off.
+// The wake-up screen: the Iggy brand mascot drawn large in green, with the wordmark
+// typed out beneath it. No gradient sweep — just the mark, settling to the welcome panel
+// once boot completes.
 export function Banner() {
-  // rotate the IQ color stops each frame → a left-to-right shimmer across the letters.
-  const base = gradients.iq;
-  const f = useFrameLoop(base.length, 4);
-  const swept = [...base.slice(f), ...base.slice(0, f)];
   const { shown } = useTypewriter(copy.wordmark, 60);
 
   return (
     <Box flexDirection="column" paddingX={1}>
-      <Gradient colors={swept}>
-        <BigText text="IQ" />
-      </Gradient>
+      <Box flexDirection="column">
+        {MASCOT.map((row, i) => (
+          <Text key={i} color={colors.ok}>{row}</Text>
+        ))}
+      </Box>
       <Text dimColor>{shown}</Text>
     </Box>
   );

@@ -57,6 +57,9 @@ export function App({ options }: { options: AppOptions }) {
     const rt = await buildRuntime(w, approval.current ?? autoApprove());
     setRuntime(rt);
     set(3, { status: "ok", label: "storage ready" });
+    // wipe the boot banner/checklist from the scrollback so the welcome panel lands on a
+    // clean screen (Ink leaves prior static output in the terminal history otherwise).
+    process.stdout.write("\x1b[2J\x1b[3J\x1b[H");
     setPhase("chat");
   }
 

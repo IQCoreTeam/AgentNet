@@ -58,7 +58,7 @@ export { marketplaceEnv } from "./skill-market/ingest/env.js";
 // search + the enumeration seam
 export { searchSkills, listUnlockable } from "./search/index.js";
 export type { SearchFilters, SortBy, SearchOptions, UnlockableWorkflow, UnlockOptions } from "./search/index.js";
-export { dasSource, indexerSource } from "./core/skillSource.js";
+export { dasSource, indexerSource, ownedSkills } from "./core/skillSource.js";
 export type { SkillSource } from "./core/skillSource.js";
 // reputation (derived live from supply + reviews)
 export { getReputation, getLeaderboard } from "./reputation/index.js";

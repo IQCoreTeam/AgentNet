@@ -163,6 +163,33 @@ export async function ownedSkillMints(owner: string): Promise<string[]> {
   return mints;
 }
 
+/**
+ * The skills a wallet OWNS, hydrated to {id, name, description} for display (e.g. the CLI
+ * welcome panel's "my skills" column). ownedSkillMints gives the mint set; we read each
+ * mint's Token-2022 metadata for its name/description. Best-effort: a mint whose metadata
+ * can't be read is dropped, so the list never throws on a single bad entry.
+ */
+export async function ownedSkills(
+  owner: string,
+): Promise<{ id: string; name: string; description?: string }[]> {
+  const mints = await ownedSkillMints(owner);
+  if (mints.length === 0) return [];
+  const rpcUrl = await resolveRpcUrl();
+  const { Connection } = await import("@solana/web3.js");
+  const { readSkillMintMetadata } = await import("../nft/token2022.js");
+  const conn = new Connection(rpcUrl, "confirmed");
+  const out: { id: string; name: string; description?: string }[] = [];
+  for (const id of mints) {
+    try {
+      const md = await readSkillMintMetadata(conn, id);
+      if (md) out.push({ id, name: md.name, description: md.description });
+    } catch {
+      // skip a mint we can't read rather than failing the whole list
+    }
+  }
+  return out;
+}
+
 /** The indexer's item shape (agentnet-nft-indexer GET /items). Declared here so
  *  core stays independent of the indexer repo — we only depend on its wire JSON. */
 interface IndexerItem {
