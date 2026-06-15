@@ -51,6 +51,11 @@ export interface ChatEnv {
   // issue #34: post a comment on a skill (holder-gated), returns refreshed notes on success
   postNote?(skillId: string, skillType: "skill" | "workflow" | undefined, text: string, gitLink?: string): Promise<{ ok: boolean; notes?: import("./marketMessages.js").Note[]; error?: string }>;
   ownedSkills?(): Promise<string[]>; // skill names already installed (panel fill)
+  // issue #35: agent directory + profile
+  listAgents?(): Promise<import("./marketMessages.js").Reputation[]>;
+  getAgentProfile?(wallet: string): Promise<import("./marketMessages.js").AgentProfile>;
+  buyAllSkills?(wallet: string): Promise<{ ok: boolean; bought: number; failed: number; error?: string }>;
+  postAgentNote?(agentWallet: string, text: string, gitLink?: string): Promise<{ ok: boolean; notes?: import("./marketMessages.js").Note[]; error?: string }>;
   // install every owned skill NFT into the runtime skills dir (session start + after a
   // buy), so the agent always has its owned skills present + discoverable. Returns slugs.
   loadOwnedSkills?(): Promise<string[]>;
@@ -301,6 +306,56 @@ export function createChatSession(
         sendMarket({ type: "postNoteResult", skillId: req.skillId, ok: res.ok, error: res.error });
         if (res.ok && res.notes) {
           sendMarket({ type: "notes", skillId: req.skillId, notes: res.notes });
+        }
+        break;
+      }
+      // issue #35: agent directory
+      case "listAgents": {
+        try {
+          const agents = env.listAgents ? await env.listAgents() : [];
+          sendMarket({ type: "agents", agents });
+        } catch (e) {
+          sendMarket({ type: "searchError", message: e instanceof Error ? e.message : String(e) });
+        }
+        break;
+      }
+      // issue #35: agent profile
+      case "getAgentProfile": {
+        const req = m as Extract<MarketRequest, { type: "getAgentProfile" }>;
+        try {
+          if (env.getAgentProfile) {
+            const profile = await env.getAgentProfile(req.wallet);
+            sendMarket({ type: "agentProfile", profile });
+          }
+        } catch (e) {
+          sendMarket({ type: "searchError", message: e instanceof Error ? e.message : String(e) });
+        }
+        break;
+      }
+      // issue #35: buy all skills from an agent (not-yet-owned, capped at 25)
+      case "buyAllSkills": {
+        const req = m as Extract<MarketRequest, { type: "buyAllSkills" }>;
+        const res = env.buyAllSkills
+          ? await env.buyAllSkills(req.wallet)
+          : { ok: false, bought: 0, failed: 0, error: "buy unavailable" };
+        sendMarket({ type: "buyAllResult", wallet: req.wallet, ...res });
+        if (res.ok && res.bought > 0) {
+          await env.loadOwnedSkills?.();
+          sendMarket({ type: "ownedSkills", names: env.ownedSkills ? await env.ownedSkills() : [] });
+        }
+        break;
+      }
+      // issue #35: post self-note (blog) or comment on an agent's profile
+      case "postAgentNote": {
+        const req = m as Extract<MarketRequest, { type: "postAgentNote" }>;
+        const res = env.postAgentNote
+          ? await env.postAgentNote(req.agentWallet, req.text, req.gitLink)
+          : { ok: false, error: "agent notes unavailable" };
+        sendMarket({ type: "agentNoteResult", agentWallet: req.agentWallet, ok: res.ok, error: res.ok ? undefined : (res as { ok: false; error?: string }).error });
+        if (res.ok && env.getAgentProfile) {
+          // re-push refreshed profile so blog updates without a manual reload
+          const profile = await env.getAgentProfile(req.agentWallet).catch(() => null);
+          if (profile) sendMarket({ type: "agentProfile", profile });
         }
         break;
       }

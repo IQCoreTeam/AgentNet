@@ -12,15 +12,16 @@ import { Connection } from "@solana/web3.js";
 import { readdir } from "node:fs/promises";
 import type { Wallet } from "../../runtime/contract.js";
 import { searchSkills } from "../../search/index.js";
-import { dasSource, indexerSource } from "../../core/skillSource.js";
+import { dasSource, indexerSource, ownedSkillMints } from "../../core/skillSource.js";
 import { buySkill } from "../../nft/skill.js";
 import { readSkillText } from "../../nft/token2022.js";
 import { claudeSkillsDir } from "../../core/paths.js";
 import { resolveRpcUrl } from "../../core/rpc.js";
-import type { SkillCard, SkillDetail } from "../../chat/marketMessages.js";
+import type { AgentProfile, SkillCard, SkillDetail } from "../../chat/marketMessages.js";
 import type { Skill } from "../../core/types.js";
-import { readNotes, postNote as corePostNote } from "../../notes/notes.js";
+import { readNotes, postNote as corePostNote, readAgentNotes, postAgentNote as corePostAgentNote } from "../../notes/notes.js";
 import { getSkillsCollectionMint, getWorkflowsCollectionMint } from "../../core/seed.js";
+import { getLeaderboard, getReputation } from "../../reputation/reputation.js";
 import { SkillSync } from "./index.js";
 
 // Skill (enumeration row) -> SkillCard (what the UI renders). One place so search +
@@ -29,7 +30,7 @@ function toCard(s: Skill): SkillCard {
   return {
     id: s.id, type: s.type, name: s.name, description: s.description,
     category: s.category, hashtags: s.hashtags, supply: s.supply,
-    creator: s.creator, requiredSkills: s.requiredSkills,
+    price: s.price, creator: s.creator, requiredSkills: s.requiredSkills,
   };
 }
 
@@ -140,6 +141,83 @@ export async function marketplaceEnv(wallet: Wallet) {
         return entries.filter((e) => e.isDirectory()).map((e) => e.name);
       } catch {
         return [];
+      }
+    },
+
+    // issue #35: agent directory ranked by totalSupply (indexer source; das fallback).
+    async listAgents() {
+      try {
+        return await getLeaderboard(conn, 20, indexerSource(INDEXER_URL));
+      } catch {
+        return await getLeaderboard(conn, 20, dasSource);
+      }
+    },
+
+    // issue #35: full agent profile — reputation + created/owned skills + notes.
+    async getAgentProfile(agentWallet: string): Promise<AgentProfile> {
+      let source;
+      try { source = indexerSource(INDEXER_URL); } catch { source = dasSource; }
+
+      const [reputation, all, ownedMints, notes] = await Promise.all([
+        getReputation(conn, agentWallet, source).catch(() => ({
+          wallet: agentWallet, skillsPublished: 0, totalSupply: 0, notesReceived: 0, updatedAt: Date.now(),
+        })),
+        runSearch(""),
+        ownedSkillMints(agentWallet).catch(() => [] as string[]),
+        readAgentNotes(agentWallet).catch(() => []),
+      ]);
+
+      const createdSkills = all.filter((s) => s.creator === agentWallet).map(toCard);
+      const ownedSet = new Set(ownedMints);
+      const ownedSkillCards = all.filter((s) => ownedSet.has(s.id)).map(toCard);
+
+      return {
+        wallet: agentWallet,
+        self: agentWallet === wallet.address,
+        reputation,
+        createdSkills,
+        ownedSkills: ownedSkillCards,
+        notes,
+      };
+    },
+
+    // issue #35: buy every skill a given agent created that the current wallet doesn't own.
+    // Cap at 25 to avoid runaway; returns tallies so the UI can show a summary.
+    async buyAllSkills(agentWallet: string) {
+      const all = await runSearch("");
+      const agentSkills = all.filter((s) => s.creator === agentWallet);
+      const alreadyOwned = new Set(await ownedSkillMints(wallet.address).catch(() => []));
+      const toBuy = agentSkills.filter((s) => !alreadyOwned.has(s.id)).slice(0, 25);
+
+      let bought = 0;
+      let failed = 0;
+      for (const s of toBuy) {
+        try {
+          await buySkill(conn, wallet, { skillId: s.id, buyerWallet: wallet.address, creatorWallet: s.creator || wallet.address });
+          bought++;
+        } catch {
+          failed++;
+        }
+      }
+      if (bought > 0) {
+        await Promise.all([
+          skills.injectOwned("claude", wallet.address),
+          skills.injectOwned("codex", wallet.address),
+        ]).catch(() => {});
+      }
+      return { ok: bought > 0 || toBuy.length === 0, bought, failed };
+    },
+
+    // issue #35: post a self-note (blog) or comment on an agent's profile.
+    async postAgentNote(agentWallet: string, text: string, gitLink?: string) {
+      try {
+        let source;
+        try { source = indexerSource(INDEXER_URL); } catch { source = dasSource; }
+        await corePostAgentNote(conn, wallet, { agentWallet, text, gitLink, source });
+        const notes = await readAgentNotes(agentWallet).catch(() => []);
+        return { ok: true as const, notes };
+      } catch (e) {
+        return { ok: false as const, error: e instanceof Error ? e.message : String(e) };
       }
     },
   };

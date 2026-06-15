@@ -10,7 +10,7 @@
 //
 // Direction is in the name: *Request = UI -> host; *Event = host -> UI.
 
-import type { Note } from "../core/types.js";
+import type { Note, Reputation } from "../core/types.js";
 
 /** One item row as the UI renders it (cards + detail). Mirrors the subset of `Skill`
  *  the UI needs — kept here so host (env callbacks) and UI agree. Covers both kinds:
@@ -25,8 +25,19 @@ export interface SkillCard {
   hashtags?: string[];
   image?: string | null; // txid / url / null (viewer infers; null -> default art)
   supply?: number; // popularity
+  price?: string; // lamports as decimal string (for buy-all cost summing)
   creator?: string; // wallet (paid on a priced buy)
   requiredSkills?: string[]; // workflows only: prerequisite skill mint ids
+}
+
+/** Full agent profile payload sent to the UI on getAgentProfile. */
+export interface AgentProfile {
+  wallet: string;
+  self: boolean; // wallet === connected wallet (host computes)
+  reputation: Reputation;
+  createdSkills: SkillCard[];
+  ownedSkills: SkillCard[];
+  notes: Note[]; // self-notes (blog) + holder comments, newest-first
 }
 
 /** A full detail payload for one item: its card, the on-chain body (skillText, read
@@ -40,7 +51,7 @@ export interface SkillDetail {
   notes?: Note[]; // skill comments, newest-first (issue #34)
 }
 
-export type { Note };
+export type { Note, Reputation };
 
 /** RPC status the UI shows (issue #23). `dasReady` = a DAS-capable RPC (a Helius key
  *  or explicit env) is configured; on the bare public default it's false, so reads
@@ -64,7 +75,12 @@ export type MarketRequest =
   | { type: "useDefaultRpc" } // clear any key, fall back to the default
   | { type: "getRpcStatus" } // ask the host to (re)send rpcStatus
   // issue #34: post a comment on a skill (holder-gated client-side)
-  | { type: "postNote"; skillId: string; skillType?: "skill" | "workflow"; text: string; gitLink?: string };
+  | { type: "postNote"; skillId: string; skillType?: "skill" | "workflow"; text: string; gitLink?: string }
+  // issue #35: agent directory + profile
+  | { type: "listAgents" }
+  | { type: "getAgentProfile"; wallet: string }
+  | { type: "buyAllSkills"; wallet: string }
+  | { type: "postAgentNote"; agentWallet: string; text: string; gitLink?: string };
 
 // ── host -> UI (responses / pushes) ─────────────────────────────────────────
 export type MarketEvent =
@@ -77,6 +93,11 @@ export type MarketEvent =
   | { type: "rpcStatus"; status: RpcStatus } // DAS-ready? which source? (issue #23)
   // issue #34: comment write result + refreshed comment list
   | { type: "postNoteResult"; skillId: string; ok: boolean; error?: string }
-  | { type: "notes"; skillId: string; notes: Note[] };
+  | { type: "notes"; skillId: string; notes: Note[] }
+  // issue #35: agent directory + profile
+  | { type: "agents"; agents: Reputation[] }
+  | { type: "agentProfile"; profile: AgentProfile }
+  | { type: "buyAllResult"; wallet: string; ok: boolean; bought: number; failed: number; error?: string }
+  | { type: "agentNoteResult"; agentWallet: string; ok: boolean; error?: string };
 
 export type MarketMessage = MarketRequest | MarketEvent;

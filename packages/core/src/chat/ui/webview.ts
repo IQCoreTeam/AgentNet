@@ -627,6 +627,41 @@ export function chatHtml(): string {
   #send:hover { filter: brightness(1.08); }
   button { background: var(--vscode-button-background); color: var(--vscode-button-foreground);
            border: none; border-radius: 6px; cursor: pointer; }
+
+  /* ── issue #35: agent directory + profile ── */
+  #agentsBtn.on { color: var(--an-green); border-bottom: 2px solid var(--an-green); }
+  .agRow { display:flex; align-items:center; gap:10px; padding:10px 0;
+           border-bottom:1px solid var(--an-line); cursor:pointer; }
+  .agRow:hover { background: var(--an-bg-2); }
+  .agAvatar { width:36px; height:36px; flex-shrink:0; }
+  .agInfo { flex:1; min-width:0; }
+  .agAddr { font-family:monospace; font-size:0.88em; color:var(--vscode-foreground); }
+  .agMeta { font-size:0.78em; color:var(--an-muted,#888); margin-top:2px; }
+  .agRank { font-size:0.8em; color:var(--an-muted,#888); flex-shrink:0; }
+  .pr-sec { font-size:0.78em; font-weight:600; text-transform:uppercase;
+            letter-spacing:.04em; color:var(--an-muted,#888); margin:14px 0 6px; }
+  .pr-blog { margin:10px 0; padding:10px; background:var(--an-bg-2); border-radius:6px; }
+  .pr-note { margin-bottom:8px; }
+  .pr-note-author { font-size:0.78em; color:var(--an-muted,#888); margin-bottom:2px; }
+  .pr-note-git { font-size:0.78em; margin-top:3px; }
+  .pr-compose { margin-top:10px; }
+  .pr-compose textarea { width:100%; box-sizing:border-box; min-height:60px; padding:8px;
+                         background:var(--an-bg-2); color:var(--vscode-foreground);
+                         border:1px solid var(--an-line); border-radius:6px; resize:vertical;
+                         font-family:inherit; font-size:0.92em; }
+  .pr-compose input[type=text] { width:100%; box-sizing:border-box; padding:6px 8px; margin-top:5px;
+                                  background:var(--an-bg-2); color:var(--vscode-foreground);
+                                  border:1px solid var(--an-line); border-radius:6px; font-size:0.88em; }
+  .pr-compose button { margin-top:6px; padding:5px 14px; }
+  .pr-compose .pr-err { color:#e05252; font-size:0.82em; margin-top:4px; display:none; }
+  .pr-buyall { width:100%; margin:10px 0; padding:8px; background:var(--an-green,#3fa37a);
+               color:#06231a; font-weight:600; border:none; border-radius:6px; cursor:pointer; }
+  .pr-buyall:disabled { opacity:0.5; cursor:not-allowed; }
+  .pr-confirm { background:var(--an-bg-2); border:1px solid var(--an-line); border-radius:8px;
+                padding:12px; margin:10px 0; }
+  .pr-confirm ul { margin:6px 0 10px 16px; font-size:0.88em; }
+  .pr-confirm .confirm-btns { display:flex; gap:8px; }
+  .pr-confirm .confirm-btns button { flex:1; }
 </style>
 </head>
 <body>
@@ -644,6 +679,7 @@ export function chatHtml(): string {
       <span class="caret">▾</span>
     </button>
     <button id="marketsBtn" title="Skill marketplace">Markets</button>
+    <button id="agentsBtn" title="Agent directory">Agents</button>
     <div class="spacer"></div>
     <button id="histBtn" title="Recent chats">↻ History <span class="caret">▾</span></button>
     <button id="newTabBtn" title="Open another chat in a new tab">+</button>
@@ -757,31 +793,40 @@ export function chatHtml(): string {
   </div>
   </div><!-- /chatView -->
 
-  <!-- MY WALLET view (Skills now lives INSIDE here) -->
+  <!-- AGENT PROFILE view — shared renderer for own wallet + other agents.
+       Storage/Disconnect are own-only (profileSelf flag hides them when browsing others).
+       #profileBody is filled by renderProfile() from the agentProfile message. -->
   <div id="walletView" class="panel" style="display:none">
     <div class="page">
       <div id="backToChat" class="muted" style="cursor:pointer;margin-bottom:10px">‹ Back to chat</div>
       <div class="card center">
         <div id="wAvatarBig"></div>
         <div class="addr" id="walletAddr">…</div>
-        <div class="muted small" style="margin-top:0">This wallet is your agent.</div>
+        <div class="muted small" style="margin-top:0" id="profileSubtitle">This wallet is your agent.</div>
       </div>
-      <div class="card">
-        <div class="muted">Storage</div>
-        <div id="walletStorage">…</div>
-      </div>
-      <div class="card">
-        <div class="muted">Skills</div>
-        <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
-          <div style="font-size:1.6em">🧩</div>
-          <div>
-            <div>On-chain skills are coming soon.</div>
-            <div class="muted small" style="margin-top:2px">Buy, equip, and collect agent skills (Token-2022, soulbound). Not live yet.</div>
-          </div>
+      <div id="profileSelfOnly">
+        <div class="card">
+          <div class="muted">Storage</div>
+          <div id="walletStorage">…</div>
         </div>
       </div>
-      <button class="danger" id="disconnectWalletBtn">Disconnect wallet</button>
-      <div class="muted small">Disconnecting returns you to the connect screen. Your encrypted local sessions stay on this device.</div>
+      <div id="profileBody"></div>
+      <div id="profileSelfOnly2">
+        <button class="danger" id="disconnectWalletBtn">Disconnect wallet</button>
+        <div class="muted small">Disconnecting returns you to the connect screen. Your encrypted local sessions stay on this device.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AGENTS DIRECTORY view — ranked list of agents (by totalSupply) -->
+  <div id="agentsView" class="panel" style="display:none">
+    <div class="page">
+      <div id="backToChatA" class="muted" style="cursor:pointer;margin-bottom:10px">‹ Back to chat</div>
+      <div class="mktHead">
+        <div class="mktTitle">Agent Directory</div>
+        <div class="muted small">Agents ranked by skill popularity (total supply).</div>
+      </div>
+      <div id="agentsList"></div>
     </div>
   </div>
 
@@ -1457,21 +1502,234 @@ export function chatHtml(): string {
     vscode.postMessage({ type: 'pickCloud' }); // extension shows a native quick-pick
   });
 
-  // ---- view switcher: Chat <-> My Wallet (full page) ----
+  // ---- view switcher: Chat / My Wallet (profile) / Market / Agents ----
   const panels = {
     chat: document.getElementById('chatView'),
     wallet: document.getElementById('walletView'),
     market: document.getElementById('marketView'),
+    agents: document.getElementById('agentsView'),
   };
   function showView(name) {
     for (const k in panels) panels[k].style.display = (k === name) ? 'flex' : 'none';
     document.getElementById('marketsBtn').classList.toggle('on', name === 'market');
+    document.getElementById('agentsBtn').classList.toggle('on', name === 'agents');
     if (name === 'wallet') vscode.postMessage({ type: 'wallet' }); // refresh address
     if (name === 'market') openMarket();
+    if (name === 'agents') openAgents();
   }
   document.getElementById('backToChat').addEventListener('click', () => showView('chat'));
   document.getElementById('backToChatM').addEventListener('click', () => showView('chat'));
+  document.getElementById('backToChatA').addEventListener('click', () => showView('chat'));
   document.getElementById('marketsBtn').addEventListener('click', () => { closeMenus(); showView('market'); });
+  document.getElementById('agentsBtn').addEventListener('click', () => { closeMenus(); showView('agents'); });
+
+  // ---- agent directory + profile (issue #35) ----
+  let currentProfileWallet = null;
+  function openAgents() {
+    document.getElementById('agentsList').innerHTML = '<div class="mktEmpty">Loading…</div>';
+    vscode.postMessage({ type: 'listAgents' });
+  }
+  function showProfile(walletAddr) {
+    currentProfileWallet = walletAddr;
+    document.getElementById('profileBody').innerHTML = '<div class="mktEmpty">Loading…</div>';
+    showView('wallet');
+    vscode.postMessage({ type: 'getAgentProfile', wallet: walletAddr });
+  }
+  function renderAgents(agents) {
+    const el = document.getElementById('agentsList');
+    if (!agents || !agents.length) { el.innerHTML = '<div class="mktEmpty">No agents found.</div>'; return; }
+    el.innerHTML = '';
+    agents.forEach((a, i) => {
+      const row = document.createElement('div'); row.className = 'agRow';
+      const av = document.createElement('div'); av.className = 'agAvatar'; av.innerHTML = avatarSvg(a.wallet);
+      const info = document.createElement('div'); info.className = 'agInfo';
+      const addr = document.createElement('div'); addr.className = 'agAddr'; addr.textContent = short(a.wallet);
+      const meta = document.createElement('div'); meta.className = 'agMeta';
+      meta.textContent = a.skillsPublished + ' skill' + (a.skillsPublished !== 1 ? 's' : '') + '  ·  ' + a.totalSupply + '× supply';
+      info.appendChild(addr); info.appendChild(meta);
+      const rank = document.createElement('div'); rank.className = 'agRank'; rank.textContent = '#' + (i + 1);
+      row.appendChild(av); row.appendChild(info); row.appendChild(rank);
+      row.addEventListener('click', () => showProfile(a.wallet));
+      el.appendChild(row);
+    });
+  }
+  function renderProfile(profile) {
+    const self = profile.self;
+    const wallet = profile.wallet;
+    // avatar + address
+    document.getElementById('wAvatarBig').innerHTML = avatarSvg(wallet);
+    document.getElementById('walletAddr').textContent = wallet;
+    document.getElementById('profileSubtitle').textContent = self ? 'This wallet is your agent.' : 'Agent profile';
+    // show/hide self-only sections
+    document.getElementById('profileSelfOnly').style.display = self ? '' : 'none';
+    document.getElementById('profileSelfOnly2').style.display = self ? '' : 'none';
+    if (self) renderWalletStorage();
+
+    const body = document.getElementById('profileBody');
+    body.innerHTML = '';
+
+    // ── reputation row ──
+    const rep = profile.reputation;
+    const repEl = document.createElement('div'); repEl.className = 'card';
+    const repLbl = document.createElement('div'); repLbl.className = 'muted'; repLbl.textContent = 'Reputation';
+    const repRow = document.createElement('div'); repRow.style.cssText = 'display:flex;gap:18px;margin-top:6px;font-size:0.92em';
+    [
+      [rep.skillsPublished, ' skills'],
+      [rep.totalSupply, '× supply'],
+      [rep.notesReceived, ' notes'],
+    ].forEach(([val, label]) => {
+      const sp = document.createElement('span');
+      const b = document.createElement('strong'); b.textContent = String(val);
+      const t = document.createTextNode(label);
+      sp.appendChild(b); sp.appendChild(t); repRow.appendChild(sp);
+    });
+    repEl.appendChild(repLbl); repEl.appendChild(repRow);
+    body.appendChild(repEl);
+
+    // ── helper: mini skill card row ──
+    function skillRow(card) {
+      const r = document.createElement('div'); r.className = 'agRow'; r.style.padding = '7px 0';
+      const nm = document.createElement('div'); nm.style.flex = '1';
+      const nmTitle = document.createElement('div'); nmTitle.style.fontSize = '0.9em';
+      nmTitle.textContent = card.name || card.id;
+      nm.appendChild(nmTitle);
+      if (card.description) {
+        const nmDesc = document.createElement('div'); nmDesc.className = 'muted small';
+        nmDesc.textContent = card.description; nm.appendChild(nmDesc);
+      }
+      nm.style.cursor = 'pointer'; nm.addEventListener('click', () => openDetail(card.id));
+      r.appendChild(nm);
+      if (!self) {
+        const owned = ownedSkills.indexOf(card.name) >= 0;
+        const btn = document.createElement('button'); btn.className = 'mc-buy';
+        btn.textContent = owned ? 'Owned' : 'Buy'; btn.disabled = owned;
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation(); btn.disabled = true; btn.textContent = 'Buying…';
+          vscode.postMessage({ type: 'buySkill', skillId: card.id, creatorWallet: card.creator });
+        });
+        r.appendChild(btn);
+      }
+      return r;
+    }
+
+    // ── created skills ──
+    if (profile.createdSkills.length) {
+      const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Created skills';
+      body.appendChild(sec);
+      if (!self) {
+        const buyAll = document.createElement('button'); buyAll.className = 'pr-buyall';
+        buyAll.textContent = 'Buy all (' + profile.createdSkills.filter(c => ownedSkills.indexOf(c.name) < 0).length + ' not owned)';
+        buyAll.addEventListener('click', () => showBuyAllConfirm(profile));
+        body.appendChild(buyAll);
+      }
+      profile.createdSkills.forEach(c => body.appendChild(skillRow(c)));
+    }
+
+    // ── owned skills ──
+    const ownedNotCreated = profile.ownedSkills.filter(o => !profile.createdSkills.some(c => c.id === o.id));
+    if (ownedNotCreated.length) {
+      const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Owned skills';
+      body.appendChild(sec);
+      ownedNotCreated.forEach(o => body.appendChild(skillRow(o)));
+    }
+
+    // ── blog (self-notes) ──
+    const selfNotes = profile.notes.filter(n => n.isSelfNote);
+    if (selfNotes.length) {
+      const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Blog';
+      body.appendChild(sec);
+      const blog = document.createElement('div'); blog.className = 'pr-blog';
+      selfNotes.forEach(n => {
+        const el = document.createElement('div'); el.className = 'pr-note';
+        const bodyEl = document.createElement('div'); renderMd(bodyEl, n.text || '');
+        el.appendChild(bodyEl);
+        if (n.gitLink) {
+          let safeLink = null;
+          try { const u = new URL(n.gitLink); if (/^https?:|^git:/.test(u.protocol)) safeLink = u.href; } catch {}
+          if (safeLink) {
+            const gl = document.createElement('div'); gl.className = 'pr-note-git';
+            const a = document.createElement('a'); a.href = safeLink; a.textContent = safeLink;
+            a.target = '_blank'; a.rel = 'noopener noreferrer'; gl.appendChild(a); el.appendChild(gl);
+          }
+        }
+        blog.appendChild(el);
+      });
+      body.appendChild(blog);
+    }
+
+    // ── self-note compose (own profile only) ──
+    if (self) {
+      const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Post to blog';
+      body.appendChild(sec);
+      const compose = document.createElement('div'); compose.className = 'pr-compose';
+      const ta = document.createElement('textarea'); ta.placeholder = 'Write a blog post or update…';
+      const gitInput = document.createElement('input'); gitInput.type = 'text'; gitInput.placeholder = 'GitHub / git URL (optional)';
+      const errEl = document.createElement('div'); errEl.className = 'pr-err';
+      const btn = document.createElement('button'); btn.textContent = 'Post';
+      btn.addEventListener('click', () => {
+        const text = ta.value.trim(); if (!text) return;
+        const gitLink = gitInput.value.trim() || undefined;
+        btn.disabled = true; btn.textContent = 'Posting…'; errEl.style.display = 'none';
+        vscode.postMessage({ type: 'postAgentNote', agentWallet: wallet, text, gitLink });
+      });
+      compose.appendChild(ta); compose.appendChild(gitInput); compose.appendChild(errEl); compose.appendChild(btn);
+      body.appendChild(compose);
+      // stash submit button reference for agentNoteResult handler
+      body._postBtn = btn; body._postErr = errEl;
+    }
+
+    // ── comments (non-self notes) ──
+    const comments = profile.notes.filter(n => !n.isSelfNote);
+    if (comments.length) {
+      const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Comments (' + comments.length + ')';
+      body.appendChild(sec);
+      comments.forEach(n => {
+        const el = document.createElement('div'); el.className = 'pr-note';
+        const auth = document.createElement('div'); auth.className = 'pr-note-author';
+        auth.textContent = n.author ? (n.author.slice(0, 6) + '…' + n.author.slice(-4)) : '?';
+        const bodyEl = document.createElement('div'); renderMd(bodyEl, n.text || '');
+        el.appendChild(auth); el.appendChild(bodyEl);
+        if (n.gitLink) {
+          let safeLink = null;
+          try { const u = new URL(n.gitLink); if (/^https?:|^git:/.test(u.protocol)) safeLink = u.href; } catch {}
+          if (safeLink) {
+            const gl = document.createElement('div'); gl.className = 'pr-note-git';
+            const a = document.createElement('a'); a.href = safeLink; a.textContent = safeLink;
+            a.target = '_blank'; a.rel = 'noopener noreferrer'; gl.appendChild(a); el.appendChild(gl);
+          }
+        }
+        body.appendChild(el);
+      });
+    }
+  }
+
+  function showBuyAllConfirm(profile) {
+    const notOwned = profile.createdSkills.filter(c => ownedSkills.indexOf(c.name) < 0);
+    if (!notOwned.length) return;
+    const totalLamports = notOwned.reduce((acc, c) => acc + (c.price ? BigInt(c.price) : 0n), 0n);
+    const totalSol = totalLamports > 0n ? (Number(totalLamports) / 1e9).toFixed(4) + ' SOL' : 'free';
+    const body = document.getElementById('profileBody');
+    // replace buy-all button area with confirm panel
+    const existing = body.querySelector('.pr-confirm');
+    if (existing) { existing.remove(); return; }
+    const confirm = document.createElement('div'); confirm.className = 'pr-confirm';
+    const h = document.createElement('div'); h.style.fontWeight = '600'; h.textContent = 'Buy ' + notOwned.length + ' skill' + (notOwned.length !== 1 ? 's' : '') + ' (' + totalSol + ')';
+    const ul = document.createElement('ul');
+    notOwned.forEach(c => { const li = document.createElement('li'); li.textContent = c.name || c.id; ul.appendChild(li); });
+    const btns = document.createElement('div'); btns.className = 'confirm-btns';
+    const ok = document.createElement('button'); ok.textContent = 'Confirm'; ok.style.background = 'var(--an-green,#3fa37a)'; ok.style.color = '#06231a';
+    const cancel = document.createElement('button'); cancel.textContent = 'Cancel';
+    ok.addEventListener('click', () => {
+      ok.disabled = true; cancel.disabled = true; ok.textContent = 'Buying…';
+      vscode.postMessage({ type: 'buyAllSkills', wallet: profile.wallet });
+    });
+    cancel.addEventListener('click', () => confirm.remove());
+    btns.appendChild(ok); btns.appendChild(cancel);
+    confirm.appendChild(h); confirm.appendChild(ul); confirm.appendChild(btns);
+    // insert after the buy-all button (first .pr-sec)
+    const firstSec = body.querySelector('.pr-sec');
+    if (firstSec) body.insertBefore(confirm, firstSec.nextSibling); else body.appendChild(confirm);
+  }
 
   // ---- top-bar dropdowns: History (sessions) + Wallet (agent menu) ----
   const histMenu = document.getElementById('histMenu');
@@ -1487,7 +1745,7 @@ export function chatHtml(): string {
   }
   document.getElementById('histBtn').addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(histMenu, 'hist'); });
   document.getElementById('walletPill').addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(walletMenu, 'wallet'); });
-  document.getElementById('openWalletPage').addEventListener('click', () => { closeMenus(); showView('wallet'); });
+  document.getElementById('openWalletPage').addEventListener('click', () => { closeMenus(); if (myWalletAddress) showProfile(myWalletAddress); else showView('wallet'); });
   // click outside closes any open menu
   document.addEventListener('click', () => closeMenus());
   histMenu.addEventListener('click', (e) => e.stopPropagation());
@@ -1817,7 +2075,9 @@ export function chatHtml(): string {
 
   // Fill the wallet pill, the wallet dropdown, and the full wallet page from one address.
   function short(a) { return a && a.length > 10 ? a.slice(0, 4) + '..' + a.slice(-3) : a; }
+  let myWalletAddress = null; // tracked so openWalletPage can showProfile(own)
   function setWallet(address) {
+    myWalletAddress = address || null;
     const full = address || '(not connected)';
     document.getElementById('walletAddr').textContent = full;
     document.getElementById('wAddr').textContent = address ? short(address) : 'not connected';
@@ -1947,6 +2207,28 @@ export function chatHtml(): string {
         const msg = 'Buy failed: ' + escapeHtml(m.error || 'unknown');
         if (marketOpen) mktResults.innerHTML = '<div class="mktEmpty">' + msg + '</div>';
         else skillResults.innerHTML = '<div class="shopEmpty">' + msg + '</div>';
+      }
+    }
+    // issue #35: agent directory + profile
+    else if (m.type === 'agents') renderAgents(m.agents);
+    else if (m.type === 'agentProfile') renderProfile(m.profile);
+    else if (m.type === 'buyAllResult') {
+      const confirm = document.getElementById('profileBody') && document.getElementById('profileBody').querySelector('.pr-confirm');
+      if (confirm) confirm.remove();
+      if (m.ok && currentProfileWallet) {
+        // refresh profile + owned list so badges update
+        vscode.postMessage({ type: 'getAgentProfile', wallet: currentProfileWallet });
+        vscode.postMessage({ type: 'ownedSkills' });
+      }
+    }
+    else if (m.type === 'agentNoteResult') {
+      // profile is re-pushed by host on success (session.ts); just reset the compose box on failure
+      const body = document.getElementById('profileBody');
+      if (!m.ok && body && body._postBtn) {
+        body._postBtn.disabled = false; body._postBtn.textContent = 'Post';
+        if (body._postErr) { body._postErr.textContent = m.error || 'Post failed'; body._postErr.style.display = ''; }
+      } else if (m.ok && body && body._postBtn) {
+        body._postBtn.disabled = false; body._postBtn.textContent = 'Post';
       }
     }
     else if (m.type === 'platform') setTab(m.cli); // extension switched CLI (e.g. on session open)
