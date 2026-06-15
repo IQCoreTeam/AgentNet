@@ -73,6 +73,49 @@ export function codexSessionsDir(): string {
   return join(codexHome(), "sessions");
 }
 
+// ── shared memory (issue #18): the per-runtime memory files we sync ⇄ canonical ──
+// Claude keeps discrete frontmatter records under its per-project memory dir; stock
+// Codex reads a plain-markdown AGENTS.md at the repo root (verified: it never writes
+// memory itself, so Codex is inject-only). See plans/shared-memory.md.
+
+/** Claude per-project auto-memory dir: projects/{cwd "/"->"-"}/memory */
+export function claudeMemoryDir(cwd: string): string {
+  return join(claudeProjectDir(cwd), "memory");
+}
+
+/** Codex's repo-level memory file (AGENTS.md at the session cwd). */
+export function codexAgentsFile(cwd: string): string {
+  return join(cwd, "AGENTS.md");
+}
+
+// ── active skills (issue #17): where we drop a bought skill's SKILL.md so the CLI
+// discovers it. Both runtimes scan a skills dir and read each skill's frontmatter
+// (name + description) at session start, loading the body only on demand — pure
+// filesystem placement, no registry (verified against last30days-skill, see
+// plans/skill-ingestion.md §8a). We write the same minimal shape from an NFT's text.
+
+/** Claude Code user skills dir; a skill lives at {dir}/{name}/SKILL.md. */
+export function claudeSkillsDir(): string {
+  return join(claudeHome(), "skills");
+}
+
+/** Codex user skills dir ($CODEX_HOME/skills); a skill lives at {dir}/{name}/SKILL.md. */
+export function codexSkillsDir(): string {
+  return join(codexHome(), "skills");
+}
+
+// ── inactive skills (skill-shopping toggle, plans/skill-shopping.md §6): a holding
+// dir OUTSIDE every runtime's scanned skills path. Toggling a bundled skill OFF moves
+// its folder here (never deletes it); toggling ON moves it back to the scanned dir. The
+// CLI never scans here, so an OFF skill is simply not discovered — no frontmatter flag
+// needed (codex ignores `disable-model-invocation`, so file-move is the one mechanism
+// that works for both engines). One dir under our root, per scanned source.
+
+/** Holding dir for a runtime's switched-OFF bundled skills (mirrors {cli}SkillsDir). */
+export function inactiveSkillsDir(cli: "claude" | "codex"): string {
+  return join(rootDir(), "inactive-skills", cli);
+}
+
 /** Ensure a directory exists (mkdir -p) with 0o700 so only the owner can enter. */
 export async function ensureDir(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true, mode: 0o700 });

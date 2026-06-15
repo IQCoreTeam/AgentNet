@@ -17,7 +17,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { Codex } from "@openai/codex-sdk";
 import type { ChatMessage } from "./contract.js";
 import { mapClaudeMessage } from "./convert/claude.js";
-import { mapCodexEvent } from "./convert/codex.js";
+import { skillFromPath } from "./convert/codex.js";
 import type { ApprovalChannel, ApprovalRequest } from "./approval/channel.js";
 import { autoApprove } from "./approval/channel.js";
 
@@ -55,6 +55,10 @@ export interface Engine {
   onSessionId(cb: (id: string) => void): void;
   onTurnEnd(cb: () => void): void;
   onError(cb: (text: string) => void): void;
+  // a skill (an installed SKILL.md) just fired — name is the skill the model invoked.
+  // Transient signal for the "Casting <skill>" activity marquee (issue #17); NOT a
+  // transcript message (it isn't persisted).
+  onSkill(cb: (name: string) => void): void;
   onUsage(cb: (contextTokens: number) => void): void; // real context occupancy per turn
   send(text: string): void;
   stop(): void;
@@ -65,11 +69,51 @@ export interface SpawnOpts {
   cwd: string;
   sessionId?: string; // NATIVE resume id (inject/prepareResume resolved it already)
   model?: string;
+  // permission/approval mode. claude → SDK permissionMode; codex → a sandbox+approval
+  // preset key (readonly | auto | full). Omit → the engine's safe default.
+  mode?: string;
   approval?: ApprovalChannel; // how tool approvals get decided; default = auto-allow
+  // Passive skill-shopping (issue #21). Claude-only for now (Codex MCP via TOML deferred).
+  // Built by the runtime per spawn when the toggle is ON: the marketplace SDK MCP server,
+  // the tool ids to allow, and the workflow prose appended to the system prompt.
+  mcpServers?: Record<string, unknown>;
+  allowedTools?: string[];
+  appendSystemPrompt?: string;
   stream?: boolean; // emit partial assistant deltas (claude includePartialMessages)
   apiKey?: string; // Stage 1 Codex API Key
   ephemeral?: boolean; // If true, disable tools / auto-deny approvals
   effort?: "low" | "medium" | "high" | "xhigh" | "max";
+}
+
+// claude permission modes: how aggressively tools run without a per-call gate.
+//   default        — canUseTool gates every tool (ask before edits/commands)
+//   acceptEdits    — file edits auto-apply; other tools still gated
+//   plan           — read-only until the model proposes a plan (ExitPlanMode)
+//   bypassPermissions — nothing is gated (full auto)
+function claudePermissionMode(
+  mode?: string,
+): "default" | "acceptEdits" | "plan" | "bypassPermissions" {
+  return mode === "acceptEdits" || mode === "plan" || mode === "bypassPermissions"
+    ? mode
+    : "default";
+}
+
+// codex governs via a sandbox + an approval policy (no inline per-tool callback). We
+// expose the three presets the codex CLI itself ships:
+//   readonly — read-only sandbox; codex can't write/network at all
+//   auto     — write inside the workspace, ask only when a command fails (default)
+//   full     — full disk + network, never ask (dangerous)
+// NOTE: the codex SDK has no inline approval callback (see codexEngine), so an
+// approvalPolicy that PAUSES to ask (on-request/untrusted) would hang the turn with no
+// way to answer. We keep "auto" on the established on-failure default but use "never"
+// for readonly (the sandbox already blocks writes — no need, and no way, to ask).
+function codexPolicy(mode?: string): {
+  sandboxMode: "read-only" | "workspace-write" | "danger-full-access";
+  approvalPolicy: "untrusted" | "on-failure" | "on-request" | "never";
+} {
+  if (mode === "readonly") return { sandboxMode: "read-only", approvalPolicy: "never" };
+  if (mode === "full") return { sandboxMode: "danger-full-access", approvalPolicy: "never" };
+  return { sandboxMode: "workspace-write", approvalPolicy: "on-failure" };
 }
 
 export function spawnCli(opts: SpawnOpts): Engine {
@@ -82,13 +126,15 @@ function callbacks() {
   const sid: Array<(id: string) => void> = [];
   const turn: Array<() => void> = [];
   const err: Array<(t: string) => void> = [];
+  const skill: Array<(name: string) => void> = [];
   const use: Array<(n: number) => void> = [];
   return {
-    msg, sid, turn, err, use,
+    msg, sid, turn, err, skill, use,
     emitMsg: (m: ChatMessage) => { for (const c of msg) c(m); },
     emitSid: (id: string) => { for (const c of sid) c(id); },
     emitTurn: () => { for (const c of turn) c(); },
     emitErr: (t: string) => { for (const c of err) c(t); },
+    emitSkill: (n: string) => { for (const c of skill) c(n); },
     emitUsage: (n: number) => { for (const c of use) c(n); },
   };
 }
@@ -156,6 +202,14 @@ function claudeEngine(opts: SpawnOpts): Engine {
   // canUseTool: claude calls this BEFORE each tool; we translate to a neutral
   // ApprovalRequest, await the channel, and map the decision back to the SDK shape.
   const canUseTool = async (toolName: string, input: Record<string, unknown>) => {
+    // A "Skill" tool call = the model is invoking an installed SKILL.md (issue #17).
+    // Surface it as a transient activity signal ("Casting <skill>") — separate from the
+    // approval/transcript flow, fire-and-forget. The skill name is the tool's argument.
+    // Fire BEFORE any gate so the cue shows even when the call is auto-allowed/cached.
+    if (toolName === "Skill") {
+      const n = (input.command ?? input.name ?? input.skill) as string | undefined;
+      if (n) cb.emitSkill(String(n));
+    }
     if (opts.ephemeral) {
       return { behavior: "deny" as const, message: "Tool use is disabled for side-channel (/btw) queries." };
     }
@@ -190,6 +244,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
       resume: opts.sessionId || undefined,
       model: opts.model,
       cwd: opts.cwd,
+      permissionMode: claudePermissionMode(opts.mode),
       canUseTool,
       includePartialMessages: !!opts.stream,
       effort: opts.effort,
@@ -207,6 +262,18 @@ function claudeEngine(opts: SpawnOpts): Engine {
       // need the SDK's own native binary on its (unresolvable) bundle-relative path.
       pathToClaudeCodeExecutable: resolveExecutable("claude"),
       stderr: (d: string) => { if (d.trim()) cb.emitErr(`[claude] ${d.trim()}`); },
+      // Passive skill-shopping wiring (issue #21). Only present when the toggle is ON;
+      // when ON, the runtime hands us the marketplace MCP server + its allowed tool ids,
+      // and appends the workflow prose so the agent shops for missing capabilities.
+      ...(opts.appendSystemPrompt
+        ? { systemPrompt: { type: "preset" as const, preset: "claude_code" as const, append: opts.appendSystemPrompt } }
+        : {}),
+      ...(opts.mcpServers ? { mcpServers: opts.mcpServers as never } : {}),
+      ...(opts.allowedTools ? { allowedTools: opts.allowedTools } : {}),
+      // NOTE: settingSources is deliberately omitted — the SDK then loads ALL sources
+      // (user/project/local), which is what lets skills in the user dir (~/.claude/skills,
+      // where owned NFTs + the passive workflow are installed) be discovered. Passing
+      // settingSources:['project'] would DROP the user dir and break skill discovery.
     },
   });
 
@@ -242,6 +309,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
     onSessionId: (c) => cb.sid.push(c),
     onTurnEnd: (c) => cb.turn.push(c),
     onError: (c) => cb.err.push(c),
+    onSkill: (c) => cb.skill.push(c),
     onUsage: (c) => cb.use.push(c),
     send: (t) => push(t),
     stop: () => { closed = true; wake?.(); void q.interrupt?.().catch(() => {}); },
@@ -363,6 +431,10 @@ function codexEngine(opts: SpawnOpts): Engine {
       } else if ((it.type === "commandExecution" || it.type === "command_execution") && it.command) {
         const aggregatedOutput = it.aggregatedOutput !== undefined ? it.aggregatedOutput : it.aggregated_output;
         const exitCode = it.exitCode !== undefined ? it.exitCode : it.exit_code;
+        // codex has no per-tool hook, so a command touching our skills dir is the signal
+        // that an installed skill is firing → the "Casting <skill>" cue (issue #17).
+        const skillName = skillFromPath(it.command);
+        if (skillName) cb.emitSkill(skillName);
         cb.emitMsg({
           role: "tool",
           text: it.command.split("\n")[0]?.slice(0, 80) || "bash",
@@ -622,6 +694,9 @@ function codexEngine(opts: SpawnOpts): Engine {
     onSessionId: (c) => cb.sid.push(c),
     onTurnEnd: (c) => cb.turn.push(c),
     onError: (c) => cb.err.push(c),
+    // codex has no per-tool hook, so the skill signal comes from the output stream:
+    // mapCodexEvent flags any command/path that references our skills dir (convert/codex).
+    onSkill: (c) => cb.skill.push(c),
     onUsage: (c) => cb.use.push(c),
     send: (t) => {
       void initPromise.then(() => runTurn(t));

@@ -91,6 +91,12 @@ export function chatHtml(): string {
                font-size: 0.78em; cursor: pointer; transition: all 0.12s; }
   #newTabBtn:hover { opacity: 1; color: var(--an-green); border-color: var(--an-green-line);
                      background: var(--an-green-dim); }
+  /* Markets: a green-tinted pill next to the wallet — the entry to the marketplace view */
+  #marketsBtn { margin-left: 8px; background: var(--an-green-dim); color: var(--an-green);
+                border: 1px solid var(--an-green-line); border-radius: 999px; padding: 3px 14px;
+                font-size: 0.78em; font-weight: 600; cursor: pointer; transition: all 0.12s; }
+  #marketsBtn:hover { background: color-mix(in srgb, var(--an-green) 22%, transparent); }
+  #marketsBtn.on { background: var(--an-green); color: #07140d; }
   /* storage block inside the wallet dropdown (moved from the top bar) */
   .wmSection { padding: 4px 8px 8px; border-bottom: 1px solid var(--an-line-soft); margin-bottom: 4px; }
   .wmLabel { font-size: 0.68em; opacity: 0.5; text-transform: uppercase; letter-spacing: 0.06em;
@@ -103,6 +109,16 @@ export function chatHtml(): string {
   .wmStorage .dot.cloud-off { color: var(--vscode-disabledForeground, #888); }
   .wmStorage .sep { opacity: 0.3; }
   .wmStorage .acct { opacity: 0.5; }
+  /* RPC row (issue #23): a green key box when set, a warn link when not, + net badge */
+  .rpcKeyBox { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 6px;
+               background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
+               font-family: var(--vscode-editor-font-family, monospace); font-size: 0.9em; }
+  .rpcWarn { color: #e0a030; cursor: pointer; font-weight: 600; }
+  .rpcWarn:hover { text-decoration: underline; }
+  .netBadge { padding: 1px 7px; border-radius: 999px; font-size: 0.66em; font-weight: 700; letter-spacing: 0.04em;
+              text-transform: uppercase; }
+  .netBadge.devnet { background: color-mix(in srgb, #e0a030 22%, transparent); color: #e0a030; }
+  .netBadge.mainnet { background: var(--an-green-dim); color: var(--an-green); }
   .wmStorage .link { background: none; border: none; padding: 0 2px; width: auto;
                      color: var(--an-green); cursor: pointer; font-size: 1em; }
   .wmStorage .link:hover { text-decoration: underline; }
@@ -214,6 +230,15 @@ export function chatHtml(): string {
   .turnHead .uq { color: var(--an-green); font-weight: 700; flex: none; line-height: 1.5; opacity: 0.8; }
   .turnHead .utext { flex: 1; min-width: 0; white-space: pre-wrap; line-height: 1.5; font-size: 0.95em;
                      font-weight: 600; overflow-wrap: anywhere; }
+  /* a long user message collapses to a few lines; "Show more" expands it (capped to
+     ~40vh with an inner scroll so a huge paste never eats the whole screen). */
+  .utextWrap { flex: 1; min-width: 0; }
+  .utextWrap .utext { width: 100%; }
+  .utextWrap.collapsed .utext { max-height: 4.5em; overflow: hidden; }
+  .utextWrap.expanded .utext { max-height: 40vh; overflow-y: auto; }
+  .utextToggle { margin-top: 4px; font-size: 0.8em; font-weight: 600; color: var(--an-green);
+                 opacity: 0.85; cursor: pointer; user-select: none; display: inline-block; }
+  .utextToggle:hover { opacity: 1; text-decoration: underline; }
   /* the timeline body: a left rail; each child item gets a dot via ::before */
   .turnBody { padding: 4px 16px 16px 16px; margin-left: 7px;
               border-left: 1.5px solid var(--an-line-soft); display: flex; flex-direction: column; gap: 2px; }
@@ -373,6 +398,25 @@ export function chatHtml(): string {
   .apResolved { padding: 8px 12px; font-size: 0.82em; border-top: 1px solid var(--an-green-dim); }
   .apResolved.allowed { color: var(--an-green); }
   .apResolved.denied { color: #e07a7a; }
+  /* AskUserQuestion card: one block per question, options as selectable chips. The
+     user's pick becomes the tool result (sent as answers), so there is no Approve/
+     Deny — just option chips + a Send that unlocks once every question is answered. */
+  .qBlock { padding: 9px 12px; border-top: 1px solid var(--an-green-dim); }
+  .qBlock:first-child { border-top: none; }
+  .qHeader { display: inline-block; font-size: 0.7em; font-weight: 600; text-transform: uppercase;
+             letter-spacing: 0.04em; color: var(--an-green); background: var(--an-green-dim);
+             padding: 1px 6px; border-radius: 4px; margin-bottom: 5px; }
+  .qText { font-size: 0.88em; font-weight: 600; margin-bottom: 7px; }
+  .qOpts { display: flex; flex-direction: column; gap: 6px; }
+  .qOpt { text-align: left; padding: 7px 10px; border-radius: 8px; cursor: pointer;
+          border: 1px solid var(--an-line); background: transparent; transition: border-color 0.12s, background 0.12s; }
+  .qOpt:hover { border-color: var(--an-green-line); }
+  .qOpt.on { border-color: var(--an-green); background: var(--an-green-dim); }
+  .qOptLabel { font-size: 0.85em; font-weight: 600; }
+  .qOptDesc { font-size: 0.78em; opacity: 0.7; margin-top: 2px; line-height: 1.35; }
+  .apBtn.ok:disabled { opacity: 0.4; cursor: not-allowed; filter: none; }
+  /* plan card body: wrap prose (not break-all like a path/command) */
+  .apBody.planBody { word-break: normal; overflow-wrap: anywhere; }
   .cursor::after { content: "\\u258B"; opacity: 0.6; animation: blink 1s step-end infinite; }
   @keyframes blink { 50% { opacity: 0; } }
 
@@ -453,6 +497,101 @@ export function chatHtml(): string {
   #skillsBtn.casting { color: var(--an-green); }
   .skNote { margin-top: 10px; font-size: 0.76em; opacity: 0.5; line-height: 1.5; }
 
+  /* passive skill-shopping toggle row (issue #21) */
+  #shopToggleRow { display: flex; align-items: center; gap: 7px; margin-top: 10px;
+                   padding-top: 9px; border-top: 1px solid var(--an-line); font-size: 0.82em; }
+  #shopToggleLabel { font-weight: 600; }
+  .shopToggleHint { opacity: 0.5; font-size: 0.92em; flex: 1; min-width: 0;
+                    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #shopToggle { position: relative; width: 32px; height: 18px; flex: none; border-radius: 999px;
+                background: var(--an-bg-2); border: 1px solid var(--an-line); cursor: pointer; padding: 0;
+                transition: background 0.15s, border-color 0.15s; }
+  #shopToggle .knob { position: absolute; top: 1px; left: 1px; width: 14px; height: 14px;
+                      border-radius: 50%; background: var(--an-fg, currentColor); opacity: 0.6;
+                      transition: left 0.15s, opacity 0.15s; }
+  #shopToggle.on { background: var(--an-green-dim); border-color: var(--an-green-line); }
+  #shopToggle.on .knob { left: 15px; background: var(--an-green); opacity: 1; }
+
+  /* marketplace shop inside the skills panel */
+  #skillShop { margin-top: 10px; }
+  #skillShop .shopRow { display: flex; gap: 6px; }
+  #skillSearch { flex: 1; min-width: 0; background: var(--an-bg); border: 1px solid var(--an-line);
+                 border-radius: var(--an-radius); color: inherit; padding: 5px 9px; font-size: 0.82em; outline: none; }
+  #skillSearch:focus { border-color: var(--an-green-line); }
+  #skillSearchBtn { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
+                    border-radius: var(--an-radius); padding: 5px 11px; font-size: 0.82em; cursor: pointer; }
+  #skillResults { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .shopItem { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--an-line);
+              border-radius: var(--an-radius); font-size: 0.82em; }
+  .shopItem .si-main { min-width: 0; flex: 1; }
+  .shopItem .si-name { font-weight: 600; }
+  .shopItem .si-desc { opacity: 0.6; font-size: 0.92em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .shopItem .si-sup { opacity: 0.5; font-size: 0.92em; white-space: nowrap; }
+  .shopItem .si-buy { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
+                      border-radius: var(--an-radius); padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+  .shopItem .si-buy[disabled] { opacity: 0.5; cursor: default; }
+  #skillResults .shopEmpty { opacity: 0.5; font-size: 0.8em; padding: 4px 2px; }
+
+  /* Markets full-screen view */
+  .mktHead { margin-bottom: 14px; }
+  .mktTitle { display: flex; align-items: center; gap: 8px; font-size: 1.15em; font-weight: 700; }
+  .mktTitle .wand { width: 18px; height: 18px; color: var(--an-green); }
+  .mktSearchRow { display: flex; gap: 8px; margin-bottom: 16px; }
+  #mktSearch { flex: 1; min-width: 0; background: var(--an-bg); border: 1px solid var(--an-line);
+               border-radius: var(--an-radius); color: inherit; padding: 9px 12px; font-size: 0.92em; outline: none; }
+  #mktSearch:focus { border-color: var(--an-green-line); }
+  #mktSearchBtn { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
+                  border-radius: var(--an-radius); padding: 9px 16px; font-size: 0.92em; font-weight: 600; cursor: pointer; }
+  .mktGrid { display: flex; flex-direction: column; gap: 10px; }
+  .mktCard { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--an-line);
+             border-radius: var(--an-radius); background: var(--an-bg); }
+  .mktCard .mc-img { width: 40px; height: 40px; border-radius: 8px; background: var(--an-green-dim);
+                     display: flex; align-items: center; justify-content: center; flex: none; }
+  .mktCard .mc-img .wand { width: 20px; height: 20px; color: var(--an-green); }
+  .mktCard .mc-main { min-width: 0; flex: 1; }
+  .mktCard .mc-name { font-weight: 600; }
+  .mktCard .mc-desc { opacity: 0.6; font-size: 0.88em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mktCard .mc-sup { opacity: 0.5; font-size: 0.85em; white-space: nowrap; }
+  .mktCard .mc-buy { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
+                     border-radius: var(--an-radius); padding: 6px 14px; cursor: pointer; white-space: nowrap; font-weight: 600; }
+  .mktCard .mc-buy[disabled] { opacity: 0.5; cursor: default; }
+  .mktGrid .mktEmpty { opacity: 0.5; font-size: 0.9em; padding: 8px 2px; }
+  /* a card body is clickable (opens detail); the Buy button stops propagation */
+  .mktCard .mc-main { cursor: pointer; }
+  .mktCard .mc-main:hover .mc-name { color: var(--an-green); }
+  /* Skills / Workflows segmented tabs */
+  .mktTabs { display: inline-flex; gap: 2px; padding: 2px; margin-bottom: 12px;
+             background: var(--an-bg); border: 1px solid var(--an-line); border-radius: 999px; }
+  .mktTab { background: transparent; border: none; color: var(--vscode-foreground); opacity: 0.6;
+            border-radius: 999px; padding: 4px 16px; font-size: 0.85em; cursor: pointer; }
+  .mktTab.on { background: var(--an-green-dim); color: var(--an-green); opacity: 1; font-weight: 600; }
+  /* detail sub-view */
+  #mktDetailBody .dt-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  #mktDetailBody .dt-img { width: 56px; height: 56px; border-radius: 10px; background: var(--an-green-dim);
+                           display: flex; align-items: center; justify-content: center; flex: none; }
+  #mktDetailBody .dt-img .wand { width: 28px; height: 28px; color: var(--an-green); }
+  #mktDetailBody .dt-name { font-size: 1.15em; font-weight: 700; }
+  #mktDetailBody .dt-kind { font-size: 0.7em; text-transform: uppercase; letter-spacing: 0.05em;
+                            color: var(--an-green); opacity: 0.8; }
+  #mktDetailBody .dt-desc { opacity: 0.85; margin-bottom: 10px; }
+  #mktDetailBody .dt-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  #mktDetailBody .dt-tag { font-size: 0.75em; padding: 2px 9px; border-radius: 999px;
+                           background: var(--an-bg); border: 1px solid var(--an-line); opacity: 0.8; }
+  #mktDetailBody .dt-sec { font-size: 0.7em; text-transform: uppercase; letter-spacing: 0.05em;
+                           opacity: 0.5; margin: 14px 0 6px; }
+  #mktDetailBody .dt-body { white-space: pre-wrap; font-family: var(--vscode-editor-font-family, monospace);
+                            font-size: 0.82em; background: var(--an-bg); border: 1px solid var(--an-line);
+                            border-radius: var(--an-radius); padding: 10px 12px; max-height: 320px; overflow: auto; }
+  #mktDetailBody .dt-buy { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
+                           border-radius: var(--an-radius); padding: 8px 18px; cursor: pointer; font-weight: 600; }
+  #mktDetailBody .dt-buy[disabled] { opacity: 0.5; cursor: default; }
+  /* a required skill row inside a workflow detail — clickable, opens its detail */
+  #mktDetailBody .dt-req { display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: pointer;
+                           border: 1px solid var(--an-line); border-radius: var(--an-radius); margin-bottom: 6px; }
+  #mktDetailBody .dt-req:hover { border-color: var(--an-green-line); background: var(--an-green-dim); }
+  #mktDetailBody .dt-req .rq-name { font-weight: 600; }
+  #mktDetailBody .dt-req .rq-arrow { margin-left: auto; opacity: 0.5; }
+
   /* skill marquee — ONLY shows when an equipped skill fires ("Casting <skill>").
      Plain tool work isn't shown here (it's already in the chat timeline). Green with
      a breathing glow so a skill firing feels like the agent wielding its power. */
@@ -495,7 +634,9 @@ export function chatHtml(): string {
                background: var(--an-bg-2); overflow: hidden; transition: border-color 0.12s; }
   #input { width: 100%; box-sizing: border-box; padding: 11px 12px 8px; background: transparent;
            color: var(--vscode-input-foreground); border: none; resize: none; font-family: inherit;
-           font-size: 0.95em; display: block; }
+           font-size: 0.95em; display: block; line-height: 1.5;
+           /* autoGrow JS caps the height (~2.5x) via inline style; this scrolls past it */
+           overflow-y: auto; }
   #input:focus { outline: none; }
   #input:disabled { opacity: 0.5; cursor: not-allowed; }
   #inputWrap:focus-within { box-shadow: 0 0 0 2px var(--engSoft); }
@@ -506,8 +647,13 @@ export function chatHtml(): string {
   #controls { display: flex; gap: 8px; align-items: center; padding: 4px 8px 7px; font-size: 0.82em; }
   #model { background: var(--an-bg-1); color: var(--vscode-foreground);
            border: 1px solid var(--an-line); border-radius: 6px; padding: 3px 7px; font-size: 0.92em; }
-  #autoEdit { display: flex; align-items: center; gap: 4px; opacity: 0.7; cursor: pointer; font-size: 0.92em; }
-  #autoEdit input { margin: 0; accent-color: var(--eng); }
+  /* permission-mode pill: an accent toggle-button (engine-tinted) rather than a plain
+     checkbox, so the current mode reads at a glance. */
+  #mode { background: var(--engSoft); color: var(--vscode-foreground); font-weight: 600;
+          border: 1px solid var(--engLine); border-radius: 999px; padding: 3px 11px;
+          font-size: 0.92em; cursor: pointer; }
+  #mode:hover { border-color: var(--eng); }
+  #mode:focus { outline: none; box-shadow: 0 0 0 2px var(--engSoft); }
   #send { margin-left: auto; padding: 6px 16px; background: var(--eng); color: #1a1205; font-weight: 600;
           border: none; border-radius: 6px; cursor: pointer; }
   #composer[data-cli="codex"] #send { color: #06231a; }
@@ -530,6 +676,7 @@ export function chatHtml(): string {
       <span id="wName">My Wallet</span>
       <span class="caret">▾</span>
     </button>
+    <button id="marketsBtn" title="Skill marketplace">Markets</button>
     <div class="spacer"></div>
     <button id="histBtn" title="Recent chats">↻ History <span class="caret">▾</span></button>
     <button id="newTabBtn" title="Open another chat in a new tab">+</button>
@@ -562,6 +709,17 @@ export function chatHtml(): string {
         <button id="cloudBtn" class="link"></button>
       </div>
     </div>
+    <!-- RPC (issue #23): a Helius key powers the marketplace (DAS); the default can't.
+         Always shows status here so a user can add/swap the key after onboarding. -->
+    <div class="wmSection">
+      <div class="wmLabel">RPC</div>
+      <div class="wmStorage">
+        <span id="rpcState" class="muted">…</span>
+        <button id="rpcSetBtn" class="link">Set Helius key</button>
+        <button id="rpcDefaultBtn" class="link" style="display:none">Use default</button>
+      </div>
+      <div id="rpcHint" class="muted small" style="display:none;margin-top:3px"></div>
+    </div>
     <div class="wmItem" id="openWalletPage">Wallet page</div>
     <div class="wmItem disabled"><span class="wand">${WAND_SVG}</span> Skills <span class="soon">soon</span></div>
   </div>
@@ -590,8 +748,22 @@ export function chatHtml(): string {
           <div class="skSlot empty"></div>
           <div class="skSlot empty"></div>
         </div>
-        <div class="skNote">On-chain skills (Token-2022, soulbound) aren't live yet. When a
-          <code>skill.md</code> is equipped, it appears here as your agent's item.</div>
+        <!-- marketplace: search the on-chain catalog, buy a soulbound skill, and it's
+             installed into the runtime's skills dir (discovered next session). -->
+        <!-- passive skill-shopping toggle (issue #21): ON = the agent shops for a
+             missing capability (verify → confirm → buy); OFF = owned-only, never buys. -->
+        <div id="shopToggleRow">
+          <label id="shopToggleLabel" for="shopToggle">Shop for me</label>
+          <span class="shopToggleHint">agent buys skills it needs (with your OK)</span>
+          <button id="shopToggle" role="switch" aria-checked="true" class="on" title="Toggle passive skill-shopping"><span class="knob"></span></button>
+        </div>
+        <div id="skillShop">
+          <div class="shopRow">
+            <input id="skillSearch" type="text" placeholder="Search skills to buy…" />
+            <button id="skillSearchBtn">Search</button>
+          </div>
+          <div id="skillResults"></div>
+        </div>
       </div>
       <!-- activity marquee: a thin status bar that flashes what the agent is doing
            right now ("Casting cleancode", "Reading auth.ts") with a breathing glow,
@@ -614,9 +786,7 @@ export function chatHtml(): string {
           <textarea id="input" rows="1" placeholder="Message claude... (Enter to send)"></textarea>
           <div id="controls">
             <select id="model"></select>
-            <label id="autoEdit" title="Auto-approve edits (skip the approval card for file edits)">
-              <input type="checkbox" id="autoEditChk" /> auto-edit
-            </label>
+            <select id="mode" title="Permission mode — how tools run before asking you"></select>
             <button id="send">Send</button>
           </div>
         </div>
@@ -650,6 +820,35 @@ export function chatHtml(): string {
       </div>
       <button class="danger" id="disconnectWalletBtn">Disconnect wallet</button>
       <div class="muted small">Disconnecting returns you to the connect screen. Your encrypted local sessions stay on this device.</div>
+    </div>
+  </div>
+
+  <!-- Markets: the full-screen skill marketplace (search → results → buy). Reuses the
+       shared market message contract; the same screens get a mobile design later. -->
+  <div id="marketView" class="panel" style="display:none">
+    <div class="page">
+      <!-- LIST sub-view: tabs (Skills/Workflows) + search + grid -->
+      <div id="mktList">
+        <div id="backToChatM" class="muted" style="cursor:pointer;margin-bottom:10px">‹ Back to chat</div>
+        <div class="mktHead">
+          <div class="mktTitle"><span class="wand">${WAND_SVG}</span> Skill Market</div>
+          <div class="muted small">Popular first. Buy an item (soulbound) and your agent equips it.</div>
+        </div>
+        <div class="mktTabs">
+          <button class="mktTab on" data-kind="skill">Skills</button>
+          <button class="mktTab" data-kind="workflow">Workflows</button>
+        </div>
+        <div class="mktSearchRow">
+          <input id="mktSearch" type="text" placeholder="Search…" />
+          <button id="mktSearchBtn">Search</button>
+        </div>
+        <div id="mktResults" class="mktGrid"></div>
+      </div>
+      <!-- DETAIL sub-view: one item's full info (hidden until a card is clicked) -->
+      <div id="mktDetail" style="display:none">
+        <div id="backToList" class="muted" style="cursor:pointer;margin-bottom:10px">‹ Back to market</div>
+        <div id="mktDetailBody"></div>
+      </div>
     </div>
   </div>
 <!-- markdown libs (marked + dompurify), inlined; expose window.marked / window.DOMPurify -->
@@ -727,7 +926,7 @@ export function chatHtml(): string {
   const emptyEl = document.getElementById('empty');
   const modelSel = document.getElementById('model');
   const composer = document.getElementById('composer');
-  const autoEditChk = document.getElementById('autoEditChk');
+  const modeSel = document.getElementById('mode');
   const approvalDock = document.getElementById('approvalDock');
   const tabs = Array.from(document.querySelectorAll('.etab'));
 
@@ -755,6 +954,24 @@ export function chatHtml(): string {
       { value: 'o3',           label: 'o3' },
     ],
   };
+  // Permission/approval mode per engine. claude → SDK permissionMode; codex → a
+  // sandbox+approval preset (mapped host-side in spawn). Like MODELS this is just a
+  // wrapper label table — when a CLI changes its modes, only this list needs editing.
+  // English labels mirror what each CLI calls these modes natively.
+  const MODES = {
+    claude: [
+      { value: 'default',     label: 'Ask edits',    title: 'Ask before each file edit (default)' },
+      { value: 'acceptEdits', label: 'Accept edits', title: 'Auto-accept file edits; still ask for other tools' },
+      { value: 'plan',        label: 'Plan',         title: 'Plan mode: read-only until you approve the plan' },
+    ],
+    codex: [
+      { value: 'readonly', label: 'Read only',   title: 'Read-only sandbox; ask before edits, commands, network' },
+      { value: 'auto',     label: 'Auto',        title: 'Edit + run inside the workspace; approve on failure (default)' },
+      { value: 'full',     label: 'Full access', title: 'Full disk + network access, never ask (use with care)' },
+    ],
+  };
+  // remember the chosen mode per engine so switching tabs restores it
+  const modeByCli = { claude: 'default', codex: 'auto' };
   let cli = 'claude';
 
   // ---- platform tabs + model dropdown ----
@@ -766,6 +983,16 @@ export function chatHtml(): string {
       modelSel.appendChild(o);
     }
   }
+  // mirror fillModels for the permission-mode dropdown; restore the engine's remembered mode
+  function fillModes() {
+    modeSel.innerHTML = '';
+    for (const m of (MODES[cli] || [{ value: 'default', label: 'default' }])) {
+      const o = document.createElement('option');
+      o.value = m.value; o.textContent = m.label; if (m.title) o.title = m.title;
+      modeSel.appendChild(o);
+    }
+    modeSel.value = modeByCli[cli] || (modeSel.options[0] && modeSel.options[0].value);
+  }
   function setTab(next) {
     if (next !== 'claude' && next !== 'codex') return;
     cli = next;
@@ -773,16 +1000,23 @@ export function chatHtml(): string {
     composer.dataset.cli = cli;                       // tints the input (claude=orange/codex=green)
     input.placeholder = 'Message ' + cli + '... (Enter to send)';
     fillModels();
+    fillModes();
   }
   function selectTab(next) {
     if (next === cli) return;
     setTab(next);
     vscode.postMessage({ type: 'platform', cli });
     vscode.postMessage({ type: 'model', model: modelSel.value });
+    vscode.postMessage({ type: 'mode', mode: modeSel.value });
   }
   tabs.forEach(t => t.addEventListener('click', () => selectTab(t.dataset.cli)));
   modelSel.addEventListener('change', () => vscode.postMessage({ type: 'model', model: modelSel.value }));
+  modeSel.addEventListener('change', () => {
+    modeByCli[cli] = modeSel.value;
+    vscode.postMessage({ type: 'mode', mode: modeSel.value });
+  });
   fillModels();
+  fillModes();
 
   // ---- relative time ("3개월", "1일", "방금") ----
   function rel(ts) {
@@ -803,12 +1037,31 @@ export function chatHtml(): string {
   let headTurn = null; // the turn prepended (top, older) replies attach to
 
   // Open a new turn at the bottom (a fresh user command). Returns its body element.
+  // Build the user-message block for a turn head. A long message starts COLLAPSED
+  // (a few lines) with a "Show more" toggle; expanded it caps at 40vh and scrolls
+  // inside, so a huge paste never pushes the chat off-screen.
+  function makeUtext(userText) {
+    const wrap = document.createElement('div'); wrap.className = 'utextWrap';
+    const ut = document.createElement('div'); ut.className = 'utext'; ut.textContent = userText;
+    wrap.appendChild(ut);
+    const longMsg = (userText.split('\\n').length > 4) || (userText.length > 280);
+    if (longMsg) {
+      wrap.classList.add('collapsed');
+      const tog = document.createElement('div'); tog.className = 'utextToggle'; tog.textContent = 'Show more';
+      tog.addEventListener('click', () => {
+        const exp = wrap.classList.toggle('expanded');
+        wrap.classList.toggle('collapsed', !exp);
+        tog.textContent = exp ? 'Show less' : 'Show more';
+      });
+      wrap.appendChild(tog);
+    }
+    return wrap;
+  }
   function startTurn(userText, badgeCli) {
     const turn = document.createElement('div'); turn.className = 'turn';
     const head = document.createElement('div'); head.className = 'turnHead';
     head.innerHTML = '<span class="uq">&gt;</span>';
-    const ut = document.createElement('div'); ut.className = 'utext'; ut.textContent = userText;
-    head.appendChild(ut);
+    head.appendChild(makeUtext(userText));
     if (badgeCli) { const b = document.createElement('span'); b.className = 'badge ' + badgeCli;
       b.textContent = badgeCli === 'codex' ? 'codex · gpt' : 'claude'; head.appendChild(b); }
     const body = document.createElement('div'); body.className = 'turnBody';
@@ -824,8 +1077,7 @@ export function chatHtml(): string {
     const turn = document.createElement('div'); turn.className = 'turn';
     const head = document.createElement('div'); head.className = 'turnHead';
     head.innerHTML = '<span class="uq">&gt;</span>';
-    const ut = document.createElement('div'); ut.className = 'utext'; ut.textContent = userText;
-    head.appendChild(ut);
+    head.appendChild(makeUtext(userText));
     if (badgeCli) { const b = document.createElement('span'); b.className = 'badge ' + badgeCli;
       b.textContent = badgeCli === 'codex' ? 'codex · gpt' : 'claude'; head.appendChild(b); }
     const body = document.createElement('div'); body.className = 'turnBody';
@@ -1051,26 +1303,74 @@ export function chatHtml(): string {
   // it wants to do (the command / file / diff) with [Approve] [Always] [Deny] buttons.
   // Clicking posts the decision back; the card then locks to show the resolution.
   function renderApproval(req) {
-    // auto-edit: if the toggle is on and this is a file edit/write, approve it
-    // silently (the tool card the engine emits already shows what changed).
-    if (autoEditChk && autoEditChk.checked && (req.kind === 'edit' || req.kind === 'write')) {
-      vscode.postMessage({ type: 'approvalDecision', id: req.id, outcome: 'once' });
-      return;
-    }
     const card = document.createElement('div');
     card.className = 'approvalCard';
 
+    // ── AskUserQuestion: a multiple-choice prompt (claude/codex both route here). The
+    // user's PICK becomes the tool result, so this card renders options as chips and
+    // sends answers (question text -> chosen label[s]) — no Approve/Deny. Without this
+    // branch the engine never received an answer and the SDK stalled on its own picker.
+    if (req.kind === 'question' && Array.isArray(req.questions) && req.questions.length) {
+      const sel = {}; // qIndex → array of chosen labels
+      const submit = document.createElement('button');
+      submit.className = 'apBtn ok'; submit.textContent = 'Send'; submit.disabled = true;
+      const refresh = () => {
+        submit.disabled = !req.questions.every((q, qi) => sel[qi] && sel[qi].length);
+      };
+      req.questions.forEach((q, qi) => {
+        const block = document.createElement('div'); block.className = 'qBlock';
+        if (q.header) { const h = document.createElement('span'); h.className = 'qHeader'; h.textContent = q.header; block.appendChild(h); }
+        const qt = document.createElement('div'); qt.className = 'qText'; qt.textContent = q.question; block.appendChild(qt);
+        const opts = document.createElement('div'); opts.className = 'qOpts';
+        (q.options || []).forEach((opt) => {
+          const b = document.createElement('button'); b.type = 'button'; b.className = 'qOpt';
+          const t = document.createElement('div'); t.className = 'qOptLabel'; t.textContent = opt.label; b.appendChild(t);
+          if (opt.description) { const d = document.createElement('div'); d.className = 'qOptDesc'; d.textContent = opt.description; b.appendChild(d); }
+          b.addEventListener('click', () => {
+            const cur = sel[qi] || [];
+            if (q.multiSelect) {
+              sel[qi] = cur.indexOf(opt.label) >= 0 ? cur.filter((l) => l !== opt.label) : cur.concat(opt.label);
+            } else {
+              sel[qi] = cur[0] === opt.label ? [] : [opt.label];
+            }
+            Array.from(opts.children).forEach((c, i) => c.classList.toggle('on', (sel[qi] || []).indexOf((q.options[i] || {}).label) >= 0));
+            refresh();
+          });
+          opts.appendChild(b);
+        });
+        block.appendChild(opts);
+        card.appendChild(block);
+      });
+      const actions = document.createElement('div'); actions.className = 'apActions';
+      submit.addEventListener('click', () => {
+        const answers = {};
+        req.questions.forEach((q, qi) => { answers[q.question] = (sel[qi] || []).join(', '); });
+        vscode.postMessage({ type: 'approvalDecision', id: req.id, outcome: 'once', answers });
+        card.remove(); syncComposerLock();
+      });
+      actions.appendChild(submit);
+      card.appendChild(actions);
+      approvalDock.insertBefore(card, approvalDock.firstChild);
+      syncComposerLock();
+      return;
+    }
+
+    // ── plan / bash / edit / read / write: a yes-or-no permission card ──
+    const isPlan = req.kind === 'plan';
     const head = document.createElement('div'); head.className = 'apHead';
-    head.innerHTML = '<span class="apk">' + (req.kind === 'bash' ? '$' : req.kind === 'read' ? '📖' : '✎') + '</span>';
+    head.innerHTML = '<span class="apk">' + (req.kind === 'bash' ? '$' : req.kind === 'read' ? '📖' : isPlan ? '✦' : '✎') + '</span>';
     const ttl = document.createElement('span'); ttl.className = 'apTitle'; ttl.textContent = req.title || req.tool;
     head.appendChild(ttl);
     const tag = document.createElement('span'); tag.className = 'apTag'; tag.textContent = req.cli;
     head.appendChild(tag);
     card.appendChild(head);
 
-    // detail: command for bash, diff for edit, file for read/write
+    // detail: command for bash, plan text for plan, diff for edit, file for read/write
     if (req.command) {
       const pre = document.createElement('pre'); pre.className = 'apBody'; pre.textContent = req.command;
+      card.appendChild(pre);
+    } else if (req.plan) {
+      const pre = document.createElement('pre'); pre.className = 'apBody planBody'; pre.textContent = req.plan;
       card.appendChild(pre);
     } else if (req.diff) {
       const pre = document.createElement('pre'); pre.className = 'apBody diffBody';
@@ -1095,7 +1395,10 @@ export function chatHtml(): string {
       const b = document.createElement('button'); b.className = 'apBtn ' + cls; b.textContent = label;
       b.addEventListener('click', () => decide(outcome)); return b;
     };
-    const btns = [mk('Approve', 'once', 'ok'), mk('Always', 'always', 'always'), mk('Deny', 'deny', 'no')];
+    // plan has no "Always" (you approve THIS plan or send it back to revise)
+    const btns = isPlan
+      ? [mk('Approve plan', 'once', 'ok'), mk('Keep planning', 'deny', 'no')]
+      : [mk('Approve', 'once', 'ok'), mk('Always', 'always', 'always'), mk('Deny', 'deny', 'no')];
     for (const b of btns) actions.appendChild(b);
     card.appendChild(actions);
 
@@ -1246,6 +1549,7 @@ export function chatHtml(): string {
     }
     vscode.postMessage({ type: 'send', text });
     input.value = '';
+    input.style.height = 'auto'; // collapse back to one row after sending
     showTyping();
   }
   document.getElementById('send').addEventListener('click', send);
@@ -1257,6 +1561,14 @@ export function chatHtml(): string {
     if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   });
+  // Grow the textarea with its content; CSS max-height (~2.5x) then scrolls inside.
+  // Reset to auto first so it shrinks when text is deleted; pasting a long message
+  // grows to the cap and scrolls rather than pushing the chat off-screen.
+  function autoGrowInput() {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 220) + 'px';
+  }
+  input.addEventListener('input', autoGrowInput);
 
   // ---- storage pill (Local always on; Cloud optional mirror) ----
   const cloudState = document.getElementById('cloudState');
@@ -1300,12 +1612,17 @@ export function chatHtml(): string {
   const panels = {
     chat: document.getElementById('chatView'),
     wallet: document.getElementById('walletView'),
+    market: document.getElementById('marketView'),
   };
   function showView(name) {
     for (const k in panels) panels[k].style.display = (k === name) ? 'flex' : 'none';
+    document.getElementById('marketsBtn').classList.toggle('on', name === 'market');
     if (name === 'wallet') vscode.postMessage({ type: 'wallet' }); // refresh address
+    if (name === 'market') openMarket();
   }
   document.getElementById('backToChat').addEventListener('click', () => showView('chat'));
+  document.getElementById('backToChatM').addEventListener('click', () => showView('chat'));
+  document.getElementById('marketsBtn').addEventListener('click', () => { closeMenus(); showView('market'); });
 
   // ---- top-bar dropdowns: History (sessions) + Wallet (agent menu) ----
   const histMenu = document.getElementById('histMenu');
@@ -1360,6 +1677,221 @@ export function chatHtml(): string {
   }
   let ownedSkills = [];
   setSkills([]); // idle: grey coming-soon slots
+
+  // ---- marketplace: search → buy → install (host does the chain work) ----
+  const skillSearch = document.getElementById('skillSearch');
+  const skillResults = document.getElementById('skillResults');
+  function runSkillSearch() {
+    const q = skillSearch.value.trim();
+    skillResults.innerHTML = '<div class="shopEmpty">Searching…</div>';
+    vscode.postMessage({ type: 'searchSkills', query: q });
+  }
+  document.getElementById('skillSearchBtn').addEventListener('click', runSkillSearch);
+  skillSearch.addEventListener('keydown', (e) => {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Enter') { e.preventDefault(); runSkillSearch(); }
+  });
+  function renderSkillResults(results) {
+    results = results || [];
+    skillResults.innerHTML = '';
+    if (!results.length) { skillResults.innerHTML = '<div class="shopEmpty">No skills found.</div>'; return; }
+    for (const r of results) {
+      const owned = ownedSkills.indexOf(r.name) >= 0;
+      const item = document.createElement('div'); item.className = 'shopItem';
+      const main = document.createElement('div'); main.className = 'si-main';
+      const nm = document.createElement('div'); nm.className = 'si-name'; nm.textContent = r.name || r.id;
+      const ds = document.createElement('div'); ds.className = 'si-desc'; ds.textContent = r.description || '';
+      main.appendChild(nm); main.appendChild(ds);
+      const sup = document.createElement('span'); sup.className = 'si-sup';
+      sup.textContent = (typeof r.supply === 'number') ? (r.supply + '\\u00d7') : '';
+      const buy = document.createElement('button'); buy.className = 'si-buy';
+      buy.textContent = owned ? 'Owned' : 'Buy'; buy.disabled = owned;
+      buy.addEventListener('click', () => {
+        buy.disabled = true; buy.textContent = 'Buying…';
+        vscode.postMessage({ type: 'buySkill', skillId: r.id, creatorWallet: r.creator });
+      });
+      item.appendChild(main); item.appendChild(sup); item.appendChild(buy);
+      skillResults.appendChild(item);
+    }
+  }
+  vscode.postMessage({ type: 'ownedSkills' }); // hydrate the panel on load
+
+  // ---- passive skill-shopping toggle (issue #21) ----
+  const shopToggle = document.getElementById('shopToggle');
+  function setShopToggle(on) {
+    shopToggle.classList.toggle('on', !!on);
+    shopToggle.setAttribute('aria-checked', on ? 'true' : 'false');
+  }
+  shopToggle.addEventListener('click', () => {
+    const next = !shopToggle.classList.contains('on');
+    setShopToggle(next); // optimistic; the host echoes the persisted value back
+    vscode.postMessage({ type: 'setSkillShopping', on: next });
+  });
+  vscode.postMessage({ type: 'getSkillShopping' }); // hydrate the switch on load
+
+  // ---- Markets full-screen view (same contract, marketplace design) ----
+  const mktSearch = document.getElementById('mktSearch');
+  const mktResults = document.getElementById('mktResults');
+  const mktListEl = document.getElementById('mktList');
+  const mktDetailEl = document.getElementById('mktDetail');
+  const mktDetailBody = document.getElementById('mktDetailBody');
+  let lastMarketResults = []; // last search results, kept to re-render on owned-list change
+  let currentKind = 'skill';  // active tab: Skills | Workflows
+  function runMarketSearch() {
+    mktResults.innerHTML = '<div class="mktEmpty">Searching…</div>';
+    vscode.postMessage({ type: 'searchSkills', query: mktSearch.value.trim(), kind: currentKind });
+  }
+  function openMarket() {
+    showMktList();
+    // first open (and re-open) loads the popular list (empty query = supply-sorted)
+    mktResults.innerHTML = '<div class="mktEmpty">Loading…</div>';
+    vscode.postMessage({ type: 'searchSkills', query: '', kind: currentKind });
+    vscode.postMessage({ type: 'ownedSkills' });
+  }
+  function showMktList() { mktListEl.style.display = 'block'; mktDetailEl.style.display = 'none'; }
+  function showMktDetail() { mktListEl.style.display = 'none'; mktDetailEl.style.display = 'block'; }
+  document.getElementById('mktSearchBtn').addEventListener('click', runMarketSearch);
+  document.getElementById('backToList').addEventListener('click', showMktList);
+  mktSearch.addEventListener('keydown', (e) => {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Enter') { e.preventDefault(); runMarketSearch(); }
+  });
+  // Skills / Workflows tabs — switching re-runs the search filtered to that kind.
+  for (const tab of document.querySelectorAll('.mktTab')) {
+    tab.addEventListener('click', () => {
+      currentKind = tab.getAttribute('data-kind');
+      for (const t of document.querySelectorAll('.mktTab')) t.classList.toggle('on', t === tab);
+      runMarketSearch();
+    });
+  }
+  function openDetail(mint) {
+    showMktDetail();
+    mktDetailBody.innerHTML = '<div class="mktEmpty">Loading…</div>';
+    vscode.postMessage({ type: 'getSkillDetail', mint });
+  }
+  // Render the detail sub-view from a {card, skillText, requiredCards} payload. For a
+  // workflow, each requiredCard is a clickable row that opens ITS detail (re-uses the
+  // same view, so you can drill skill→workflow→skill without leaving the market).
+  function renderDetail(detail) {
+    const c = (detail && detail.card) || {};
+    const owned = ownedSkills.indexOf(c.name) >= 0;
+    mktDetailBody.innerHTML = '';
+    // head: icon + name + kind
+    const head = document.createElement('div'); head.className = 'dt-head';
+    const img = document.createElement('div'); img.className = 'dt-img';
+    img.innerHTML = '<span class="wand">' + ${JSON.stringify(WAND_SVG)} + '</span>';
+    const htxt = document.createElement('div');
+    const kind = document.createElement('div'); kind.className = 'dt-kind'; kind.textContent = (c.type || 'skill');
+    const nm = document.createElement('div'); nm.className = 'dt-name'; nm.textContent = c.name || c.id || '';
+    htxt.appendChild(kind); htxt.appendChild(nm);
+    head.appendChild(img); head.appendChild(htxt);
+    mktDetailBody.appendChild(head);
+    // description
+    if (c.description) { const d = document.createElement('div'); d.className = 'dt-desc'; d.textContent = c.description; mktDetailBody.appendChild(d); }
+    // meta: category + hashtags + supply
+    const meta = document.createElement('div'); meta.className = 'dt-meta';
+    const addTag = (t) => { const s = document.createElement('span'); s.className = 'dt-tag'; s.textContent = t; meta.appendChild(s); };
+    if (c.category) addTag(c.category);
+    for (const h of (c.hashtags || [])) addTag('#' + h);
+    if (typeof c.supply === 'number') addTag(c.supply + '\\u00d7 owned');
+    if (meta.childElementCount) mktDetailBody.appendChild(meta);
+    // buy
+    const buy = document.createElement('button'); buy.className = 'dt-buy';
+    buy.textContent = owned ? 'Owned' : 'Buy'; buy.disabled = owned;
+    buy.addEventListener('click', () => {
+      buy.disabled = true; buy.textContent = 'Buying…';
+      vscode.postMessage({ type: 'buySkill', skillId: c.id, creatorWallet: c.creator });
+    });
+    mktDetailBody.appendChild(buy);
+    // required skills (workflow only) — clickable rows
+    const reqs = (detail && detail.requiredCards) || [];
+    if (reqs.length) {
+      const sec = document.createElement('div'); sec.className = 'dt-sec'; sec.textContent = 'Required skills'; mktDetailBody.appendChild(sec);
+      for (const rc of reqs) {
+        const row = document.createElement('div'); row.className = 'dt-req';
+        const w = document.createElement('span'); w.className = 'wand'; w.style.width = '14px'; w.style.color = 'var(--an-green)'; w.innerHTML = ${JSON.stringify(WAND_SVG)};
+        const rn = document.createElement('span'); rn.className = 'rq-name'; rn.textContent = rc.name || rc.id;
+        const ar = document.createElement('span'); ar.className = 'rq-arrow'; ar.textContent = '\\u203a';
+        row.appendChild(w); row.appendChild(rn); row.appendChild(ar);
+        row.addEventListener('click', () => openDetail(rc.id)); // drill into that skill
+        mktDetailBody.appendChild(row);
+      }
+    }
+    // body (skillText)
+    if (detail && detail.skillText) {
+      const sec = document.createElement('div'); sec.className = 'dt-sec'; sec.textContent = (c.type === 'workflow' ? 'Workflow' : 'Skill') + ' text'; mktDetailBody.appendChild(sec);
+      const body = document.createElement('div'); body.className = 'dt-body'; body.textContent = detail.skillText; mktDetailBody.appendChild(body);
+    }
+  }
+  function renderMarketResults(results) {
+    results = results || [];
+    mktResults.innerHTML = '';
+    if (!results.length) {
+      // empty can mean "no match" OR "no DAS RPC so reads return nothing" — say which.
+      mktResults.innerHTML = dasReady
+        ? '<div class="mktEmpty">No skills found.</div>'
+        : '<div class="mktEmpty">No skills — the default RPC can\\'t read the marketplace. Add a Helius key (free devnet tier) in the wallet menu \\u2192 RPC.</div>';
+      return;
+    }
+    for (const r of results) {
+      const owned = ownedSkills.indexOf(r.name) >= 0;
+      const card = document.createElement('div'); card.className = 'mktCard';
+      const img = document.createElement('div'); img.className = 'mc-img';
+      img.innerHTML = '<span class="wand">' + ${JSON.stringify(WAND_SVG)} + '</span>';
+      const main = document.createElement('div'); main.className = 'mc-main';
+      const nm = document.createElement('div'); nm.className = 'mc-name'; nm.textContent = r.name || r.id;
+      const ds = document.createElement('div'); ds.className = 'mc-desc'; ds.textContent = r.description || '';
+      main.appendChild(nm); main.appendChild(ds);
+      main.addEventListener('click', () => openDetail(r.id)); // card body → detail view
+      const sup = document.createElement('span'); sup.className = 'mc-sup';
+      sup.textContent = (typeof r.supply === 'number') ? (r.supply + '\\u00d7') : '';
+      const buy = document.createElement('button'); buy.className = 'mc-buy';
+      buy.textContent = owned ? 'Owned' : 'Buy'; buy.disabled = owned;
+      buy.addEventListener('click', (e) => {
+        e.stopPropagation(); // don't trigger the card-body detail open
+        buy.disabled = true; buy.textContent = 'Buying…';
+        vscode.postMessage({ type: 'buySkill', skillId: r.id, creatorWallet: r.creator });
+      });
+      card.appendChild(img); card.appendChild(main); card.appendChild(sup); card.appendChild(buy);
+      mktResults.appendChild(card);
+    }
+  }
+
+  // ---- RPC status (issue #23): show whether a DAS-capable RPC (Helius) is set ----
+  let dasReady = false;
+  const rpcState = document.getElementById('rpcState');
+  const rpcHint = document.getElementById('rpcHint');
+  const rpcSetBtn = document.getElementById('rpcSetBtn');
+  const rpcDefaultBtn = document.getElementById('rpcDefaultBtn');
+  // The default RPC is never shown — the user only sees "key set" (green masked box +
+  // net badge) or "no key" (a warn link to set one). devnet/mainnet is a badge driven
+  // by the central network. (issue #23)
+  function netBadge(network) {
+    const n = network === 'mainnet' ? 'mainnet' : 'devnet';
+    return '<span class="netBadge ' + n + '">' + n + '</span>';
+  }
+  function renderRpcStatus(s) {
+    s = s || { dasReady: false, hasKey: false, masked: null, network: 'devnet' };
+    dasReady = !!s.dasReady;
+    if (s.hasKey && s.masked) {
+      // green box: masked key (last chars only) + the network badge
+      rpcState.innerHTML = '<span class="rpcKeyBox">\\u2713 ' + escapeHtml(s.masked) + '</span> ' + netBadge(s.network);
+      rpcSetBtn.textContent = 'Change'; rpcSetBtn.style.display = '';
+      rpcDefaultBtn.textContent = 'Remove'; rpcDefaultBtn.style.display = '';
+      rpcHint.style.display = 'none';
+    } else {
+      // no key: just a warning that doubles as the set action + the network badge
+      rpcState.innerHTML = '<span class="rpcWarn" id="rpcWarnSet">\\u26a0 Set Helius key</span> ' + netBadge(s.network);
+      const w = document.getElementById('rpcWarnSet');
+      if (w) w.addEventListener('click', () => vscode.postMessage({ type: 'setHeliusKey' }));
+      rpcSetBtn.style.display = 'none';
+      rpcDefaultBtn.style.display = 'none';
+      rpcHint.style.display = 'none';
+    }
+  }
+  rpcSetBtn.addEventListener('click', () => vscode.postMessage({ type: 'setHeliusKey' }));
+  rpcDefaultBtn.addEventListener('click', () => vscode.postMessage({ type: 'useDefaultRpc' }));
+  vscode.postMessage({ type: 'getRpcStatus' }); // hydrate on load
 
   // ---- activity marquee: advertise what the agent is doing RIGHT NOW ----
   // Map a tool action to a flashy game-verb + object. The verb is picked from a small
@@ -1442,8 +1974,7 @@ export function chatHtml(): string {
       const turn = document.createElement('div'); turn.className = 'turn';
       const head = document.createElement('div'); head.className = 'turnHead';
       head.innerHTML = '<span class="uq">&gt;</span>';
-      const ut = document.createElement('div'); ut.className = 'utext'; ut.textContent = userText;
-      head.appendChild(ut);
+      head.appendChild(makeUtext(userText));
       if (badge) { const b = document.createElement('span'); b.className = 'badge ' + badge;
         b.textContent = badge === 'codex' ? 'codex · gpt' : 'claude'; head.appendChild(b); }
       const b = document.createElement('div'); b.className = 'turnBody';
@@ -1485,6 +2016,34 @@ export function chatHtml(): string {
     else if (m.type === 'loading') showLoading();
     else if (m.type === 'clear') { log.innerHTML = ''; approvalDock.innerHTML = ''; syncComposerLock(); streaming = null; openBash = null; tailTurn = null; headTurn = null; hideTyping(); hideActivity(); resetPaging(); syncWatermark(); hideLoading(); }
     else if (m.type === 'turnEnd') { hideTyping(); hideActivity(); }
+    else if (m.type === 'skillActive') flashSkill(m.name); // a real skill fired (was /mockskill)
+    else if (m.type === 'rpcStatus') renderRpcStatus(m.status);
+    else if (m.type === 'skillShopping') setShopToggle(m.on);
+    else if (m.type === 'searchResults') {
+      lastMarketResults = m.results || [];
+      renderSkillResults(m.results);           // the small skills-panel shop
+      renderMarketResults(m.results);          // the full Markets view
+    }
+    else if (m.type === 'searchError') {
+      // don't hang on "Searching…" — show the real reason in both views
+      const msg = 'Search failed: ' + escapeHtml(m.message || 'unknown');
+      mktResults.innerHTML = '<div class="mktEmpty">' + msg + '</div>';
+      skillResults.innerHTML = '<div class="shopEmpty">' + msg + '</div>';
+    }
+    else if (m.type === 'skillDetail') renderDetail(m.detail);
+    else if (m.type === 'ownedSkills') {
+      setSkills(m.names || []);                // updates ownedSkills used by both renders
+      if (panels.market.style.display !== 'none') renderMarketResults(lastMarketResults); // refresh Owned badges
+    }
+    else if (m.type === 'buyResult') {
+      const marketOpen = panels.market.style.display !== 'none';
+      if (m.ok) { marketOpen ? runMarketSearch() : runSkillSearch(); } // refresh so the bought item shows "Owned"
+      else {
+        const msg = 'Buy failed: ' + escapeHtml(m.error || 'unknown');
+        if (marketOpen) mktResults.innerHTML = '<div class="mktEmpty">' + msg + '</div>';
+        else skillResults.innerHTML = '<div class="shopEmpty">' + msg + '</div>';
+      }
+    }
     else if (m.type === 'platform') setTab(m.cli); // extension switched CLI (e.g. on session open)
     else if (m.type === 'storage') { renderStorage(m.info, m.options); renderWalletStorage(); }
     else if (m.type === 'cloudSync') renderCloudSync(m.status);

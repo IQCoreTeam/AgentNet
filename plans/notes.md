@@ -1,9 +1,14 @@
-# Notes (write-on-chain)
+# Notes / reviews (write-on-chain)
 
 > Siblings: [`offchain-session-sync.md`](offchain-session-sync.md) (sessions) /
-> [`skill-nft-structure.md`](skill-nft-structure.md) (skill NFT).
-> A **note** = text written on-chain onto a skill or an agent. Not a rating/score — just
-> writing (a comment from others, or your own post). A note may attach a github / on-chain-git link.
+> [`skill-nft-structure.md`](skill-nft-structure.md) (skill NFT) /
+> [`onchain-format/tables.md`](onchain-format/tables.md) (the table list).
+> A **note** = text written on-chain onto a skill/workflow item or an agent. Not a
+> rating/score — just writing (a comment from others, or your own post). May attach a
+> github / on-chain-git link.
+>
+> **Naming:** the on-chain tables are `reviews:*` (renamed from `notes`); a "note" is the
+> conceptual unit, a row in a `reviews` table. Code: `core/seed.ts`, `notes/notes.ts`.
 
 ---
 
@@ -15,9 +20,9 @@ subject's address:
 
 ```mermaid
 flowchart TB
-    Skill["🧩 skill NFT (token address)"] --> N1[("notes/[skillNFT]")]
-    Agent["🤖 agent wallet"] --> N2[("notes/[agentWallet]")]
-    N1 --> C["📝 note<br/>body + optional git attachment"]
+    Skill["🧩 skill/workflow item (collection + item mint)"] --> N1[("reviews:[collectionId]:[nft]")]
+    Agent["🤖 agent wallet"] --> N2[("reviews:agent:[wallet]")]
+    N1 --> C["📝 note<br/>text + optional git attachment (gitLink)"]
     N2 --> C
     style C fill:#efe,stroke:#3a3
 ```
@@ -37,30 +42,29 @@ The subject's address *is* the partition — no `subjectKind` field needed:
 
 | Table | Key | Holds |
 |---|---|---|
-| `notes/[skillNFT]` | skill's Token-2022 mint address | notes on that skill |
-| `notes/[agentWallet]` | agent wallet | notes on that agent (incl. the owner's self-notes) |
+| `reviews:[collectionId]:[nft]` | umbrella collection mint + item mint | notes on that skill/workflow item |
+| `reviews:agent:[wallet]` | agent wallet | notes on that agent (incl. the owner's self-notes) |
 
-A note row (same shape in both tables):
+A note row (`REVIEW_COLUMNS`, same shape in both tables — see `core/seed.ts`):
 
 ```jsonc
 {
-  "author": "<base58>",                 // signer
-  "body":   "Built X with this, worked great",
-  "attach": {                            // optional git link
-    "kind": "offchain-git",             // "offchain-git" | "onchain-git"
-    "url":  "https://github.com/..."    // or an on-chain IQ-GitHub repo ref
-  },
-  "ts": 1700000000
+  "id":        "<author:ts:nonce>",       // collision-resistant row id
+  "author":    "<base58>",                // signer
+  "text":      "Built X with this, worked great",
+  "gitLink":   "https://github.com/...",  // optional — github URL or on-chain IQ-GitHub ref
+  "timestamp": 1700000000,
+  "meta":      {}                          // optional extra
 }
 ```
 
-- **Source code = an attachment on a note**, not a separate feature: "I built this, here's
-  the repo" is a note with `attach`. Attachment rendering (preview, link card) is the front-end's job.
-- Query = read the table for that subject address. Sort by `ts`.
+- **Source code = the `gitLink` on a note**, not a separate feature: "I built this, here's
+  the repo" is a note with `gitLink`. Attachment rendering (preview, link card) is the front-end's job.
+- Query = read the table for that subject. Sort by `timestamp`.
 
 ```mermaid
 flowchart LR
-    Q["view a skill / agent"] --> READ["read notes/[addr]"]
+    Q["view a skill / agent"] --> READ["read reviews:[…] for that subject"]
     READ --> RENDER["front-end renders notes<br/>+ git attachments (link/preview)"]
     style RENDER fill:#efe,stroke:#3a3
 ```
@@ -71,9 +75,12 @@ flowchart LR
 
 | Note kind | Where | Who can write |
 |---|---|---|
-| comment on a skill | `notes/[skillNFT]` | wallets that **hold that skill's soulbound token** (= bought it) |
-| comment on an agent | `notes/[agentWallet]` (by others) | open decision (§4): e.g. holders of ≥1 of that agent's skills |
-| **self-note / blog** | `notes/[agentWallet]` (by owner) | **the wallet owner only** |
+| comment on a skill/workflow item | `reviews:[collectionId]:[nft]` | wallets that **hold that item's soulbound token** (= bought it) |
+| comment on an agent | `reviews:agent:[wallet]` (by others) | open decision (§4): e.g. holders of ≥1 of that agent's skills |
+| **self-note / blog** | `reviews:agent:[wallet]` (by owner) | **the wallet owner only** |
+
+> Gates are enforced **client-side** today (the deployed IQ contract's native gate
+> can't verify a Token-2022 mint's ATA yet) — see [`onchain-format/tables.md`](onchain-format/tables.md) §3.
 
 ```mermaid
 flowchart LR
@@ -96,15 +103,15 @@ Same logic for all notes; only the table + gate differ:
 
 ```ts
 type Subject =
-  | { kind: "skill"; addr: string }   // skill NFT mint address → notes/[addr]
-  | { kind: "agent"; addr: string };  // agent wallet → notes/[addr]
+  | { kind: "skill"; addr: string }   // skill/workflow item mint → reviews:[collectionId]:[addr]
+  | { kind: "agent"; addr: string };  // agent wallet → reviews:agent:[addr]
 
 interface Notes {
   subject: Subject;
   list(): Promise<Note[]>;
-  write(body: string, attach?: GitLink): Promise<void>;  // gated (§2)
+  write(text: string, gitLink?: string): Promise<void>;  // gated (§2)
 }
-// Note = { author, body, attach?: { kind: "onchain-git"|"offchain-git", url }, ts }
+// Note row = { id, author, text, gitLink?, timestamp, meta? }  (REVIEW_COLUMNS)
 ```
 
 The same UI component renders both — a skill NFT view or an agent profile view just swaps
@@ -122,14 +129,14 @@ owner.
 - **Attachment auto-verification** — currently self-attested; later, weak checks (is the
   skill referenced in the repo?).
 - **Likes / sorting** — likes stay **off-chain or dropped** (high-frequency, low-value;
-  on-chain likes = slow/costly/contract changes). Default sort by `ts`.
+  on-chain likes = slow/costly/contract changes). Default sort by `timestamp`.
 - **Delete / hide** — can't delete on-chain, but the gateway can hide (inverse of iqchan bump).
 
 ---
 
 ## 5. Build order (after skill NFT)
 
-1. ⬜ `notes/[skillNFT]` table + token-holding write gate (skill comments).
-2. ⬜ `notes/[agentWallet]` table — owner-write (self-notes/blog) + others' comments per §4.
-3. ⬜ Note shape with optional git `attach` (onchain-git / offchain-git).
-4. ⬜ Front-end: render notes + git attachments on the skill NFT view and agent profile.
+1. ✅ `reviews:[collectionId]:[nft]` + token-holding write gate (skill/workflow comments) — `notes/notes.ts`.
+2. ✅ `reviews:agent:[wallet]` — owner-write (self-notes/blog) + others' comments per §4.
+3. ✅ Note row with optional `gitLink`.
+4. ⬜ Front-end: render notes + git attachments on the item view and agent profile (UI — see issue #16).

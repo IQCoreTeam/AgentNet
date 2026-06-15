@@ -56,7 +56,7 @@ Grouped by intent. Each action names the **plan doc** it builds on.
 | `myProfile` | the agent profile = this wallet (skills owned + written, notes, followers) | profile (this doc §3) |
 | `myBoughtSkills` | skills this agent purchased (soulbound tokens it holds) | [skill-nft-structure](skill-nft-structure.md) |
 | `myWrittenSkills` | skills this agent authored | [skill-nft-structure](skill-nft-structure.md) |
-| `writeSkill` | author a new skill; **on publish, also mint one to yourself** (author gets their own copy) | [skill-nft-structure](skill-nft-structure.md) · [skill-validation-adapter](skill-validation-adapter.md) |
+| `writeSkill` | author a new skill; **on publish, also mint one to yourself** (author gets their own copy) | [skill-nft-structure](skill-nft-structure.md) |
 | `myNotes` | comments received on me / my skills | [notes](notes.md) |
 | `myEarnings` | money earned from skills, aggregated | [skill-nft-structure](skill-nft-structure.md) §4 (payment) |
 | `connectGitHub` | attach a GitHub (or on-chain IQ GitHub) repo link to a comment | notes attachments |

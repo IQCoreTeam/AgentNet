@@ -12,6 +12,64 @@ export type {
   StorageAdapter,
 } from "./runtime/contract.js";
 
+// ─── On-chain marketplace layer (from Step-0 core PR: nft/search/notes/etc.) ──
+// chain + seed + domain types
+export type { SignerInput, Session, Skill, Workflow, Note, Row, ReadOptions } from "./core/types.js";
+export {
+  init as initChain,
+  ensureDbRoot,
+  createTable,
+  writeRow,
+  readRows,
+  readRowsByPda,
+  codeIn,
+  readCodeIn,
+  tableExists,
+  getTablePdaRef,
+  signerAddress,
+} from "./core/chain.js";
+export { AGENTNET_ROOT_ID, mysessionsHint, reviewsHint, reviewsAgentHint } from "./core/seed.js";
+// skill / workflow NFTs (Token-2022 + code-in)
+export {
+  publishSkill,
+  buySkill,
+  createSkillMint,
+  mintSkillToken,
+  getMintSupply,
+  readSkillMintMetadata,
+  readSkillText,
+} from "./nft/index.js";
+export type { PublishSkillInput, BuySkillInput } from "./nft/skill.js";
+export type { SkillMintMetadata } from "./nft/token2022.js";
+export { resolveMinter, tryMinterPubkey, resetMinterCache } from "./nft/minter.js";
+// notes (reviews)
+export { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes, getBalance, getSolBalance, canAffordSkill, TX_FEE_BUFFER_LAMPORTS } from "./notes/index.js";
+export type { PostNoteInput, ReadNotesOptions, PostAgentNoteInput } from "./notes/index.js";
+// RPC resolution (issue #23): a registered Helius key wins over env over the default
+export { resolveRpcUrl, saveHeliusKey, loadHeliusKey, hasDasRpc, heliusUrl, maskedHeliusKey } from "./core/rpc.js";
+export { getNetwork, NETWORK } from "./core/seed.js";
+export type { Network } from "./core/seed.js";
+// the marketplace UI<->host message contract (shared by every surface's UI)
+export type { SkillCard, SkillDetail, MarketRequest, MarketEvent, MarketMessage, RpcStatus } from "./chat/marketMessages.js";
+// active-skill injection (install a bought skill's SKILL.md into a runtime's skills dir)
+export { SkillSync } from "./skill-market/ingest/index.js";
+export { toSkillMd, skillSlug } from "./skill-market/ingest/convert.js";
+export { marketplaceEnv } from "./skill-market/ingest/env.js";
+// search + the enumeration seam
+export { searchSkills, listUnlockable } from "./search/index.js";
+export type { SearchFilters, SortBy, SearchOptions, UnlockableWorkflow, UnlockOptions } from "./search/index.js";
+export { dasSource, indexerSource } from "./core/skillSource.js";
+export type { SkillSource } from "./core/skillSource.js";
+// reputation (derived live from supply + reviews)
+export { getReputation, getLeaderboard } from "./reputation/index.js";
+export type { Reputation } from "./core/types.js";
+// skill-market MCP surface (autonomous buy)
+export { createAgentMcpServer, createAgentSdkMcpServer, getAgentNetTools, handleToolCall, newVerifyGuard, verifyOneSkill, verifySkills } from "./skill-market/index.js";
+export type { VerifyGuard } from "./skill-market/index.js";
+export { browseSkills } from "./skill-market/browse.js";
+export type { BrowseResult } from "./skill-market/browse.js";
+export { setSkillShoppingActive, PASSIVE_SKILL_SLUG } from "./skill-market/passive.js";
+
 export { createRuntime } from "./runtime/index.js";
 export { detectCli } from "./runtime/detect.js";
 export type { CliStatus, CliReport } from "./runtime/detect.js";
@@ -53,6 +111,8 @@ export {
   switchStorage,
   currentStorageKind,
   getStorageInfo,
+  getSkillShopping,
+  setSkillShopping,
   saveGoogleCreds,
   hasGoogleCreds,
 } from "./account/login.js";

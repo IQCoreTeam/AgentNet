@@ -25,7 +25,7 @@ flowchart LR
     Q["query"] --> SEM["semantic: map query → category/hashtag<br/>(e.g. 'hotdog' → #convenience-store)<br/>+ keyword match on name"]
     SEM --> FILT["filter the one collection<br/>by that category/trait"]
     FILT --> SORT["sort by supply (mint count)<br/>= most-minted first"]
-    SORT --> R["results + Q-table (audit) shown alongside<br/>+ ⚠️ 'verify the source yourself' note"]
+    SORT --> R["results + ⚠️ 'verify before you buy' note<br/>(buyer's agent runs a verify skill)"]
     style SORT fill:#cfc,stroke:#3a3
     style R fill:#ffd,stroke:#ca0
 ```
@@ -103,12 +103,19 @@ flowchart LR
 
 ---
 
-## 2c. Result display — Q-table + a verify warning
+## 2c. Result display — verify before you buy (reader-side)
 
 In the results view (per [`actions-and-adapters.md`](actions-and-adapters.md) adapters):
-- **Alongside each result, show the Q-table (audit) outcome** ([`skill-validation-adapter.md`](skill-validation-adapter.md) §0c) — the official QAgent eval, read from the `audit` table.
-- **Always show a ⚠️ "verify the source yourself" note.** The audit is a signal, not a
-  guarantee — the user (or their agent) should double-check the skill/source before trusting it.
+- **There is no on-chain audit / Q-table.** Skill safety is **not** an official
+  admin eval recorded on-chain — publishing stays permissionless and a green
+  badge can't be forged because there's no badge.
+- **Safety is verified reader-side, before buying.** The buyer's own agent runs a
+  **"verify" skill** over the candidate skill's text (a normal skill in the net,
+  dogfooding the model) and decides whether to proceed. The buyer's agent — the
+  party with skin in the game — is the gate, not a central authority.
+- **Always show a ⚠️ "verify before you trust" note.** Search ranks by `supply`
+  (does it sell?) and creator reputation; those are signals, not guarantees, so
+  the buyer/agent checks the skill before equipping it.
 
 ---
 
@@ -164,8 +171,14 @@ flowchart TB
 
 Same `CacheLayer` abstraction as `listAgents` ([`actions-and-adapters.md`](actions-and-adapters.md) §4):
 the keyword + trait filter can run on-chain/gateway reads; the embedding index is an
-off-chain side index (cheap to rebuild). **Gateway or a separate backend — not decided now;**
-depends on the NFT trait structure landing first.
+off-chain side index (cheap to rebuild).
+
+> **Decided / built (since):** the keyword + trait filter + supply sort now runs in a
+> **separate backend** — the `agentnet-nft-indexer` repo (DAS scan → SQLite). The SDK
+> reaches it via `indexerSource(baseUrl)` (a `hydrated` `SkillSource`) and falls back to
+> `dasSource` (direct DAS scan) when it's unreachable. The **embedding/semantic** layer
+> below is still unbuilt (the "later" half). So: keyword + category/hashtag + supply =
+> built; semantic query→category mapping = not yet.
 
 ```mermaid
 flowchart LR
@@ -183,7 +196,8 @@ flowchart LR
 
 1. ⬜ Skill search pipeline: keyword on name + **category/trait filter → sort by `supply`**
    (the §0 flow). Depends on NFT traits ([`skill-nft-structure.md`](skill-nft-structure.md)).
-2. ⬜ Result view: show **Q-table (audit) alongside** + the ⚠️ "verify the source" note (§2c).
+2. ⬜ Result view: **reader-side verify before buy** — buyer's agent runs a "verify"
+   skill over the candidate + the ⚠️ "verify before you trust" note (§2c).
 3. ⬜ **Agent search** (§2b): collection holders → match creators → rank by their skills'
    total `supply`.
 4. ⬜ Semantic query→category mapper (embed the small category/hashtag set; map the query

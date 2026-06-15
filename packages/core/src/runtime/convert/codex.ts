@@ -7,8 +7,23 @@
 //   {type:"turn.completed" | "turn.failed"}                                → turn end
 
 import type { ParseResult } from "./types.js";
+import { codexSkillsDir } from "../../core/paths.js";
 
 const OUTPUT_CAP = 4000;
+
+// codex has no per-tool hook (unlike claude's canUseTool), so we detect a skill firing
+// from the event itself: any command/path that references our skills dir means an
+// installed skill is being used. We own that dir, so matching its path is reliable —
+// extract the <slug> right after it. Returns the skill slug, or undefined.
+export function skillFromPath(text: string | undefined): string | undefined {
+  if (!text) return undefined;
+  const root = codexSkillsDir();
+  const i = text.indexOf(root + "/");
+  if (i < 0) return undefined;
+  const rest = text.slice(i + root.length + 1);
+  const slug = rest.split(/[/\s'"]/)[0];
+  return slug || undefined;
+}
 
 // We accept `unknown` and narrow so the runtime needn't import SDK types.
 // One ThreadEvent → 0+ ChatMessages.
@@ -58,6 +73,8 @@ export function mapCodexEvent(ev: unknown): ParseResult {
         ts: Date.now(),
         tool: { name: "Bash", command: it.command, output: (it.aggregated_output ?? "").slice(0, OUTPUT_CAP), exitCode: it.exit_code },
       });
+      // a command touching our skills dir = an installed skill firing → "Casting" cue
+      out.skill = skillFromPath(it.command) ?? out.skill;
     } else if (it.type === "todo_list" && Array.isArray(it.items)) {
       // normalize codex todos {text,completed} → the neutral TodoWrite shape so the same
       // checklist panel renders for both engines.

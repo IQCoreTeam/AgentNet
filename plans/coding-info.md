@@ -58,7 +58,7 @@ The foundation every client module reuses (so table access isn't duplicated).
 
 | Owns | Detail |
 |---|---|
-| **table seeds/hints** | one place for `agentnet-root`, `mysessions/[wallet]`, `notes/[skillNFT]`, etc. (like git-sdk `core/seed.ts`) |
+| **table seeds/hints** | one place for `agentnet-root`, `mysessions/[wallet]`, `reviews:[collectionId]:[nft]`, etc. (like git-sdk `core/seed.ts`) |
 | **chain wrappers** | thin wrappers over solana-sdk `writeRow` / `codeIn` / `readTableRows` / PDA helpers |
 | **crypto** | re-export iqlabs-sdk crypto (`deriveX25519Keypair`, `dhEncrypt`, `dhDecrypt`) as-is |
 | **types** | shared domain types (Session, Skill, Workflow, Comment) |
@@ -117,7 +117,7 @@ Takes a query, finds matching NFTs, sorts. **MVP = keyword + category/hashtag on
 | (later) semantic | embed a small category set, map vocabulary-mismatch query → category |
 
 - **Front-end sorting** (zo): gateway/RPC returns raw data; sort/filter happens client-side.
-- Result view shows the Q-table (audit) alongside + a ⚠️ "verify the source" note.
+- Result view: reader-side verify before buy (buyer's agent runs a "verify" skill) + a ⚠️ "verify before you trust" note.
 - **Reuses:** backend's sorted/mapped output (when available) + core read wrappers.
 - Plan doc: [`search.md`](search.md).
 
@@ -129,9 +129,9 @@ A **note** = text written on-chain (not a star/score). Two flavors, same table s
 
 | Note | Table | Writer |
 |---|---|---|
-| comment on a skill | `notes/[skillNFT]` | holders of that skill |
-| comment on an agent | `notes/[agentWallet]` | (open: holders of that agent's skills) |
-| **self-note ("I built this", blog)** | `notes/[agentWallet]` | **the wallet owner only** |
+| comment on a skill/workflow item | `reviews:[collectionId]:[nft]` | holders of that item |
+| comment on an agent | `reviews:agent:[wallet]` | (open: holders of that agent's skills) |
+| **self-note ("I built this", blog)** | `reviews:agent:[wallet]` | **the wallet owner only** |
 
 - A note may attach a github / on-chain-git link (rendered by the front-end).
 - **Self-note** is *my* posts on *my* profile (owner-write), told apart from others'
@@ -170,7 +170,6 @@ them. Data stays on-chain; backend is a cache/index that can be rebuilt anytime.
 | sort by `supply` (NFT type + sales count) | on-chain can't rank globally; someone reads all + sorts |
 | sort by category | aggregate across the collection |
 | **skill ↔ agent (creator) mapping** | for "popular agents" + "popular in which field" later |
-| (later) Q audit | needs authority + LLM (separate concern, runs on our Q) |
 
 > Once the backend just **sorts and maps**, the search module connects to it (and later via
 > semantic) easily. Keep it open — it serves data, doesn't own it.
@@ -222,7 +221,7 @@ agentnet-sdk/                       package: @iqlabs-official/agent-sdk
     ├── core/                       shared base (no module-specific logic)
     │   ├── types.ts                Session · Skill · Workflow · Note (domain types)
     │   ├── seed.ts                 ALL table hints in one place (agentnet-root, mysessions,
-    │   │                           notes/[…], audit) + helpers like noteTableHint(addr)
+    │   │                           reviews/[…]) + helpers like reviewsHint(addr)
     │   ├── chain.ts                thin wrappers on solana-sdk: writeRow/codeIn/readRows/PDA
     │   └── crypto.ts               re-export iqlabs crypto (deriveX25519Keypair, dh*)
     │
@@ -254,8 +253,8 @@ agentnet-sdk/                       package: @iqlabs-official/agent-sdk
     │       ├── claude.ts
     │       └── codex.ts
     │
-    └── mcp/                        ⑦ expose our functions as MCP tools (LATER)
-        └── server.ts               searchSkill · buySkill · listMySkills as MCP tools
+    └── skill-market/               ⑦ expose our functions as MCP tools
+        └── index.ts                search_skills · buy_skill via createAgentMcpServer
                                      → so codex/claude can CALL them mid-task (autonomous buy)
 ```
 
@@ -273,8 +272,9 @@ Each surface just imports the SDK and renders/binds (wallet signature + UI). The
 core (runtime/) is shared; surfaces only differ in "how to sign" + "how to render".
 
 **Autonomous buy is not a new engine — it's two small things (LATER):**
-1. `mcp/` exposes `searchSkill` / `buySkill` as **MCP tools**, so codex/claude can call them
-   mid-task (they both support MCP).
+1. `skill-market/` exposes `search_skills` / `buy_skill` as **MCP tools**, so codex/claude can call
+   them mid-task (they both support MCP). The tools exist; wiring them into the runtime spawn
+   (`mcpServers` / `allowedTools`) is the remaining step.
 2. A **"skill-shopping" SKILL.md** we publish to the market — natural-language: "when you
    need an ability, search the market and buy the matching skill." The agent fetches *that*
    skill while browsing, and follows it → calls our MCP tools. So "buying skills" is itself
@@ -316,8 +316,11 @@ core (runtime/) is shared; surfaces only differ in "how to sign" + "how to rende
 We do **not** build custom write-gates. `createTable` already takes:
 - **`writers: PublicKey[]`** → owner-only tables. `mysessions` = `writers:[wallet]`.
 - **`gate: { mint, amount, gateType }`** (`gateType` 0=Token, 1=Collection) → token-holding gates.
-  `notes/[skillNFT]` = gate on that skill's mint (only holders write). The contract checks the
-  ATA / Metaplex metadata on-chain. **This is exactly our notes/session write rules — free.**
+  `mysessions` uses `writers`. **Reviews are gated CLIENT-SIDE today**, not via this param: the
+  deployed contract's native gate derives the ATA with the legacy token program id, so it can't
+  verify a Token-2022 holder — `notes/notes.ts` checks `getBalance ≥ 1` before `writeRow`
+  (see [`onchain-format/tables.md`](onchain-format/tables.md) §3). Real on-chain enforcement
+  waits on SDK Token-2022 ATA support.
 
 So `notes` and `mysessions` are mostly *table definitions* (seed + columns + gate/writers in
 `core/seed.ts`), not new gate code. Net-new code is only the **nft module** (Token-2022 mint
@@ -466,9 +469,9 @@ just assembly.
 
 ## Step 4 (Track T2) — notes + search (need skill mints to exist)
 - **Read:** [`notes.md`](notes.md) + [`search.md`](search.md).
-- **Build:** `notes/notes.ts` (`writeNote`/`listNotes` on `notes/[skillNFT]` + `notes/[agentWallet]`;
-  gate = token-holding via `createTable` `gate` param — §B3); `search/search.ts` (keyword + trait
-  filter → sort by `supply`, **front-end**).
+- **Build:** `notes/notes.ts` (`postNote`/`readNotes` on `reviews:[collectionId]:[nft]` +
+  `reviews:agent:[wallet]`; gate = client-side token-holding check — §B3); `search/search.ts`
+  (keyword + trait filter → sort by `supply`, via a `SkillSource` — `indexerSource` or `dasSource`).
 - **Search:** confirm DAS `getTokenAccounts` for holder lists; the `createTable` gate/writers
   signature (§B2/B3) — no new gate code needed.
 - **Done when:** a holder can comment on a skill; search lists skills filtered by category, sorted
@@ -489,11 +492,12 @@ just assembly.
   the runtime) works in at least the web surface.
 
 ## Step 7 — LATER (after the loop works)
-- **mcp/** — expose `searchSkill`/`buySkill` as MCP tools + publish a "skill-shopping" SKILL.md →
-  autonomous buy (this doc §B autonomous-buy note).
-- **backend (⑤)** — off-chain sort/aggregate + skill↔creator map; Q audit
-  ([`skill-validation-adapter.md`](skill-validation-adapter.md)). Search upgrades to use it; add
-  semantic query→category mapping.
+- **skill-market/** — `search_skills`/`buy_skill` exposed as MCP tools (done) + the
+  "skill-shopping" SKILL.md (present) → wire into runtime spawn for autonomous buy
+  (this doc §B autonomous-buy note).
+- **backend (⑤)** — off-chain sort/aggregate + skill↔creator map. Search upgrades to use it; add
+  semantic query→category mapping. (Skill safety is reader-side verify before buy — see
+  [`search.md`](search.md) §2c — not a backend audit.)
 - **Path 2 runtimes** — OpenClaw/Hermes fetch our skills + call our log-save function
   ([`actions-and-adapters.md`](actions-and-adapters.md) §5b "two paths").
 

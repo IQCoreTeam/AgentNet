@@ -13,6 +13,7 @@
 
 import type { AgentRuntime, SessionHandle } from "../runtime/contract.js";
 import type { ApprovalChannel } from "../runtime/approval/channel.js";
+import type { SkillCard, MarketRequest } from "./marketMessages.js";
 
 // The two-way pipe to ONE chat UI (one panel / one socket). Messages both ways are
 // flat {type, ...} JSON — the same shape the webview already speaks.
@@ -40,6 +41,27 @@ export interface ChatEnv {
   openCloud?(kind: string, location?: string): Promise<void>;
   walletAddress(): string | null; // for the "My Wallet" view
   storageInfo(): Promise<{ info: unknown; options: unknown }>; // header storage pill
+  // marketplace (issue #17): search + buy need the wallet + a chain connection, which
+  // are host-held (the extension owns them), so they're delegated like wallet/cloud.
+  // buySkill installs the bought skill's SKILL.md into the runtime skills dir as part
+  // of the buy (the host calls SkillSync.installBought), returning the installed slug.
+  searchSkills?(query: string, kind?: "skill" | "workflow"): Promise<SkillCard[]>;
+  getSkillDetail?(mint: string): Promise<import("./marketMessages.js").SkillDetail>;
+  buySkill?(skillId: string, creatorWallet?: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
+  ownedSkills?(): Promise<string[]>; // skill names already installed (panel fill)
+  // install every owned skill NFT into the runtime skills dir (session start + after a
+  // buy), so the agent always has its owned skills present + discoverable. Returns slugs.
+  loadOwnedSkills?(): Promise<string[]>;
+  // passive skill-shopping toggle (issue #21): ON = agent shops for missing capabilities
+  // (verify → confirm → buy); OFF = owned-only, never buys. Persisted in config.json by
+  // the host (login.ts getSkillShopping/setSkillShopping). Default ON.
+  getSkillShopping?(): Promise<boolean>;
+  setSkillShopping?(on: boolean): Promise<void>;
+  // RPC config (issue #23). setHeliusKey opens a host-native secret input (the key
+  // never goes through the UI as plain text); the others persist/read the choice.
+  setHeliusKey?(): Promise<void>;
+  useDefaultRpc?(): Promise<void>;
+  rpcStatus?(): Promise<import("./marketMessages.js").RpcStatus>;
   // OPTIONAL multi-tab guard: vscode can open the same session in two panels (two
   // tabs writing one log races), so it claims a session before opening and yields
   // false to abort if another panel already holds it. One-socket surfaces (server,
@@ -59,13 +81,18 @@ export function createChatSession(
   // model). Switching tabs just repaints the active slot — nothing is killed, so
   // claude and codex never step on each other. A handle is spawned lazily on first
   // send (spawn costs ~2s); codex re-spawns per turn internally anyway.
-  type Slot = { handle: SessionHandle | null; pendingId?: string; model?: string };
+  type Slot = { handle: SessionHandle | null; pendingId?: string; model?: string; mode?: string };
   const slots: Record<"claude" | "codex", Slot> = {
-    claude: { handle: null },
-    codex: { handle: null },
+    claude: { handle: null, mode: "default" },
+    codex: { handle: null, mode: "auto" },
   };
   let cli: "claude" | "codex" = "claude"; // which tab is showing
   const slot = () => slots[cli];
+
+  // typed host->UI marketplace push: the contract (marketMessages.ts) is enforced
+  // here, so a wrong field/type on a market event is a compile error, not a silent
+  // runtime miss. Every surface's UI reads the same shape.
+  const sendMarket = (e: import("./marketMessages.js").MarketEvent) => transport.send(e);
 
   // A handle's output is only painted when ITS cli tab is the active one (so a
   // background reply doesn't bleed into the other tab's log). The message already
@@ -73,6 +100,9 @@ export function createChatSession(
   // per-message — correct even for a cross-CLI session.
   function wire(forCli: "claude" | "codex", h: SessionHandle) {
     h.onMessage((msg) => { if (cli === forCli) transport.send({ type: "message", msg }); });
+    // a skill firing → the green "Casting <skill>" marquee (issue #17). Transient, not
+    // persisted; only painted for the active tab.
+    h.onSkill((name) => { if (cli === forCli) sendMarket({ type: "skillActive", name }); });
     h.onTurnEnd(async () => {
       if (cli === forCli) transport.send({ type: "turnEnd" }); // stop the typing dots
       await pushSessions();
@@ -110,7 +140,7 @@ export function createChatSession(
     const s = slot();
     if (s.handle) return s.handle;
     const spawnCli = cli; // capture: cli must not change across the await
-    s.handle = await rt.startSession({ cli: spawnCli, model: s.model, cwd: env.cwd(), sessionId: s.pendingId, approval: env.approval });
+    s.handle = await rt.startSession({ cli: spawnCli, model: s.model, mode: s.mode, cwd: env.cwd(), sessionId: s.pendingId, approval: env.approval });
     wire(spawnCli, s.handle);
     return s.handle;
   }
@@ -124,6 +154,12 @@ export function createChatSession(
   async function pushStorage() {
     const { info, options } = await env.storageInfo();
     transport.send({ type: "storage", info, options });
+  }
+
+  async function pushSkillShopping() {
+    // default ON when the host doesn't offer the toggle (matches login.ts default).
+    const on = env.getSkillShopping ? await env.getSkillShopping() : true;
+    transport.send({ type: "skillShopping", on });
   }
 
   // Process messages STRICTLY in order — each handler runs to completion before the
@@ -146,7 +182,16 @@ export function createChatSession(
 
   async function handle(m: any) {
     switch (m?.type) {
-      case "ready": await pushSessions(); await pushStorage(); await open(); break;
+      case "ready":
+        await pushSessions(); await pushStorage(); await pushSkillShopping(); await open();
+        // install the wallet's owned skills so they're present + discoverable this
+        // session (issue #17). Fire-and-forget: a chain hiccup must not delay the chat;
+        // refresh the panel once it lands.
+        void (async () => {
+          await env.loadOwnedSkills?.();
+          sendMarket({ type: "ownedSkills", names: env.ownedSkills ? await env.ownedSkills() : [] });
+        })().catch(() => {});
+        break;
       case "new":   await open(); await pushSessions(); break;
       // Opening a session resumes it in the CURRENT tab's cli (cross-CLI). The
       // session's own cli is ignored — that's the whole point of cross-CLI resume.
@@ -174,6 +219,16 @@ export function createChatSession(
         // model is per-slot; changing it only re-spawns THAT slot's handle next send.
         slot().model = m.model && m.model !== "default" ? m.model : undefined;
         slot().handle?.stop(); slot().handle = null;
+        break;
+      case "mode":
+        // permission mode is per-slot. Unlike model, the value is always meaningful
+        // (claude "default"/codex "auto" are real modes), so we keep it as-is and let
+        // an undefined fall back to the engine default in spawn. Re-spawn next send so
+        // the new permissionMode/sandbox takes effect.
+        if (typeof m.mode === "string") {
+          slot().mode = m.mode;
+          slot().handle?.stop(); slot().handle = null;
+        }
         break;
       case "send":
         if (typeof m.text === "string") (await ensureHandle()).send(m.text);
@@ -208,6 +263,62 @@ export function createChatSession(
       case "disconnectWallet": await env.disconnectWallet?.(); break;
       case "openCloud":       await env.openCloud?.(m.kind, m.location); break;
       case "wallet":          transport.send({ type: "wallet", address: env.walletAddress() }); break;
+      // ── marketplace: search → buy → install (delegated to the host) ──
+      // payload typed via the shared contract (marketMessages.ts) so a wrong field
+      // is caught here, not at runtime on some surface.
+      case "searchSkills": {
+        const req = m as Extract<MarketRequest, { type: "searchSkills" }>;
+        try {
+          const results = env.searchSkills ? await env.searchSkills(req.query ?? "", req.kind) : [];
+          sendMarket({ type: "searchResults", results });
+        } catch (e) {
+          // a chain/RPC failure must NOT leave the UI stuck on "Searching…": surface it.
+          sendMarket({ type: "searchError", message: e instanceof Error ? e.message : String(e) });
+        }
+        break;
+      }
+      case "getSkillDetail": {
+        const req = m as Extract<MarketRequest, { type: "getSkillDetail" }>;
+        try {
+          if (env.getSkillDetail) sendMarket({ type: "skillDetail", detail: await env.getSkillDetail(req.mint) });
+        } catch (e) {
+          sendMarket({ type: "searchError", message: e instanceof Error ? e.message : String(e) });
+        }
+        break;
+      }
+      case "buySkill": {
+        const req = m as Extract<MarketRequest, { type: "buySkill" }>;
+        const res = env.buySkill ? await env.buySkill(req.skillId, req.creatorWallet) : { ok: false, error: "buy unavailable" };
+        sendMarket({ type: "buyResult", skillId: req.skillId, ...res });
+        if (res.ok) {
+          await env.loadOwnedSkills?.(); // re-sync the whole owned set after the buy
+          sendMarket({ type: "ownedSkills", names: env.ownedSkills ? await env.ownedSkills() : [] });
+        }
+        break;
+      }
+      case "ownedSkills":
+        sendMarket({ type: "ownedSkills", names: env.ownedSkills ? await env.ownedSkills() : [] });
+        break;
+      // ── RPC config (issue #23): set/clear the Helius key, report status ──
+      case "setHeliusKey":
+        await env.setHeliusKey?.(); // host opens a native secret input + saves
+        if (env.rpcStatus) sendMarket({ type: "rpcStatus", status: await env.rpcStatus() });
+        break;
+      case "useDefaultRpc":
+        await env.useDefaultRpc?.();
+        if (env.rpcStatus) sendMarket({ type: "rpcStatus", status: await env.rpcStatus() });
+        break;
+      case "getRpcStatus":
+        if (env.rpcStatus) sendMarket({ type: "rpcStatus", status: await env.rpcStatus() });
+        break;
+      // ── passive skill-shopping toggle (issue #21) ──
+      case "getSkillShopping":
+        await pushSkillShopping();
+        break;
+      case "setSkillShopping":
+        await env.setSkillShopping?.(!!m.on);
+        await pushSkillShopping(); // echo the persisted value back so the switch reflects truth
+        break;
     }
   }
 

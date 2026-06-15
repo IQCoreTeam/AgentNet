@@ -16,6 +16,13 @@ import {
   agentnetFolderLink,
   STORAGE_OPTIONS,
   createChatSession,
+  marketplaceEnv,
+  getSkillShopping,
+  setSkillShopping,
+  saveHeliusKey,
+  hasDasRpc,
+  maskedHeliusKey,
+  getNetwork,
   TransportApprovalChannel,
   chatHtml,
   onboardingHtml,
@@ -187,12 +194,36 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
   }
   panel.onDidDispose(() => { if (heldSession) openSessions.delete(heldSession); });
 
+  // marketplace search/buy/install — needs the wallet + a chain connection. The RPC is
+  // resolved inside (registered Helius key wins; else env; else public-devnet default).
+  const market = await marketplaceEnv(wallet!);
   const chat = createChatSession(runtime!, transport, {
     cwd: getCwd,
     approval,
     claimSession,
+    ...market,
+    // RPC config (issue #23): capture the Helius key via a native secret input — it
+    // never passes through the webview as plain text — then save it like an OAuth token.
+    setHeliusKey: async () => {
+      const key = await vscode.window.showInputBox({
+        title: "Helius API key",
+        prompt: "Paste your Helius API key OR the full Helius RPC URL. Stored locally, never synced.",
+        password: true,
+        ignoreFocusOut: true,
+        placeHolder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx  (or https://…helius-rpc.com/?api-key=…)",
+      });
+      if (key && key.trim()) await saveHeliusKey(key.trim());
+    },
+    useDefaultRpc: async () => { await saveHeliusKey(""); }, // clear the key
+    rpcStatus: async () => {
+      const masked = await maskedHeliusKey();
+      return { dasReady: await hasDasRpc(), hasKey: !!masked, masked, network: getNetwork() };
+    },
     walletAddress: () => wallet?.address ?? null,
     storageInfo: async () => ({ info: await getStorageInfo(), options: STORAGE_OPTIONS }),
+    // passive skill-shopping toggle (issue #21): persisted in config.json by the SDK.
+    getSkillShopping: () => getSkillShopping(),
+    setSkillShopping: (on) => setSkillShopping(on),
     // header "connect" link → native quick-pick of cloud backends, then connect
     pickCloud: async () => {
       const cfg = await pickCloud();

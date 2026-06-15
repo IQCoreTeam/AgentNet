@@ -44,10 +44,10 @@ enforced by the token program.
 ```mermaid
 flowchart TB
     GRP["Token-2022 Group (umbrella)<br/>TokenGroup.size = total # of skills"]
-    GRP --> SK["skill = one Token-2022 mint<br/>own mint authority = its creator"]
+    GRP --> SK["skill = one Token-2022 mint<br/>mint authority = gate-program PDA (trustless, no minter key)"]
     SK --> SUP["supply = # of copies owned<br/>(= popularity, on-chain, free)"]
     SK --> NT["NonTransferable ext<br/>= native soulbound"]
-    SK --> MD["TokenMetadata ext<br/>category + hashtags (traits)<br/>uri → IQLabs on-chain path"]
+    SK --> MD["TokenMetadata ext<br/>name/symbol + uri → code-in JSON<br/>(traits live in that JSON's attributes, not on the mint)"]
     style SK fill:#efe,stroke:#3a3,stroke-width:2px
     style SUP fill:#cfc,stroke:#3a3
 ```
@@ -58,11 +58,11 @@ ownership PDA** (the token *is* the ownership record):
 | Requirement | Token-2022 feature | On-chain? |
 |---|---|---|
 | umbrella collection | `TokenGroup` (`size` = # skills) | ✅ enforced count |
-| per-item different creator | each skill = own mint + own authority | ✅ |
-| many copies per item | mint 1 token per owner → `supply`++ | ✅ |
+| per-item different creator | each skill = own mint; mint authority = gate PDA | ✅ |
+| many copies per item | gate program mints 1 token per buyer → `supply`++ | ✅ |
 | **per-skill popularity count** | **`mint.supply`** | ✅ free, enforced |
 | soulbound | **`NonTransferable` extension** | ✅ native (set at mint init) |
-| traits (category/hashtags) | `TokenMetadata` `additional_metadata` | ✅ on-chain |
+| traits (category/hashtags/requiredSkill) | **code-in JSON `attributes`** (uri → JSON), NOT the mint | ✅ on-chain |
 | all holders / user list | DAS `getTokenAccounts` per mint | indexer-fronted |
 
 Two caveats to design around:
@@ -180,6 +180,15 @@ What this unification gives for free:
 - **iqfee = IQ revenue** — a paid purchase auto-routes a portion to the treasury.
 - **Popularity for free** — `supply` = number of owners; a native token field, no counter.
 
+> **Built since (PR #22):** the fee is now concrete and on-chain. `FEE_BPS` =
+> **6.9%**, taken **out of the price** (treasury gets 6.9%, the creator nets the
+> rest — not added on top). The treasury is a **fixed program constant**
+> (`constants.rs::FEE_TREASURY`, mirrored in `core/seed.ts` `FEE_TREASURY` /
+> `getFeeTreasury()`); the gate program **rejects any other treasury account**, so
+> the split is trustless. `buyItemIx` injects the treasury account automatically
+> (slot after `creator`) — callers like `buySkill` pass nothing extra. Free mints
+> (price 0) skip the transfer entirely, so they pay no fee.
+
 ---
 
 ## 5. Alternatives (heavier — why not)
@@ -232,7 +241,7 @@ Together: **wallet = abilities (on-chain) + memory (off-chain), portable across 
   `GroupMemberPointer`/`TokenGroupMember`; umbrella `TokenGroup`.
 - **Trait schema** — exact category list + hashtag rules (feeds [`search.md`](search.md)).
 - **Price model** — creator sets per-skill price (0 = free); fixed vs free-set.
-- **iqfee split** — IQ treasury share % on a paid purchase; whether free mints pay a minimal fee.
+- ~~**iqfee split**~~ — **decided + built (PR #22):** 6.9% of the price to a fixed program-constant treasury, fee taken out of the price; free (price-0) mints pay nothing. See §4.
 - **Popularity formula + sybil** — total `supply` vs paid-only weighting; defend against
   free-mint bots (make free mints cost something).
 - **Famous-agent score** — supply sum vs followers vs cumulative revenue.

@@ -79,6 +79,7 @@ export interface SessionHandle {
   send(userText: string): void; // user input → CLI stdin
   onMessage(cb: (msg: ChatMessage) => void): void; // CLI output (UI renders)
   onTurnEnd(cb: () => void): void; // turn finished (runtime auto-saves here)
+  onSkill(cb: (name: string) => void): void; // a skill fired → UI "Casting <skill>" cue
   // real context-window occupancy (tokens) reported by the engine each turn. Optional
   // for the UI to use (e.g. a context-left meter); surfaces may ignore it.
   onUsage(cb: (contextTokens: number) => void): void;
@@ -94,6 +95,10 @@ export interface AgentRuntime {
     cwd: string;
     sessionId?: string; // present = resume, absent = new
     model?: string;
+    // permission/approval mode. claude → SDK permissionMode (default | acceptEdits |
+    // plan | bypassPermissions); codex → a sandbox+approval preset key (readonly |
+    // auto | full). Omit → the engine's safe default (claude "default", codex "auto").
+    mode?: string;
     // opt-in token streaming: when true, the engine emits partial assistant deltas
     // (ChatMessage.partial:true) followed by a final partial:false message. Surfaces that
     // don't set this (e.g. vscode) keep the whole-turn behavior unchanged. Partials are

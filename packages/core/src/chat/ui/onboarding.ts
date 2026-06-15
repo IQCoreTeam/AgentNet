@@ -125,6 +125,9 @@ export function onboardingHtml(): string {
       <input id="customAuth" placeholder="Authorization header (optional)" />
     </div>
 
+    <p style="margin:14px 0 0">Marketplace RPC <span style="opacity:.5">(recommended)</span></p>
+    <div class="sub">The skill marketplace reads on-chain data via an RPC. The built-in default is rate-limited and can't load the market; a free <b>Helius</b> key (devnet tier) fixes it. You can start now and add the key anytime from the wallet menu &rarr; RPC.</div>
+
     <button class="primary" id="connectStorageBtn">Connect cloud &amp; continue</button>
     <button class="ghost" id="skipBtn">Keep on this device only (maybe later)</button>
 
