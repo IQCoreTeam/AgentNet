@@ -545,6 +545,7 @@ function codexEngine(opts: SpawnOpts): Engine {
       cb.emitTurn();
       running = false;
       currentTurnId = null;
+      streamBuf = ""; thinkingBuf = ""; // a turn that ended without a clean item/completed
       pendingImgCleanup?.(); pendingImgCleanup = null;
     } else if (msg.method === "turn/failed" || msg.method === "error") {
       const err = params?.error?.message || params?.message || "Turn failed";
@@ -552,6 +553,7 @@ function codexEngine(opts: SpawnOpts): Engine {
       cb.emitTurn();
       running = false;
       currentTurnId = null;
+      streamBuf = ""; thinkingBuf = ""; // (e.g. interrupted) must not seed the next turn's snapshot
       pendingImgCleanup?.(); pendingImgCleanup = null;
     }
   }

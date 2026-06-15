@@ -1757,10 +1757,13 @@ export function chatHtml(): string {
         streaming.dataset.acc = '';
         streaming.classList.add('cursor');
       }
-      const prev = streaming.dataset.acc || '';
-      const next = msg.text.startsWith(prev) ? msg.text : prev + msg.text;
-      streaming.dataset.acc = next;
-      streaming.textContent = next; // raw during stream
+      // Producers always send partials as the cumulative "full text so far"
+      // (replace-semantics — see runtime/spawn.ts). So REPLACE the bubble, never
+      // append. The old startsWith()+append heuristic desynced on any hiccup and
+      // then compounded every later snapshot into quadratic repeated text (the
+      // runaway streaming-duplication bug).
+      streaming.dataset.acc = msg.text;
+      streaming.textContent = msg.text; // raw during stream
     } else {
       if (streaming && streaming.dataset.role === msg.role) {
         const prev = streaming.dataset.acc || '';
