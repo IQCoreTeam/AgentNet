@@ -56,7 +56,7 @@ async function writeConfig(cfg: StorageConfig): Promise<void> {
 
 /** True once a storage backend has been chosen on this device. */
 export async function isInitialized(): Promise<boolean> {
-  return (await readConfig()) !== null;
+  return (await readConfig())?.kind != null;
 }
 
 // Passive skill-shopping toggle (issue #21). Lives in the same config.json as the
@@ -175,3 +175,19 @@ export async function disconnectCloud(): Promise<void> {
 
 /** @deprecated use disconnectCloud — kept for callers still importing logout. */
 export const logout = disconnectCloud;
+
+/** Save Google OAuth app credentials without touching the storage kind. */
+export async function saveGoogleCreds(clientId: string, clientSecret: string): Promise<void> {
+  await ensureDir(rootDir());
+  const prev = await readRawConfig();
+  await writeFile(
+    configFile(),
+    JSON.stringify({ ...prev, google_client_id: clientId, google_client_secret: clientSecret }, null, 2),
+  );
+}
+
+/** True if Google OAuth app credentials are present in config. */
+export async function hasGoogleCreds(): Promise<boolean> {
+  const raw = await readRawConfig();
+  return !!(raw.google_client_id);
+}

@@ -27,9 +27,18 @@ import type {
 export type EngineStatus = "ok" | "no-login" | "missing";
 
 export interface State {
-  phase: "connecting" | "onboarding" | "engineSelect" | "claudeAuth" | "codexAuth" | "chat";
+  phase:
+    | "connecting"
+    | "onboarding"
+    | "storageSelect"
+    | "engineSelect"
+    | "claudeAuth"
+    | "codexAuth"
+    | "chat";
   walletAddress: string | null;
   cli: Cli;
+  googleLoginUrl: string | null;
+  googleLoginError: string | null;
   // per-engine install/login status from the post-wallet `cliStatus` event, kept so the
   // engine picker can show a live badge next to each choice (null until it arrives).
   cliReport: { claude: EngineStatus; codex: EngineStatus } | null;
@@ -45,7 +54,8 @@ export interface State {
   sessions: SessionMeta[];
   activeSessionId?: string;
   approvals: ApprovalRequest[];
-  storage: { info: unknown; options: unknown } | null;
+  storage: { info: unknown; options: unknown; googleCredsConfigured?: boolean } | null;
+  googleCredsError: string | null;
   cloudSync: { ok: boolean; error?: string } | null;
   typing: boolean; // a turn is in flight (typing dots)
   loading: boolean; // cross-CLI carry veil
@@ -60,6 +70,8 @@ const initialState: State = {
   cli: "claude",
   cliReport: null,
   claudeLoginUrl: null,
+  googleLoginUrl: null,
+  googleLoginError: null,
   claudeLoginError: null,
   codexLoginUrl: null,
   codexLoginCode: null,
@@ -68,6 +80,7 @@ const initialState: State = {
   sessions: [],
   approvals: [],
   storage: null,
+  googleCredsError: null,
   cloudSync: null,
   typing: false,
   loading: false,
@@ -102,7 +115,8 @@ type LocalAction =
   | { type: "__typing" }
   | { type: "__removeApproval"; id: string }
   | { type: "__clearToast" }
-  | { type: "__selectEngine"; cli: Cli };
+  | { type: "__selectEngine"; cli: Cli }
+  | { type: "__finishStorage" };
 type Action = ServerMessage | LocalAction;
 
 function reducer(state: State, ev: Action): State {
@@ -131,9 +145,11 @@ function reducer(state: State, ev: Action): State {
       // Onboarding handshake: no runtime yet → show ConnectWallet.
       return { ...state, phase: "onboarding" };
     case "walletConnected":
-      // Wallet is in. Don't jump to chat yet — the cliStatus that follows decides whether
-      // claude needs a subscription login first. Stay in onboarding meanwhile.
-      return { ...state, walletAddress: ev.address };
+      // Wallet is in. If storage was already configured on this device (returning user),
+      // skip the storage picker entirely and go straight to engine select — the gdrive
+      // choice + token persist, so re-walking it (and re-auth) is pointless. Only a true
+      // first run shows the picker.
+      return { ...state, walletAddress: ev.address, phase: ev.storageConfigured ? "engineSelect" : "storageSelect" };
     case "cliStatus":
       // After wallet: don't force claude. Record both engines' status and show the engine
       // picker so the user chooses which one to activate. The chosen engine then runs its
@@ -141,8 +157,18 @@ function reducer(state: State, ev: Action): State {
       return {
         ...state,
         cliReport: { claude: ev.claude, codex: ev.codex },
-        phase: "engineSelect",
       };
+    case "__finishStorage":
+      return { ...state, phase: "engineSelect" };
+    case "googleLoginUrl":
+      return { ...state, googleLoginUrl: ev.url, googleLoginError: null };
+    case "googleLoginStatus":
+      return ev.status === "done"
+        ? { ...state, googleLoginUrl: null, googleLoginError: null, phase: "engineSelect" }
+        : { ...state, googleLoginUrl: null, googleLoginError: ev.error ?? "Login failed." };
+    case "openUrl":
+      window.open(ev.url, "_blank");
+      return state;
     case "claudeLoginUrl":
       return { ...state, claudeLoginUrl: ev.url, claudeLoginError: null };
     case "claudeLoginStatus":
@@ -177,7 +203,11 @@ function reducer(state: State, ev: Action): State {
     case "platform":
       return { ...state, cli: ev.cli };
     case "storage":
-      return { ...state, storage: { info: ev.info, options: ev.options } };
+      return { ...state, storage: { info: ev.info, options: ev.options, googleCredsConfigured: ev.googleCredsConfigured } };
+    case "googleCredsStatus":
+      return ev.status === "saved"
+        ? { ...state, googleCredsError: null, storage: { ...(state.storage ?? { info: null, options: [] }), googleCredsConfigured: true } }
+        : { ...state, googleCredsError: ev.error ?? "Failed to save credentials." };
     case "cloudSync":
       return { ...state, cloudSync: ev.status };
     case "wallet":
@@ -199,6 +229,7 @@ interface Store {
   resolveApproval: (id: string) => void;
   clearToast: () => void;
   selectEngine: (cli: Cli) => void;
+  finishStorage: () => void;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -229,6 +260,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (state.phase === "chat" && !wasChat.current) {
       wasChat.current = true;
       transportRef.current?.reopen();
+      // reopen() spins up a FRESH client that the server binds to attachChat (runtime now
+      // exists). That handler only pushes sessions + storage on "ready" — and the initial
+      // ready (sent at mount) went to the now-discarded onboarding client. So re-send it,
+      // or the chat lands with no session list and a stale "local only" storage pill.
+      void transportRef.current?.post({ type: "ready" });
     } else if (state.phase !== "chat") {
       wasChat.current = false;
     }
@@ -249,6 +285,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       clearToast: () => raw({ type: "__clearToast" }),
       // Activate the chosen engine; routing (login gate / chat) is decided in the reducer.
       selectEngine: (cli) => raw({ type: "__selectEngine", cli }),
+      finishStorage: () => raw({ type: "__finishStorage" }),
     };
   }, [state]);
 

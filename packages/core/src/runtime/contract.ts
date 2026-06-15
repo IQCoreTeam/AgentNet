@@ -80,6 +80,9 @@ export interface SessionHandle {
   onMessage(cb: (msg: ChatMessage) => void): void; // CLI output (UI renders)
   onTurnEnd(cb: () => void): void; // turn finished (runtime auto-saves here)
   onSkill(cb: (name: string) => void): void; // a skill fired → UI "Casting <skill>" cue
+  // real context-window occupancy (tokens) reported by the engine each turn. Optional
+  // for the UI to use (e.g. a context-left meter); surfaces may ignore it.
+  onUsage(cb: (contextTokens: number) => void): void;
   stop(): void;
 }
 
@@ -96,10 +99,21 @@ export interface AgentRuntime {
     // plan | bypassPermissions); codex → a sandbox+approval preset key (readonly |
     // auto | full). Omit → the engine's safe default (claude "default", codex "auto").
     mode?: string;
+    // opt-in token streaming: when true, the engine emits partial assistant deltas
+    // (ChatMessage.partial:true) followed by a final partial:false message. Surfaces that
+    // don't set this (e.g. vscode) keep the whole-turn behavior unchanged. Partials are
+    // rendered but NOT persisted — only the final message is written to the log.
+    stream?: boolean;
     // who decides tool approvals for THIS session. Per-session (not per-runtime) so
     // multiple chat panels sharing one runtime each route approvals to their OWN
     // panel. Omit → the runtime's default channel (or auto-allow).
     approval?: ApprovalChannel;
+    // Optional Codex API Key (Stage 1)
+    apiKey?: string;
+    // Ephemeral (side-channel /btw) session that doesn't save messages to the store.
+    ephemeral?: boolean;
+    // Reasoning effort level (claude: adaptive thinking depth; codex: reasoning_effort).
+    effort?: "low" | "medium" | "high" | "xhigh" | "max";
   }): Promise<SessionHandle>;
 
   // list the wallet's saved sessions (for the UI's session list)

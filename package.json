@@ -6,6 +6,8 @@
   "scripts": {
     "test:run": "pnpm --filter @iqlabs-official/agent-sdk test:run",
     "build:core": "pnpm --filter @iqlabs-official/agent-sdk build",
-    "build:vscode": "pnpm --filter agentnet-vscode build"
+    "build:vscode": "pnpm --filter agentnet-vscode build",
+    "build:cli": "pnpm --filter agentnet-cli build",
+    "dev:cli": "pnpm --filter agentnet-cli dev"
   }
 }

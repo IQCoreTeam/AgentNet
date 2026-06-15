@@ -113,6 +113,8 @@ export {
   getStorageInfo,
   getSkillShopping,
   setSkillShopping,
+  saveGoogleCreds,
+  hasGoogleCreds,
 } from "./account/login.js";
 export { STORAGE_OPTIONS } from "./account/storage/adapter.js";
 export type { StorageConfig, StorageKind } from "./account/storage/adapter.js";
@@ -123,6 +125,10 @@ export { ephemeralKey, persistedKey } from "./account/keyPolicy.js";
 export type { KeyPolicy, KeyVault } from "./account/keyPolicy.js";
 export { agentnetFolderLink } from "./account/storage/gdrive.js";
 export type { CloudStatus } from "./account/storage/mirror.js";
+export { startGoogleLogin, startGoogleLoginFixed } from "./account/storage/oauth.js";
+export type { GoogleLogin } from "./account/storage/oauth.js";
+
+
 
 import type { AgentRuntime, Wallet } from "./runtime/contract.js";
 import type { CloudStatus } from "./account/storage/mirror.js";

@@ -12,6 +12,7 @@ import { MemorySync } from "../memory/index.js";
 import { getSkillShopping } from "../account/login.js";
 import { setSkillShoppingActive } from "../skill-market/passive.js";
 import { createAgentSdkMcpServer, newVerifyGuard } from "../skill-market/index.js";
+import { getCodexApiKey } from "../account/codexAuth.js";
 import type { ApprovalChannel } from "./approval/channel.js";
 import type {
   AgentRuntime,
@@ -83,7 +84,7 @@ export function createRuntime(
       // FRESH: no sessionId; the cli mints its own, which becomes the canonical id.
       const resuming = !!opts.sessionId;
       const nativeId = resuming
-        ? await prepareResume(store, opts.cli, opts.cwd, opts.sessionId!)
+        ? await prepareResume(store, opts.cli, opts.cwd, opts.sessionId!, opts.ephemeral)
         : undefined;
 
       // Inject the project's shared memory into this CLI's native files (Claude's
@@ -106,7 +107,8 @@ export function createRuntime(
 
       // per-session approval channel (each panel passes its own) wins; fall back to
       // the runtime-level default channel.
-      const cli = spawnCli({ ...opts, sessionId: nativeId, approval: opts.approval ?? approval, ...passive });
+      const apiKey = opts.apiKey || (opts.cli === "codex" ? (await getCodexApiKey().catch(() => undefined)) ?? undefined : undefined);
+      const cli = spawnCli({ ...opts, sessionId: nativeId, approval: opts.approval ?? approval, apiKey, ...passive });
 
       // Storage key stays the CANONICAL id while resuming; the cli's emitted (native)
       // id must NOT overwrite it, or appended turns land in the wrong log.
@@ -115,6 +117,7 @@ export function createRuntime(
       const msgCbs: Array<(m: ChatMessage) => void> = [];
       const turnCbs: Array<() => void> = [];
       const skillCbs: Array<(name: string) => void> = []; // "Casting <skill>" marquee
+      const usageCbs: Array<(n: number) => void> = [];
       const pending: ChatMessage[] = []; // messages awaiting a known sessionId
 
       const meta = () => ({ sessionId, cli: opts.cli, title, ts: Date.now() });
@@ -127,6 +130,10 @@ export function createRuntime(
         if (!m.cli) m.cli = opts.cli;
         if (!title && m.role === "user") title = m.text.slice(0, 60);
         for (const cb of msgCbs) cb(m);
+        // streaming deltas are for the live UI only — never persist them. The final
+        // (partial:false) assistant message carries the full text and IS stored below.
+        if (m.partial) return;
+        if (opts.ephemeral) return; // Do not save ephemeral messages to the store.
         if (sessionId) void store.appendMessage(meta(), m);
         else pending.push(m);
       };
@@ -147,7 +154,12 @@ export function createRuntime(
       // A skill firing is a transient UI cue, not a transcript entry — fan it out to
       // listeners without persisting it (issue #17).
       cli.onSkill((name: string) => { for (const cb of skillCbs) cb(name); });
+      cli.onUsage((n: number) => { for (const cb of usageCbs) cb(n); });
       cli.onTurnEnd(() => {
+        if (opts.ephemeral) {
+          for (const cb of turnCbs) cb();
+          return;
+        }
         void flush().then(() => {
           for (const cb of turnCbs) cb();
         });
@@ -188,6 +200,9 @@ export function createRuntime(
         },
         onSkill(cb) {
           skillCbs.push(cb);
+        },
+        onUsage(cb) {
+          usageCbs.push(cb);
         },
         stop() {
           stopped = true; // mark so the resulting exit isn't reported as a failure

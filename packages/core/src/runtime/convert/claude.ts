@@ -25,11 +25,35 @@ const OUTPUT_CAP = 4000;
 const base = (text: string): ChatMessage => ({ role: "tool", text, ts: Date.now() });
 const fileName = (p?: string) => (p ? p.split("/").pop() || p : "");
 
-// old/new → a simple, accurate diff (the replaced region as "-", the new as "+").
+// old/new → a line-level INTERLEAVED diff via LCS, so unchanged lines render as context
+// (" ") between the "-"/"+" changes instead of one block of removals then one of additions.
+// Edit old/new strings are usually a small region, so the O(m·n) table is cheap; we guard
+// against a pathological size and fall back to the plain block form.
 function makeDiff(oldStr = "", newStr = ""): string {
-  const minus = oldStr.split("\n").map((l) => "-" + l);
-  const plus = newStr.split("\n").map((l) => "+" + l);
-  return [...minus, ...plus].slice(0, 200).join("\n");
+  const a = oldStr.split("\n");
+  const b = newStr.split("\n");
+  if (a.length * b.length > 250_000) {
+    return [...a.map((l) => "-" + l), ...b.map((l) => "+" + l)].slice(0, 200).join("\n");
+  }
+  const m = a.length;
+  const n = b.length;
+  // dp[i][j] = LCS length of a[i:], b[j:]
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = m - 1; i >= 0; i--)
+    for (let j = n - 1; j >= 0; j--)
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+
+  const out: string[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < m && j < n) {
+    if (a[i] === b[j]) out.push(" " + a[i++]), j++;
+    else if (dp[i + 1][j] >= dp[i][j + 1]) out.push("-" + a[i++]);
+    else out.push("+" + b[j++]);
+  }
+  while (i < m) out.push("-" + a[i++]);
+  while (j < n) out.push("+" + b[j++]);
+  return out.slice(0, 200).join("\n");
 }
 
 // tool_result.content can be a string or an array of {type:"text",text} parts.
@@ -67,6 +91,12 @@ function toolUseMessage(b: Block): ChatMessage {
       const file = String(input.file_path ?? "");
       return { ...base("Read " + fileName(file)), tool: { name, file } };
     }
+    case "TodoWrite": {
+      // preserve the structured todo list in `output` (JSON) so a surface can render it
+      // as a checklist; the neutral ToolAction shape needs no new field.
+      const todos = Array.isArray(input.todos) ? input.todos : [];
+      return { ...base("TodoWrite"), tool: { name, output: JSON.stringify(todos) } };
+    }
     case "Agent": {
       const title = String(input.description ?? "subagent");
       return { ...base("Agent: " + title), tool: { name, command: title } };
@@ -89,6 +119,12 @@ export function mapClaudeMessage(m: unknown): ParseResult {
     session_id?: string;
     compact_metadata?: unknown;
     message?: { content?: Block[] | string; role?: string };
+    event?: { type?: string; delta?: { type?: string; text?: string } };
+    usage?: {
+      input_tokens?: number;
+      cache_read_input_tokens?: number;
+      cache_creation_input_tokens?: number;
+    };
   };
 
   // system/init and any assistant/result frame carries the session id.
@@ -96,6 +132,17 @@ export function mapClaudeMessage(m: unknown): ParseResult {
     out.sessionId = msg.session_id;
   }
   if (msg.session_id && !out.sessionId) out.sessionId = msg.session_id;
+
+  // streaming: a partial text delta (only sent when includePartialMessages is on). Emit
+  // it as a partial:true assistant chunk; the surface coalesces deltas into the live line.
+  // The final complete `assistant` frame (below) still arrives as the partial:false text.
+  if (msg.type === "stream_event") {
+    const ev = msg.event;
+    if (ev?.type === "content_block_delta" && ev.delta?.type === "text_delta" && ev.delta.text) {
+      out.messages.push({ role: "assistant", text: ev.delta.text, ts: Date.now(), partial: true });
+    }
+    return out;
+  }
 
   // a compact boundary = claude condensed the history; surface a summary record so
   // it folds in cross-CLI exactly like the line path's isCompactSummary.
@@ -127,7 +174,15 @@ export function mapClaudeMessage(m: unknown): ParseResult {
     }
   }
 
-  // a 'result' frame ends the turn.
-  if (msg.type === "result") out.turnEnded = true;
+  // a 'result' frame ends the turn — and carries the turn's token usage. The context
+  // window occupancy = input + cache-read + cache-create (the full prompt that was sent).
+  if (msg.type === "result") {
+    out.turnEnded = true;
+    const u = msg.usage;
+    if (u) {
+      out.contextTokens =
+        (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+    }
+  }
   return out;
 }

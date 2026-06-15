@@ -30,34 +30,54 @@ function name(sessionId: string): string {
 // Find a folder by name under `parent` (or root), creating it if absent. Returns
 // its id. Cached per-process so we don't re-resolve the folder every call.
 const folderCache = new Map<string, string>();
+// In-flight resolutions, keyed the same as folderCache. Two concurrent calls (e.g. the
+// session save and the initial list both racing to ensure "AgentNet" at startup) would
+// each see "not found" and each CREATE — leaving duplicate folders that then split
+// sessions. Sharing one in-flight promise per key collapses that race within a process.
+const folderInflight = new Map<string, Promise<string>>();
 async function ensureFolder(folderName: string, parent?: string): Promise<string> {
   const cacheKey = `${parent ?? "root"}/${folderName}`;
   const cached = folderCache.get(cacheKey);
   if (cached) return cached;
+  const inflight = folderInflight.get(cacheKey);
+  if (inflight) return inflight;
 
-  const parentClause = parent ? ` and '${parent}' in parents` : "";
-  const q = encodeURIComponent(
-    `name='${folderName}' and mimeType='${FOLDER_MIME}' and trashed=false${parentClause}`,
-  );
-  const res = await fetch(`${FILES}?q=${q}&fields=files(id)`, { headers: await auth() });
-  if (!res.ok) throw new Error(`drive folder lookup failed: ${res.status}`);
-  const found = ((await res.json()) as { files: { id: string }[] }).files[0]?.id;
-  if (found) {
-    folderCache.set(cacheKey, found);
-    return found;
+  const run = (async () => {
+    const parentClause = parent ? ` and '${parent}' in parents` : "";
+    const q = encodeURIComponent(
+      `name='${folderName}' and mimeType='${FOLDER_MIME}' and trashed=false${parentClause}`,
+    );
+    // orderBy createdTime: if duplicates already exist (a past cross-device race), every
+    // caller deterministically converges on the OLDEST one rather than picking whichever
+    // the API happens to return first — so sessions stop scattering across the copies.
+    const res = await fetch(`${FILES}?q=${q}&fields=files(id,createdTime)&orderBy=createdTime`, {
+      headers: await auth(),
+    });
+    if (!res.ok) throw new Error(`drive folder lookup failed: ${res.status}`);
+    const found = ((await res.json()) as { files: { id: string }[] }).files[0]?.id;
+    if (found) {
+      folderCache.set(cacheKey, found);
+      return found;
+    }
+
+    const meta: Record<string, unknown> = { name: folderName, mimeType: FOLDER_MIME };
+    if (parent) meta.parents = [parent];
+    const create = await fetch(`${FILES}?fields=id`, {
+      method: "POST",
+      headers: { ...(await auth()), "Content-Type": "application/json" },
+      body: JSON.stringify(meta),
+    });
+    if (!create.ok) throw new Error(`drive folder create failed: ${create.status}`);
+    const id = ((await create.json()) as { id: string }).id;
+    folderCache.set(cacheKey, id);
+    return id;
+  })();
+  folderInflight.set(cacheKey, run);
+  try {
+    return await run;
+  } finally {
+    folderInflight.delete(cacheKey);
   }
-
-  const meta: Record<string, unknown> = { name: folderName, mimeType: FOLDER_MIME };
-  if (parent) meta.parents = [parent];
-  const create = await fetch(`${FILES}?fields=id`, {
-    method: "POST",
-    headers: { ...(await auth()), "Content-Type": "application/json" },
-    body: JSON.stringify(meta),
-  });
-  if (!create.ok) throw new Error(`drive folder create failed: ${create.status}`);
-  const id = ((await create.json()) as { id: string }).id;
-  folderCache.set(cacheKey, id);
-  return id;
 }
 
 // The "AgentNet/{wallet}/sessions" folder id (created on first use). Per-wallet so
