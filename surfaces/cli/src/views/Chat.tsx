@@ -15,6 +15,7 @@ import {
   maskedHeliusKey,
   saveHeliusKey,
   ownedSkills,
+  hasDasRpc,
 } from "@iqlabs-official/agent-sdk";
 import { Select } from "@inkjs/ui";
 import { chooseStorage } from "../bootstrap.js";
@@ -72,9 +73,14 @@ export function Chat({
   const [cloud, setCloud] = useState<{ kind: string; account?: string } | null>(null);
   const [heliusMasked, setHeliusMasked] = useState<string | null>(null);
   const [skills, setSkills] = useState<OwnedSkill[]>([]);
+  // Whether a DAS-capable RPC is configured. The public default RPC can't serve
+  // getAssetsByOwner, so owned skills come back empty there — the panel uses this to
+  // tell "you have no skills" apart from "set a Helius key to read your skills".
+  const [dasReady, setDasReady] = useState(true);
   useEffect(() => {
     void getStorageInfo().then((info) => setCloud(info ?? null));
     void maskedHeliusKey().then(setHeliusMasked);
+    void hasDasRpc().then(setDasReady);
     // owned-skills needs a DAS RPC; best-effort, leave empty on failure.
     void ownedSkills(address).then(setSkills).catch(() => setSkills([]));
   }, [address]);
@@ -376,6 +382,7 @@ export function Chat({
   function setHelius(raw: string) {
     void saveHeliusKey(raw).then(async () => {
       setHeliusMasked(await maskedHeliusKey());
+      setDasReady(await hasDasRpc());
       void ownedSkills(address).then(setSkills).catch(() => {});
       setNotice(raw.trim() ? "helius key saved" : "helius key cleared — using default rpc");
     });
@@ -732,6 +739,7 @@ export function Chat({
           engine={chat.cli}
           heliusMasked={heliusMasked}
           skills={skills}
+          dasReady={dasReady}
           active={panelActive}
           onEdit={editPanelField}
           onSetHelius={setHelius}

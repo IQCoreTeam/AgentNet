@@ -9,6 +9,16 @@ import { colors, glyph } from "../theme.js";
 export type PanelField = "wallet" | "cloud" | "engine" | "github" | "helius";
 const SETTINGS: PanelField[] = ["wallet", "cloud", "engine", "github", "helius"];
 
+// Where to get a (free) Helius key — shown when the user opens the key editor.
+const HELIUS_QUICKSTART = "https://www.helius.dev/docs/quickstart";
+
+// A clickable terminal hyperlink (OSC 8). Modern terminals (iTerm2, VS Code,
+// kitty, …) render `label` underlined and open `url` on ⌘/Ctrl-click; the rest
+// just show the label, so we keep the raw URL visible separately as a fallback.
+function link(label: string, url: string): string {
+  return `\x1b]8;;${url}\x07${label}\x1b]8;;\x07`;
+}
+
 export interface OwnedSkill {
   id: string;
   name: string;
@@ -55,6 +65,7 @@ export function WelcomePanel({
   engine,
   heliusMasked,
   skills,
+  dasReady,
   active,
   onEdit,
   onSetHelius,
@@ -70,6 +81,9 @@ export function WelcomePanel({
   heliusMasked: string | null;
   // the wallet's owned skills (hydrated id+name); empty until fetched / if none.
   skills: OwnedSkill[];
+  // hasDasRpc(): false on the public default RPC, which can't read owned skills.
+  // Lets the empty state say "set a Helius key" instead of a misleading "none yet".
+  dasReady: boolean;
   // when true, the panel has focus and owns tab/arrow/enter (entered via Ctrl+S in Chat).
   active: boolean;
   onEdit: (field: PanelField) => void;
@@ -169,16 +183,25 @@ export function WelcomePanel({
             focused={active && focus === 4}
           />
         )}
-        <Box marginTop={1}>
-          <Text dimColor>
-            {glyph.sparkle}{" "}
-            {keyInput !== null
-              ? "paste Helius key/URL · [enter] save · [esc] cancel"
-              : active
-                ? "[tab] move · [enter] edit · [esc] chat"
-                : "[ctrl+s] settings"}
-          </Text>
-        </Box>
+        {keyInput !== null ? (
+          // key-entry mode: walk the user through getting a key + where it goes.
+          <Box flexDirection="column" marginTop={1}>
+            <Text dimColor>
+              1. get a free key at{" "}
+              <Text color={colors.iqCyan}>{link(HELIUS_QUICKSTART, HELIUS_QUICKSTART)}</Text>
+            </Text>
+            <Text dimColor> (⌘/ctrl-click the link, then copy your API key)</Text>
+            <Text dimColor>2. paste it on the line above — the key or the full RPC URL</Text>
+            <Text dimColor>3. [enter] save · [esc] cancel · empty = use default rpc</Text>
+          </Box>
+        ) : (
+          <Box marginTop={1}>
+            <Text dimColor>
+              {glyph.sparkle}{" "}
+              {active ? "[tab] move · [enter] edit · [esc] chat" : "[ctrl+s] settings"}
+            </Text>
+          </Box>
+        )}
       </Box>
 
       {/* my skills (right) */}
@@ -187,7 +210,15 @@ export function WelcomePanel({
           <Text bold color={colors.iqViolet}>my skills{skills.length ? ` (${skills.length})` : ""}</Text>
         </Box>
         {skills.length === 0 ? (
-          <Text dimColor>none yet</Text>
+          dasReady ? (
+            <Text dimColor>none yet</Text>
+          ) : (
+            // public default RPC can't read owned skills — point the user at the key row.
+            <Box flexDirection="column">
+              <Text color={colors.iqViolet}>set a Helius key to see your skills</Text>
+              <Text dimColor>the default RPC can't read NFTs · edit the helius row</Text>
+            </Box>
+          )
         ) : (
           skills.map((s, i) => {
             const idx = skillStart + i;
