@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@iqlabs-official/agent-sdk": "workspace:*",
+    "@solana/web3.js": "^1.98.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {

@@ -92,12 +92,14 @@ export type ClientMessage =
   | { type: "googleAuthCode"; code: string }
   | { type: "cancelGoogleLogin" }
   | { type: "setGoogleCredentials"; clientId: string; clientSecret: string }
+  | { type: "signTransactionResponse"; id: string; transaction: number[]; isVersioned: boolean }
   | { type: "toast"; text: string };
 
 // ── server → UI (SSE /events) ──
 
 export type ServerMessage =
   | { type: "clear" }
+  | { type: "signTransactionRequest"; id: string; transaction: number[]; isVersioned: boolean }
   | { type: "message"; msg: ChatMessage }
   | { type: "turnEnd" }
   | { type: "page"; hasMore: boolean; cursor: number }

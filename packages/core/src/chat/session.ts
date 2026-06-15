@@ -38,6 +38,7 @@ export interface ChatEnv {
   connectCloud?(cfg: { kind: string; location?: string; authHeader?: string }): Promise<void>;
   disconnectCloud?(): Promise<void>;
   disconnectWallet?(): Promise<void>;
+  logoutFull?(): Promise<void>;
   openCloud?(kind: string, location?: string): Promise<void>;
   walletAddress(): string | null; // for the "My Wallet" view
   storageInfo(): Promise<{ info: unknown; options: unknown }>; // header storage pill
@@ -291,6 +292,7 @@ export function createChatSession(
       case "connectCloud":    await env.connectCloud?.({ kind: m.kind, location: m.location, authHeader: m.authHeader }); await pushStorage(); await pushSessions(); break;
       case "disconnectCloud": await env.disconnectCloud?.(); await pushStorage(); await pushSessions(); break;
       case "disconnectWallet": await env.disconnectWallet?.(); break;
+      case "logoutFull":       await env.logoutFull?.(); break;
       case "openCloud":       await env.openCloud?.(m.kind, m.location); break;
       case "wallet":          transport.send({ type: "wallet", address: env.walletAddress() }); break;
       // ── marketplace: search → buy → install (delegated to the host) ──

@@ -10,7 +10,7 @@
     "./*.js": "./src/*.ts"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup src/index.ts",
     "test": "vitest run",
     "test:run": "tsx test/test-runtime.ts",
     "test:memory": "tsx test/test-memory.ts",

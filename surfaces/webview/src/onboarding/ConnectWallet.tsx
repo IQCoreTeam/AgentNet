@@ -45,6 +45,7 @@ function detectWallets(): { name: string; provider: SolanaProvider }[] {
 export function ConnectWallet() {
   const { send } = useStore();
   const [busy, setBusy] = useState<string | null>(null);
+  const [qrUri, setQrUri] = useState<string | null>(null);
   const wallets = useMemo(detectWallets, []);
   // Inside the Android shell there are no injected providers — the native MWA bridge is
   // the only path. Detect it once and, if present, show a single native connect button.
@@ -82,6 +83,82 @@ export function ConnectWallet() {
     }
   }
 
+  async function connectViaQR() {
+    setBusy("QR");
+    try {
+      const SignClient = (await import("@walletconnect/sign-client")).default;
+      const bs58 = (await import("bs58")).default;
+
+      const client = await SignClient.init({
+        projectId: "3fcc6b14d1b7473db311d1bfab721c0b", // standard public project ID
+        metadata: {
+          name: "AgentNet",
+          description: "AgentNet Web Wallet Connection",
+          url: window.location.origin,
+          icons: [window.location.origin + "/favicon.ico"],
+        },
+      });
+
+      const { uri, approval } = await client.connect({
+        requiredNamespaces: {
+          solana: {
+            chains: ["solana:5ey2ja1KstPwMQRx7EokG2dfJksAGGPA"],
+            methods: ["solana_signMessage", "solana_signTransaction"],
+            events: [],
+          },
+        },
+      });
+
+      if (uri) {
+        setQrUri(uri);
+      }
+
+      const session = await approval();
+      const accounts = session.namespaces.solana.accounts;
+      const address = accounts[0].split(":")[2];
+
+      const msgBytes = new TextEncoder().encode(SESSION_KEY_MESSAGE);
+      const response = await client.request<string | { signature: string }>({
+        topic: session.topic,
+        chainId: "solana:5ey2ja1KstPwMQRx7EokG2dfJksAGGPA",
+        request: {
+          method: "solana_signMessage",
+          params: {
+            message: bs58.encode(msgBytes),
+            pubkey: address,
+          },
+        },
+      });
+
+      const signatureBytes = typeof response === "string" ? bs58.decode(response) : bs58.decode(response.signature);
+
+      send({ type: "connectWallet", address, signature: Array.from(signatureBytes) });
+    } catch (err) {
+      console.error(err);
+      send({ type: "toast", text: "Wallet connection failed or cancelled." });
+      setQrUri(null);
+      setBusy(null);
+    }
+  }
+
+  if (qrUri) {
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrUri)}`;
+    return (
+      <OnboardingShell
+        title="Scan QR to login"
+        subtitle="Scan this QR code with Phantom or Solflare on your phone to connect."
+      >
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", marginTop: "16px" }}>
+          <img src={qrCodeUrl} alt="WalletConnect QR Code" style={{ padding: "10px", background: "white", borderRadius: "8px", width: "200px", height: "200px" }} />
+          <p style={{ fontSize: "0.85em", opacity: 0.7, textAlign: "center" }}>Waiting for approval on your phone...</p>
+          <OnboardingButton onClick={() => { setQrUri(null); setBusy(null); }}>
+            Cancel
+          </OnboardingButton>
+        </div>
+      </OnboardingShell>
+    );
+  }
+
   return (
     <OnboardingShell
       title="Connect your wallet"
@@ -93,19 +170,35 @@ export function ConnectWallet() {
           {busy ? "Connecting…" : "Connect Wallet"}
         </OnboardingButton>
       ) : wallets.length === 0 ? (
-        <p className="text-center text-sm text-zinc-500">
-          No Solana wallet detected. Install Phantom, Solflare, or Backpack and reload.
-        </p>
-      ) : (
-        wallets.map(({ name, provider }) => (
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>
+          <p className="text-center text-sm text-zinc-500" style={{ marginBottom: "12px" }}>
+            No Solana wallet detected. Install Phantom, Solflare, or Backpack and reload.
+          </p>
           <OnboardingButton
-            key={name}
             disabled={busy !== null}
-            onClick={() => connectWith(name, provider)}
+            onClick={connectViaQR}
           >
-            {busy === name ? `Connecting ${name}…` : `Connect ${name}`}
+            {busy === "QR" ? "Connecting via QR…" : "QR to login (Phone)"}
           </OnboardingButton>
-        ))
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>
+          {wallets.map(({ name, provider }) => (
+            <OnboardingButton
+              key={name}
+              disabled={busy !== null}
+              onClick={() => connectWith(name, provider)}
+            >
+              {busy === name ? `Connecting ${name}…` : `Connect ${name}`}
+            </OnboardingButton>
+          ))}
+          <OnboardingButton
+            disabled={busy !== null}
+            onClick={connectViaQR}
+          >
+            {busy === "QR" ? "Connecting via QR…" : "QR to login (Phone)"}
+          </OnboardingButton>
+        </div>
       )}
     </OnboardingShell>
   );

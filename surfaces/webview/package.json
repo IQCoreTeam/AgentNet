@@ -10,6 +10,9 @@
   },
   "dependencies": {
     "@iqlabs-official/agent-sdk": "workspace:*",
+    "@solana/web3.js": "^1.98.0",
+    "@walletconnect/sign-client": "^2.13.0",
+    "bs58": "^4.0.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

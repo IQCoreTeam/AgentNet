@@ -34,7 +34,12 @@ export function pubkeyToAddress(pubkey: Uint8Array): string {
 
 // address: base58 from the connected wallet (provider.publicKey.toString()).
 // sessionKeySig: the wallet's signature over SESSION_KEY_MESSAGE's bytes.
-export function webWallet(address: string, sessionKeySig: Uint8Array): Wallet {
+export function webWallet(
+  address: string,
+  sessionKeySig: Uint8Array,
+  signTransaction?: <T extends Transaction | VersionedTransaction>(tx: T) => Promise<T>,
+  signAllTransactions?: <T extends Transaction | VersionedTransaction>(txs: T[]) => Promise<T[]>,
+): Wallet {
   const expected = new TextEncoder().encode(SESSION_KEY_MESSAGE);
   const sameBytes = (a: Uint8Array, b: Uint8Array) =>
     a.length === b.length && a.every((v, i) => v === b[i]);
@@ -50,10 +55,19 @@ export function webWallet(address: string, sessionKeySig: Uint8Array): Wallet {
       }
       return sessionKeySig;
     },
-    async signTransaction<T extends Transaction | VersionedTransaction>(_tx: T): Promise<T> {
+    async signTransaction<T extends Transaction | VersionedTransaction>(tx: T): Promise<T> {
+      if (signTransaction) return signTransaction(tx);
       throw new Error("on-chain signing not wired through the web wallet yet (Track 2).");
     },
-    async signAllTransactions<T extends Transaction | VersionedTransaction>(_txs: T[]): Promise<T[]> {
+    async signAllTransactions<T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> {
+      if (signAllTransactions) return signAllTransactions(txs);
+      if (signTransaction) {
+        const results: T[] = [];
+        for (const tx of txs) {
+          results.push(await signTransaction(tx));
+        }
+        return results;
+      }
       throw new Error("on-chain signing not wired through the web wallet yet (Track 2).");
     },
   };

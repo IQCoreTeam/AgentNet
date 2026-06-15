@@ -10,7 +10,10 @@
 // live separately (oauth.ts → tokens/google.json). Our server stores nothing.
 
 import { readFile, writeFile, rm } from "node:fs/promises";
-import { configFile, tokenFile, rootDir, ensureDir } from "../core/paths.js";
+import { join } from "node:path";
+import { configFile, tokenFile, rootDir, ensureDir, sessionsDir } from "../core/paths.js";
+import { deleteCodexApiKey } from "./codexAuth.js";
+import type { KeyPolicy, KeyVault } from "./keyPolicy.js";
 import { buildStorage, type StorageConfig, type StorageKind } from "./storage/adapter.js";
 import { manualStorage, migrateLocalSessions } from "./storage/manual.js";
 import { mirrorStorage, type CloudStatus } from "./storage/mirror.js";
@@ -173,8 +176,40 @@ export async function disconnectCloud(): Promise<void> {
   }
 }
 
-/** @deprecated use disconnectCloud — kept for callers still importing logout. */
-export const logout = disconnectCloud;
+/** "soft": drop in-memory state + cloud binding (default). "full": soft + wipe this wallet's local data. */
+export type LogoutPolicy = "soft" | "full";
+
+/**
+ * Unified logout. Soft = forget cloud binding + in-memory session key. Full = soft +
+ * delete this wallet's local session logs and cached Codex API key.
+ *
+ * Always KEEP: keypair file, installed skills, claude/codex own home dirs, cli-map.
+ * Pass `address` when policy is "full" (the wallet's base58 address).
+ * Pass `keyPolicy` to also clear its cached session key (and vault if address is provided).
+ */
+export async function logout(opts: {
+  policy?: LogoutPolicy;
+  address?: string;
+  keyPolicy?: KeyPolicy;
+} = {}): Promise<void> {
+  const { policy = "soft", address, keyPolicy } = opts;
+
+  await disconnectCloud();
+
+  if (policy === "full") {
+    if (keyPolicy) {
+      await keyPolicy.clear(address);
+    }
+    if (address) {
+      await rm(join(sessionsDir(), address), { recursive: true, force: true });
+    }
+    await deleteCodexApiKey();
+  } else {
+    if (keyPolicy) {
+      await keyPolicy.clear();
+    }
+  }
+}
 
 /** Save Google OAuth app credentials without touching the storage kind. */
 export async function saveGoogleCreds(clientId: string, clientSecret: string): Promise<void> {

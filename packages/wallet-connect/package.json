@@ -1,0 +1,29 @@
+{
+  "name": "@iqlabs-official/wallet-connect",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts",
+    "./*.js": "./src/*.ts"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts"
+  },
+  "dependencies": {
+    "@walletconnect/sign-client": "^2.13.0",
+    "@walletconnect/utils": "^2.13.0",
+    "qrcode": "^1.5.3",
+    "bs58": "^4.0.1"
+  },
+  "devDependencies": {
+    "@iqlabs-official/agent-sdk": "workspace:*",
+    "@solana/web3.js": "^1.98.0",
+    "@types/node": "^20.0.0",
+    "@types/qrcode": "^1.5.5",
+    "tsup": "^8.0.0",
+    "typescript": "^5.6.0"
+  }
+}

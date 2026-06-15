@@ -19,7 +19,7 @@ import {
   marketplaceEnv,
 } from "@iqlabs-official/agent-sdk";
 import { Select } from "@inkjs/ui";
-import { chooseStorage } from "../bootstrap.js";
+import { chooseStorage, doLogout } from "../bootstrap.js";
 import { copyToClipboard } from "../clipboard.js";
 import { Message } from "../components/Message.js";
 import { StatusLine } from "../components/StatusLine.js";
@@ -439,6 +439,14 @@ export function Chat({
         setNotice(pick(copy.signoffs));
         setTimeout(() => exit(), 350);
         return;
+      case "logout":
+        void (async () => {
+          const policy = arg === "full" ? "full" : "soft";
+          setNotice(policy === "full" ? "logging out (full wipe)…" : "logging out…");
+          await doLogout(policy, policy === "full" ? address : undefined);
+          setTimeout(() => exit(), 350);
+        })();
+        return;
       case "new":
         chat.newSession();
         setPanelFocused(false); // empty session again → panel shows, focus back on composer
@@ -568,7 +576,7 @@ export function Chat({
         startBtwQuery(arg.trim());
         return;
       case "help":
-        setNotice("/new /sessions /resume /more /compact /clear /copy /models /engine /effort /account /settings /wallet /storage /btw <question> /iq /quit · !cmd shell · Esc cancels · Ctrl+A/E/W/U edit");
+        setNotice("/new /sessions /resume /more /compact /clear /copy /models /engine /effort /account /settings /wallet /storage /btw <question> /iq /logout [full] /quit · !cmd shell · Esc cancels · Ctrl+A/E/W/U edit");
         return;
       default:
         setNotice(`unknown command: /${cmd} — try /help`);

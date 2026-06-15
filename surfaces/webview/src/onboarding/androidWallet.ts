@@ -38,14 +38,14 @@ export function isAndroidWallet(): boolean {
 }
 
 // id -> resolver for in-flight requests. The dispatcher is installed once.
-const pending = new Map<string, { resolve: (v: { address: string; signature: number[] }) => void; reject: (e: Error) => void }>();
+const pending = new Map<string, { resolve: (v: any) => void; reject: (e: Error) => void }>();
 let installed = false;
 
 function ensureDispatcher() {
   if (installed) return;
   installed = true;
   window.__onWalletResult = (resultJson: string) => {
-    let r: WalletResult;
+    let r: any;
     try {
       r = JSON.parse(resultJson);
     } catch {
@@ -54,16 +54,22 @@ function ensureDispatcher() {
     const entry = pending.get(r.id);
     if (!entry) return;
     pending.delete(r.id);
-    if (r.ok && r.pubkey && r.signature) {
-      try {
-        const address = pubkeyToAddress(Uint8Array.from(r.pubkey));
-        entry.resolve({ address, signature: r.signature });
-      } catch (e) {
-        entry.reject(e instanceof Error ? e : new Error(String(e)));
+    if (r.ok) {
+      if (r.pubkey && r.signature) {
+        try {
+          const address = pubkeyToAddress(Uint8Array.from(r.pubkey));
+          entry.resolve({ address, signature: r.signature });
+        } catch (e) {
+          entry.reject(e instanceof Error ? e : new Error(String(e)));
+        }
+      } else if (r.transaction) {
+        entry.resolve(Uint8Array.from(r.transaction));
+      } else {
+        entry.reject(new Error("Malformed wallet response."));
       }
     } else {
       const err = new Error(r.error || "Wallet request failed.");
-      (err as Error & { reason?: string }).reason = r.reason;
+      (err as any).reason = r.reason;
       entry.reject(err);
     }
   };
@@ -90,5 +96,27 @@ export function connectAndroidWallet(
       reject: (e) => { clearTimeout(timer); reject(e); },
     });
     bridge.connect(JSON.stringify({ id, message }));
+  });
+}
+
+export function signAndroidTransaction(
+  txBytes: Uint8Array,
+): Promise<Uint8Array> {
+  ensureDispatcher();
+  const bridge = window.AgentNetWallet;
+  if (!bridge || typeof (bridge as any).signTransaction !== "function") {
+    return Promise.reject(new Error("Native wallet transaction signing unavailable."));
+  }
+
+  const id = "tx" + Date.now().toString(36) + Math.random().toString(36).slice(2);
+  return new Promise<Uint8Array>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      if (pending.delete(id)) reject(new Error("Wallet request timed out."));
+    }, 180_000);
+    pending.set(id, {
+      resolve: (bytes) => { clearTimeout(timer); resolve(bytes); },
+      reject: (e) => { clearTimeout(timer); reject(e); },
+    });
+    (bridge as any).signTransaction(JSON.stringify({ id, transaction: Array.from(txBytes) }));
   });
 }

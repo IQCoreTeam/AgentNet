@@ -241,7 +241,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const t = new Transport();
     transportRef.current = t;
-    const off = t.onEvent((msg) => raw(msg));
+    const off = t.onEvent((msg) => {
+      if (msg.type === "signTransactionRequest") {
+        void (async () => {
+          try {
+            const bytes = new Uint8Array(msg.transaction);
+            let signedBytes: Uint8Array;
+            if (typeof (window as any).AgentNetWallet?.connect === "function") {
+              const { signAndroidTransaction } = await import("../onboarding/androidWallet");
+              signedBytes = await signAndroidTransaction(bytes);
+            } else {
+              const w = window as any;
+              const provider = w.phantom?.solana || w.solflare || w.backpack || w.okxwallet?.solana || w.solana;
+              if (!provider || typeof provider.signTransaction !== "function") {
+                throw new Error("No active provider with signTransaction support found.");
+              }
+              const { Transaction, VersionedTransaction } = await import("@solana/web3.js");
+              const tx = msg.isVersioned ? VersionedTransaction.deserialize(bytes) : Transaction.from(bytes);
+              const signedTx = await provider.signTransaction(tx);
+              signedBytes = signedTx.serialize({ requireAllSignatures: false, verifySignatures: false });
+            }
+            void t.post({
+              type: "signTransactionResponse",
+              id: msg.id,
+              transaction: Array.from(signedBytes),
+              isVersioned: msg.isVersioned
+            });
+          } catch (err) {
+            console.error("Failed to sign transaction:", err);
+          }
+        })();
+        return;
+      }
+      raw(msg);
+    });
     t.open();
     void t.post({ type: "ready" });
     return () => {

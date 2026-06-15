@@ -26,7 +26,7 @@ export interface KeyPolicy {
   // an ephemeral key is already dropped without calling this. clear() is the explicit
   // path for when a surface keeps one store across logins (e.g. the persisted toggle
   // wiping the in-memory copy while the vault entry stays) — wired when that lands.
-  clear(): void;
+  clear(address?: string): Promise<void> | void;
 }
 
 // Memory-only: derive once per process, cache, drop on clear(). Current behavior,
@@ -69,8 +69,11 @@ export function persistedKey(vault: KeyVault): KeyPolicy {
       }
       return key;
     },
-    clear() {
+    async clear(address?: string) {
       key = undefined;
+      if (address) {
+        await vault.remove(address);
+      }
     },
   };
 }

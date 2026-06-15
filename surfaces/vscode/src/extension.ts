@@ -13,6 +13,7 @@ import {
   getStorageInfo,
   switchStorage,
   disconnectCloud,
+  logout,
   agentnetFolderLink,
   STORAGE_OPTIONS,
   createChatSession,
@@ -49,12 +50,25 @@ function cloudStatusCb(s: { ok: boolean; error?: string }) {
 export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand("agentnet.openChat", () => boot(context)),
-    // open ANOTHER chat panel (a new tab). VSCode handles the tab/split/drag; each
-    // panel is an independent chat sharing the one wallet+runtime. Needs the runtime
-    // ready (onboarded) — otherwise route through boot so onboarding runs first.
     vscode.commands.registerCommand("agentnet.newChat", () => {
       if (runtime) openChat(context, vscode.ViewColumn.Beside);
       else boot(context);
+    }),
+    // Full wipe: also deletes this wallet's local session logs + Codex API key.
+    vscode.commands.registerCommand("agentnet.fullLogout", async () => {
+      const confirm = await vscode.window.showWarningMessage(
+        "This will delete all local session logs for this wallet and your Codex API key. Continue?",
+        { modal: true },
+        "Delete",
+      );
+      if (confirm !== "Delete") return;
+      const addr = wallet?.address;
+      await logout({ policy: "full", address: addr });
+      await context.globalState.update("onboarded", false);
+      wallet = null;
+      runtime = null;
+      closeAllChatPanels();
+      openOnboarding(context);
     }),
   );
   boot(context);
@@ -119,6 +133,39 @@ function openOnboarding(context: vscode.ExtensionContext) {
         } catch (e) {
           vscode.window.showErrorMessage(
             "Couldn't use that keypair: " + (e instanceof Error ? e.message : String(e)),
+          );
+        }
+        break;
+      }
+      case "startQrLogin": {
+        try {
+          const { wcTransport, generateQrDataUri } = await import("@iqlabs-official/wallet-connect");
+          const { remoteWallet } = await import("@iqlabs-official/agent-sdk");
+
+          const projectId = process.env.REOWN_PROJECT_ID || "3fcc6b14d1b7473db311d1bfab721c0b";
+          const transport = wcTransport({ projectId });
+          const { uri, approved } = await transport.connect();
+
+          const qrImage = await generateQrDataUri(uri);
+          panel.webview.postMessage({ type: 'showQr', qrImage });
+
+          const { address } = await approved;
+
+          const SESSION_KEY_MESSAGE = "iq-sdk-derive-encryption-key-v1";
+          const msgBytes = new TextEncoder().encode(SESSION_KEY_MESSAGE);
+
+          const w = remoteWallet(transport, address);
+          await w.signMessage(msgBytes); // derive/pre-sign
+
+          wallet = w;
+          panel.webview.postMessage({
+            type: "walletConnected",
+            address,
+            storageOptions: STORAGE_OPTIONS,
+          });
+        } catch (e) {
+          vscode.window.showErrorMessage(
+            "WalletConnect login failed: " + (e instanceof Error ? e.message : String(e)),
           );
         }
         break;
@@ -259,17 +306,18 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
         openExternal(location);
       }
     },
-    // Disconnect the wallet entirely: drop the cloud, forget onboarding, go back to
-    // onboarding. Local session files stay on disk. The runtime (tied to this wallet)
-    // goes away, so EVERY open chat tab must close — otherwise stragglers point at a
-    // now-null runtime / stale wallet.
+    // Soft disconnect: drop cloud binding + in-memory state, back to onboarding.
+    // Local session files stay on disk. Full wipe available via the "agentnet.fullLogout"
+    // command registered in activate() below.
     disconnectWallet: async () => {
-      await disconnectCloud();
+      const addr = wallet?.address;
+      await logout({ policy: "soft" });
       await context.globalState.update("onboarded", false);
       wallet = null;
       runtime = null;
       closeAllChatPanels();
       openOnboarding(context);
+      void addr; // captured for future full-wipe command
     },
   });
 

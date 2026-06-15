@@ -7,9 +7,10 @@ import {
   initialize,
   isInitialized,
   detectCli,
+  logout,
   type CliReport,
 } from "@iqlabs-official/agent-sdk";
-import type { StorageConfig } from "@iqlabs-official/agent-sdk";
+import type { StorageConfig, LogoutPolicy } from "@iqlabs-official/agent-sdk";
 import { localWallet, solanaDefaultKeypairPath } from "@iqlabs-official/agent-sdk/account/localWallet";
 import type { AgentRuntime, Wallet } from "@iqlabs-official/agent-sdk/runtime/contract";
 import type { ApprovalChannel } from "@iqlabs-official/agent-sdk/runtime/approval/channel";
@@ -44,4 +45,8 @@ export function buildRuntime(
 // which we open with the `open` package (the surface-injected openBrowser callback).
 export async function chooseStorage(cfg: StorageConfig): Promise<void> {
   await initialize(cfg, (url) => void open(url));
+}
+
+export async function doLogout(policy: LogoutPolicy = "soft", address?: string): Promise<void> {
+  await logout({ policy, address });
 }

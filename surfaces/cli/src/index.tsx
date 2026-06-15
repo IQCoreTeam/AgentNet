@@ -65,4 +65,20 @@ program
     console.log(`codex:  ${r.codex}`);
   });
 
+program
+  .command("logout")
+  .description("logout from AgentNet")
+  .option("--full", "perform a full wipe (deletes sessions, codex key, vault)")
+  .option("--address <address>", "wallet address to wipe (required for --full)")
+  .action(async (cmdOpts) => {
+    const { logout } = await import("@iqlabs-official/agent-sdk");
+    const { savePrefs } = await import("./prefs.js");
+    const policy = cmdOpts.full ? "full" : "soft";
+    
+    await logout({ policy, address: cmdOpts.address });
+    await savePrefs({ onboarded: false });
+    
+    console.log(`Logged out successfully (${policy} policy).`);
+  });
+
 program.parse();
