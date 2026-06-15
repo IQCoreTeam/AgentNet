@@ -96,6 +96,10 @@ export interface SessionHandle {
   // real context-window occupancy (tokens) reported by the engine each turn. Optional
   // for the UI to use (e.g. a context-left meter); surfaces may ignore it.
   onUsage(cb: (contextTokens: number) => void): void;
+  // interrupt the CURRENT turn but keep the session alive (claude q.interrupt / codex
+  // turn/interrupt) — the next send continues the same conversation. Distinct from
+  // stop(), which tears the whole handle down.
+  interrupt(): void;
   stop(): void;
 }
 

@@ -206,6 +206,9 @@ export function createRuntime(
         onUsage(cb) {
           usageCbs.push(cb);
         },
+        interrupt() {
+          cli.interrupt(); // stop the current turn; the session stays open for the next send
+        },
         stop() {
           stopped = true; // mark so the resulting exit isn't reported as a failure
           cli.stop();

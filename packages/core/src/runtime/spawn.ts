@@ -63,6 +63,7 @@ export interface Engine {
   onSkill(cb: (name: string) => void): void;
   onUsage(cb: (contextTokens: number) => void): void; // real context occupancy per turn
   send(text: string, images?: ImageInput[]): void;
+  interrupt(): void; // stop the current turn, keep the session alive
   stop(): void;
 }
 
@@ -248,14 +249,9 @@ function claudeEngine(opts: SpawnOpts): Engine {
   // canUseTool: claude calls this BEFORE each tool; we translate to a neutral
   // ApprovalRequest, await the channel, and map the decision back to the SDK shape.
   const canUseTool = async (toolName: string, input: Record<string, unknown>) => {
-    // A "Skill" tool call = the model is invoking an installed SKILL.md (issue #17).
-    // Surface it as a transient activity signal ("Casting <skill>") — separate from the
-    // approval/transcript flow, fire-and-forget. The skill name is the tool's argument.
-    // Fire BEFORE any gate so the cue shows even when the call is auto-allowed/cached.
-    if (toolName === "Skill") {
-      const n = (input.command ?? input.name ?? input.skill) as string | undefined;
-      if (n) cb.emitSkill(String(n));
-    }
+    // NOTE: the "Skill" tool → "Casting <skill>" cue is emitted from the OUTPUT stream
+    // (see firedSkillIds above), not here — canUseTool is skipped when a tool is
+    // auto-allowed under acceptEdits/bypassPermissions, which would drop the cue.
     if (opts.ephemeral) {
       return { behavior: "deny" as const, message: "Tool use is disabled for side-channel (/btw) queries." };
     }
@@ -326,10 +322,26 @@ function claudeEngine(opts: SpawnOpts): Engine {
   // drive the output generator; map each SDKMessage → ChatMessages. Partial assistant
   // deltas are ACCUMULATED here into a running snapshot so the surface always receives
   // "full text so far" (replace-semantics) — matching codex's item.updated snapshots.
+  const firedSkillIds = new Set<string>();
   (async () => {
     let streamBuf = "";
     try {
       for await (const m of q) {
+        // A skill firing surfaces as a `Skill` tool_use in the assistant stream. Detect it
+        // HERE (not only in canUseTool, which is bypassed when the tool is auto-allowed under
+        // acceptEdits/bypassPermissions) so the "Casting <skill>" cue fires whenever the agent
+        // actually uses a skill. Deduped by the tool_use id.
+        const am = m as any;
+        if (am?.type === "assistant" && Array.isArray(am.message?.content)) {
+          for (const b of am.message.content) {
+            if (b?.type === "tool_use" && b.name === "Skill" && b.id && !firedSkillIds.has(b.id)) {
+              firedSkillIds.add(b.id);
+              const inp = b.input || {};
+              const n = inp.command ?? inp.name ?? inp.skill;
+              if (n) cb.emitSkill(String(n));
+            }
+          }
+        }
         const r = mapClaudeMessage(m);
         if (r.sessionId && !sessionId) { sessionId = r.sessionId; cb.emitSid(r.sessionId); }
         for (const cm of r.messages) {
@@ -358,6 +370,9 @@ function claudeEngine(opts: SpawnOpts): Engine {
     onSkill: (c) => cb.skill.push(c),
     onUsage: (c) => cb.use.push(c),
     send: (t, images) => push(t, images),
+    // interrupt the running turn WITHOUT closing the query — prompts() keeps waiting, so
+    // the next send resumes the same session. (stop() also sets closed=true to end it.)
+    interrupt: () => { void q.interrupt?.().catch(() => {}); },
     stop: () => { closed = true; wake?.(); void q.interrupt?.().catch(() => {}); },
   };
 }
@@ -427,6 +442,7 @@ function codexEngine(opts: SpawnOpts): Engine {
   let streamBuf = "";
   let thinkingBuf = "";
   let running = false;
+  let currentTurnId: string | null = null; // the in-flight turn (for turn/interrupt)
   let pendingImgCleanup: (() => void) | null = null; // unlink this turn's temp images on end
 
   rl.on("line", (line) => {
@@ -458,6 +474,8 @@ function codexEngine(opts: SpawnOpts): Engine {
     if (msg.method === "thread/started" && params?.threadId) {
       sessionId = params.threadId;
       cb.emitSid(params.threadId);
+    } else if (msg.method === "turn/started" && params?.turn?.id) {
+      currentTurnId = params.turn.id; // remember so interrupt() can target THIS turn
     } else if (msg.method === "item/agentMessage/delta" && params?.delta) {
       streamBuf += params.delta;
       cb.emitMsg({ role: "assistant", text: streamBuf, ts: Date.now(), partial: true });
@@ -526,12 +544,14 @@ function codexEngine(opts: SpawnOpts): Engine {
       }
       cb.emitTurn();
       running = false;
+      currentTurnId = null;
       pendingImgCleanup?.(); pendingImgCleanup = null;
     } else if (msg.method === "turn/failed" || msg.method === "error") {
       const err = params?.error?.message || params?.message || "Turn failed";
       cb.emitErr(`[codex] ${err}`);
       cb.emitTurn();
       running = false;
+      currentTurnId = null;
       pendingImgCleanup?.(); pendingImgCleanup = null;
     }
   }
@@ -738,6 +758,7 @@ function codexEngine(opts: SpawnOpts): Engine {
       cb.emitErr(`[codex engine] ${e instanceof Error ? e.message : String(e)}`);
       cb.emitTurn();
       running = false;
+      currentTurnId = null;
       pendingImgCleanup?.(); pendingImgCleanup = null;
     }
   };
@@ -753,6 +774,13 @@ function codexEngine(opts: SpawnOpts): Engine {
     onUsage: (c) => cb.use.push(c),
     send: (t, images) => {
       void initPromise.then(() => runTurn(t, images));
+    },
+    // ask the server to abort the in-flight turn (keeps the thread alive). The resulting
+    // turn/completed|failed unblocks the UI and clears running/turnId as usual.
+    interrupt: () => {
+      if (running && sessionId && currentTurnId) {
+        void sendRequest("turn/interrupt", { threadId: sessionId, turnId: currentTurnId }).catch(() => {});
+      }
     },
     stop: () => {
       pendingImgCleanup?.(); pendingImgCleanup = null;

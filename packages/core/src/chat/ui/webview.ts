@@ -189,6 +189,19 @@ export function chatHtml(): string {
   .wmItem.disabled { opacity: 0.4; cursor: default; }
   .wmItem .soon { margin-left: auto; font-size: 0.72em; opacity: 0.6; border: 1px solid var(--an-line);
                   border-radius: 999px; padding: 0 7px; }
+  /* caret sits at the right edge; when the count badge is shown it already grabs the
+     space (margin-left:auto), so the caret just trails it with a small gap. */
+  .wmItem .wmCaret { margin-left: auto; font-size: 0.7em; opacity: 0.5; transition: transform 0.12s; }
+  .wmItem .soon:not([style*="none"]) + .wmCaret { margin-left: 6px; }
+  .wmItem.open .wmCaret { transform: rotate(90deg); }
+  /* inline owned-skill list inside the wallet dropdown: scrollable, no buy/nav */
+  #walletSkillList { max-height: 184px; overflow-y: auto; margin: 2px 4px 4px; padding: 2px;
+                     display: flex; flex-direction: column; gap: 3px; }
+  #walletSkillList .wskRow { display: flex; align-items: center; gap: 8px; padding: 7px 9px;
+                     border-radius: var(--an-radius-sm); background: var(--an-bg-1);
+                     border: 1px solid var(--an-green-line); font-size: 0.86em; }
+  #walletSkillList .wskRow .wand { width: 13px; height: 13px; color: var(--an-green); flex: 0 0 auto; }
+  #walletSkillList .wskEmpty { padding: 9px; font-size: 0.82em; opacity: 0.55; text-align: center; }
 
   /* right chat area */
   #main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
@@ -471,7 +484,13 @@ export function chatHtml(): string {
                          font-weight: 600; opacity: 0.85; margin-bottom: 9px; }
   #skillsPanel .skHead .wand { width: 14px; height: 14px; color: var(--an-green); }
   #skillsPanel .skMuted { margin-left: auto; font-weight: 400; opacity: 0.5; font-size: 0.92em; }
-  #skillGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  #skillsClose { margin-left: 8px; width: 20px; height: 20px; padding: 0; line-height: 18px; text-align: center;
+                 font-size: 15px; border-radius: 5px; background: transparent; color: var(--vscode-foreground);
+                 opacity: 0.55; border: 1px solid transparent; cursor: pointer; flex: 0 0 auto; }
+  #skillsClose:hover { opacity: 1; background: var(--an-bg-1); border-color: var(--an-line); }
+  /* owned-skill grid scrolls once it outgrows ~3 rows instead of pushing the chat up */
+  #skillGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+               max-height: 188px; overflow-y: auto; }
   /* a skill slot: an item card. empty = a quiet dashed "coming soon" placeholder. */
   .skSlot { aspect-ratio: 1; border-radius: var(--an-radius-sm); display: flex; align-items: center;
             justify-content: center; }
@@ -524,7 +543,8 @@ export function chatHtml(): string {
   #skillSearch:focus { border-color: var(--an-green-line); }
   #skillSearchBtn { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
                     border-radius: var(--an-radius); padding: 5px 11px; font-size: 0.82em; cursor: pointer; }
-  #skillResults { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  #skillResults { margin-top: 8px; display: flex; flex-direction: column; gap: 6px;
+                  max-height: 240px; overflow-y: auto; }
   .shopItem { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--an-line);
               border-radius: var(--an-radius); font-size: 0.82em; }
   .shopItem .si-main { min-width: 0; flex: 1; }
@@ -689,10 +709,29 @@ export function chatHtml(): string {
                background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
                border: 1px solid var(--an-line); border-radius: var(--an-radius);
                box-shadow: 0 8px 28px rgba(0,0,0,0.4); }
-  #send { margin-left: auto; padding: 6px 16px; background: var(--eng); color: #1a1205; font-weight: 600;
-          border: none; border-radius: 6px; cursor: pointer; }
+  #send { margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+          padding: 7px 15px; color: #1a1205; font-weight: 600; letter-spacing: 0.2px;
+          border: none; border-radius: 9px; cursor: pointer;
+          background: linear-gradient(180deg, color-mix(in srgb, var(--eng) 88%, #fff) 0%, var(--eng) 100%);
+          box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+          transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease; }
   #composer[data-cli="codex"] #send { color: #06231a; }
-  #send:hover { filter: brightness(1.08); }
+  #send:hover { transform: translateY(-1px); filter: brightness(1.05);
+                box-shadow: 0 4px 12px color-mix(in srgb, var(--eng) 40%, transparent); }
+  #send:active { transform: translateY(0); box-shadow: 0 1px 2px rgba(0,0,0,0.25); }
+  #send:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+  #send svg { width: 15px; height: 15px; flex: none; }
+  #send .ic-stop { display: none; }
+  #send.stopping .ic-send { display: none; }
+  #send.stopping .ic-stop { display: inline-block; }
+  /* Stop state (a turn is running): red gradient with a soft pulsing glow */
+  #send.stopping { color: #fff;
+                   background: linear-gradient(180deg, #e5564e 0%, #c8392f 100%);
+                   animation: stopPulse 1.6s ease-in-out infinite; }
+  @keyframes stopPulse {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(229,86,78,0.4), 0 0 9px rgba(229,86,78,0.25); }
+    50%      { box-shadow: 0 0 0 1px rgba(229,86,78,0.65), 0 0 18px rgba(229,86,78,0.5); } }
+  @media (prefers-reduced-motion: reduce) { #send.stopping { animation: none; } }
 
   /* attach (paperclip): a quiet icon button that tints to the engine accent on hover */
   #attachBtn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
@@ -787,10 +826,15 @@ export function chatHtml(): string {
   }
 
   /* ---- wallet balance (dropdown) + market balance chip ---- */
-  .walletBal { margin-top: 3px; font-size: 0.86em; font-weight: 600; color: var(--an-green);
-               display: flex; align-items: center; gap: 5px; }
-  .walletBal::before { content: '◎'; opacity: 0.8; font-weight: 400; } /* SOL glyph */
-  .walletBal.low { color: var(--an-amber); }
+  /* balance block, right-aligned in the wallet header: tiny caption over the SOL amount */
+  .walletBal { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end;
+               gap: 1px; text-align: right; white-space: nowrap; }
+  .walletBal .balLabel { font-size: 0.6em; text-transform: uppercase; letter-spacing: 0.08em;
+                         opacity: 0.45; font-weight: 700; }
+  .walletBal .balAmt { font-size: 0.98em; font-weight: 600; color: var(--an-green);
+                       display: flex; align-items: center; gap: 4px; }
+  .walletBal .balAmt::before { content: '◎'; opacity: 0.8; font-weight: 400; } /* SOL glyph */
+  .walletBal.low .balAmt { color: var(--an-amber); }
   .mktTitleRow { display: flex; align-items: center; gap: 10px; }
   .mktBal { font-size: 0.82em; font-weight: 600; color: var(--an-green); white-space: nowrap;
             padding: 2px 9px; border-radius: 999px; border: 1px solid var(--an-green-line);
@@ -859,7 +903,11 @@ export function chatHtml(): string {
       <div class="grow">
         <div id="wName2">My Wallet</div>
         <div id="wAddr" class="muted">connecting…</div>
-        <div id="wBalance" class="walletBal" style="display:none"></div>
+      </div>
+      <!-- balance pinned to the right of the header: a small caption + the SOL amount -->
+      <div id="wBalance" class="walletBal" style="display:none">
+        <span class="balLabel">balance</span>
+        <span class="balAmt"></span>
       </div>
     </div>
     <!-- storage / Google Drive info, moved here from the top bar -->
@@ -884,7 +932,10 @@ export function chatHtml(): string {
       <div id="rpcHint" class="muted small" style="display:none;margin-top:3px"></div>
     </div>
     <div class="wmItem" id="openWalletPage">Wallet page</div>
-    <div class="wmItem" id="walletSkills"><span class="wand">${WAND_SVG}</span> Skills <span class="soon" id="walletSkillCount" style="display:none"></span></div>
+    <div class="wmItem" id="walletSkills"><span class="wand">${WAND_SVG}</span> Skills <span class="soon" id="walletSkillCount" style="display:none"></span><span class="wmCaret" id="walletSkillCaret">▸</span></div>
+    <!-- inline, scrollable list of the skills THIS wallet owns. No buy / no navigation —
+         purchases happen in the Markets tab. Just "what do I own", scroll through it. -->
+    <div id="walletSkillList" style="display:none"></div>
   </div>
 
   <div id="wrap">
@@ -904,6 +955,7 @@ export function chatHtml(): string {
           <span class="wand">${WAND_SVG}</span>
           <span>Equipped skills</span>
           <span class="skMuted" id="skillStatus">none active</span>
+          <button id="skillsClose" title="Close">×</button>
         </div>
         <div id="skillGrid">
           <!-- coming-soon grey slots (no lie: nothing equipped yet) -->
@@ -964,7 +1016,7 @@ export function chatHtml(): string {
               </button>
               <div id="modeMenu" style="display:none"></div>
             </span>
-            <button id="send">Send</button>
+            <button id="send"><svg class="ic-send" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.4 20.4l17.45-7.48a1 1 0 0 0 0-1.84L3.4 3.6a.993.993 0 0 0-1.39.91L2 9.12c0 .5.37.92.87.99L17 12 2.87 13.89c-.5.07-.87.49-.87.99l.01 4.61c0 .71.73 1.2 1.39.91z"/></svg><svg class="ic-stop" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg><span class="lbl">Send</span></button>
           </div>
         </div>
       </div>
@@ -1150,7 +1202,7 @@ export function chatHtml(): string {
     ],
     codex: [
       { value: 'readonly', label: 'Read only',   title: 'Read-only sandbox; ask before edits, commands, network' },
-      { value: 'auto',     label: 'Auto',        title: 'Edit + run inside the workspace; approve on failure (default)' },
+      { value: 'auto',     label: 'Auto accept', title: 'Auto-accept edits + run inside the workspace; approve on failure (default)' },
       { value: 'full',     label: 'Full access', title: 'Full disk + network access, never ask (use with care)' },
     ],
   };
@@ -1703,6 +1755,7 @@ export function chatHtml(): string {
     const badge = (msg.role === 'assistant' && msg.cli) ? msg.cli : undefined;
     // assistant text is markdown; user/thinking stay plain. While streaming we show
     // raw accumulating text (cheap), then render md once the turn's text is complete.
+    // Some runtimes send token deltas; others resend the full text-so-far. Accept both.
     const asMd = (el, raw) => { if (msg.role === 'assistant') renderMd(el, raw); else { el.textContent = raw; el.dataset.md = raw; } };
     if (msg.partial) {
       if (!streaming || streaming.dataset.role !== msg.role) {
@@ -1711,11 +1764,14 @@ export function chatHtml(): string {
         streaming.dataset.acc = '';
         streaming.classList.add('cursor');
       }
-      streaming.dataset.acc += msg.text;
-      streaming.textContent = streaming.dataset.acc; // raw during stream
+      const prev = streaming.dataset.acc || '';
+      const next = msg.text.startsWith(prev) ? msg.text : prev + msg.text;
+      streaming.dataset.acc = next;
+      streaming.textContent = next; // raw during stream
     } else {
       if (streaming && streaming.dataset.role === msg.role) {
-        const raw = (streaming.dataset.acc || '') + msg.text;
+        const prev = streaming.dataset.acc || '';
+        const raw = msg.text.startsWith(prev) ? msg.text : prev + msg.text;
         streaming.classList.remove('cursor');
         asMd(streaming, raw);
         streaming = null;
@@ -1770,6 +1826,7 @@ export function chatHtml(): string {
   // ---- typing indicator (shown while the engine works, until turn end) ----
   let typingEl = null;
   function showTyping() {
+    setBusy(true); // a turn is running → the Send button becomes Stop
     if (typingEl) return;
     const node = document.createElement('div');
     node.className = 'node typing';
@@ -1779,7 +1836,26 @@ export function chatHtml(): string {
     log.scrollTop = log.scrollHeight;
     typingEl = node;
   }
-  function hideTyping() { if (typingEl) { typingEl.remove(); typingEl = null; } }
+  function hideTyping() { setBusy(false); if (typingEl) { typingEl.remove(); typingEl = null; } }
+
+  // Send ⇄ Stop: while a turn runs, the primary button interrupts it (claude q.interrupt
+  // / codex turn/interrupt) instead of sending. The session survives — the next message
+  // continues the same conversation.
+  let busy = false;
+  function setBusy(b) {
+    if (busy === b) return;
+    busy = b;
+    const btn = document.getElementById('send');
+    if (!btn) return;
+    const lbl = btn.querySelector('.lbl');
+    if (lbl) lbl.textContent = b ? 'Stop' : 'Send';
+    btn.classList.toggle('stopping', b);
+  }
+  function interruptTurn() {
+    vscode.postMessage({ type: 'interrupt' });
+    setBusy(false); // optimistic: drop the dots now; the engine's turnEnd confirms
+    hideTyping();
+  }
 
   // While a tool approval is pending, freeze the composer: the user must answer the
   // approval before sending more. We DON'T clear what they've typed — input.value is
@@ -1896,7 +1972,8 @@ export function chatHtml(): string {
     input.style.height = 'auto'; // collapse back to one row after sending
     showTyping();
   }
-  document.getElementById('send').addEventListener('click', send);
+  // the primary button sends when idle, interrupts when a turn is running
+  document.getElementById('send').addEventListener('click', () => { busy ? interruptTurn() : send(); });
   document.getElementById('newBtn').addEventListener('click', () => { vscode.postMessage({ type: 'new' }); closeMenus(); });
   document.getElementById('newTabBtn').addEventListener('click', () => vscode.postMessage({ type: 'newTab' }));
   input.addEventListener('keydown', (e) => {
@@ -1904,7 +1981,10 @@ export function chatHtml(): string {
     // a half-formed syllable. keyCode 229 is the legacy IME-in-progress signal.
     if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    if (e.key === 'Escape' && busy) { e.preventDefault(); interruptTurn(); } // Esc stops the turn
   });
+  // Esc interrupts the running turn (Claude-Code style) even when the input isn't focused
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && busy) { e.preventDefault(); interruptTurn(); } });
   // Grow the textarea with its content; CSS max-height (~2.5x) then scrolls inside.
   // Reset to auto first so it shrinks when text is deleted; pasting a long message
   // grows to the cap and scrolls rather than pushing the chat off-screen.
@@ -1995,19 +2075,45 @@ export function chatHtml(): string {
   // equipped-skills panel: inline toggle above the composer (not an absolute dropdown)
   const skillsBtn = document.getElementById('skillsBtn');
   const skillsPanel = document.getElementById('skillsPanel');
+  function closeSkillsPanel() { skillsPanel.style.display = 'none'; skillsBtn.classList.remove('on'); }
   skillsBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     const open = skillsPanel.style.display !== 'none';
     skillsPanel.style.display = open ? 'none' : 'block';
     skillsBtn.classList.toggle('on', !open);
   });
-  // wallet-menu "Skills" entry → reveal the equipped-skills panel (it lists owned skills)
+  // explicit close (×) on the panel header — the panel was un-dismissable before
+  const skillsCloseBtn = document.getElementById('skillsClose');
+  if (skillsCloseBtn) skillsCloseBtn.addEventListener('click', (e) => { e.stopPropagation(); closeSkillsPanel(); });
+
+  // wallet-menu "Skills" entry → expand an INLINE, scrollable list of owned skills right
+  // here in the dropdown. No buy / no page jump (purchases live in the Markets tab); just
+  // "what do I own". Clicking again collapses it.
   const walletSkillsItem = document.getElementById('walletSkills');
-  if (walletSkillsItem) walletSkillsItem.addEventListener('click', () => {
-    closeMenus();
-    skillsPanel.style.display = 'block';
-    skillsBtn.classList.add('on');
-    skillsPanel.scrollIntoView({ block: 'nearest' });
+  const walletSkillList = document.getElementById('walletSkillList');
+  function renderWalletSkillList() {
+    if (!walletSkillList) return;
+    walletSkillList.innerHTML = '';
+    if (!ownedSkills.length) {
+      const e = document.createElement('div'); e.className = 'wskEmpty';
+      e.textContent = 'No skills yet — buy them in Markets.';
+      walletSkillList.appendChild(e);
+      return;
+    }
+    for (const name of ownedSkills) {
+      const row = document.createElement('div'); row.className = 'wskRow';
+      row.innerHTML = '<span class="wand">' + ${JSON.stringify(WAND_SVG)} + '</span>';
+      const lbl = document.createElement('span'); lbl.textContent = name; lbl.title = name;
+      row.appendChild(lbl); walletSkillList.appendChild(row);
+    }
+  }
+  if (walletSkillsItem && walletSkillList) walletSkillsItem.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = walletSkillList.style.display !== 'none';
+    if (open) { walletSkillList.style.display = 'none'; walletSkillsItem.classList.remove('open'); return; }
+    renderWalletSkillList();
+    walletSkillList.style.display = 'flex';
+    walletSkillsItem.classList.add('open');
   });
   // The agent's OWNED skills (array of names) — everything owned is "active" (no
   // separate active state). Renders each as an item card in the panel; empty slots
@@ -2033,6 +2139,9 @@ export function chatHtml(): string {
     // mirror the owned count onto the wallet-menu Skills entry (badge hidden when 0)
     const wc = document.getElementById('walletSkillCount');
     if (wc) { wc.textContent = n ? String(n) : ''; wc.style.display = n ? '' : 'none'; }
+    // keep the inline wallet list fresh if it's currently expanded
+    const wsl = document.getElementById('walletSkillList');
+    if (wsl && wsl.style.display !== 'none') renderWalletSkillList();
   }
   let ownedSkills = [];
   setSkills([]); // idle: grey coming-soon slots
@@ -2301,8 +2410,9 @@ export function chatHtml(): string {
     const wb = document.getElementById('wBalance');
     const mb = document.getElementById('mktBalance');
     if (wb) {
+      const amt = wb.querySelector('.balAmt');
       if (txt == null) { wb.style.display = 'none'; }
-      else { wb.textContent = txt; wb.style.display = 'flex'; wb.classList.toggle('low', low); }
+      else { if (amt) amt.textContent = txt; wb.style.display = 'flex'; wb.classList.toggle('low', low); }
     }
     if (mb) {
       if (txt == null) { mb.style.display = 'none'; }

@@ -259,6 +259,10 @@ export function createChatSession(
         }
         break;
       }
+      case "interrupt":
+        // stop the in-flight turn but keep the session — no re-spawn, no history loss.
+        slot().handle?.interrupt();
+        break;
       // NOTE: "approvalDecision" is owned by the approval channel (it subscribes to
       // the transport itself), so there's deliberately no case for it here.
       // scroll-to-top: fetch the page older than `cursor`, prepend in the UI
