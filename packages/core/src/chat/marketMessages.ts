@@ -10,6 +10,8 @@
 //
 // Direction is in the name: *Request = UI -> host; *Event = host -> UI.
 
+import type { Note } from "../core/types.js";
+
 /** One item row as the UI renders it (cards + detail). Mirrors the subset of `Skill`
  *  the UI needs — kept here so host (env callbacks) and UI agree. Covers both kinds:
  *  `type` splits the Skills / Workflows tabs; `requiredSkills` (workflows only) are
@@ -29,12 +31,16 @@ export interface SkillCard {
 
 /** A full detail payload for one item: its card, the on-chain body (skillText, read
  *  separately — not in the indexer), and — for a workflow — the cards of each required
- *  skill so the UI can render them as clickable rows that open their own detail. */
+ *  skill so the UI can render them as clickable rows that open their own detail.
+ *  `notes` is fetched in the same round-trip so the detail view opens with comments. */
 export interface SkillDetail {
   card: SkillCard;
   skillText: string | null; // the SKILL.md / workflow body (readSkillText)
   requiredCards: SkillCard[]; // resolved cards for requiredSkills (workflows)
+  notes?: Note[]; // skill comments, newest-first (issue #34)
 }
+
+export type { Note };
 
 /** RPC status the UI shows (issue #23). `dasReady` = a DAS-capable RPC (a Helius key
  *  or explicit env) is configured; on the bare public default it's false, so reads
@@ -56,16 +62,21 @@ export type MarketRequest =
   | { type: "ownedSkills" } // ask the host to (re)send the owned list
   | { type: "setHeliusKey" } // host opens a native input to capture + save the key
   | { type: "useDefaultRpc" } // clear any key, fall back to the default
-  | { type: "getRpcStatus" }; // ask the host to (re)send rpcStatus
+  | { type: "getRpcStatus" } // ask the host to (re)send rpcStatus
+  // issue #34: post a comment on a skill (holder-gated client-side)
+  | { type: "postNote"; skillId: string; skillType?: "skill" | "workflow"; text: string; gitLink?: string };
 
 // ── host -> UI (responses / pushes) ─────────────────────────────────────────
 export type MarketEvent =
   | { type: "searchResults"; results: SkillCard[] }
   | { type: "searchError"; message: string } // search threw (RPC/DAS failure) — show why, don't hang
-  | { type: "skillDetail"; detail: SkillDetail } // full detail for the opened item
+  | { type: "skillDetail"; detail: SkillDetail } // full detail for the opened item (includes notes)
   | { type: "buyResult"; skillId: string; ok: boolean; slug?: string; error?: string }
   | { type: "ownedSkills"; names: string[] } // installed skill names (panel fill)
   | { type: "skillActive"; name: string } // a skill fired -> "Casting <name>" cue
-  | { type: "rpcStatus"; status: RpcStatus }; // DAS-ready? which source? (issue #23)
+  | { type: "rpcStatus"; status: RpcStatus } // DAS-ready? which source? (issue #23)
+  // issue #34: comment write result + refreshed comment list
+  | { type: "postNoteResult"; skillId: string; ok: boolean; error?: string }
+  | { type: "notes"; skillId: string; notes: Note[] };
 
 export type MarketMessage = MarketRequest | MarketEvent;

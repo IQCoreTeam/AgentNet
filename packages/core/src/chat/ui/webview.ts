@@ -548,6 +548,23 @@ export function chatHtml(): string {
   #mktDetailBody .dt-req:hover { border-color: var(--an-green-line); background: var(--an-green-dim); }
   #mktDetailBody .dt-req .rq-name { font-weight: 600; }
   #mktDetailBody .dt-req .rq-arrow { margin-left: auto; opacity: 0.5; }
+  /* comments section (issue #34) */
+  #mktDetailBody .dt-comments { margin-top: 14px; }
+  #mktDetailBody .dt-comment { border: 1px solid var(--an-line); border-radius: var(--an-radius);
+                               padding: 8px 10px; margin-bottom: 8px; font-size: 0.85em; }
+  #mktDetailBody .dt-comment .cm-author { font-size: 0.72em; opacity: 0.55; margin-bottom: 4px; font-family: var(--vscode-editor-font-family, monospace); }
+  #mktDetailBody .dt-comment .cm-git { font-size: 0.72em; opacity: 0.6; margin-top: 4px; }
+  #mktDetailBody .dt-comment .cm-git a { color: var(--an-green); text-decoration: none; }
+  #mktDetailBody .dt-note-input { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  #mktDetailBody .dt-note-input textarea { background: var(--an-bg); color: var(--vscode-foreground);
+                                          border: 1px solid var(--an-line); border-radius: var(--an-radius);
+                                          padding: 8px 10px; font-size: 0.85em; resize: vertical; min-height: 60px; }
+  #mktDetailBody .dt-note-input .dt-note-submit { align-self: flex-end; background: var(--an-green-dim);
+                                                  border: 1px solid var(--an-green-line); color: var(--an-green);
+                                                  border-radius: var(--an-radius); padding: 5px 14px; cursor: pointer; font-size: 0.85em; }
+  #mktDetailBody .dt-note-input .dt-note-submit[disabled] { opacity: 0.5; cursor: default; }
+  #mktDetailBody .dt-note-gate { font-size: 0.78em; opacity: 0.55; font-style: italic; margin-top: 4px; }
+  #mktDetailBody .dt-note-error { font-size: 0.78em; color: var(--vscode-errorForeground, #f48771); margin-top: 4px; }
 
   /* skill marquee — ONLY shows when an equipped skill fires ("Casting <skill>").
      Plain tool work isn't shown here (it's already in the chat timeline). Green with
@@ -1556,6 +1573,7 @@ export function chatHtml(): string {
   const mktDetailBody = document.getElementById('mktDetailBody');
   let lastMarketResults = []; // last search results, kept to re-render on owned-list change
   let currentKind = 'skill';  // active tab: Skills | Workflows
+  let currentDetail = null;   // { id, type } of the open detail — for comments refresh
   function runMarketSearch() {
     mktResults.innerHTML = '<div class="mktEmpty">Searching…</div>';
     vscode.postMessage({ type: 'searchSkills', query: mktSearch.value.trim(), kind: currentKind });
@@ -1591,9 +1609,65 @@ export function chatHtml(): string {
   // Render the detail sub-view from a {card, skillText, requiredCards} payload. For a
   // workflow, each requiredCard is a clickable row that opens ITS detail (re-uses the
   // same view, so you can drill skill→workflow→skill without leaving the market).
+  function renderComments(skillId, skillType, notes, owned) {
+    const existing = mktDetailBody.querySelector('.dt-comments');
+    if (existing) existing.remove();
+    const wrap = document.createElement('div'); wrap.className = 'dt-comments';
+    const sec = document.createElement('div'); sec.className = 'dt-sec';
+    sec.textContent = 'Comments (' + (notes ? notes.length : 0) + ')';
+    wrap.appendChild(sec);
+    for (const n of (notes || [])) {
+      const el = document.createElement('div'); el.className = 'dt-comment';
+      const auth = document.createElement('div'); auth.className = 'cm-author';
+      auth.textContent = n.author ? (n.author.slice(0, 6) + '…' + n.author.slice(-4)) : '?';
+      const body = document.createElement('div');
+      renderMd(body, n.text || '');
+      el.appendChild(auth); el.appendChild(body);
+      if (n.gitLink) {
+        // only allow http/https/git protocols to prevent javascript: injection
+        let safeLink = null;
+        try { const u = new URL(n.gitLink); if (/^https?:|^git:/.test(u.protocol)) safeLink = u.href; } catch {}
+        if (safeLink) {
+          const gl = document.createElement('div'); gl.className = 'cm-git';
+          const a = document.createElement('a'); a.href = safeLink; a.textContent = safeLink;
+          a.target = '_blank'; a.rel = 'noopener noreferrer';
+          gl.appendChild(a); el.appendChild(gl);
+        }
+      }
+      wrap.appendChild(el);
+    }
+    // comment input
+    const inputWrap = document.createElement('div'); inputWrap.className = 'dt-note-input';
+    if (owned) {
+      const ta = document.createElement('textarea'); ta.placeholder = 'Write a comment…';
+      const errEl = document.createElement('div'); errEl.className = 'dt-note-error'; errEl.style.display = 'none';
+      const submit = document.createElement('button'); submit.className = 'dt-note-submit'; submit.textContent = 'Post';
+      submit.addEventListener('click', () => {
+        const text = ta.value.trim();
+        if (!text) return;
+        submit.disabled = true; submit.textContent = 'Posting…';
+        errEl.style.display = 'none';
+        vscode.postMessage({ type: 'postNote', skillId, skillType, text });
+        ta.value = '';
+        // re-enable on next postNoteResult (handled below)
+        submit._pending = true;
+      });
+      submit._reset = () => { submit.disabled = false; submit.textContent = 'Post'; };
+      submit._fail = (msg) => { errEl.textContent = msg; errEl.style.display = 'block'; submit.disabled = false; submit.textContent = 'Post'; };
+      inputWrap.appendChild(ta); inputWrap.appendChild(errEl); inputWrap.appendChild(submit);
+    } else {
+      const gate = document.createElement('div'); gate.className = 'dt-note-gate';
+      gate.textContent = 'Buy this skill to leave a comment.';
+      inputWrap.appendChild(gate);
+    }
+    wrap.appendChild(inputWrap);
+    mktDetailBody.appendChild(wrap);
+  }
+
   function renderDetail(detail) {
     const c = (detail && detail.card) || {};
     const owned = ownedSkills.indexOf(c.name) >= 0;
+    currentDetail = { id: c.id, type: c.type };
     mktDetailBody.innerHTML = '';
     // head: icon + name + kind
     const head = document.createElement('div'); head.className = 'dt-head';
@@ -1641,6 +1715,8 @@ export function chatHtml(): string {
       const sec = document.createElement('div'); sec.className = 'dt-sec'; sec.textContent = (c.type === 'workflow' ? 'Workflow' : 'Skill') + ' text'; mktDetailBody.appendChild(sec);
       const body = document.createElement('div'); body.className = 'dt-body'; body.textContent = detail.skillText; mktDetailBody.appendChild(body);
     }
+    // comments section (issue #34) — notes bundled in detail, or empty on first render
+    renderComments(c.id, c.type, detail && detail.notes, owned);
   }
   function renderMarketResults(results) {
     results = results || [];
@@ -1850,6 +1926,16 @@ export function chatHtml(): string {
       skillResults.innerHTML = '<div class="shopEmpty">' + msg + '</div>';
     }
     else if (m.type === 'skillDetail') renderDetail(m.detail);
+    // issue #34: comment write result — re-enable the submit button; on failure show error
+    else if (m.type === 'postNoteResult') {
+      const submit = mktDetailBody.querySelector('.dt-note-submit');
+      if (submit) { m.ok ? submit._reset && submit._reset() : submit._fail && submit._fail(m.error || 'Post failed'); }
+    }
+    // issue #34: refreshed comments pushed after a successful postNote
+    else if (m.type === 'notes' && currentDetail && m.skillId === currentDetail.id) {
+      const owned = ownedSkills.indexOf(currentDetail.id) >= 0;
+      renderComments(currentDetail.id, currentDetail.type, m.notes, owned);
+    }
     else if (m.type === 'ownedSkills') {
       setSkills(m.names || []);                // updates ownedSkills used by both renders
       if (panels.market.style.display !== 'none') renderMarketResults(lastMarketResults); // refresh Owned badges

@@ -19,6 +19,8 @@ import { claudeSkillsDir } from "../../core/paths.js";
 import { resolveRpcUrl } from "../../core/rpc.js";
 import type { SkillCard, SkillDetail } from "../../chat/marketMessages.js";
 import type { Skill } from "../../core/types.js";
+import { readNotes, postNote as corePostNote } from "../../notes/notes.js";
+import { getSkillsCollectionMint, getWorkflowsCollectionMint } from "../../core/seed.js";
 import { SkillSync } from "./index.js";
 
 // Skill (enumeration row) -> SkillCard (what the UI renders). One place so search +
@@ -43,6 +45,11 @@ function toCard(s: Skill): SkillCard {
 // down. Override the URL with AGENTNET_INDEXER_URL.
 const INDEXER_URL = process.env.AGENTNET_INDEXER_URL || "https://nft-index.iqlabs.dev";
 
+function collectionIdFor(type?: "skill" | "workflow"): Promise<string | null> {
+  const id = type === "workflow" ? getWorkflowsCollectionMint() : getSkillsCollectionMint();
+  return Promise.resolve(id);
+}
+
 export async function marketplaceEnv(wallet: Wallet) {
   const conn = new Connection(await resolveRpcUrl(), "confirmed");
   const skills = new SkillSync(conn);
@@ -64,13 +71,16 @@ export async function marketplaceEnv(wallet: Wallet) {
     },
 
     // Full detail for one item: its card + the on-chain body (readSkillText) + — for a
-    // workflow — the cards of its required skills, so the UI can render them clickable.
+    // workflow — the cards of its required skills + comments (issue #34).
     async getSkillDetail(mint: string): Promise<SkillDetail> {
       // find the card among all items (indexer has no single-item-with-traits route we
       // map; one search covers both kinds since they share the catalog).
       const all = await runSearch("");
       const card = all.find((s) => s.id === mint);
-      const skillText = await readSkillText(conn, mint).catch(() => null);
+      const [skillText, notes] = await Promise.all([
+        readSkillText(conn, mint).catch(() => null),
+        collectionIdFor(card?.type).then((cid) => cid ? readNotes(cid, mint).catch(() => []) : Promise.resolve([])),
+      ]);
       const reqIds = card?.requiredSkills ?? [];
       const requiredCards = reqIds
         .map((id) => all.find((s) => s.id === id))
@@ -80,7 +90,21 @@ export async function marketplaceEnv(wallet: Wallet) {
         card: card ? toCard(card) : { id: mint, name: mint },
         skillText,
         requiredCards,
+        notes,
       };
+    },
+
+    // Post a comment on a skill (issue #34). collectionId resolved from skillType.
+    async postNote(skillId: string, skillType: "skill" | "workflow" | undefined, text: string, gitLink?: string) {
+      const collectionId = await collectionIdFor(skillType);
+      if (!collectionId) return { ok: false, error: "Skills collection not configured" };
+      try {
+        await corePostNote(conn, wallet, { collectionId, skillId, text, gitLink });
+        const notes = await readNotes(collectionId, skillId).catch(() => []);
+        return { ok: true, notes };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) };
+      }
     },
 
     // creatorWallet comes from the search result (a Skill carries .creator); the

@@ -33,6 +33,7 @@ export { AGENTNET_ROOT_ID, mysessionsHint, reviewsHint, reviewsAgentHint } from 
 export {
   publishSkill,
   buySkill,
+  DEFAULT_SKILL_PRICE_LAMPORTS,
   createSkillMint,
   mintSkillToken,
   getMintSupply,

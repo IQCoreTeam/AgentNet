@@ -24,13 +24,16 @@ import { checkFormat, FormatError } from "./checkFormat.js";
 import { publishItemIx, buyItemIx, itemMintAuthorityPda } from "./workflowGate.js";
 import { sendTx } from "./workflow.js";
 
+/** Default publish price: 0.1 SOL. Explicit `price: 0n` publishes free. */
+export const DEFAULT_SKILL_PRICE_LAMPORTS = 100_000_000n;
+
 export interface PublishSkillInput {
   name: string;
   description: string;
   text: string; // SKILL.md content (codeIn auto-chunks if large)
   category?: string; // e.g. "clean-code"
   hashtags?: string[]; // e.g. ["refactoring"]
-  price?: bigint; // lamports (0 = free)
+  price?: bigint; // lamports (0n = free, omit = DEFAULT_SKILL_PRICE_LAMPORTS)
 }
 
 /**
@@ -92,7 +95,7 @@ export async function publishSkill(
     creator,
     itemMint: skillMint,
     requiredSkills: [],
-    price: input.price ?? 0n,
+    price: input.price ?? DEFAULT_SKILL_PRICE_LAMPORTS,
   });
   await sendTx(conn, signer, [ataIx, ix]);
 
