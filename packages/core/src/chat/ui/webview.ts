@@ -709,29 +709,22 @@ export function chatHtml(): string {
                background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
                border: 1px solid var(--an-line); border-radius: var(--an-radius);
                box-shadow: 0 8px 28px rgba(0,0,0,0.4); }
-  #send { margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
-          padding: 7px 15px; color: #1a1205; font-weight: 600; letter-spacing: 0.2px;
-          border: none; border-radius: 9px; cursor: pointer;
-          background: linear-gradient(180deg, color-mix(in srgb, var(--eng) 88%, #fff) 0%, var(--eng) 100%);
-          box-shadow: 0 1px 2px rgba(0,0,0,0.25);
-          transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease; }
-  #composer[data-cli="codex"] #send { color: #06231a; }
-  #send:hover { transform: translateY(-1px); filter: brightness(1.05);
-                box-shadow: 0 4px 12px color-mix(in srgb, var(--eng) 40%, transparent); }
-  #send:active { transform: translateY(0); box-shadow: 0 1px 2px rgba(0,0,0,0.25); }
-  #send:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+  /* send/stop: a single small, flat, round icon button (Claude/Codex style) —
+     no text, no gradient, no lift. Engine accent when ready, neutral when empty. */
+  #send { margin-left: auto; display: inline-flex; align-items: center; justify-content: center;
+          width: 28px; height: 28px; padding: 0; flex: none;
+          color: #fff; border: none; border-radius: 999px; cursor: pointer;
+          background: var(--eng); transition: background 0.12s ease, opacity 0.12s ease; }
+  #send:hover { background: color-mix(in srgb, var(--eng) 88%, #fff); }
+  #send:disabled { background: var(--an-bg-2, var(--an-bg-1)); color: var(--vscode-foreground);
+                   opacity: 0.4; cursor: default; }
   #send svg { width: 15px; height: 15px; flex: none; }
+  #send .lbl { display: none; }
   #send .ic-stop { display: none; }
   #send.stopping .ic-send { display: none; }
   #send.stopping .ic-stop { display: inline-block; }
-  /* Stop state (a turn is running): red gradient with a soft pulsing glow */
-  #send.stopping { color: #fff;
-                   background: linear-gradient(180deg, #e5564e 0%, #c8392f 100%);
-                   animation: stopPulse 1.6s ease-in-out infinite; }
-  @keyframes stopPulse {
-    0%, 100% { box-shadow: 0 0 0 1px rgba(229,86,78,0.4), 0 0 9px rgba(229,86,78,0.25); }
-    50%      { box-shadow: 0 0 0 1px rgba(229,86,78,0.65), 0 0 18px rgba(229,86,78,0.5); } }
-  @media (prefers-reduced-motion: reduce) { #send.stopping { animation: none; } }
+  #send.stopping { background: var(--vscode-foreground); color: var(--vscode-editor-background); opacity: 0.85; }
+  #send.stopping:hover { opacity: 1; }
 
   /* attach (paperclip): a quiet icon button that tints to the engine accent on hover */
   #attachBtn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
@@ -1016,7 +1009,7 @@ export function chatHtml(): string {
               </button>
               <div id="modeMenu" style="display:none"></div>
             </span>
-            <button id="send"><svg class="ic-send" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.4 20.4l17.45-7.48a1 1 0 0 0 0-1.84L3.4 3.6a.993.993 0 0 0-1.39.91L2 9.12c0 .5.37.92.87.99L17 12 2.87 13.89c-.5.07-.87.49-.87.99l.01 4.61c0 .71.73 1.2 1.39.91z"/></svg><svg class="ic-stop" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg><span class="lbl">Send</span></button>
+            <button id="send" title="Send" aria-label="Send"><svg class="ic-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg><svg class="ic-stop" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="1.5"/></svg><span class="lbl">Send</span></button>
           </div>
         </div>
       </div>
@@ -1849,6 +1842,8 @@ export function chatHtml(): string {
     if (!btn) return;
     const lbl = btn.querySelector('.lbl');
     if (lbl) lbl.textContent = b ? 'Stop' : 'Send';
+    btn.title = b ? 'Stop' : 'Send';
+    btn.setAttribute('aria-label', b ? 'Stop' : 'Send');
     btn.classList.toggle('stopping', b);
   }
   function interruptTurn() {
