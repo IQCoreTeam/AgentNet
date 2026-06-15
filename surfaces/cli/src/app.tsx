@@ -43,6 +43,8 @@ export function App({ options }: { options: AppOptions }) {
   const [address, setAddress] = useState("");
   const [report, setReport] = useState<CliReport>({ claude: "missing", codex: "missing" });
   const [runtime, setRuntime] = useState<AgentRuntime | null>(null);
+  // the connected wallet, kept so the chat view can build the skill-market env from it.
+  const [wallet, setWallet] = useState<Awaited<ReturnType<typeof loadWallet>>["wallet"] | null>(null);
   const [errMsg, setErrMsg] = useState("");
   const [prefs, setPrefs] = useState<Prefs>({});
   // tool-approval seam: --yolo skips the UI (auto-allow); otherwise prompts route here.
@@ -56,6 +58,7 @@ export function App({ options }: { options: AppOptions }) {
     set(3, { status: "pending", label: "connecting storage" });
     const rt = await buildRuntime(w, approval.current ?? autoApprove());
     setRuntime(rt);
+    setWallet(w);
     set(3, { status: "ok", label: "storage ready" });
     // wipe the boot banner/checklist from the scrollback so the welcome panel lands on a
     // clean screen (Ink leaves prior static output in the terminal history otherwise).
@@ -144,6 +147,6 @@ export function App({ options }: { options: AppOptions }) {
     resume: options.resume ?? (options.continue ? prefs.lastSessionId : undefined),
   };
   return (
-    <Chat runtime={runtime!} address={address} report={report} options={effective} approval={approval.current} />
+    <Chat runtime={runtime!} wallet={wallet!} address={address} report={report} options={effective} approval={approval.current} />
   );
 }

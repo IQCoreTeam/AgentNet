@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Box, Text, Static, useApp, useInput } from "ink";
-import type { AgentRuntime } from "@iqlabs-official/agent-sdk/runtime/contract";
+import type { AgentRuntime, Wallet } from "@iqlabs-official/agent-sdk/runtime/contract";
 import type { CliReport } from "@iqlabs-official/agent-sdk";
 import type { ApprovalRequest } from "@iqlabs-official/agent-sdk/runtime/approval/channel";
 import type { AppOptions } from "../app.js";
@@ -16,6 +16,7 @@ import {
   saveHeliusKey,
   ownedSkills,
   hasDasRpc,
+  marketplaceEnv,
 } from "@iqlabs-official/agent-sdk";
 import { Select } from "@inkjs/ui";
 import { chooseStorage } from "../bootstrap.js";
@@ -29,6 +30,7 @@ import { WelcomePanel, type PanelField, type OwnedSkill } from "../components/We
 import { NoticeBanner } from "../components/NoticeBanner.js";
 import { Footer } from "../components/Footer.js";
 import { SessionList } from "./SessionList.js";
+import { SkillMarket } from "./SkillMarket.js";
 import { ModelPicker } from "./ModelPicker.js";
 import { EffortPicker } from "./EffortPicker.js";
 import type { EffortLevel } from "../prefs.js";
@@ -47,11 +49,13 @@ function ThinkingLine() {
 
 export function Chat({
   runtime,
+  wallet,
   options,
   approval,
   address,
 }: {
   runtime: AgentRuntime;
+  wallet: Wallet;
   address: string;
   report: CliReport;
   options: AppOptions;
@@ -78,6 +82,11 @@ export function Chat({
   // getAssetsByOwner, so owned skills come back empty there — the panel uses this to
   // tell "you have no skills" apart from "set a Helius key to read your skills".
   const [dasReady, setDasReady] = useState(true);
+  // the skill-market actions (search/detail/buy/balance), resolved once from the wallet —
+  // the same marketplaceEnv functions the VSCode market uses, driven from this TUI.
+  const [market, setMarket] = useState<Awaited<ReturnType<typeof marketplaceEnv>> | null>(null);
+  // installed skill slugs (dir names) — drives the market's "owned" badge.
+  const [installed, setInstalled] = useState<string[]>([]);
   useEffect(() => {
     void getStorageInfo().then((info) => setCloud(info ?? null));
     void maskedHeliusKey().then(setHeliusMasked);
@@ -85,7 +94,11 @@ export function Chat({
     // owned-skills needs a DAS RPC; best-effort, leave empty on failure.
     setSkills(null);
     void ownedSkills(address).then(setSkills).catch(() => setSkills([]));
-  }, [address]);
+    void marketplaceEnv(wallet).then((env) => {
+      setMarket(env);
+      void env.ownedSkills().then(setInstalled).catch(() => {});
+    });
+  }, [address, wallet]);
   const [showBtw, setShowBtw] = useState(false);
   const [btwQuestion, setBtwQuestion] = useState("");
   const [btwAnswer, setBtwAnswer] = useState("");
@@ -158,6 +171,7 @@ export function Chat({
   const [replyMode, setReplyMode] = useState<"reason" | "edit" | null>(null);
   const [replyText, setReplyText] = useState("");
   const [showSessions, setShowSessions] = useState(false);
+  const [showMarket, setShowMarket] = useState(false);
   const [showModels, setShowModels] = useState(false);
   const [showEfforts, setShowEfforts] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
@@ -394,7 +408,11 @@ export function Chat({
 
   function openMarket() {
     setPanelFocused(false);
-    setNotice("skill market — coming soon (search / buy)");
+    if (!market) {
+      setNotice("skill market — still loading, try again in a moment");
+      return;
+    }
+    setShowMarket(true);
   }
 
   // apply a storage choice picked from the panel. local applies in place; a cloud (gdrive)
@@ -676,6 +694,24 @@ export function Chat({
         }}
         onDelete={(id) => void chat.deleteSession(id)}
         onClose={() => setShowSessions(false)}
+      />
+    );
+  }
+
+  // skill-market overlay — search/list/detail/buy over marketplaceEnv. Takes over input
+  // while open; Esc backs out a level (or closes from the list), like the VSCode market.
+  if (showMarket && market) {
+    return (
+      <SkillMarket
+        api={market}
+        walletAddr={address}
+        ownedNames={installed}
+        onBought={() => {
+          // a buy installs the skill — refresh the badge source + the welcome panel list.
+          void market.ownedSkills().then(setInstalled).catch(() => {});
+          void ownedSkills(address).then(setSkills).catch(() => {});
+        }}
+        onClose={() => setShowMarket(false)}
       />
     );
   }
