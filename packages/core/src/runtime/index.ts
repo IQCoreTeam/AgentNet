@@ -188,9 +188,11 @@ export function createRuntime(
           return sessionId;
         },
         cli: opts.cli,
-        send(userText: string) {
-          emit({ role: "user", text: userText, ts: Date.now() });
-          cli.send(userText);
+        send(userText: string, images?: import("./contract.js").ImageInput[]) {
+          // Persist only a COUNT of attached images, never the base64 (keeps the encrypted
+          // log small). The live UI still gets thumbnails — it holds the originals itself.
+          emit({ role: "user", text: userText, ts: Date.now(), imageCount: images?.length || undefined });
+          cli.send(userText, images);
         },
         onMessage(cb) {
           msgCbs.push(cb);

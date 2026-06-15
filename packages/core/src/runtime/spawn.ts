@@ -11,11 +11,13 @@
 
 import { execFileSync, spawn } from "node:child_process";
 import readline from "node:readline";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { configFile, rootDir } from "../core/paths.js";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { Codex } from "@openai/codex-sdk";
-import type { ChatMessage } from "./contract.js";
+import type { ChatMessage, ImageInput } from "./contract.js";
 import { mapClaudeMessage } from "./convert/claude.js";
 import { skillFromPath } from "./convert/codex.js";
 import type { ApprovalChannel, ApprovalRequest } from "./approval/channel.js";
@@ -60,7 +62,7 @@ export interface Engine {
   // transcript message (it isn't persisted).
   onSkill(cb: (name: string) => void): void;
   onUsage(cb: (contextTokens: number) => void): void; // real context occupancy per turn
-  send(text: string): void;
+  send(text: string, images?: ImageInput[]): void;
   stop(): void;
 }
 
@@ -168,6 +170,49 @@ function savePersistentWhitelist(allowedKeys: Set<string>): void {
   }
 }
 
+// ── image attachments: each engine wants a different shape ───────────────────
+const mimeToExt = (mime: string) =>
+  mime === "image/jpeg" ? "jpg"
+  : mime === "image/gif" ? "gif"
+  : mime === "image/webp" ? "webp"
+  : "png"; // default/png
+
+// claude takes images INLINE as base64 content blocks alongside a text block. An empty
+// text block is dropped (image-only turns are valid). Returns a plain string when there
+// are no images, so the common path is unchanged. Exported for spawn.spec.
+export function claudeUserContent(text: string, images?: ImageInput[]): string | unknown[] {
+  if (!images || !images.length) return text;
+  const blocks: unknown[] = [];
+  if (text) blocks.push({ type: "text", text });
+  for (const im of images) {
+    blocks.push({ type: "image", source: { type: "base64", media_type: im.mime, data: im.dataBase64 } });
+  }
+  return blocks;
+}
+
+// codex needs a FILE PATH (its native `localImage` input), so we materialise each base64
+// image into a temp file and hand back the paths + a cleanup to unlink them after the
+// turn. Files live under <tmp>/agentnet-img; a failed write is skipped, not fatal.
+function writeCodexImages(images: ImageInput[]): { paths: string[]; cleanup: () => void } {
+  const dir = join(tmpdir(), "agentnet-img");
+  try { mkdirSync(dir, { recursive: true }); } catch {}
+  const paths: string[] = [];
+  images.forEach((im, i) => {
+    try {
+      const p = join(dir, `img-${process.pid}-${seqImg++}-${i}.${mimeToExt(im.mime)}`);
+      writeFileSync(p, Buffer.from(im.dataBase64, "base64"));
+      paths.push(p);
+    } catch (e) {
+      console.error("[codex image] failed to write temp file:", e);
+    }
+  });
+  return {
+    paths,
+    cleanup: () => { for (const p of paths) { try { unlinkSync(p); } catch {} } },
+  };
+}
+let seqImg = 0; // monotonic so two images in one turn never collide on a filename
+
 // ── claude: SDK query with streaming input + canUseTool → ApprovalChannel ─────
 function claudeEngine(opts: SpawnOpts): Engine {
   const cb = callbacks();
@@ -176,19 +221,20 @@ function claudeEngine(opts: SpawnOpts): Engine {
 
   // streaming input: an async queue the SDK pulls user turns from. send() pushes;
   // the generator yields them. This keeps ONE query() alive across many turns.
-  const inbox: string[] = [];
+  const inbox: { text: string; images?: ImageInput[] }[] = [];
   let wake: (() => void) | null = null;
   let closed = false;
   async function* prompts(): AsyncGenerator<import("@anthropic-ai/claude-agent-sdk").SDKUserMessage> {
     while (!closed) {
       if (inbox.length === 0) await new Promise<void>((r) => (wake = r));
       while (inbox.length) {
-        const text = inbox.shift()!;
-        yield { type: "user", message: { role: "user", content: text }, parent_tool_use_id: null };
+        const turn = inbox.shift()!;
+        const content = claudeUserContent(turn.text, turn.images);
+        yield { type: "user", message: { role: "user", content: content as any }, parent_tool_use_id: null };
       }
     }
   }
-  const push = (t: string) => { inbox.push(t); wake?.(); wake = null; };
+  const push = (text: string, images?: ImageInput[]) => { inbox.push({ text, images }); wake?.(); wake = null; };
 
   // Per-session memory of "always" grants. claude's SDK has no native allowlist across
   // canUseTool calls, so we keep one: a set of action keys the user has blanket-approved.
@@ -311,7 +357,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
     onError: (c) => cb.err.push(c),
     onSkill: (c) => cb.skill.push(c),
     onUsage: (c) => cb.use.push(c),
-    send: (t) => push(t),
+    send: (t, images) => push(t, images),
     stop: () => { closed = true; wake?.(); void q.interrupt?.().catch(() => {}); },
   };
 }
@@ -381,6 +427,7 @@ function codexEngine(opts: SpawnOpts): Engine {
   let streamBuf = "";
   let thinkingBuf = "";
   let running = false;
+  let pendingImgCleanup: (() => void) | null = null; // unlink this turn's temp images on end
 
   rl.on("line", (line) => {
     if (!line.trim()) return;
@@ -479,11 +526,13 @@ function codexEngine(opts: SpawnOpts): Engine {
       }
       cb.emitTurn();
       running = false;
+      pendingImgCleanup?.(); pendingImgCleanup = null;
     } else if (msg.method === "turn/failed" || msg.method === "error") {
       const err = params?.error?.message || params?.message || "Turn failed";
       cb.emitErr(`[codex] ${err}`);
       cb.emitTurn();
       running = false;
+      pendingImgCleanup?.(); pendingImgCleanup = null;
     }
   }
 
@@ -674,18 +723,22 @@ function codexEngine(opts: SpawnOpts): Engine {
     }
   })();
 
-  const runTurn = async (text: string) => {
+  const runTurn = async (text: string, images?: ImageInput[]) => {
     if (running) return;
     running = true;
+    // codex wants a file path per image (`localImage`), so materialise the base64 into
+    // temp files for this turn and unlink them once it ends (turn/completed|failed|stop).
+    const imgFiles = images && images.length ? writeCodexImages(images) : null;
+    pendingImgCleanup = imgFiles?.cleanup ?? null;
+    const input: any[] = [{ type: "text", text, text_elements: [] }];
+    for (const p of imgFiles?.paths ?? []) input.push({ type: "localImage", path: p });
     try {
-      await sendRequest("turn/start", {
-        threadId: sessionId,
-        input: [{ type: "text", text, text_elements: [] }],
-      });
+      await sendRequest("turn/start", { threadId: sessionId, input });
     } catch (e) {
       cb.emitErr(`[codex engine] ${e instanceof Error ? e.message : String(e)}`);
       cb.emitTurn();
       running = false;
+      pendingImgCleanup?.(); pendingImgCleanup = null;
     }
   };
 
@@ -698,10 +751,11 @@ function codexEngine(opts: SpawnOpts): Engine {
     // mapCodexEvent flags any command/path that references our skills dir (convert/codex).
     onSkill: (c) => cb.skill.push(c),
     onUsage: (c) => cb.use.push(c),
-    send: (t) => {
-      void initPromise.then(() => runTurn(t));
+    send: (t, images) => {
+      void initPromise.then(() => runTurn(t, images));
     },
     stop: () => {
+      pendingImgCleanup?.(); pendingImgCleanup = null;
       child.kill();
     },
   };

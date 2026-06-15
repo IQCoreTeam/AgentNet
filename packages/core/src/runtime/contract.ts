@@ -60,6 +60,19 @@ export interface ChatMessage {
   // summary subsumes everything before its own ts.
   replacesUpTo?: number;
   partial?: boolean; // true = streaming delta (future); absent/false = complete
+  // For role:"user" — how many images the user attached to this turn. ONLY a count is
+  // stored (never the base64 payload — that would bloat the encrypted log); the live UI
+  // renders real thumbnails from the in-memory attachments, history shows a count chip.
+  imageCount?: number;
+}
+
+// An image attached to a user turn. `dataBase64` is the RAW base64 (no data: prefix).
+// Neutral across engines: claude takes it inline as a base64 content block; codex needs
+// a file path, so the spawn layer writes it to a temp file and passes that.
+export interface ImageInput {
+  mime: string; // e.g. "image/png"
+  dataBase64: string; // raw base64, no "data:...;base64," prefix
+  name?: string; // original filename, for display only
 }
 
 // One tool/agent action surfaced in the transcript (bash run, file edit, read…).
@@ -76,7 +89,7 @@ export interface ToolAction {
 export interface SessionHandle {
   readonly sessionId: string; // from the CLI's system/init
   readonly cli: "claude" | "codex";
-  send(userText: string): void; // user input → CLI stdin
+  send(userText: string, images?: ImageInput[]): void; // user input (+ attached images) → CLI
   onMessage(cb: (msg: ChatMessage) => void): void; // CLI output (UI renders)
   onTurnEnd(cb: () => void): void; // turn finished (runtime auto-saves here)
   onSkill(cb: (name: string) => void): void; // a skill fired → UI "Casting <skill>" cue

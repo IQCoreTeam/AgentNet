@@ -49,6 +49,7 @@ export interface ChatEnv {
   getSkillDetail?(mint: string): Promise<import("./marketMessages.js").SkillDetail>;
   buySkill?(skillId: string, creatorWallet?: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
   ownedSkills?(): Promise<string[]>; // skill names already installed (panel fill)
+  solBalance?(): Promise<number | null>; // wallet's native SOL balance (lamports), for the UI funds display
   // install every owned skill NFT into the runtime skills dir (session start + after a
   // buy), so the agent always has its owned skills present + discoverable. Returns slugs.
   loadOwnedSkills?(): Promise<string[]>;
@@ -81,9 +82,14 @@ export function createChatSession(
   // model). Switching tabs just repaints the active slot — nothing is killed, so
   // claude and codex never step on each other. A handle is spawned lazily on first
   // send (spawn costs ~2s); codex re-spawns per turn internally anyway.
-  type Slot = { handle: SessionHandle | null; pendingId?: string; model?: string; mode?: string };
+  // `restage` = a config (model/mode) changed while a handle was live. We DON'T tear
+  // the handle down on the toggle — that would interrupt an in-flight turn (claude
+  // q.interrupt / codex child.kill). Instead we re-spawn lazily on the next send,
+  // carrying the live session over, so the running turn finishes untouched and the new
+  // setting applies from the next message.
+  type Slot = { handle: SessionHandle | null; pendingId?: string; model?: string; mode?: string; restage?: boolean };
   const slots: Record<"claude" | "codex", Slot> = {
-    claude: { handle: null, mode: "default" },
+    claude: { handle: null, mode: "acceptEdits" },
     codex: { handle: null, mode: "auto" },
   };
   let cli: "claude" | "codex" = "claude"; // which tab is showing
@@ -131,6 +137,7 @@ export function createChatSession(
     if (env.claimSession && !env.claimSession(sessionId)) return false;
     slot().handle?.stop();
     slot().handle = null;
+    slot().restage = false; // fresh slot — no pending config re-spawn to carry over
     slot().pendingId = sessionId;
     await repaint();
     return true;
@@ -138,7 +145,16 @@ export function createChatSession(
 
   async function ensureHandle() {
     const s = slot();
-    if (s.handle) return s.handle;
+    if (s.handle && !s.restage) return s.handle;
+    // A model/mode change since the last spawn: retire the old handle HERE (turn is
+    // idle — we're about to send), carrying its live sessionId into pendingId so the
+    // re-spawn RESUMES the same canonical session instead of starting a blank one.
+    if (s.handle && s.restage) {
+      s.pendingId = s.handle.sessionId || s.pendingId;
+      s.handle.stop();
+      s.handle = null;
+      s.restage = false;
+    }
     const spawnCli = cli; // capture: cli must not change across the await
     s.handle = await rt.startSession({ cli: spawnCli, model: s.model, mode: s.mode, cwd: env.cwd(), sessionId: s.pendingId, approval: env.approval });
     wire(spawnCli, s.handle);
@@ -216,23 +232,33 @@ export function createChatSession(
         }
         break;
       case "model":
-        // model is per-slot; changing it only re-spawns THAT slot's handle next send.
+        // model is per-slot. Don't kill a live handle (that would abort an in-flight
+        // turn) — flag for a lazy re-spawn on the next send. If no handle exists yet,
+        // the next spawn already picks up the new value, so no restage is needed.
         slot().model = m.model && m.model !== "default" ? m.model : undefined;
-        slot().handle?.stop(); slot().handle = null;
+        if (slot().handle) slot().restage = true;
         break;
       case "mode":
         // permission mode is per-slot. Unlike model, the value is always meaningful
         // (claude "default"/codex "auto" are real modes), so we keep it as-is and let
-        // an undefined fall back to the engine default in spawn. Re-spawn next send so
-        // the new permissionMode/sandbox takes effect.
+        // an undefined fall back to the engine default in spawn. Same lazy-restage rule
+        // as model: NEVER stop the running handle here — toggling the mode picker must
+        // not interrupt the turn the user is watching. The new permissionMode/sandbox
+        // takes effect from the next message.
         if (typeof m.mode === "string") {
           slot().mode = m.mode;
-          slot().handle?.stop(); slot().handle = null;
+          if (slot().handle) slot().restage = true;
         }
         break;
-      case "send":
-        if (typeof m.text === "string") (await ensureHandle()).send(m.text);
+      case "send": {
+        // images are optional; an image-only turn (empty text) is allowed. Each is
+        // { mime, dataBase64, name? } — the engine layer renders/attaches per its CLI.
+        const imgs = Array.isArray(m.images) && m.images.length ? m.images : undefined;
+        if (typeof m.text === "string" && (m.text.length > 0 || imgs)) {
+          (await ensureHandle()).send(m.text, imgs);
+        }
         break;
+      }
       // NOTE: "approvalDecision" is owned by the approval channel (it subscribes to
       // the transport itself), so there's deliberately no case for it here.
       // scroll-to-top: fetch the page older than `cursor`, prepend in the UI
@@ -249,7 +275,7 @@ export function createChatSession(
           for (const k of ["claude", "codex"] as const) {
             const s = slots[k];
             if (m.sessionId === (s.handle?.sessionId ?? s.pendingId)) {
-              s.handle?.stop(); s.handle = null; s.pendingId = undefined;
+              s.handle?.stop(); s.handle = null; s.pendingId = undefined; s.restage = false;
             }
           }
           await repaint();
@@ -298,6 +324,9 @@ export function createChatSession(
       }
       case "ownedSkills":
         sendMarket({ type: "ownedSkills", names: env.ownedSkills ? await env.ownedSkills() : [] });
+        break;
+      case "getBalance":
+        sendMarket({ type: "balance", lamports: env.solBalance ? await env.solBalance() : null });
         break;
       // ── RPC config (issue #23): set/clear the Helius key, report status ──
       case "setHeliusKey":
