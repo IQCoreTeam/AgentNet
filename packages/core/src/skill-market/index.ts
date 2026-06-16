@@ -26,13 +26,14 @@ import { z } from "zod";
 import type { Connection } from "@solana/web3.js";
 import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
 import { searchSkills } from "../search/search.js";
-import { buySkill } from "../nft/skill.js";
+import { buySkill, publishSkill } from "../nft/skill.js";
 import { readSkillText } from "../nft/token2022.js";
 import { signerAddress } from "../core/chain.js";
 import { postNote, postAgentNote } from "../notes/notes.js";
 import { getSkillsCollectionMint, getWorkflowsCollectionMint } from "../core/seed.js";
 import { scanSkillText } from "./scan.js";
 import { VERIFY_RUBRIC } from "./rubric.js";
+import { solToLamports } from "./ingest/env.js";
 
 /**
  * Per-session record of which skills cleared the code-side verify scan (plan §3 ③).
@@ -187,6 +188,24 @@ export function getAgentNetTools() {
         required: ["agentWallet", "text"],
       },
     },
+    {
+      name: "publish_skill",
+      description:
+        "Publish a new skill to the marketplace: mint it as a soulbound Token-2022 NFT and store the SKILL.md body on-chain (you, the creator, auto-receive 1 copy). This is the raw publish action — it does NOT decide WHETHER something is worth becoming a skill; call it once you've authored the SKILL.md content and chosen a name/price.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Short skill name / slug, e.g. 'clean-code-refactor'." },
+          description: { type: "string", description: "One or two lines on what the skill does." },
+          text: { type: "string", description: "The full SKILL.md body the agent reads when this skill fires." },
+          category: { type: "string", description: "Optional single category, e.g. 'clean-code'." },
+          hashtags: { type: "array", items: { type: "string" }, description: "Optional tags, e.g. ['refactoring','testing']." },
+          priceSol: { type: "string", description: "Price in SOL a buyer pays (e.g. '0.1'). Use '0' for a free skill. Defaults to 0.1 if omitted." },
+          image: { type: "string", description: "Optional cover image: an http URL or an on-chain (base58) address." },
+        },
+        required: ["name", "description", "text"],
+      },
+    },
   ];
 }
 
@@ -276,6 +295,38 @@ export async function handleToolCall(
       return { content: [{ type: "text", text: `Comment posted (id: ${noteId})` }] };
     } catch (err: any) {
       return { isError: true, content: [{ type: "text", text: `Failed to post comment: ${err.message}` }] };
+    }
+  }
+
+  if (name === "publish_skill") {
+    // The raw publish DOOR — author fills the fields, we mint. No "is this worth a
+    // skill?" policy here (that judgment is the Hermes-informed workflow, issue #33
+    // §B / item 2); this tool is just the mechanism the workflow would call.
+    const skillName = args?.name as string;
+    const description = args?.description as string;
+    const text = args?.text as string;
+    if (!skillName || !description || !text) {
+      throw new Error("Missing required argument: name, description, and text");
+    }
+    // priceSol uses the SAME parse as the publish UI (default 0.1 SOL when omitted).
+    const priceSol = (args?.priceSol as string | undefined) ?? "0.1";
+    const lamports = solToLamports(priceSol);
+    if (lamports === null) {
+      return { isError: true, content: [{ type: "text", text: `Invalid priceSol "${priceSol}" — use a SOL amount like "0.1" or "0".` }] };
+    }
+    try {
+      const mint = await publishSkill(conn, signer, {
+        name: skillName,
+        description,
+        text,
+        category: args?.category as string | undefined,
+        hashtags: args?.hashtags as string[] | undefined,
+        price: lamports,
+        image: args?.image as string | undefined,
+      });
+      return { content: [{ type: "text", text: `Published skill "${skillName}" — mint: ${mint}` }] };
+    } catch (err: any) {
+      return { isError: true, content: [{ type: "text", text: `Failed to publish skill: ${err.message}` }] };
     }
   }
 

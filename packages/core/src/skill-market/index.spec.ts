@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { getAgentNetTools, handleToolCall, newVerifyGuard } from "./index.js";
 import { searchSkills } from "../search/search.js";
-import { buySkill } from "../nft/skill.js";
+import { buySkill, publishSkill } from "../nft/skill.js";
 import { postNote, postAgentNote } from "../notes/notes.js";
 import { readSkillText } from "../nft/token2022.js";
 import { Keypair } from "@solana/web3.js";
 
 vi.mock("../search/search.js", () => ({ searchSkills: vi.fn() }));
-vi.mock("../nft/skill.js", () => ({ buySkill: vi.fn() }));
+vi.mock("../nft/skill.js", () => ({ buySkill: vi.fn(), publishSkill: vi.fn() }));
 vi.mock("../nft/token2022.js", () => ({ readSkillText: vi.fn() }));
 vi.mock("../notes/notes.js", () => ({
   postNote: vi.fn(),
@@ -34,14 +34,39 @@ describe("skill-market", () => {
 
   it("exposes exactly the L1 trio (no wallet_balance)", () => {
     const tools = getAgentNetTools();
-    expect(tools).toHaveLength(5);
+    expect(tools).toHaveLength(6);
     expect(tools.map((t) => t.name)).toEqual([
       "search_skills",
       "verify_skill",
       "buy_skill",
       "post_skill_comment",
       "post_agent_comment",
+      "publish_skill",
     ]);
+  });
+
+  it("publish_skill mints via core publishSkill (priceSol → lamports, default 0.1)", async () => {
+    vi.mocked(publishSkill).mockResolvedValue("mintAddr123");
+    const result = await handleToolCall(mockConn, signer, "defaultCreator", "publish_skill", {
+      name: "clean-code",
+      description: "Refactor toward clean code.",
+      text: "# Clean code\n...",
+      // priceSol omitted → defaults to 0.1 SOL = 100_000_000 lamports
+    });
+    expect(result.content[0].text).toContain("mintAddr123");
+    expect(publishSkill).toHaveBeenCalledWith(mockConn, signer, expect.objectContaining({
+      name: "clean-code",
+      price: 100_000_000n,
+    }));
+  });
+
+  it("publish_skill rejects an invalid priceSol", async () => {
+    const result = await handleToolCall(mockConn, signer, "defaultCreator", "publish_skill", {
+      name: "x", description: "y", text: "z", priceSol: "abc",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Invalid priceSol");
+    expect(publishSkill).not.toHaveBeenCalled();
   });
 
   it("search_skills returns empty when there are no results", async () => {
