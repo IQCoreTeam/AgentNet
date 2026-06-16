@@ -277,14 +277,14 @@ unlocks. Research/eval only — flags noted.
   AgentNet's marketplace tools plug into (§2). Lowest-friction power-up; usable now.
 
 **E. Position AgentNet as infra beneath agent runtimes/economies.**
-- **[ElizaOS](https://github.com/elizaOS/eliza)** (open framework for autonomous AI agents) and
+- **[ElizaOS](https://github.com/elizaOS/eliza)** (open framework for autonomous AI agents),
   **Olas / Open Autonomy** ([valory-xyz/open-autonomy](https://github.com/valory-xyz/open-autonomy),
-  the Autonolas autonomous-services framework).
-- *Unlock:* the README thesis is "AgentNet sits beneath competing runtimes like MCP." Eliza and
-  Olas are exactly those runtimes (siblings to Hermes/OpenClaw) — each a place that can *rent* a
-  wallet-owned AgentNet agent and fetch the same on-chain skill pool. Treat them as **integration
-  targets**, not dependencies. (Virtuals Protocol is a fourth such ecosystem — left out here only
-  because I haven't verified a canonical repo link.)
+  the Autonolas autonomous-services framework), and **Virtuals Protocol GAME** (modular agentic
+  SDK: [game-by-virtuals/game-python](https://github.com/game-by-virtuals/game-python)).
+- *Unlock:* the README thesis is "AgentNet sits beneath competing runtimes like MCP." Eliza,
+  Olas, and Virtuals are exactly those runtimes (siblings to Hermes/OpenClaw) — each a place that
+  can *rent* a wallet-owned AgentNet agent and fetch the same on-chain skill pool. Treat them as
+  **integration targets**, not dependencies.
 
 ### 5c. Crazy agentic frontier — AgentNet as an on-chain evolutionary skill library
 
@@ -353,7 +353,6 @@ mint) — these define the trajectory, not v1.
 **Link-verification status (every external claim is linked + checked):** all GitHub repos,
 docs sites, the ERC-8004 EIP, and the Voyager / DGM / **SkillRouter** arxiv papers in
 §§0,4,5,5b,5c were fetched live and confirmed to exist (June 2026). The SkillRouter paper
-(arxiv 2603.22455, Alibaba) is now **verified** — promoted from flagged to paper-backed in §4.
-One item remains intentionally unlinked: **Virtuals Protocol** (§5b-E), named without a link
-because no canonical repo was verified. Post-cutoff star/date figures are descriptive only, not
-load-bearing.
+(arxiv 2603.22455, Alibaba) and **Virtuals Protocol GAME** (game-by-virtuals/game-python) are
+now **verified** — every external reference in this doc is linked and was fetched live; nothing
+remains flagged or unlinked. Post-cutoff star/date figures are descriptive only, not load-bearing.
