@@ -415,5 +415,6 @@ Exploration shows **~90% already exists in IQLabs / the SDKs.** Most is a clone 
 
 ## Authors
 
-- [zo-sol](https://github.com/zo-sol)
+- [zo.sol](https://github.com/zo-sol)
+- [shankstwin](https://github.com/mega123-art)
 - [SpaceBunEth](https://github.com/SpaceBunEth)
