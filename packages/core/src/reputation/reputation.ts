@@ -32,11 +32,17 @@ export async function getReputation(
   const totalSupply = supplies.reduce((acc, n) => acc + n, 0);
 
   // Count reviews across all creator's skills (informational, not a score).
-  let notesReceived = 0;
-  for (const skill of mySkills) {
-    const reviews = await readRows(reviewsHint(collectionFor(skill.type), skill.id), { limit: 1000 });
-    notesReceived += reviews.filter((n) => typeof n.id === "string").length;
-  }
+  // Fan out in parallel: a prolific agent has many skills and a sequential loop
+  // (one gateway round-trip each) dominated profile-load latency. The gateway
+  // caches these, so one concurrent round is cheap.
+  const reviewCounts = await Promise.all(
+    mySkills.map((skill) =>
+      readRows(reviewsHint(collectionFor(skill.type), skill.id), { limit: 1000 })
+        .then((reviews) => reviews.filter((n) => typeof n.id === "string").length)
+        .catch(() => 0),
+    ),
+  );
+  const notesReceived = reviewCounts.reduce((acc, n) => acc + n, 0);
 
   return {
     wallet,

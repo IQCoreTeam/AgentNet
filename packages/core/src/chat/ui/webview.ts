@@ -493,10 +493,9 @@ export function chatHtml(): string {
                  font-size: 15px; border-radius: 5px; background: transparent; color: var(--vscode-foreground);
                  opacity: 0.55; border: 1px solid transparent; cursor: pointer; flex: 0 0 auto; }
   #skillsClose:hover { opacity: 1; background: var(--an-bg-1); border-color: var(--an-line); }
-  /* 3-column grid that grows to fill the screen (up to ~60% of the viewport) before
-     it scrolls — the panel takes maximum size rather than capping at ~3 rows. */
+  /* owned-skill grid scrolls once it outgrows ~3 rows instead of pushing the chat up */
   #skillGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
-               max-height: 60vh; overflow-y: auto; }
+               max-height: 188px; overflow-y: auto; }
   /* a skill slot: an item card. empty = a quiet dashed "coming soon" placeholder. */
   .skSlot { aspect-ratio: 1; border-radius: var(--an-radius-sm); display: flex; align-items: center;
             justify-content: center; }
@@ -803,14 +802,69 @@ export function chatHtml(): string {
                                   border:1px solid var(--an-line); border-radius:6px; font-size:0.88em; }
   .pr-compose button { margin-top:6px; padding:5px 14px; }
   .pr-compose .pr-err { color:#e05252; font-size:0.82em; margin-top:4px; display:none; }
-  .pr-buyall { width:100%; margin:10px 0; padding:8px; background:var(--an-green,#3fa37a);
-               color:#06231a; font-weight:600; border:none; border-radius:6px; cursor:pointer; }
+  /* buy-all: minimal outline pill (matches the market's .mc-buy tone, not a heavy fill) */
+  .pr-buyall { display:inline-flex; align-items:center; gap:6px; margin:2px 0 10px; padding:6px 14px;
+               background:var(--an-green-dim); border:1px solid var(--an-green-line); color:var(--an-green);
+               font-weight:600; font-size:0.86em; border-radius:999px; cursor:pointer; transition:background .12s; }
+  .pr-buyall:hover { background:var(--an-green-soft); }
   .pr-buyall:disabled { opacity:0.5; cursor:not-allowed; }
-  .pr-confirm { background:var(--an-bg-2); border:1px solid var(--an-line); border-radius:8px;
+  .pr-confirm { background:var(--an-bg-2); border:1px solid var(--an-line); border-radius:var(--an-radius);
                 padding:12px; margin:10px 0; }
   .pr-confirm ul { margin:6px 0 10px 16px; font-size:0.88em; }
   .pr-confirm .confirm-btns { display:flex; gap:8px; }
-  .pr-confirm .confirm-btns button { flex:1; }
+  .pr-confirm .confirm-btns button { flex:1; border-radius:var(--an-radius-sm); }
+
+  /* ── agent profile redesign ─────────────────────────────────────────────
+     header = identity card (left) beside a reputation stat card (right);
+     skills shown as market-style cards that open a popup; Skills/Notes tabs. */
+  .pr-header { display:flex; flex-wrap:wrap; gap:12px; align-items:stretch; margin-bottom:12px; }
+  .pr-header .card { margin-bottom:0; }
+  .pr-id { flex:2 1 200px; min-width:0; display:flex; align-items:center; gap:12px; }
+  .pr-id #wAvatarBig { margin:0; flex:none; }
+  .pr-id-txt { min-width:0; }
+  .pr-id .addr { font-size:0.8em; }
+  .pr-rep { flex:1 1 150px; display:flex; flex-direction:column; gap:8px; }
+  .pr-rep-title { font-size:0.68em; font-weight:700; text-transform:uppercase; letter-spacing:.06em;
+                  color:var(--an-muted,#888); }
+  .pr-rep-stats { display:flex; flex-direction:column; gap:7px; }
+  .pr-rep-stat { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+  .pr-rep-stat .v { font-size:1.05em; font-weight:700; color:var(--an-green); }
+  .pr-rep-stat .l { font-size:0.78em; opacity:0.6; }
+  /* Skills / Notes segmented tabs (same shape as the market tabs) */
+  .pr-tabs { display:inline-flex; gap:2px; padding:2px; margin:2px 0 12px;
+             background:var(--an-bg); border:1px solid var(--an-line); border-radius:999px; }
+  .pr-tab { background:transparent; border:none; color:var(--vscode-foreground); opacity:0.6;
+            border-radius:999px; padding:4px 16px; font-size:0.85em; cursor:pointer; }
+  .pr-tab.on { background:var(--an-green-dim); color:var(--an-green); opacity:1; font-weight:600; }
+  .pr-empty { opacity:0.5; font-size:0.85em; padding:10px 2px; }
+  /* a skill card in the profile — same language as the market .mktCard */
+  .pr-skill { display:flex; align-items:center; gap:12px; padding:10px 12px; margin-bottom:8px;
+              border:1px solid var(--an-line); border-radius:var(--an-radius); background:var(--an-bg);
+              transition:border-color .12s; }
+  .pr-skill .ps-img { width:36px; height:36px; border-radius:8px; background:var(--an-green-dim); flex:none;
+                      display:flex; align-items:center; justify-content:center; }
+  .pr-skill .ps-img .wand { width:22px; height:auto; color:var(--an-green); display:inline-flex; }
+  .pr-skill .ps-img .wand svg { width:100%; height:auto; }
+  .pr-skill .ps-main { flex:1; min-width:0; cursor:pointer; }
+  .pr-skill .ps-name { font-weight:600; font-size:0.92em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pr-skill .ps-desc { opacity:0.6; font-size:0.82em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pr-skill:hover { border-color:var(--an-green-line); }
+  .pr-skill:hover .ps-name { color:var(--an-green); }
+  .pr-skill .ps-price { color:var(--an-green); font-size:0.8em; font-weight:600; white-space:nowrap; }
+  .pr-skill .mc-buy { background:var(--an-green-dim); border:1px solid var(--an-green-line); color:var(--an-green);
+                      border-radius:999px; padding:5px 14px; font-size:0.82em; font-weight:600; cursor:pointer; white-space:nowrap; }
+  .pr-skill .mc-buy[disabled] { opacity:0.5; cursor:default; }
+  /* skill popup overlay (reuses .dt-* styles for its body) */
+  .skModal { position:fixed; inset:0; z-index:60; background:rgba(0,0,0,0.5);
+             display:flex; align-items:center; justify-content:center; padding:24px; }
+  .skModal-card { position:relative; width:100%; max-width:480px; max-height:82vh; overflow:auto;
+                  background:var(--vscode-editor-background); border:1px solid var(--an-line);
+                  border-radius:var(--an-radius); padding:20px 18px 18px; box-shadow:0 12px 40px rgba(0,0,0,0.4); }
+  .skModal-close { position:absolute; top:10px; right:10px; width:26px; height:26px; line-height:1;
+                   background:transparent; border:1px solid transparent; border-radius:6px; color:var(--vscode-foreground);
+                   opacity:0.55; cursor:pointer; font-size:13px; }
+  .skModal-close:hover { opacity:1; background:var(--an-bg-1); border-color:var(--an-line); }
+  #skillModalBody .dt-buy { width:100%; box-sizing:border-box; text-align:center; }
 
   /* ── make-skill: topbar/header/panel entry buttons + publish form ── */
   #makeSkillBtn { color: var(--an-green); }
@@ -949,6 +1003,13 @@ export function chatHtml(): string {
   <div id="celebrate"></div>
   <!-- buy-failure banner (orange-bordered, (i) icon) — filled + shown by showBuyError -->
   <div id="buyErr" class="buyErr" style="display:none"></div>
+  <!-- skill popup: opened from a profile skill card; reuses the .dt-* detail styles -->
+  <div id="skillModal" class="skModal" style="display:none">
+    <div class="skModal-card">
+      <button class="skModal-close" id="skillModalClose" title="Close" aria-label="Close">✕</button>
+      <div id="skillModalBody"></div>
+    </div>
+  </div>
   <!-- No top tab bar: the wallet card (bottom-left) is the entry to My Wallet. -->
 
   <!-- CHAT view -->
@@ -1113,10 +1174,19 @@ export function chatHtml(): string {
   <div id="walletView" class="panel" style="display:none">
     <div class="page">
       <div id="backToChat" class="muted" style="cursor:pointer;margin-bottom:10px">‹ Back to chat</div>
-      <div class="card center">
-        <div id="wAvatarBig"></div>
-        <div class="addr" id="walletAddr">…</div>
-        <div class="muted small" style="margin-top:0" id="profileSubtitle">This wallet is your agent.</div>
+      <!-- header: identity (left) sits beside a reputation stat card (right) -->
+      <div class="pr-header">
+        <div class="pr-id card">
+          <div id="wAvatarBig"></div>
+          <div class="pr-id-txt">
+            <div class="addr" id="walletAddr">…</div>
+            <div class="muted small" id="profileSubtitle" style="margin:2px 0 0">This wallet is your agent.</div>
+          </div>
+        </div>
+        <div class="pr-rep card">
+          <div class="pr-rep-title">Reputation</div>
+          <div id="profileRep" class="pr-rep-stats"></div>
+        </div>
       </div>
       <div id="profileSelfOnly">
         <div class="card">
@@ -2281,7 +2351,16 @@ export function chatHtml(): string {
   }
   function showProfile(walletAddr) {
     currentProfileWallet = walletAddr;
-    document.getElementById('profileBody').innerHTML = '<div class="mktEmpty">Loading…</div>';
+    // paint the TARGET wallet immediately so the loading state never flashes the
+    // previously-shown (own) wallet. self-only sections stay hidden until the
+    // profile lands and tells us whether this wallet is ours.
+    document.getElementById('wAvatarBig').innerHTML = avatarSvg(walletAddr);
+    document.getElementById('walletAddr').textContent = walletAddr;
+    document.getElementById('profileSubtitle').textContent = 'Loading profile…';
+    document.getElementById('profileRep').innerHTML = '';
+    document.getElementById('profileSelfOnly').style.display = 'none';
+    document.getElementById('profileSelfOnly2').style.display = 'none';
+    document.getElementById('profileBody').innerHTML = '<div class="pr-empty">Loading…</div>';
     showView('wallet');
     vscode.postMessage({ type: 'getAgentProfile', wallet: walletAddr });
   }
@@ -2306,7 +2385,7 @@ export function chatHtml(): string {
   function renderProfile(profile) {
     const self = profile.self;
     const wallet = profile.wallet;
-    // avatar + address
+    // identity (header, left)
     document.getElementById('wAvatarBig').innerHTML = avatarSvg(wallet);
     document.getElementById('walletAddr').textContent = wallet;
     document.getElementById('profileSubtitle').textContent = self ? 'This wallet is your agent.' : 'Agent profile';
@@ -2315,40 +2394,56 @@ export function chatHtml(): string {
     document.getElementById('profileSelfOnly2').style.display = self ? '' : 'none';
     if (self) renderWalletStorage();
 
+    // ── reputation card (header, right) — stacked stats ──
+    const rep = profile.reputation;
+    const repEl = document.getElementById('profileRep');
+    repEl.innerHTML = '';
+    [
+      [rep.skillsPublished, 'skills'],
+      [rep.totalSupply, 'total supply'],
+      [rep.notesReceived, 'notes'],
+    ].forEach(([val, label]) => {
+      const stat = document.createElement('div'); stat.className = 'pr-rep-stat';
+      const v = document.createElement('span'); v.className = 'v'; v.textContent = String(val);
+      const l = document.createElement('span'); l.className = 'l'; l.textContent = label;
+      stat.appendChild(v); stat.appendChild(l); repEl.appendChild(stat);
+    });
+
     const body = document.getElementById('profileBody');
     body.innerHTML = '';
 
-    // ── reputation row ──
-    const rep = profile.reputation;
-    const repEl = document.createElement('div'); repEl.className = 'card';
-    const repLbl = document.createElement('div'); repLbl.className = 'muted'; repLbl.textContent = 'Reputation';
-    const repRow = document.createElement('div'); repRow.style.cssText = 'display:flex;gap:18px;margin-top:6px;font-size:0.92em';
-    [
-      [rep.skillsPublished, ' skills'],
-      [rep.totalSupply, '× supply'],
-      [rep.notesReceived, ' notes'],
-    ].forEach(([val, label]) => {
-      const sp = document.createElement('span');
-      const b = document.createElement('strong'); b.textContent = String(val);
-      const t = document.createTextNode(label);
-      sp.appendChild(b); sp.appendChild(t); repRow.appendChild(sp);
-    });
-    repEl.appendChild(repLbl); repEl.appendChild(repRow);
-    body.appendChild(repEl);
+    // ── tabs: Skills / Notes ──
+    const tabs = document.createElement('div'); tabs.className = 'pr-tabs';
+    const tabSkills = document.createElement('button'); tabSkills.className = 'pr-tab on'; tabSkills.textContent = 'Skills';
+    const tabNotes = document.createElement('button'); tabNotes.className = 'pr-tab'; tabNotes.textContent = 'Notes';
+    tabs.appendChild(tabSkills); tabs.appendChild(tabNotes);
+    body.appendChild(tabs);
+    const paneSkills = document.createElement('div');
+    const paneNotes = document.createElement('div'); paneNotes.style.display = 'none';
+    body.appendChild(paneSkills); body.appendChild(paneNotes);
+    function selectTab(which) {
+      const onSkills = which === 'skills';
+      tabSkills.classList.toggle('on', onSkills); tabNotes.classList.toggle('on', !onSkills);
+      paneSkills.style.display = onSkills ? '' : 'none'; paneNotes.style.display = onSkills ? 'none' : '';
+    }
+    tabSkills.addEventListener('click', () => selectTab('skills'));
+    tabNotes.addEventListener('click', () => selectTab('notes'));
 
-    // ── helper: mini skill card row ──
-    function skillRow(card) {
-      const r = document.createElement('div'); r.className = 'agRow'; r.style.padding = '7px 0';
-      const nm = document.createElement('div'); nm.style.flex = '1';
-      const nmTitle = document.createElement('div'); nmTitle.style.fontSize = '0.9em';
-      nmTitle.textContent = card.name || card.id;
-      nm.appendChild(nmTitle);
+    // ── helper: pretty skill card (click body → popup; Buy stops propagation) ──
+    function skillCard(card) {
+      const r = document.createElement('div'); r.className = 'pr-skill';
+      const img = document.createElement('div'); img.className = 'ps-img';
+      img.innerHTML = '<span class="wand">' + ${JSON.stringify(IQ_LOGO_SVG)} + '</span>';
+      const main = document.createElement('div'); main.className = 'ps-main';
+      const nm = document.createElement('div'); nm.className = 'ps-name'; nm.textContent = card.name || card.id;
+      main.appendChild(nm);
       if (card.description) {
-        const nmDesc = document.createElement('div'); nmDesc.className = 'muted small';
-        nmDesc.textContent = card.description; nm.appendChild(nmDesc);
+        const ds = document.createElement('div'); ds.className = 'ps-desc'; ds.textContent = card.description; main.appendChild(ds);
       }
-      nm.style.cursor = 'pointer'; nm.addEventListener('click', () => openDetail(card.id));
-      r.appendChild(nm);
+      main.addEventListener('click', () => openSkillModal(card.id));
+      r.appendChild(img); r.appendChild(main);
+      const priceTxt = fmtPrice(card.price);
+      if (priceTxt) { const pr = document.createElement('span'); pr.className = 'ps-price'; pr.textContent = priceTxt; r.appendChild(pr); }
       if (!self) {
         const owned = ownedSkills.indexOf(card.name) >= 0;
         const btn = document.createElement('button'); btn.className = 'mc-buy';
@@ -2362,55 +2457,64 @@ export function chatHtml(): string {
       return r;
     }
 
-    // ── created skills ──
+    // ── SKILLS pane: created (with buy-all) + owned ──
     if (profile.createdSkills.length) {
       const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Created skills';
-      body.appendChild(sec);
+      paneSkills.appendChild(sec);
       if (!self) {
-        const buyAll = document.createElement('button'); buyAll.className = 'pr-buyall';
-        buyAll.textContent = 'Buy all (' + profile.createdSkills.filter(c => ownedSkills.indexOf(c.name) < 0).length + ' not owned)';
-        buyAll.addEventListener('click', () => showBuyAllConfirm(profile));
-        body.appendChild(buyAll);
+        const notOwned = profile.createdSkills.filter(c => ownedSkills.indexOf(c.name) < 0).length;
+        if (notOwned > 0) {
+          const buyAll = document.createElement('button'); buyAll.className = 'pr-buyall';
+          buyAll.textContent = 'Buy all · ' + notOwned + ' not owned';
+          buyAll.addEventListener('click', () => showBuyAllConfirm(profile));
+          paneSkills.appendChild(buyAll);
+        }
       }
-      profile.createdSkills.forEach(c => body.appendChild(skillRow(c)));
+      profile.createdSkills.forEach(c => paneSkills.appendChild(skillCard(c)));
     }
-
-    // ── owned skills ──
     const ownedNotCreated = profile.ownedSkills.filter(o => !profile.createdSkills.some(c => c.id === o.id));
     if (ownedNotCreated.length) {
       const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Owned skills';
-      body.appendChild(sec);
-      ownedNotCreated.forEach(o => body.appendChild(skillRow(o)));
+      paneSkills.appendChild(sec);
+      ownedNotCreated.forEach(o => paneSkills.appendChild(skillCard(o)));
+    }
+    if (!profile.createdSkills.length && !ownedNotCreated.length) {
+      const e = document.createElement('div'); e.className = 'pr-empty'; e.textContent = 'No skills yet.'; paneSkills.appendChild(e);
     }
 
-    // ── blog (self-notes) ──
+    // ── helper: a note/comment card ──
+    function noteCard(n, withAuthor) {
+      const el = document.createElement('div'); el.className = 'pr-note';
+      if (withAuthor) {
+        const auth = document.createElement('div'); auth.className = 'pr-note-author';
+        auth.textContent = n.author ? (n.author.slice(0, 6) + '…' + n.author.slice(-4)) : '?';
+        el.appendChild(auth);
+      }
+      const bodyEl = document.createElement('div'); renderMd(bodyEl, n.text || ''); el.appendChild(bodyEl);
+      if (n.gitLink) {
+        let safeLink = null;
+        try { const u = new URL(n.gitLink); if (/^https?:|^git:/.test(u.protocol)) safeLink = u.href; } catch {}
+        if (safeLink) {
+          const gl = document.createElement('div'); gl.className = 'pr-note-git';
+          const a = document.createElement('a'); a.href = safeLink; a.textContent = safeLink;
+          a.target = '_blank'; a.rel = 'noopener noreferrer'; gl.appendChild(a); el.appendChild(gl);
+        }
+      }
+      return el;
+    }
+
+    // ── NOTES pane: blog (self-notes) + compose (own) + comments ──
     const selfNotes = profile.notes.filter(n => n.isSelfNote);
     if (selfNotes.length) {
       const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Blog';
-      body.appendChild(sec);
+      paneNotes.appendChild(sec);
       const blog = document.createElement('div'); blog.className = 'pr-blog';
-      selfNotes.forEach(n => {
-        const el = document.createElement('div'); el.className = 'pr-note';
-        const bodyEl = document.createElement('div'); renderMd(bodyEl, n.text || '');
-        el.appendChild(bodyEl);
-        if (n.gitLink) {
-          let safeLink = null;
-          try { const u = new URL(n.gitLink); if (/^https?:|^git:/.test(u.protocol)) safeLink = u.href; } catch {}
-          if (safeLink) {
-            const gl = document.createElement('div'); gl.className = 'pr-note-git';
-            const a = document.createElement('a'); a.href = safeLink; a.textContent = safeLink;
-            a.target = '_blank'; a.rel = 'noopener noreferrer'; gl.appendChild(a); el.appendChild(gl);
-          }
-        }
-        blog.appendChild(el);
-      });
-      body.appendChild(blog);
+      selfNotes.forEach(n => blog.appendChild(noteCard(n, false)));
+      paneNotes.appendChild(blog);
     }
-
-    // ── self-note compose (own profile only) ──
     if (self) {
       const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Post to blog';
-      body.appendChild(sec);
+      paneNotes.appendChild(sec);
       const compose = document.createElement('div'); compose.className = 'pr-compose';
       const ta = document.createElement('textarea'); ta.placeholder = 'Write a blog post or update…';
       const gitInput = document.createElement('input'); gitInput.type = 'text'; gitInput.placeholder = 'GitHub / git URL (optional)';
@@ -2423,33 +2527,18 @@ export function chatHtml(): string {
         vscode.postMessage({ type: 'postAgentNote', agentWallet: wallet, text, gitLink });
       });
       compose.appendChild(ta); compose.appendChild(gitInput); compose.appendChild(errEl); compose.appendChild(btn);
-      body.appendChild(compose);
+      paneNotes.appendChild(compose);
       // stash submit button reference for agentNoteResult handler
       body._postBtn = btn; body._postErr = errEl;
     }
-
-    // ── comments (non-self notes) ──
     const comments = profile.notes.filter(n => !n.isSelfNote);
     if (comments.length) {
       const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Comments (' + comments.length + ')';
-      body.appendChild(sec);
-      comments.forEach(n => {
-        const el = document.createElement('div'); el.className = 'pr-note';
-        const auth = document.createElement('div'); auth.className = 'pr-note-author';
-        auth.textContent = n.author ? (n.author.slice(0, 6) + '…' + n.author.slice(-4)) : '?';
-        const bodyEl = document.createElement('div'); renderMd(bodyEl, n.text || '');
-        el.appendChild(auth); el.appendChild(bodyEl);
-        if (n.gitLink) {
-          let safeLink = null;
-          try { const u = new URL(n.gitLink); if (/^https?:|^git:/.test(u.protocol)) safeLink = u.href; } catch {}
-          if (safeLink) {
-            const gl = document.createElement('div'); gl.className = 'pr-note-git';
-            const a = document.createElement('a'); a.href = safeLink; a.textContent = safeLink;
-            a.target = '_blank'; a.rel = 'noopener noreferrer'; gl.appendChild(a); el.appendChild(gl);
-          }
-        }
-        body.appendChild(el);
-      });
+      paneNotes.appendChild(sec);
+      comments.forEach(n => paneNotes.appendChild(noteCard(n, true)));
+    }
+    if (!selfNotes.length && !self && !comments.length) {
+      const e = document.createElement('div'); e.className = 'pr-empty'; e.textContent = 'No notes yet.'; paneNotes.appendChild(e);
     }
   }
 
@@ -2467,7 +2556,7 @@ export function chatHtml(): string {
     const ul = document.createElement('ul');
     notOwned.forEach(c => { const li = document.createElement('li'); li.textContent = c.name || c.id; ul.appendChild(li); });
     const btns = document.createElement('div'); btns.className = 'confirm-btns';
-    const ok = document.createElement('button'); ok.textContent = 'Confirm'; ok.style.background = 'var(--an-green,#3fa37a)'; ok.style.color = '#06231a';
+    const ok = document.createElement('button'); ok.className = 'pr-buyall'; ok.style.justifyContent = 'center'; ok.textContent = 'Confirm';
     const cancel = document.createElement('button'); cancel.textContent = 'Cancel';
     ok.addEventListener('click', () => {
       ok.disabled = true; cancel.disabled = true; ok.textContent = 'Buying…';
@@ -2476,9 +2565,10 @@ export function chatHtml(): string {
     cancel.addEventListener('click', () => confirm.remove());
     btns.appendChild(ok); btns.appendChild(cancel);
     confirm.appendChild(h); confirm.appendChild(ul); confirm.appendChild(btns);
-    // insert after the buy-all button (first .pr-sec)
-    const firstSec = body.querySelector('.pr-sec');
-    if (firstSec) body.insertBefore(confirm, firstSec.nextSibling); else body.appendChild(confirm);
+    // insert right after the Buy-all button (which lives in the Skills pane)
+    const buyAllBtn = body.querySelector('.pr-buyall');
+    if (buyAllBtn && buyAllBtn.parentNode) buyAllBtn.parentNode.insertBefore(confirm, buyAllBtn.nextSibling);
+    else body.appendChild(confirm);
   }
 
   // ---- top-bar dropdowns: History (sessions) + Wallet (agent menu) ----
@@ -2672,6 +2762,72 @@ export function chatHtml(): string {
     mktDetailBody.innerHTML = '<div class="mktEmpty">Loading…</div>';
     vscode.postMessage({ type: 'getSkillDetail', mint });
   }
+
+  // ---- skill popup (opened from a profile skill card) ----------------------
+  // A modal overlay that reuses the .dt-* detail styles. Routed separately from
+  // the market detail view via skillModalOpen so one getSkillDetail reply lands
+  // in the right place.
+  const skillModalEl = document.getElementById('skillModal');
+  const skillModalBody = document.getElementById('skillModalBody');
+  let skillModalOpen = false, skillModalBuyBtn = null, skillModalName = null;
+  function openSkillModal(mint) {
+    skillModalOpen = true;
+    skillModalBuyBtn = null; skillModalName = null;
+    skillModalBody.innerHTML = '<div class="mktEmpty">Loading…</div>';
+    skillModalEl.style.display = 'flex';
+    vscode.postMessage({ type: 'getSkillDetail', mint });
+  }
+  function closeSkillModal() {
+    skillModalOpen = false; skillModalBuyBtn = null; skillModalName = null;
+    skillModalEl.style.display = 'none';
+  }
+  // flip the modal's Buy → Owned once an ownedSkills refresh shows we now hold it
+  function refreshModalOwned() {
+    if (skillModalBuyBtn && skillModalName && ownedSkills.indexOf(skillModalName) >= 0) {
+      skillModalBuyBtn.disabled = true; skillModalBuyBtn.textContent = 'Owned';
+    }
+  }
+  function renderSkillModal(detail) {
+    const c = (detail && detail.card) || {};
+    const owned = ownedSkills.indexOf(c.name) >= 0;
+    skillModalName = c.name || null;
+    skillModalBody.innerHTML = '';
+    const head = document.createElement('div'); head.className = 'dt-head';
+    const img = document.createElement('div'); img.className = 'dt-img';
+    img.innerHTML = '<span class="wand">' + ${JSON.stringify(IQ_LOGO_SVG)} + '</span>';
+    const htxt = document.createElement('div');
+    const kind = document.createElement('div'); kind.className = 'dt-kind'; kind.textContent = (c.type || 'skill');
+    const nm = document.createElement('div'); nm.className = 'dt-name'; nm.textContent = c.name || c.id || '';
+    htxt.appendChild(kind); htxt.appendChild(nm);
+    head.appendChild(img); head.appendChild(htxt); skillModalBody.appendChild(head);
+    if (c.description) { const d = document.createElement('div'); d.className = 'dt-desc'; d.textContent = c.description; skillModalBody.appendChild(d); }
+    const meta = document.createElement('div'); meta.className = 'dt-meta';
+    const addTag = (t) => { const s = document.createElement('span'); s.className = 'dt-tag'; s.textContent = t; meta.appendChild(s); };
+    if (c.category) addTag(c.category);
+    for (const h of (c.hashtags || [])) addTag('#' + h);
+    if (typeof c.supply === 'number') addTag(c.supply + '\\u00d7 owned');
+    const price = fmtPrice(c.price); if (price) addTag(price);
+    if (meta.childElementCount) skillModalBody.appendChild(meta);
+    // buy (hidden on your own skills — you can't buy what you authored)
+    if (!owned || c.type) {
+      const buy = document.createElement('button'); buy.className = 'dt-buy';
+      const buyLabel = price && price !== 'Free' ? ('Buy · ' + price) : 'Buy';
+      buy.textContent = owned ? 'Owned' : buyLabel; buy.disabled = owned;
+      buy.addEventListener('click', () => {
+        buy.disabled = true; buy.textContent = 'Buying…';
+        vscode.postMessage({ type: 'buySkill', skillId: c.id, creatorWallet: c.creator });
+      });
+      skillModalBody.appendChild(buy); skillModalBuyBtn = buy;
+    }
+    if (detail && detail.skillText) {
+      const sec = document.createElement('div'); sec.className = 'dt-sec'; sec.textContent = (c.type === 'workflow' ? 'Workflow' : 'Skill') + ' text';
+      const bd = document.createElement('div'); bd.className = 'dt-body'; bd.textContent = detail.skillText;
+      skillModalBody.appendChild(sec); skillModalBody.appendChild(bd);
+    }
+  }
+  document.getElementById('skillModalClose').addEventListener('click', closeSkillModal);
+  skillModalEl.addEventListener('click', (e) => { if (e.target === skillModalEl) closeSkillModal(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && skillModalOpen) closeSkillModal(); });
   // Render the detail sub-view from a {card, skillText, requiredCards} payload. For a
   // workflow, each requiredCard is a clickable row that opens ITS detail (re-uses the
   // same view, so you can drill skill→workflow→skill without leaving the market).
@@ -3035,7 +3191,6 @@ export function chatHtml(): string {
   function setWallet(address) {
     myWalletAddress = address || null;
     const full = address || '(not connected)';
-    document.getElementById('walletAddr').textContent = full;
     document.getElementById('wAddr').textContent = address ? short(address) : 'not connected';
     const label = address ? short(address) : 'My Wallet';
     document.getElementById('wName').textContent = label;
@@ -3044,7 +3199,13 @@ export function chatHtml(): string {
     const svg = address ? avatarSvg(address) : '';
     document.getElementById('wAvatar').innerHTML = svg;
     document.getElementById('wAvatar2').innerHTML = svg;
-    document.getElementById('wAvatarBig').innerHTML = svg;
+    // #wAvatarBig + #walletAddr are SHARED with the agent-profile view. A wallet/sync
+    // push must not clobber them with our own identity while we're browsing someone
+    // else's profile — only paint them when the open profile is our own (or none yet).
+    if (currentProfileWallet === null || currentProfileWallet === address) {
+      document.getElementById('walletAddr').textContent = full;
+      document.getElementById('wAvatarBig').innerHTML = svg;
+    }
   }
 
   // Drive sync indicator next to the pill: ✓ synced / ⚠ failed (hover = why).
@@ -3142,8 +3303,14 @@ export function chatHtml(): string {
       const msg = 'Search failed: ' + escapeHtml(m.message || 'unknown');
       mktResults.innerHTML = '<div class="mktEmpty">' + msg + '</div>';
       skillResults.innerHTML = '<div class="shopEmpty">' + msg + '</div>';
+      // the profile view shares no element with these — clear its loading state too so
+      // a failed getAgentProfile doesn't leave the profile stuck on "Loading…".
+      if (currentProfileWallet) {
+        document.getElementById('profileSubtitle').textContent = 'Could not load profile.';
+        document.getElementById('profileBody').innerHTML = '<div class="pr-empty">' + msg + '</div>';
+      }
     }
-    else if (m.type === 'skillDetail') renderDetail(m.detail);
+    else if (m.type === 'skillDetail') { if (skillModalOpen) renderSkillModal(m.detail); else renderDetail(m.detail); }
     // issue #34: comment write result — re-enable the submit button; on failure show error
     else if (m.type === 'postNoteResult') {
       const submit = mktDetailBody.querySelector('.dt-note-submit');
@@ -3160,6 +3327,7 @@ export function chatHtml(): string {
       if (panels.market.style.display !== 'none') renderMarketResults(lastMarketResults);
       renderSkillResults(lastMarketResults);   // small skills-panel shop badges
       refreshDetailOwned();                    // detail view (if open) — clears its "Buying…"
+      refreshModalOwned();                     // skill popup (if open) — flip Buy → Owned
     }
     else if (m.type === 'buyResult') {
       if (m.ok) {
@@ -3173,6 +3341,7 @@ export function chatHtml(): string {
         // orange (i) banner and just re-enable the buttons that were mid-"Buying…".
         showBuyError(m.error);
         if (detailBuyBtn) { detailBuyBtn.disabled = false; detailBuyBtn.textContent = 'Buy'; }
+        if (skillModalBuyBtn) { skillModalBuyBtn.disabled = false; skillModalBuyBtn.textContent = 'Buy'; }
         renderMarketResults(lastMarketResults); // restore any card stuck on "Buying…"
         renderSkillResults(lastMarketResults);
       }

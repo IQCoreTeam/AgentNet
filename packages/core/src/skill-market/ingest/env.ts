@@ -17,6 +17,7 @@ import { buySkill, publishSkill as corePublishSkill } from "../../nft/skill.js";
 import { getSolBalance } from "../../notes/index.js";
 import { readSkillText } from "../../nft/token2022.js";
 import { claudeSkillsDir } from "../../core/paths.js";
+import { classifySkills } from "../registry.js";
 import { resolveRpcUrl } from "../../core/rpc.js";
 import type { AgentProfile, SkillCard, SkillDetail } from "../../chat/marketMessages.js";
 import type { Skill } from "../../core/types.js";
@@ -195,6 +196,25 @@ export async function marketplaceEnv(wallet: Wallet) {
       }
     },
 
+    // The skills shown in the "Equipped skills" grid = the wallet's installed skills that
+    // are real items (bought NFTs or hand-added local skills), NOT the app's bundled tools
+    // (skill-shopping / make-skill — those live in the small built-in list, not the grid).
+    //
+    // Source = the local skills dir, classified by the origin manifest (skills.json). We do
+    // NOT intersect the indexer catalog: a bought skill's per-buyer mint isn't a catalog
+    // member, so that intersection is always empty (and it cost a DAS+indexer round-trip).
+    // Installed = equipped here, which is exactly what the panel means. Network-free, no 429.
+    async ownedNftSkills() {
+      try {
+        const entries = await readdir(claudeSkillsDir(), { withFileTypes: true });
+        const slugs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+        const classified = await classifySkills(slugs);
+        return classified.filter((c) => c.origin !== "bundled").map((c) => c.slug);
+      } catch {
+        return [];
+      }
+    },
+
     // issue #35: agent directory ranked by totalSupply (indexer source; das fallback).
     async listAgents() {
       try {
@@ -217,7 +237,9 @@ export async function marketplaceEnv(wallet: Wallet) {
         getReputation(conn, agentWallet, source).catch(() => ({
           wallet: agentWallet, skillsPublished: 0, totalSupply: 0, notesReceived: 0, updatedAt: Date.now(),
         })),
-        runSearch(""),
+        // catch here too: a catalog fetch failure must NOT reject the whole profile
+        // (otherwise the UI hangs on "Loading…"); degrade to empty created/owned lists.
+        runSearch("").catch(() => [] as Skill[]),
         ownedAssetIds(agentWallet).catch(() => new Set<string>()),
         readAgentNotes(agentWallet).catch(() => []),
       ]);

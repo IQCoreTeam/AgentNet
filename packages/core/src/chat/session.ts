@@ -51,6 +51,10 @@ export interface ChatEnv {
   // issue #34: post a comment on a skill (holder-gated), returns refreshed notes on success
   postNote?(skillId: string, skillType: "skill" | "workflow" | undefined, text: string, gitLink?: string): Promise<{ ok: boolean; notes?: import("./marketMessages.js").Note[]; error?: string }>;
   ownedSkills?(): Promise<string[]>; // skill names already installed (panel fill)
+  // The wallet's soulbound NFT skills, by display name (catalog ∩ holdings). This is
+  // what the "Equipped skills" panel shows: skills you OWN on-chain, not local dirs.
+  // Preferred over ownedSkills() for the panel; falls back to it when not provided.
+  ownedNftSkills?(): Promise<string[]>;
   // issue #35: agent directory + profile
   listAgents?(): Promise<import("./marketMessages.js").Reputation[]>;
   getAgentProfile?(wallet: string): Promise<import("./marketMessages.js").AgentProfile>;
@@ -87,6 +91,14 @@ export interface ChatEnv {
   // android) omit this — there's only ever one view per chat. Called with the id
   // being opened (undefined = a fresh/blank chat, always allowed).
   claimSession?(sessionId: string | undefined): boolean;
+}
+
+// Names for the "Equipped skills" panel: prefer on-chain owned NFT skills; fall back
+// to locally-installed skill dirs only when the host doesn't expose the NFT view.
+async function ownedNames(env: ChatEnv): Promise<string[]> {
+  if (env.ownedNftSkills) return env.ownedNftSkills();
+  if (env.ownedSkills) return env.ownedSkills();
+  return [];
 }
 
 // Wire one chat UI to the runtime. Returns a stop() that tears down both engine
@@ -223,7 +235,7 @@ export function createChatSession(
         // refresh the panel once it lands.
         void (async () => {
           await env.loadOwnedSkills?.();
-          sendMarket({ type: "ownedSkills", names: env.ownedSkills ? await env.ownedSkills() : [] });
+          sendMarket({ type: "ownedSkills", names: await ownedNames(env) });
         })().catch(() => {});
         break;
       case "new":   await open(); await pushSessions(); break;
@@ -340,12 +352,12 @@ export function createChatSession(
         sendMarket({ type: "buyResult", skillId: req.skillId, ...res });
         if (res.ok) {
           await env.loadOwnedSkills?.(); // re-sync the whole owned set after the buy
-          sendMarket({ type: "ownedSkills", names: env.ownedSkills ? await env.ownedSkills() : [] });
+          sendMarket({ type: "ownedSkills", names: await ownedNames(env) });
         }
         break;
       }
       case "ownedSkills":
-        sendMarket({ type: "ownedSkills", names: env.ownedSkills ? await env.ownedSkills() : [] });
+        sendMarket({ type: "ownedSkills", names: await ownedNames(env) });
         break;
       case "getBalance":
         sendMarket({ type: "balance", lamports: env.solBalance ? await env.solBalance() : null });
@@ -406,7 +418,7 @@ export function createChatSession(
         sendMarket({ type: "buyAllResult", wallet: req.wallet, ...res });
         if (res.ok && res.bought > 0) {
           await env.loadOwnedSkills?.();
-          sendMarket({ type: "ownedSkills", names: env.ownedSkills ? await env.ownedSkills() : [] });
+          sendMarket({ type: "ownedSkills", names: await ownedNames(env) });
         }
         break;
       }
@@ -434,7 +446,7 @@ export function createChatSession(
         if (res.ok) {
           // a fresh skill is owned by its creator — refresh owned + the market list
           await env.loadOwnedSkills?.();
-          if (env.ownedSkills) sendMarket({ type: "ownedSkills", names: await env.ownedSkills() });
+          if (env.ownedSkills || env.ownedNftSkills) sendMarket({ type: "ownedSkills", names: await ownedNames(env) });
         }
         break;
       }
