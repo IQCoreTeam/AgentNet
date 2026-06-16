@@ -151,7 +151,48 @@ collective intelligence (§0).
 5. **§5 DGM** + **§7 verify-gated autonomy** — research-grade; need the §hermes-doc-5b-C
    sandbox/attestation safety story before turning self-modification loose.
 
-## 10. Verification status
+## 10. Cross-model fusion — Codex × Claude (a moat only AgentNet has)
+
+Inspired by **OpenRouter Fusion** (launched 2026-06-13): fan a prompt across 3–5 models in
+parallel, a **judge model** synthesizes one output + surfaces consensus / contradictions /
+coverage gaps / blind spots; claims near-Fable-5 quality at ~half cost.
+Docs: https://openrouter.ai/docs/guides/features/plugins/fusion · model
+https://openrouter.ai/openrouter/fusion
+
+**Why AgentNet specifically:** [`runtime/spawn.ts`](../packages/core/src/runtime/spawn.ts)
+already drives **both** Claude (`@anthropic-ai/claude-agent-sdk`) and Codex
+(`@openai/codex-sdk`) behind ONE uniform `Engine` interface. No other runtime drives Claude
+*and* Codex uniformly — so cross-vendor fusion is a structural moat, not just a feature.
+
+**Flavor 1 — completion-level fusion (easy, ship first).** For *reasoning/planning* sub-steps
+(not file edits), fan out to Claude + Codex (+ others), judge-synthesize. Options: call
+OpenRouter Fusion directly as the planning model, or reuse the existing **llm-council** pattern
+(panel → anonymous peer-review → synthesized verdict). Low risk, immediate quality + a viral
+line ("planning fused across Claude + Codex"). Plugs in at the prompt/plan layer, leaves the
+agentic execution single-engine.
+
+**Flavor 2 — agent-level fusion (hard, novel, the flagship).** Run **both full agentic CLIs on
+the same task in parallel**, each in an isolated worktree, then a **judge** picks/merges:
+- Claude-agent + Codex-agent each produce a **diff** → judge model (or a `verify`-style skill,
+  §7) scores both → keep the best, or synthesize a merged diff.
+- = "best-of-N agents with a judge," cross-**model** not just cross-sample. A per-vendor
+  population, conceptually a 2-wide [DGM](https://github.com/lemoz/darwin-godel-machine) (§5).
+- Maps cleanly onto the uniform `Engine` interface: a `fusionEngine` wraps two `spawnCli`
+  handles, runs turns in parallel, emits judge-selected `ChatMessage`s. Worktree isolation
+  (per the existing worktree primitives) keeps their edits from colliding.
+
+**Honest risks (flavor 2):**
+- Two agents editing files **diverge** — merging *diffs* is much harder than merging text
+  answers. Cleanest when the deliverable is a single artifact/diff, not a long multi-file
+  session.
+- **Cost 2×+** (parallelism cuts latency, not spend).
+- **Judge is the ceiling** — a weak judge yields output worse than the best single agent.
+
+**Recommendation:** ship Flavor 1 now (cheap quality + marketing); treat Flavor 2 as the
+flagship R&D bet — "two frontier agents compete, best wins" is both a killer demo and a genuine
+moat, but gate it on a solid judge + diff-merge story.
+
+## 11. Verification status
 
 Every external reference was fetched live and confirmed (June 2026): repos
 [gepa-ai/gepa](https://github.com/gepa-ai/gepa),
@@ -161,5 +202,7 @@ Every external reference was fetched live and confirmed (June 2026): repos
 [mem0ai/mem0](https://github.com/mem0ai/mem0); papers Voyager (2305.16291), DGM (2505.22954),
 SkillRouter (2603.22455), GEPA (2507.19457 — "GEPA: Reflective Prompt Evolution Can Outperform
 Reinforcement Learning", ICLR 2026 Oral), ACE (2510.04618 — "Agentic Context Engineering",
-ICLR 2026). All five paper IDs were fetched live and resolve to the exact titles. Nothing here
-is an unsourced or unverified claim.
+ICLR 2026). All five paper IDs were fetched live and resolve to the exact titles. **OpenRouter
+Fusion** (§10) was also verified live — launched 2026-06-13, fan-to-N + judge-synthesis
+(https://openrouter.ai/docs/guides/features/plugins/fusion). Nothing here is an unsourced or
+unverified claim.
