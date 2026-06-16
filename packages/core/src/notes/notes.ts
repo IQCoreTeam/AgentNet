@@ -1,6 +1,9 @@
-// On-chain notes (notes.md). Two subjects, same row shape:
-//   - notes/[skillNFT]   — comments on a skill, gated by holding the skill token
-//   - notes/[agentWallet] — comments on an agent + the owner's self-notes (blog)
+// On-chain notes (notes.md). Two subjects, same row shape (tables renamed
+// notes→reviews, keyed by collection-then-item — see onchain-format/tables.md §2):
+//   - reviews:[collectionId]:[itemNFT] — comments on a skill/workflow item,
+//     gated by holding that item's token
+//   - reviews:agent:[agentWallet]      — comments on an agent + the owner's
+//     self-notes (blog)
 //
 // Read: anyone (public tables keyed by subject address).
 // Write gate (notes.md §2): see postNote / postAgentNote. Gates are CLIENT-SIDE
@@ -121,10 +124,10 @@ export async function readNotes(
   return hydrateNotes(rows, skillId);
 }
 
-// ===== Agent notes (notes/[agentWallet]) — self-notes + others' comments =====
+// ===== Agent notes (reviews:agent:[agentWallet]) — self-notes + others' comments =====
 
 export interface PostAgentNoteInput {
-  agentWallet: string; // subject — the agent's wallet (the notes/[agentWallet] table key)
+  agentWallet: string; // subject — the agent's wallet (the reviews:agent:[agentWallet] table key)
   text: string;
   gitLink?: string;
   meta?: Record<string, unknown>;
