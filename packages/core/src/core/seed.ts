@@ -78,8 +78,8 @@ export function getGatewayUrl(): string {
 }
 
 /** Devnet test ids — the single source. Swap here (or via env) to retarget. */
-export const SKILLS_COLLECTION_MINT = "4exdqNEcXixiMzenEBts2cE7qLmMvcVtHCjsZUGBm4Gt";
-export const WORKFLOWS_COLLECTION_MINT = "ByrnPfd9DcbpuVxm7J7xo2gnWxNfuTAdvZUPds7ctYN4";
+export const SKILLS_COLLECTION_MINT = "5TPKvxXTpPVFrj9MUnFUr6XiGFEdtetsTvwRh6bKQ9Qg";
+export const WORKFLOWS_COLLECTION_MINT = "F474VEn2uevpCotRqrPEbZ4XvWyqrqL4iGmNnmp9zvNe";
 /** agent-workflow-nft gate program — publish_workflow / buy_workflow. */
 export const WORKFLOW_GATE_PROGRAM_ID = "3ptXj4yuaQG51WTA3SZZ37jGvYFgMhgXnSKWJLASJNkt";
 /**
