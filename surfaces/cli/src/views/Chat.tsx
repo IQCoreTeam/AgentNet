@@ -17,6 +17,7 @@ import {
   ownedSkills,
   hasDasRpc,
   marketplaceEnv,
+  BUNDLED_SKILLS,
 } from "@iqlabs-official/agent-sdk";
 import { Select } from "@inkjs/ui";
 import { chooseStorage } from "../bootstrap.js";
@@ -87,6 +88,9 @@ export function Chat({
   const [market, setMarket] = useState<Awaited<ReturnType<typeof marketplaceEnv>> | null>(null);
   // installed skill slugs (dir names) — drives the market's "owned" badge.
   const [installed, setInstalled] = useState<string[]>([]);
+  // bundled/built-in skills present on disk (skill-shopping, make-skill) — split out of the
+  // installed set so the panel can list them plainly, apart from owned NFT skills.
+  const passive = useMemo(() => installed.filter((s) => BUNDLED_SKILLS.includes(s)), [installed]);
   useEffect(() => {
     void getStorageInfo().then((info) => setCloud(info ?? null));
     void maskedHeliusKey().then(setHeliusMasked);
@@ -778,6 +782,7 @@ export function Chat({
           engine={chat.cli}
           heliusMasked={heliusMasked}
           skills={skills}
+          passive={passive}
           dasReady={dasReady}
           active={panelActive}
           onEdit={editPanelField}

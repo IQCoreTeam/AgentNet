@@ -65,6 +65,7 @@ export function WelcomePanel({
   engine,
   heliusMasked,
   skills,
+  passive,
   dasReady,
   active,
   onEdit,
@@ -81,6 +82,9 @@ export function WelcomePanel({
   heliusMasked: string | null;
   // the wallet's owned skills (hydrated id+name). null = still loading; [] = none owned.
   skills: OwnedSkill[] | null;
+  // bundled/built-in skill slugs present on disk (skill-shopping, make-skill). Rendered as
+  // a small plain list — these aren't bought NFTs, so no color/effects and not focusable.
+  passive?: string[];
   // hasDasRpc(): false on the public default RPC, which can't read owned skills.
   // Lets the empty state say "set a Helius key" instead of a misleading "none yet".
   dasReady: boolean;
@@ -241,6 +245,20 @@ export function WelcomePanel({
             {active && focus === marketIdx ? "▸ " : "  "}→ open market
           </Text>
         </Box>
+
+        {/* built-in skills (skill-shopping, make-skill): a small plain list, set apart from
+            owned NFTs — no color, no effects, not focusable. They ship with the app. */}
+        {passive && passive.length > 0 ? (
+          <Box flexDirection="column" marginTop={1}>
+            <Text dimColor>built-in</Text>
+            {passive.map((slug) => (
+              <Text key={slug} dimColor>
+                {"  · "}
+                {slug}
+              </Text>
+            ))}
+          </Box>
+        ) : null}
       </Box>
     </Box>
   );
