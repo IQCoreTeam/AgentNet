@@ -24,6 +24,11 @@ class Installer(private val ctx: Context) {
     companion object {
         private const val TAG = "AgentNet/Installer"
         private const val MARKER = ".installed-v1"
+        // Server bundle is small and changes every app build; its marker holds the app's
+        // versionCode so an APK update re-extracts ONLY the server bundle (the heavy
+        // rootfs is left alone). Without this, the idempotent MARKER froze the server
+        // code at first-install forever — surface fixes never reached the device.
+        private const val SERVER_MARKER = ".server-version"
     }
 
     private fun abi(): String = when {
@@ -36,13 +41,52 @@ class Installer(private val ctx: Context) {
 
     fun isInstalled(): Boolean = File(ctx.filesDir, MARKER).exists()
 
+    // Identity of the server bundle SHIPPED in this APK — a CRC32 over the asset bytes.
+    // Content-based (not versionCode) so even unversioned dev rebuilds re-extract when
+    // the bundle actually changed. ~8MB streamed at launch; cheap enough.
+    private fun assetCrc(name: String): String {
+        val crc = java.util.zip.CRC32()
+        ctx.assets.open(name).use { input ->
+            val buf = ByteArray(1 shl 16)
+            while (true) {
+                val n = input.read(buf)
+                if (n < 0) break
+                crc.update(buf, 0, n)
+            }
+        }
+        return crc.value.toString(16)
+    }
+
+    private fun serverUpToDate(crc: String): Boolean =
+        File(ctx.filesDir, SERVER_MARKER).takeIf { it.exists() }?.readText() == crc
+
+    // Re-extract ONLY the server bundle (cheap) over the existing one. Called when the
+    // heavy rootfs is already installed but the APK shipped newer server code.
+    private fun installServerBundle(p: Paths.Layout, crc: String) {
+        val dir = File(p.serverBundle)
+        if (dir.exists()) dir.deleteRecursively()
+        Paths.dir(p.serverBundle)
+        TarExtractor.extract(ctx.assets.open("agentnet-server.tar"), dir)
+        File(ctx.filesDir, SERVER_MARKER).writeText(crc)
+    }
+
     // Extract everything. onProgress reports a short status for the setup UI.
     fun install(onProgress: (String) -> Unit) {
+        val p = Paths.layout(ctx)
+        val serverCrc = assetCrc("agentnet-server.tar")
         if (isInstalled()) {
-            Log.i(TAG, "already installed")
+            // Heavy artifacts (proot + rootfs) are in place. But the server bundle changes
+            // every build — refresh it if this APK shipped a different one.
+            if (serverUpToDate(serverCrc)) {
+                Log.i(TAG, "already installed")
+            } else {
+                Log.i(TAG, "updating server bundle ($serverCrc)")
+                onProgress("Updating")
+                installServerBundle(p, serverCrc)
+                Log.i(TAG, "server bundle updated")
+            }
             return
         }
-        val p = Paths.layout(ctx)
         val abi = abi()
 
         onProgress("Preparing your runtime")
@@ -66,8 +110,7 @@ class Installer(private val ctx: Context) {
         configureGuest(p) // DNS/hosts/tmp — Android doesn't provide these to the guest
 
         onProgress("Almost there")
-        Paths.dir(p.serverBundle)
-        TarExtractor.extract(ctx.assets.open("agentnet-server.tar"), File(p.serverBundle))
+        installServerBundle(p, serverCrc)
 
         File(ctx.filesDir, MARKER).writeText("ok")
         Log.i(TAG, "install complete")

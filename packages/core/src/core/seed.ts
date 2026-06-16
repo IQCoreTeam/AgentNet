@@ -63,9 +63,23 @@ export function getNetwork(): Network {
   return n === "mainnet" || n === "devnet" ? n : NETWORK;
 }
 
+/**
+ * The IQLabs gateway that resolves a code-in inscription (a tx signature) into its
+ * content. It MUST match the network: the mainnet gateway can't resolve a devnet
+ * tx, and vice versa — a mismatch returns empty data (the skill body goes blank).
+ * Derived from getNetwork() so flipping the one switch retargets it; env override
+ * (AGENTNET_GATEWAY_URL) still wins for a custom/self-hosted gateway.
+ */
+export function getGatewayUrl(): string {
+  if (process.env.AGENTNET_GATEWAY_URL) return process.env.AGENTNET_GATEWAY_URL;
+  return getNetwork() === "mainnet"
+    ? "https://gateway.iqlabs.dev"
+    : "https://dev-gateway.iqlabs.dev";
+}
+
 /** Devnet test ids — the single source. Swap here (or via env) to retarget. */
-export const SKILLS_COLLECTION_MINT = "4exdqNEcXixiMzenEBts2cE7qLmMvcVtHCjsZUGBm4Gt";
-export const WORKFLOWS_COLLECTION_MINT = "ByrnPfd9DcbpuVxm7J7xo2gnWxNfuTAdvZUPds7ctYN4";
+export const SKILLS_COLLECTION_MINT = "5TPKvxXTpPVFrj9MUnFUr6XiGFEdtetsTvwRh6bKQ9Qg";
+export const WORKFLOWS_COLLECTION_MINT = "F474VEn2uevpCotRqrPEbZ4XvWyqrqL4iGmNnmp9zvNe";
 /** agent-workflow-nft gate program — publish_workflow / buy_workflow. */
 export const WORKFLOW_GATE_PROGRAM_ID = "3ptXj4yuaQG51WTA3SZZ37jGvYFgMhgXnSKWJLASJNkt";
 /**

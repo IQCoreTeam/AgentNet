@@ -76,6 +76,9 @@ export type ClientMessage =
   | { type: "connectCloud"; kind: string; location?: string; authHeader?: string }
   | { type: "disconnectCloud" }
   | { type: "openCloud"; kind: string; location?: string }
+  // passive skill-shopping toggle (issue #21)
+  | { type: "getSkillShopping" }
+  | { type: "setSkillShopping"; on: boolean }
   | { type: "approvalDecision"; id: string; outcome: ApprovalOutcome; reason?: string; answers?: Record<string, string> }
   // onboarding-only:
   | { type: "connectWallet"; address: string; signature: number[] }
@@ -84,7 +87,11 @@ export type ClientMessage =
   | { type: "cancelClaudeLogin" }
   | { type: "startCodexLogin" }
   | { type: "cancelCodexLogin" }
-  | { type: "saveCodexApiKey"; key: string }
+  | { type: "submitCodexApiKey"; key: string }
+  | { type: "startGoogleLogin" }
+  | { type: "googleAuthCode"; code: string }
+  | { type: "cancelGoogleLogin" }
+  | { type: "setGoogleCredentials"; clientId: string; clientSecret: string }
   | { type: "toast"; text: string };
 
 // ── server → UI (SSE /events) ──
@@ -98,13 +105,14 @@ export type ServerMessage =
   | { type: "sessions"; list: SessionMeta[]; activeId?: string }
   | { type: "loading" }
   | { type: "platform"; cli: Cli }
-  | { type: "storage"; info: unknown; options: unknown }
+  | { type: "storage"; info: unknown; options: unknown; googleCredsConfigured?: boolean }
   | { type: "cloudSync"; status: { ok: boolean; error?: string } | null }
   | { type: "wallet"; address: string | null }
+  | { type: "skillShopping"; on: boolean }
   | { type: "approval"; req: ApprovalRequest }
   // onboarding-only:
   | { type: "init"; defaultPath: string | null; cloudKind: string | null }
-  | { type: "walletConnected"; address: string | null; storageOptions: unknown }
+  | { type: "walletConnected"; address: string | null; storageOptions: unknown; storageConfigured?: boolean }
   // claude subscription login: server reports whether login is needed, streams the OAuth
   // URL to open, and the final result after the user pastes their code.
   | { type: "cliStatus"; claude: "ok" | "no-login" | "missing"; codex: "ok" | "no-login" | "missing" }
@@ -113,4 +121,9 @@ export type ServerMessage =
   // codex device-auth: server streams the URL + one-time code; CLI auto-polls (no code submittal).
   | { type: "codexLoginChallenge"; url: string; code: string }
   | { type: "codexLoginStatus"; status: "done" | "error"; error?: string }
+  | { type: "googleLoginUrl"; url: string }
+  | { type: "googleLoginStatus"; status: "done" | "error"; error?: string }
+  // result of saving user-supplied Google OAuth client credentials (setGoogleCredentials).
+  | { type: "googleCredsStatus"; status: "saved" | "error"; error?: string }
+  | { type: "openUrl"; url: string }
   | { type: "toast"; text: string };

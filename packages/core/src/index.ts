@@ -44,7 +44,7 @@ export type { PublishSkillInput, BuySkillInput } from "./nft/skill.js";
 export type { SkillMintMetadata } from "./nft/token2022.js";
 export { resolveMinter, tryMinterPubkey, resetMinterCache } from "./nft/minter.js";
 // notes (reviews)
-export { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes, getBalance } from "./notes/index.js";
+export { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes, getBalance, getSolBalance, canAffordSkill, TX_FEE_BUFFER_LAMPORTS } from "./notes/index.js";
 export type { PostNoteInput, ReadNotesOptions, PostAgentNoteInput } from "./notes/index.js";
 // RPC resolution (issue #23): a registered Helius key wins over env over the default
 export { resolveRpcUrl, saveHeliusKey, loadHeliusKey, hasDasRpc, heliusUrl, maskedHeliusKey } from "./core/rpc.js";
@@ -59,13 +59,17 @@ export { marketplaceEnv } from "./skill-market/ingest/env.js";
 // search + the enumeration seam
 export { searchSkills, listUnlockable } from "./search/index.js";
 export type { SearchFilters, SortBy, SearchOptions, UnlockableWorkflow, UnlockOptions } from "./search/index.js";
-export { dasSource, indexerSource } from "./core/skillSource.js";
+export { dasSource, indexerSource, ownedSkills } from "./core/skillSource.js";
 export type { SkillSource } from "./core/skillSource.js";
 // reputation (derived live from supply + reviews)
 export { getReputation, getLeaderboard } from "./reputation/index.js";
 export type { Reputation } from "./core/types.js";
 // skill-market MCP surface (autonomous buy)
-export { createAgentMcpServer, getAgentNetTools, handleToolCall } from "./skill-market/index.js";
+export { createAgentMcpServer, createAgentSdkMcpServer, getAgentNetTools, handleToolCall, newVerifyGuard, verifyOneSkill, verifySkills } from "./skill-market/index.js";
+export type { VerifyGuard } from "./skill-market/index.js";
+export { browseSkills } from "./skill-market/browse.js";
+export type { BrowseResult } from "./skill-market/browse.js";
+export { setSkillShoppingActive, PASSIVE_SKILL_SLUG } from "./skill-market/passive.js";
 
 export { createRuntime } from "./runtime/index.js";
 export { detectCli } from "./runtime/detect.js";
@@ -108,6 +112,10 @@ export {
   switchStorage,
   currentStorageKind,
   getStorageInfo,
+  getSkillShopping,
+  setSkillShopping,
+  saveGoogleCreds,
+  hasGoogleCreds,
 } from "./account/login.js";
 export { STORAGE_OPTIONS } from "./account/storage/adapter.js";
 export type { StorageConfig, StorageKind } from "./account/storage/adapter.js";
@@ -118,6 +126,10 @@ export { ephemeralKey, persistedKey } from "./account/keyPolicy.js";
 export type { KeyPolicy, KeyVault } from "./account/keyPolicy.js";
 export { agentnetFolderLink } from "./account/storage/gdrive.js";
 export type { CloudStatus } from "./account/storage/mirror.js";
+export { startGoogleLogin, startGoogleLoginFixed } from "./account/storage/oauth.js";
+export type { GoogleLogin } from "./account/storage/oauth.js";
+
+
 
 import type { AgentRuntime, Wallet } from "./runtime/contract.js";
 import type { CloudStatus } from "./account/storage/mirror.js";

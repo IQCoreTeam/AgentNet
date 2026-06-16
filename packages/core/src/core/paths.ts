@@ -104,7 +104,19 @@ export function codexSkillsDir(): string {
   return join(codexHome(), "skills");
 }
 
-/** Ensure a directory exists (mkdir -p). Call before writing into it. */
+// ── inactive skills (skill-shopping toggle, plans/skill-shopping.md §6): a holding
+// dir OUTSIDE every runtime's scanned skills path. Toggling a bundled skill OFF moves
+// its folder here (never deletes it); toggling ON moves it back to the scanned dir. The
+// CLI never scans here, so an OFF skill is simply not discovered — no frontmatter flag
+// needed (codex ignores `disable-model-invocation`, so file-move is the one mechanism
+// that works for both engines). One dir under our root, per scanned source.
+
+/** Holding dir for a runtime's switched-OFF bundled skills (mirrors {cli}SkillsDir). */
+export function inactiveSkillsDir(cli: "claude" | "codex"): string {
+  return join(rootDir(), "inactive-skills", cli);
+}
+
+/** Ensure a directory exists (mkdir -p) with 0o700 so only the owner can enter. */
 export async function ensureDir(dir: string): Promise<void> {
-  await mkdir(dir, { recursive: true });
+  await mkdir(dir, { recursive: true, mode: 0o700 });
 }

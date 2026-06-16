@@ -43,6 +43,17 @@ import {
   type CloudStatus,
   type ClaudeLogin,
   type CodexLogin,
+  type Wallet,
+  type GoogleLogin,
+  type StorageConfig,
+  switchStorage,
+  disconnectCloud,
+  agentnetFolderLink,
+  startGoogleLogin,
+  startGoogleLoginFixed,
+  saveGoogleCreds,
+  hasGoogleCreds,
+  isCloudConnected,
 } from "@iqlabs-official/agent-sdk";
 
 const PORT = Number(process.env.AGENTNET_PORT ?? 4317);
@@ -92,6 +103,7 @@ const REPLAY_BUFFER = 256;
 
 // The one runtime for this host, built on first wallet connect. Null until then; once
 // set, every client uses it (so the chat page after onboarding finds it ready).
+let wallet: Wallet | null = null;
 let runtime: AgentRuntime | null = null;
 let walletAddress: string | null = null;
 
@@ -99,14 +111,22 @@ let walletAddress: string | null = null;
 // (cloud writes are otherwise silent). One value; the connected chat reflects it.
 let lastCloudStatus: CloudStatus | null = null;
 let onCloudStatus: (() => void) | null = null;
+let googleLoginSession: GoogleLogin | null = null;
 
 // Build the runtime from a freshly connected wallet (idempotent for this host: a
 // second connect with the same address is a no-op so re-opened tabs don't rebuild).
 async function connectWallet(address: string, signature: Uint8Array): Promise<void> {
   if (runtime && walletAddress === address) return;
-  const wallet = webWallet(address, signature);
-  runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
+  wallet = webWallet(address, signature);
   walletAddress = address;
+  // Only build the runtime immediately if storage is already configured (returning user).
+  // First-time users go through onboarding (storage picker) before runtime is needed;
+  // building it here with no-cloud config and then rebuilding after Drive OAuth caused
+  // the chat SSE to attach to a stale local runtime while the user was in Chrome.
+  const { isInitialized } = await import("@iqlabs-official/agent-sdk");
+  if (await isInitialized()) {
+    runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
+  }
 }
 
 // ── one connected UI (one SSE stream) ──
@@ -181,10 +201,85 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
     cwd: () => process.cwd(),
     approval,
     walletAddress: () => walletAddress,
-    storageInfo: async () => ({ info: await getStorageInfo(), options: STORAGE_OPTIONS }),
-    // Cloud actions (pickCloud / connectCloud / …) rely on native flows this headless
-    // host doesn't have yet; their messages no-op (the dispatcher guards each).
+    storageInfo: async () => ({ info: await getStorageInfo(), options: STORAGE_OPTIONS, googleCredsConfigured: await hasGoogleCreds() }),
+    connectCloud: async (cfg) => {
+      if (wallet) {
+        await switchStorage(wallet, { kind: cfg.kind, location: cfg.location, authHeader: cfg.authHeader } as StorageConfig);
+        runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
+      }
+    },
+    disconnectCloud: async () => {
+      await disconnectCloud();
+      if (wallet) {
+        runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
+      }
+    },
+    disconnectWallet: async () => {
+      await disconnectCloud();
+      wallet = null;
+      walletAddress = null;
+      runtime = null;
+      c.send({ type: "clear" });
+      c.send({ type: "init", defaultPath: null, cloudKind: null });
+    },
+    openCloud: async (kind, location) => {
+      if (kind === "gdrive" && walletAddress) {
+        const link = await agentnetFolderLink(walletAddress);
+        c.send({ type: "openUrl", url: link ?? "https://drive.google.com/drive/my-drive" });
+      } else if (kind === "custom" && typeof location === "string") {
+        c.send({ type: "openUrl", url: location });
+      }
+    },
   });
+  c.recvs.push(async (m: any) => {
+    if (m?.type === "setGoogleCredentials" && typeof m.clientId === "string" && typeof m.clientSecret === "string") {
+      try {
+        await saveGoogleCreds(m.clientId, m.clientSecret);
+        c.send({ type: "googleCredsStatus", status: "saved" });
+      } catch (e) {
+        c.send({ type: "googleCredsStatus", status: "error", error: (e as Error).message });
+      }
+      return;
+    }
+    if (m?.type === "startGoogleLogin") {
+      try {
+        googleLoginSession?.cancel();
+        googleLoginSession = startGoogleLoginFixed(`http://127.0.0.1:${PORT}/oauth/google/callback`);
+        c.send({ type: "googleLoginUrl", url: googleLoginSession.url });
+        googleLoginSession.done.then(async (ok) => {
+          if (ok && wallet) {
+            await switchStorage(wallet, { kind: "gdrive" });
+            runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
+          }
+          // Broadcast to ALL clients — the onboarding SSE may have been replaced by a
+          // chat SSE while the user was in Chrome (WebView drop + reconnect). Both need
+          // to hear the result; the store's googleLoginStatus handler will reopen the
+          // stream, picking up the new gdrive runtime on reconnect.
+          const payload = { type: "googleLoginStatus" as const, status: ok ? "done" as const : "error" as const, error: ok ? undefined : "Login was not completed." };
+          for (const client of clients.values()) client.send(payload);
+          googleLoginSession = null;
+        });
+      } catch (e) {
+        c.send({ type: "googleLoginStatus", status: "error", error: (e as Error).message });
+        googleLoginSession = null;
+      }
+      return;
+    }
+    if (m?.type === "googleAuthCode" && typeof m.code === "string") {
+      try {
+        await googleLoginSession?.submitCode(m.code);
+      } catch (e) {
+        c.send({ type: "googleLoginStatus", status: "error", error: (e as Error).message });
+      }
+      return;
+    }
+    if (m?.type === "cancelGoogleLogin") {
+      googleLoginSession?.cancel();
+      googleLoginSession = null;
+      return;
+    }
+  });
+
   const hook = () => chat.pushCloudStatus(lastCloudStatus);
   onCloudStatus = hook;
   // Teardown is deferred: when the SSE stream closes we don't kill the chat at once —
@@ -222,7 +317,10 @@ function attachOnboarding(c: Client) {
       // Wallet is in. Report CLI auth state so the UI can gate on claude login before
       // chat; if claude is already logged in (or missing), the UI skips straight through.
       const cli = await detectCli();
-      c.send({ type: "walletConnected", address: walletAddress, storageOptions: STORAGE_OPTIONS });
+      // storageConfigured lets the UI skip the storage picker on a returning device —
+      // the gdrive choice + token persist, so re-walking that screen (and re-auth) is
+      // pointless. Only a true first run needs the picker.
+      c.send({ type: "walletConnected", address: walletAddress, storageOptions: STORAGE_OPTIONS, storageConfigured: await isCloudConnected() });
       c.send({ type: "cliStatus", claude: cli.claude, codex: cli.codex });
       return;
     }
@@ -276,14 +374,60 @@ function attachOnboarding(c: Client) {
       codexLogin = null;
       return;
     }
-    if (m?.type === "saveCodexApiKey" && typeof m.key === "string" && m.key.trim()) {
+    if (m?.type === "setGoogleCredentials" && typeof m.clientId === "string" && typeof m.clientSecret === "string") {
       try {
-        await saveCodexApiKey(m.key.trim());
+        await saveGoogleCreds(m.clientId, m.clientSecret);
+        c.send({ type: "googleCredsStatus", status: "saved" });
+      } catch (e) {
+        c.send({ type: "googleCredsStatus", status: "error", error: (e as Error).message });
+      }
+      return;
+    }
+    if (m?.type === "submitCodexApiKey" && typeof m.key === "string") {
+      try {
+        await saveCodexApiKey(m.key);
         await markCodexConnected();
         c.send({ type: "codexLoginStatus", status: "done" });
       } catch (e) {
         c.send({ type: "codexLoginStatus", status: "error", error: (e as Error).message });
       }
+      return;
+    }
+    if (m?.type === "startGoogleLogin") {
+      try {
+        googleLoginSession?.cancel();
+        googleLoginSession = startGoogleLoginFixed(`http://127.0.0.1:${PORT}/oauth/google/callback`);
+        c.send({ type: "googleLoginUrl", url: googleLoginSession.url });
+        googleLoginSession.done.then(async (ok) => {
+          if (ok && wallet) {
+            await switchStorage(wallet, { kind: "gdrive" });
+            runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
+          }
+          // Broadcast to ALL clients — the onboarding SSE may have been replaced by a
+          // chat SSE while the user was in Chrome (WebView drop + reconnect). Both need
+          // to hear the result; the store's googleLoginStatus handler will reopen the
+          // stream, picking up the new gdrive runtime on reconnect.
+          const payload = { type: "googleLoginStatus" as const, status: ok ? "done" as const : "error" as const, error: ok ? undefined : "Login was not completed." };
+          for (const client of clients.values()) client.send(payload);
+          googleLoginSession = null;
+        });
+      } catch (e) {
+        c.send({ type: "googleLoginStatus", status: "error", error: (e as Error).message });
+        googleLoginSession = null;
+      }
+      return;
+    }
+    if (m?.type === "googleAuthCode" && typeof m.code === "string") {
+      try {
+        await googleLoginSession?.submitCode(m.code);
+      } catch (e) {
+        c.send({ type: "googleLoginStatus", status: "error", error: (e as Error).message });
+      }
+      return;
+    }
+    if (m?.type === "cancelGoogleLogin") {
+      googleLoginSession?.cancel();
+      googleLoginSession = null;
       return;
     }
   });
@@ -357,6 +501,23 @@ const http = createServer(async (req, res) => {
     // recognize the message just ignores it (their switches guard each type).
     for (const recv of c.recvs) {
       Promise.resolve(recv(msg)).catch((e) => console.error("[rpc] handler error:", e));
+    }
+    return;
+  }
+
+  // ── OAuth callback: Google redirects here after authorization. Chrome on Android CAN
+  // reach this port (same device, proot localhost), unlike a random second port. Extract
+  // the code and hand it to the active Google login session, then show a close-tab page.
+  if (req.method === "GET" && path === "/oauth/google/callback") {
+    const code = url.searchParams.get("code");
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    res.end(`<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;background:#111;color:#eee">
+      <h2 style="color:#00E673">✓ Google connected</h2><p>You can close this tab and return to AgentNet.</p>
+    </body></html>`);
+    if (code && googleLoginSession) {
+      googleLoginSession.submitCode(url.toString()).catch((e) =>
+        console.error("[oauth] submitCode failed:", e),
+      );
     }
     return;
   }

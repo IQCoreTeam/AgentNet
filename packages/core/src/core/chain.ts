@@ -31,7 +31,7 @@ import {
   writeRow as sdkWriteRow,
   codeIn as sdkCodeIn,
 } from "@iqlabs-official/solana-sdk/writer";
-import { AGENTNET_ROOT_ID } from "./seed.js";
+import { AGENTNET_ROOT_ID, getGatewayUrl } from "./seed.js";
 import type { Row, ReadOptions, SignerInput as DomainSignerInput } from "./types.js";
 
 /** DbRoot PDA for the `agentnet-root` namespace — derived once, reused everywhere. */
@@ -203,21 +203,21 @@ export async function codeIn(
   );
 }
 
-// Gateway base for code-in reads. The gateway caches inscriptions (L1/L2/L3), so
-// `GET /data/{sig}` is far cheaper than an RPC scan. Default to the public
-// gateway; override with AGENTNET_GATEWAY_URL. Pattern mirrors iq-wide-web's
-// readCodeInGW.
-const GATEWAY_URL = process.env.AGENTNET_GATEWAY_URL || "https://gateway.iqlabs.dev";
-
 // Read a code-in inscription by its tx signature. Tries the gateway's cached
-// `/data/{sig}` first; on any failure (network, non-OK, parse), falls back to
-// the SDK's direct RPC read — so it always resolves the same shape.
+// `/data/{sig}` first (network-matched via getGatewayUrl — the mainnet gateway
+// can't resolve a devnet tx, so the URL must follow the network); on any failure
+// OR an empty body, falls back to the SDK's direct RPC read — so it always
+// resolves the same shape. The empty-body fallback matters: a wrong-network
+// gateway answers 200 with {data:null}, which without the fallback would leave
+// the skill body blank instead of reading it straight from chain.
 export async function readCodeIn(txSig: string): Promise<{ data: string | null; metadata: string }> {
   try {
-    const res = await fetch(`${GATEWAY_URL}/data/${txSig}`);
+    const res = await fetch(`${getGatewayUrl()}/data/${txSig}`);
     if (res.ok) {
       const json = (await res.json()) as { data?: string | null; metadata?: string };
-      return { data: json.data ?? null, metadata: json.metadata ?? "" };
+      if (json.data) return { data: json.data, metadata: json.metadata ?? "" };
+      // 200 but no data → gateway couldn't resolve it (often a network mismatch);
+      // fall through to the direct RPC read rather than returning a blank body.
     }
   } catch {
     // fall through to the SDK read

@@ -38,6 +38,7 @@
     "@solana/spl-token-group": "^0.0.7",
     "@solana/spl-token-metadata": "^0.1.6",
     "dompurify": "^3.4.9",
-    "marked": "^18.0.5"
+    "marked": "^18.0.5",
+    "zod": "^4.4.3"
   }
 }

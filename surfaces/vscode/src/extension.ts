@@ -17,6 +17,8 @@ import {
   STORAGE_OPTIONS,
   createChatSession,
   marketplaceEnv,
+  getSkillShopping,
+  setSkillShopping,
   saveHeliusKey,
   hasDasRpc,
   maskedHeliusKey,
@@ -219,6 +221,9 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
     },
     walletAddress: () => wallet?.address ?? null,
     storageInfo: async () => ({ info: await getStorageInfo(), options: STORAGE_OPTIONS }),
+    // passive skill-shopping toggle (issue #21): persisted in config.json by the SDK.
+    getSkillShopping: () => getSkillShopping(),
+    setSkillShopping: (on) => setSkillShopping(on),
     // header "connect" link → native quick-pick of cloud backends, then connect
     pickCloud: async () => {
       const cfg = await pickCloud();
