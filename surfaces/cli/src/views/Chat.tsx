@@ -579,13 +579,13 @@ export function Chat({
     }
   }
 
-  function onSubmit(value: string) {
+  function onSubmit(value: string, images?: import("@iqlabs-official/agent-sdk/runtime/contract").ImageInput[]) {
     const text = value.trim();
-    if (!text) return;
+    if (!text && !images?.length) return;
     setNotice("");
     if (text.startsWith("/")) return runSlash(text);
     if (text.startsWith("!")) return chat.runBash(text.slice(1)); // quick local shell
-    void chat.send(text);
+    void chat.send(text, images);
   }
 
   const mood: Mood = eggMood ?? (pendingApproval ? "tool" : chat.busy ? "thinking" : idle ? "sleeping" : "idle");
