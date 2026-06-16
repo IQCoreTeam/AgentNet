@@ -177,13 +177,47 @@ export async function writeRow(
   return sdkWriteRow(conn(), asSolana(signer), AGENTNET_ROOT_ID, hint, rowJson);
 }
 
+// Read decoded table rows via the IQ gateway's `/table/{pda}/rows` — ONE HTTP call
+// that returns server-side-decoded rows (the gateway ran getSignaturesForAddress +
+// per-sig getTransaction once, then cached the result), instead of the SDK's direct
+// path which re-does 1 + N RPC calls against the RPC (Helius) on every read. That
+// per-row RPC fan-out is what rate-limited (429) the comment/notes reads; the NFT
+// catalog already has its own indexer, so this is the matching cache for the row
+// tables. Network-matched via getGatewayUrl() (same as readCodeIn). The gateway caps
+// `limit` at 100/page, so we follow `nextCursor` until we've gathered the requested
+// count (or the table ends). Throws on any non-2xx / network error so readRows can
+// fall back to the on-chain SDK read and always resolve the same Row[] shape.
+async function readRowsViaGateway(pda: PublicKey, options?: ReadOptions): Promise<Row[]> {
+  const want = options?.limit ?? 100;
+  const base = `${getGatewayUrl()}/table/${pda.toBase58()}/rows`;
+  const out: Row[] = [];
+  let before = options?.before;
+  while (out.length < want) {
+    const pageLimit = Math.min(100, want - out.length);
+    const url = `${base}?limit=${pageLimit}${before ? `&before=${encodeURIComponent(before)}` : ""}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`gateway /table/rows → HTTP ${res.status}`);
+    const json = (await res.json()) as { rows?: Row[]; nextCursor?: string | null };
+    const rows = json.rows ?? [];
+    out.push(...rows);
+    if (rows.length === 0 || !json.nextCursor) break; // table exhausted
+    before = json.nextCursor;
+  }
+  return out.slice(0, want);
+}
+
 export async function readRows(hint: string, options?: ReadOptions): Promise<Row[]> {
-  const pda = tablePda(hint);
-  return readTableRows(pda, options);
+  return readRowsByPda(tablePda(hint), options);
 }
 
 export async function readRowsByPda(pda: PublicKey, options?: ReadOptions): Promise<Row[]> {
-  return readTableRows(pda, options);
+  // Gateway first (cached, one HTTP call); on any failure fall back to the SDK's
+  // direct on-chain read so a gateway outage degrades to "slower" not "broken".
+  try {
+    return await readRowsViaGateway(pda, options);
+  } catch {
+    return readTableRows(pda, options);
+  }
 }
 
 export async function codeIn(

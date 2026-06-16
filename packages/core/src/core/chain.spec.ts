@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Connection, PublicKey, Keypair } from "@solana/web3.js";
-import { init, ensureDbRoot, createTable, writeRow, codeIn, signerAddress, tableExists, readCodeIn } from "./chain.js";
-import { readCodeIn as sdkReadCodeIn } from "@iqlabs-official/solana-sdk/reader";
+import { init, ensureDbRoot, createTable, writeRow, codeIn, signerAddress, tableExists, readCodeIn, readRows } from "./chain.js";
+import { readCodeIn as sdkReadCodeIn, readTableRows as sdkReadTableRows } from "@iqlabs-official/solana-sdk/reader";
 
 // Mock the solana-sdk modules
 vi.mock("@iqlabs-official/solana-sdk/contract", async () => {
@@ -111,6 +111,51 @@ describe("core/chain", () => {
       const r = await readCodeIn("sig123");
       expect(r).toEqual({ data: "mocked code", metadata: "{}" });
       expect(sdkReadCodeIn).toHaveBeenCalled();
+      vi.unstubAllGlobals();
+    });
+  });
+
+  describe("readRows — gateway-first", () => {
+    it("returns the gateway's /table/{pda}/rows result without an on-chain read", async () => {
+      const rows = [{ id: "a", author: "w", __txSignature: "s1" }];
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ rows, nextCursor: null }),
+      }));
+      const r = await readRows("reviews:agent:w", { limit: 100 });
+      expect(r).toEqual(rows);
+      expect(sdkReadTableRows).not.toHaveBeenCalled(); // gateway hit → no per-row RPC
+      vi.unstubAllGlobals();
+    });
+
+    it("falls back to the SDK on-chain read when the gateway fails", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+      const r = await readRows("reviews:agent:w");
+      expect(r).toEqual([]); // the sdk readTableRows mock
+      expect(sdkReadTableRows).toHaveBeenCalled();
+      vi.unstubAllGlobals();
+    });
+
+    it("falls back to the SDK on-chain read when the gateway returns non-OK", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+      const r = await readRows("reviews:agent:w");
+      expect(r).toEqual([]);
+      expect(sdkReadTableRows).toHaveBeenCalled();
+      vi.unstubAllGlobals();
+    });
+
+    it("follows nextCursor to gather up to `limit` rows, then stops", async () => {
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ rows: [{ id: "1" }, { id: "2" }], nextCursor: "cur1" }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ rows: [{ id: "3" }], nextCursor: null }) });
+      vi.stubGlobal("fetch", fetchMock);
+      const r = await readRows("reviews:agent:w", { limit: 5 });
+      expect(r.map((x: any) => x.id)).toEqual(["1", "2", "3"]);
+      expect(fetchMock).toHaveBeenCalledTimes(2); // paged once, then table exhausted
+      const firstUrl = fetchMock.mock.calls[0][0] as string;
+      const secondUrl = fetchMock.mock.calls[1][0] as string;
+      expect(firstUrl).toContain("/rows?limit=5");
+      expect(secondUrl).toContain("before=cur1"); // cursor threaded into page 2
       vi.unstubAllGlobals();
     });
   });
