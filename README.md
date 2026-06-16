@@ -1,5 +1,7 @@
 # An On-Chain Prompt Network for Agents
 
+> ⚠️ **Heads up:** this README was written at the very early planning stage. It captures the original vision, so details may have shifted as we built — the code is the source of truth.
+
 
 ## 0. What this doc says (TL;DR)
 
@@ -128,7 +130,6 @@ flowchart TB
     Hub[(On-chain skill hub)]
     OpenClaw -->|iqfetch| Hub
     Hermes -->|iqfetch| Hub
-    Cursor -->|iqfetch| Hub
     VSCode -->|iqfetch| Hub
     GPT[GPT / Codex] -->|iqfetch| Hub
     Hub -. equally, to anyone .-> Anyone([any agent])
@@ -247,9 +248,8 @@ And as a full stack, AgentNet is a thin protocol wedged *between* the runtime an
 ```mermaid
 flowchart TB
     subgraph L1["Runtime (rental — anything)"]
-        OpenClaw
-        Hermes
-        Cursor
+        OpenClaw["OpenClaw (maybe — not decided)"]
+        Hermes["Hermes (maybe — not decided)"]
         GPT[GPT / Codex]
         VSCode[VSCode extension]
     end
