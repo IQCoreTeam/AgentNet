@@ -29,12 +29,31 @@ body {
   margin: 0.5em 0;
 }
 .md pre {
+  position: relative;
   overflow-x: auto;
   background: #18181b;
   border-radius: 8px;
   padding: 10px 12px;
   margin: 0.5em 0;
   font-size: 0.85em;
+}
+
+.copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: #3f3f46;
+  color: #d4d4d8;
+  border: none;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.copy-btn:hover {
+  background: #52525b;
 }
 .md code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;

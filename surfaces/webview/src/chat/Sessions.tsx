@@ -27,12 +27,23 @@ export function Sessions({ onClose }: { onClose: () => void }) {
     }
   }, [info, settingsMode]);
 
+  // Esc closes the drawer (never a trap)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (settingsMode !== "list") { setSettingsMode("list"); return; }
+      onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [settingsMode, onClose]);
+
   return (
     <div className="fixed inset-0 z-20 flex" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50" />
       <div
         className="relative flex w-[80vw] max-w-xs flex-col bg-zinc-950 p-3"
-        style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
+        style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))", paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
         onClick={(e) => e.stopPropagation()}
       >
         {settingsMode === "list" ? (
