@@ -55,8 +55,9 @@ function collectionIdFor(type?: "skill" | "workflow"): Promise<string | null> {
 // Parse a human SOL string ("0.1", "2", "0") into integer lamports without float
 // rounding: split on the decimal point and pad the fraction to 9 places. Returns
 // null for anything not a non-negative decimal (so the caller can reject it).
+// Exported so the publish_skill MCP tool reuses the exact same parse as the UI.
 const LAMPORTS_PER_SOL = 1_000_000_000n;
-function solToLamports(sol: string): bigint | null {
+export function solToLamports(sol: string): bigint | null {
   const s = sol.trim();
   if (!/^\d+(\.\d+)?$/.test(s)) return null;
   const [whole, frac = ""] = s.split(".");
