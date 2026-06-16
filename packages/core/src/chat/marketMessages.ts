@@ -81,7 +81,20 @@ export type MarketRequest =
   | { type: "listAgents" }
   | { type: "getAgentProfile"; wallet: string }
   | { type: "buyAllSkills"; wallet: string }
-  | { type: "postAgentNote"; agentWallet: string; text: string; gitLink?: string };
+  | { type: "postAgentNote"; agentWallet: string; text: string; gitLink?: string }
+  // publish a skill from the UI (make-skill). priceSol is the human SOL amount as a
+  // string ("0.1"); the host converts to lamports. image is optional — an http URL
+  // or a base58 on-chain txid/PDA (the UI badges on-chain values), see skill-nft-json §3.
+  | {
+      type: "publishSkill";
+      name: string;
+      description: string;
+      text: string;
+      category?: string;
+      hashtags?: string[];
+      priceSol: string;
+      image?: string;
+    };
 
 // ── host -> UI (responses / pushes) ─────────────────────────────────────────
 export type MarketEvent =
@@ -100,6 +113,8 @@ export type MarketEvent =
   | { type: "agents"; agents: Reputation[] }
   | { type: "agentProfile"; profile: AgentProfile }
   | { type: "buyAllResult"; wallet: string; ok: boolean; bought: number; failed: number; error?: string }
-  | { type: "agentNoteResult"; agentWallet: string; ok: boolean; error?: string };
+  | { type: "agentNoteResult"; agentWallet: string; ok: boolean; error?: string }
+  // make-skill: result of a UI publish. mint = the new skill's mint address on success.
+  | { type: "publishResult"; ok: boolean; mint?: string; error?: string };
 
 export type MarketMessage = MarketRequest | MarketEvent;
