@@ -2389,7 +2389,7 @@ export function chatHtml(): string {
             '/copy — copy last reply', '/engine claude|codex — switch engine',
             '/model <model> — change model', '/mode <mode> — change permission mode',
             '/effort low|medium|high|xhigh|max — set reasoning effort',
-          ].join('\n');
+          ].join('\\n');
           const pre = document.createElement('pre');
           pre.style.cssText = 'margin:8px 0;padding:8px 12px;background:var(--an-bg-1);border-radius:6px;font-size:0.82em;opacity:0.8';
           pre.textContent = helpText;
