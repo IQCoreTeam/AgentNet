@@ -77,6 +77,16 @@ export function getGatewayUrl(): string {
     : "https://dev-gateway.iqlabs.dev";
 }
 
+/**
+ * The NFT indexer (agentnet-nft-indexer) base URL — the primary read path for the
+ * skill/workflow catalog (it serves /items with supply + traits already filled).
+ * Single source so every caller (marketplace search, owned-skill resolution) agrees;
+ * env override (AGENTNET_INDEXER_URL) wins for a self-hosted indexer.
+ */
+export function getIndexerUrl(): string {
+  return process.env.AGENTNET_INDEXER_URL || "https://nft-index.iqlabs.dev";
+}
+
 /** Devnet test ids — the single source. Swap here (or via env) to retarget. */
 export const SKILLS_COLLECTION_MINT = "5TPKvxXTpPVFrj9MUnFUr6XiGFEdtetsTvwRh6bKQ9Qg";
 export const WORKFLOWS_COLLECTION_MINT = "F474VEn2uevpCotRqrPEbZ4XvWyqrqL4iGmNnmp9zvNe";

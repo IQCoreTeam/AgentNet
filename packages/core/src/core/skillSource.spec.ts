@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { dasSource, indexerSource } from "./skillSource.js";
+import { dasSource, indexerSource, ownedAssetIds, ownedSkillMints } from "./skillSource.js";
+import type { Skill } from "./types.js";
 
 // dasSource enumerates the TokenGroup collections via a DAS RPC. We mock fetch
 // and the collection-mint config (env) to drive it without a real RPC.
@@ -139,5 +140,67 @@ describe("core/skillSource — indexerSource", () => {
     const src = indexerSource("https://nft-index.iqlabs.dev");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503 }));
     await expect(src.listSkills()).rejects.toThrow(/HTTP 503/);
+  });
+});
+
+// ownedSkillMints decides "which of our skills does this wallet hold" by intersecting
+// the wallet's holdings (one cheap getAssetsByOwner) with the catalog — NOT by reading
+// each held asset's TokenGroupMember on-chain. These tests pin that no per-asset
+// getParsedAccountInfo fan-out happens on the fast path (the old 429 source).
+describe("core/skillSource — ownedAssetIds / ownedSkillMints", () => {
+  const origEnv = { ...process.env };
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    process.env.DAS_RPC_URL = "https://das.example/rpc";
+    process.env.AGENTNET_SKILLS_COLLECTION_PUBKEY = "SkillsCollection";
+    delete process.env.AGENTNET_WORKFLOWS_COLLECTION_PUBKEY;
+    process.env.AGENTNET_HOME = "/tmp/agentnet-owned-test";
+  });
+  afterEach(() => { process.env = { ...origEnv }; });
+
+  it("ownedAssetIds returns only held assets that carry a collection grouping", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      json: async () => ({ result: { items: [
+        { id: "m1", grouping: [{ group_key: "collection", group_value: "syntheticX" }] },
+        { id: "m2", grouping: [{ group_key: "collection", group_value: "syntheticY" }] },
+        { id: "plain", grouping: [] }, // no collection grouping → excluded
+      ] } }),
+    }));
+    const ids = await ownedAssetIds("wallet");
+    expect([...ids].sort()).toEqual(["m1", "m2"]);
+  });
+
+  it("fast path: intersects holdings with a passed-in catalog, no on-chain per-asset read", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ result: { items: [
+        { id: "m1", grouping: [{ group_key: "collection", group_value: "x" }] },
+        { id: "other", grouping: [{ group_key: "collection", group_value: "x" }] },
+      ] } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const catalog = [{ id: "m1" }, { id: "m2" }] as Skill[]; // m2 not held; "other" not in catalog
+    const owned = await ownedSkillMints("wallet", catalog);
+    expect(owned).toEqual(["m1"]); // m1 ∩ catalog only
+    expect(fetchMock).toHaveBeenCalledTimes(1); // just the owner query — no indexer, no getParsedAccountInfo
+  });
+
+  it("self-fetches the catalog from the indexer when none is passed", async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: string, opts?: any) => {
+      if (opts?.body && JSON.parse(opts.body).method === "getAssetsByOwner") {
+        return { json: async () => ({ result: { items: [
+          { id: "m1", grouping: [{ group_key: "collection", group_value: "x" }] },
+          { id: "held-but-not-a-skill", grouping: [{ group_key: "collection", group_value: "x" }] },
+        ] } }) };
+      }
+      // indexer /items
+      expect(url).toContain("/items");
+      return { ok: true, json: async () => ({ items: [
+        { mint: "m1", type: "skill", name: "n", description: "d", creator: "c", supply: 1, attributes: [] },
+        { mint: "m9", type: "skill", name: "n", description: "d", creator: "c", supply: 1, attributes: [] },
+      ] }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const owned = await ownedSkillMints("wallet");
+    expect(owned).toEqual(["m1"]); // held m1 ∩ catalog{m1,m9}
   });
 });

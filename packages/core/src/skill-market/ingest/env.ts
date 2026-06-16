@@ -12,7 +12,7 @@ import { Connection } from "@solana/web3.js";
 import { readdir } from "node:fs/promises";
 import type { Wallet } from "../../runtime/contract.js";
 import { searchSkills } from "../../search/index.js";
-import { dasSource, indexerSource, ownedSkillMints } from "../../core/skillSource.js";
+import { dasSource, indexerSource, ownedSkillMints, ownedAssetIds } from "../../core/skillSource.js";
 import { buySkill, publishSkill as corePublishSkill } from "../../nft/skill.js";
 import { getSolBalance } from "../../notes/index.js";
 import { readSkillText } from "../../nft/token2022.js";
@@ -21,7 +21,7 @@ import { resolveRpcUrl } from "../../core/rpc.js";
 import type { AgentProfile, SkillCard, SkillDetail } from "../../chat/marketMessages.js";
 import type { Skill } from "../../core/types.js";
 import { readNotes, postNote as corePostNote, readAgentNotes, postAgentNote as corePostAgentNote } from "../../notes/notes.js";
-import { getSkillsCollectionMint, getWorkflowsCollectionMint } from "../../core/seed.js";
+import { getSkillsCollectionMint, getWorkflowsCollectionMint, getIndexerUrl } from "../../core/seed.js";
 import { getLeaderboard, getReputation } from "../../reputation/reputation.js";
 import { SkillSync } from "./index.js";
 
@@ -45,7 +45,7 @@ function toCard(s: Skill): SkillCard {
 // since our TokenGroup isn't a Metaplex collection) and serves /items with supply +
 // traits already filled. dasSource stays as a last-ditch fallback if the indexer is
 // down. Override the URL with AGENTNET_INDEXER_URL.
-const INDEXER_URL = process.env.AGENTNET_INDEXER_URL || "https://nft-index.iqlabs.dev";
+const INDEXER_URL = getIndexerUrl();
 
 function collectionIdFor(type?: "skill" | "workflow"): Promise<string | null> {
   const id = type === "workflow" ? getWorkflowsCollectionMint() : getSkillsCollectionMint();
@@ -209,18 +209,21 @@ export async function marketplaceEnv(wallet: Wallet) {
       let source;
       try { source = indexerSource(INDEXER_URL); } catch { source = dasSource; }
 
-      const [reputation, all, ownedMints, notes] = await Promise.all([
+      // Fetch the agent's holdings (one cheap DAS owner query) IN PARALLEL with the
+      // catalog, then decide owned-skills by intersecting in memory — no per-asset
+      // on-chain group read. The owned list was already filtered against `all` before,
+      // so this is the same result minus the getParsedAccountInfo fan-out that 429'd.
+      const [reputation, all, ownedIds, notes] = await Promise.all([
         getReputation(conn, agentWallet, source).catch(() => ({
           wallet: agentWallet, skillsPublished: 0, totalSupply: 0, notesReceived: 0, updatedAt: Date.now(),
         })),
         runSearch(""),
-        ownedSkillMints(agentWallet).catch(() => [] as string[]),
+        ownedAssetIds(agentWallet).catch(() => new Set<string>()),
         readAgentNotes(agentWallet).catch(() => []),
       ]);
 
       const createdSkills = all.filter((s) => s.creator === agentWallet).map(toCard);
-      const ownedSet = new Set(ownedMints);
-      const ownedSkillCards = all.filter((s) => ownedSet.has(s.id)).map(toCard);
+      const ownedSkillCards = all.filter((s) => ownedIds.has(s.id)).map(toCard);
 
       return {
         wallet: agentWallet,
@@ -237,7 +240,8 @@ export async function marketplaceEnv(wallet: Wallet) {
     async buyAllSkills(agentWallet: string) {
       const all = await runSearch("");
       const agentSkills = all.filter((s) => s.creator === agentWallet);
-      const alreadyOwned = new Set(await ownedSkillMints(wallet.address).catch(() => []));
+      // Reuse the catalog we just fetched (no second indexer round-trip, no per-asset reads).
+      const alreadyOwned = new Set(await ownedSkillMints(wallet.address, all).catch(() => []));
       const toBuy = agentSkills.filter((s) => !alreadyOwned.has(s.id)).slice(0, 25);
 
       let bought = 0;

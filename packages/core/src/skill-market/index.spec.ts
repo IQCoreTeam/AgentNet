@@ -20,6 +20,7 @@ vi.mock("../core/chain.js", () => ({
 vi.mock("../core/seed.js", () => ({
   getSkillsCollectionMint: vi.fn().mockReturnValue("skillsCollection111"),
   getWorkflowsCollectionMint: vi.fn().mockReturnValue("workflowsCollection111"),
+  getIndexerUrl: vi.fn().mockReturnValue("https://nft-index.example"),
 }));
 
 describe("skill-market", () => {

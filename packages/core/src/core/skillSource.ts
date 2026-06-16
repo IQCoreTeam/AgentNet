@@ -149,26 +149,16 @@ async function onChainGroup(
 }
 
 /**
- * The skill/workflow NFT mints a wallet OWNS (issue #17 — auto-load owned skills at
- * session start). Owned membership is read from on-chain truth, not the indexer or
- * DAS's group projection: DAS getAssetsByOwner only tells us which assets the wallet
- * holds (an owner query, unaffected by group representation); each grouped candidate's
- * real collection is then read from its Token-2022 TokenGroupMember.group and matched
- * against our seed mints. We deliberately do NOT trust DAS `grouping.group_value` here
- * — for our TokenGroup mints it's a synthetic id that never equals the seed mint, so
- * the wallet's real skills would be dropped (verified on devnet). Returns [] if
- * RPC/collections aren't configured (best-effort caller).
+ * Every asset id a wallet HOLDS that carries a "collection" grouping — the cheap DAS
+ * owner query (getAssetsByOwner, paged at 1000). This is an *owner* query (one call
+ * per 1000 assets), unaffected by how DAS represents our TokenGroup, so it's the only
+ * DAS hit needed to find owned skills. Membership ("is this one of OUR skills") is then
+ * decided by intersecting with the catalog (see ownedSkillMints) — NOT by re-reading
+ * each held asset on-chain. Throws on an RPC error so callers can fall back/catch.
  */
-export async function ownedSkillMints(owner: string): Promise<string[]> {
+export async function ownedAssetIds(owner: string): Promise<Set<string>> {
   const rpcUrl = await resolveRpcUrl(); // Helius key > env > default (issue #23)
-  const { getSkillsCollectionMint, getWorkflowsCollectionMint } = await import("./seed.js");
-  const ours = new Set([getSkillsCollectionMint(), getWorkflowsCollectionMint()].filter(Boolean) as string[]);
-  if (ours.size === 0) return [];
-
-  // Owner query (cheap, paged): every asset the wallet holds that carries a "collection"
-  // grouping is a candidate. We resolve its REAL collection on-chain below — the DAS
-  // group_value itself is never compared to the seed (it's a synthetic id for our mints).
-  const candidates: string[] = [];
+  const ids = new Set<string>();
   for (let page = 1; ; page++) {
     const res = await fetch(rpcUrl, {
       method: "POST",
@@ -183,16 +173,55 @@ export async function ownedSkillMints(owner: string): Promise<string[]> {
     const items = json.result?.items ?? [];
     for (const it of items) {
       const groups = (it.grouping ?? []) as { group_key?: string; group_value?: string }[];
-      if (groups.some((g) => g.group_key === "collection" && g.group_value)) candidates.push(it.id);
+      if (groups.some((g) => g.group_key === "collection" && g.group_value)) ids.add(it.id);
     }
     if (items.length < 1000) break; // last page
   }
-  if (candidates.length === 0) return [];
+  return ids;
+}
 
-  // Keep the candidates whose on-chain TokenGroupMember.group is one of our collections.
-  // One Connection, candidates read in parallel (typically a handful).
+/**
+ * The skill/workflow NFT mints a wallet OWNS (issue #17 — auto-load owned skills at
+ * session start; agent-profile owned list).
+ *
+ * Fast path (default): a mint that is BOTH in the catalog (the indexer-enumerated set
+ * of our collections' members) AND held by the wallet IS an owned skill — a set
+ * intersection of two lists we can get cheaply. The caller may pass a catalog it has
+ * already fetched (e.g. getAgentProfile's search results) to avoid a second indexer
+ * round-trip. This replaces the old per-asset TokenGroupMember resolution, which fired
+ * one getParsedAccountInfo per held asset (an unbounded concurrent RPC fan-out that
+ * rate-limited / 429'd the agent-directory view).
+ *
+ * Fallback (only when the catalog can't be reached — indexer down): decide membership
+ * on-chain per held asset. We deliberately do NOT trust DAS `grouping.group_value` —
+ * for our Token-2022 TokenGroup mints it's a synthetic id that never equals the seed
+ * mint (verified on devnet), so the real group is read from each mint's
+ * TokenGroupMember extension. This is the expensive path, kept only as a safety net.
+ *
+ * Returns [] if collections aren't configured (best-effort caller).
+ */
+export async function ownedSkillMints(owner: string, catalog?: Skill[]): Promise<string[]> {
+  const { getSkillsCollectionMint, getWorkflowsCollectionMint, getIndexerUrl } = await import("./seed.js");
+  const ours = new Set([getSkillsCollectionMint(), getWorkflowsCollectionMint()].filter(Boolean) as string[]);
+  if (ours.size === 0) return [];
+
+  const ownedIds = await ownedAssetIds(owner);
+  if (ownedIds.size === 0) return [];
+
+  // Fast path: intersect the wallet's holdings with the catalog (collection members).
+  let cat = catalog;
+  if (!cat) {
+    try { cat = await indexerSource(getIndexerUrl()).listSkills(); } catch { cat = undefined; }
+  }
+  if (cat && cat.length > 0) {
+    return cat.filter((s) => ownedIds.has(s.id)).map((s) => s.id);
+  }
+
+  // Fallback: catalog unavailable → resolve each held asset's real group on-chain.
   const { Connection, PublicKey } = await import("@solana/web3.js");
+  const rpcUrl = await resolveRpcUrl();
   const conn = new Connection(rpcUrl, "confirmed");
+  const candidates = [...ownedIds];
   const groups = await Promise.all(
     candidates.map((id) => onChainGroup(conn, PublicKey, id).catch(() => null)),
   );
