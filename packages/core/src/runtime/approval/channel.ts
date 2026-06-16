@@ -11,10 +11,22 @@
 // options the user picks from. NOT a yes/no permission — the user's CHOICE becomes the
 // tool result, so the decision carries `answers` rather than just allow/deny.
 export interface ApprovalQuestion {
+  id?: string;           // engine-provided id (codex request_user_input), when available
   question: string;       // the prompt text (also the answer key the SDK expects back)
   header?: string;        // short label/chip
   multiSelect?: boolean;  // may the user pick more than one option
+  allowCustomInput?: boolean; // may the user type instead of picking an option
+  secret?: boolean;       // render as a secret/password field when true
   options: { label: string; description?: string }[];
+}
+
+// A user response to one ApprovalQuestion. `selected` carries structured option picks;
+// `text` carries a free-form answer when the surface offered custom input instead.
+export interface ApprovalQuestionResponse {
+  question: string;
+  questionId?: string;
+  selected: string[];
+  text?: string;
 }
 
 // A pending tool action that needs a decision. `kind` lets a surface render it well
@@ -46,7 +58,8 @@ export interface ApprovalDecision {
   outcome: "once" | "always" | "deny";
   reason?: string;                       // shown to the model on deny
   updatedInput?: Record<string, unknown>; // override the tool input (allow path only)
-  answers?: Record<string, string>;      // question text → selected label(s)
+  answers?: Record<string, string>;      // legacy question text → selected label(s)
+  questionResponses?: ApprovalQuestionResponse[]; // structured/free-form question answers
 }
 
 // The swappable decision source. One method: given a request, resolve a decision.

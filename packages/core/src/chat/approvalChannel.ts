@@ -20,7 +20,12 @@ export class TransportApprovalChannel implements ApprovalChannel {
   constructor(private transport: ChatTransport) {
     transport.onRecv((m) => {
       if (m?.type === "approvalDecision" && typeof m.id === "string" && m.outcome) {
-        this.resolve(m.id, { outcome: m.outcome, reason: m.reason, answers: m.answers });
+        this.resolve(m.id, {
+          outcome: m.outcome,
+          reason: m.reason,
+          answers: m.answers,
+          questionResponses: m.questionResponses,
+        });
       }
     });
   }
