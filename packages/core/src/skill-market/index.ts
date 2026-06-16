@@ -29,6 +29,8 @@ import { searchSkills } from "../search/search.js";
 import { buySkill } from "../nft/skill.js";
 import { readSkillText } from "../nft/token2022.js";
 import { signerAddress } from "../core/chain.js";
+import { postNote, postAgentNote } from "../notes/notes.js";
+import { getSkillsCollectionMint, getWorkflowsCollectionMint } from "../core/seed.js";
 import { scanSkillText } from "./scan.js";
 import { VERIFY_RUBRIC } from "./rubric.js";
 
@@ -137,6 +139,54 @@ export function getAgentNetTools() {
         required: ["skillId"],
       },
     },
+    {
+      name: "post_skill_comment",
+      description: "Post a comment/review on a skill. You must hold ≥1 of the skill's token to comment.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          skillId: {
+            type: "string",
+            description: "The base58 mint address of the skill to comment on.",
+          },
+          collectionId: {
+            type: "string",
+            description: "The collection mint address the skill belongs to (skills or workflows collection). Omit to use the default skills collection.",
+          },
+          text: {
+            type: "string",
+            description: "The comment text (markdown supported).",
+          },
+          gitLink: {
+            type: "string",
+            description: "Optional GitHub or on-chain git URL to attach to the comment.",
+          },
+        },
+        required: ["skillId", "text"],
+      },
+    },
+    {
+      name: "post_agent_comment",
+      description: "Post a comment on an agent's profile, or write a self-note/blog entry on your own profile. Self-notes are always allowed; commenting on others requires holding ≥1 of their skills.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          agentWallet: {
+            type: "string",
+            description: "The wallet address of the agent to comment on.",
+          },
+          text: {
+            type: "string",
+            description: "The comment or blog text (markdown supported).",
+          },
+          gitLink: {
+            type: "string",
+            description: "Optional GitHub or on-chain git URL to attach.",
+          },
+        },
+        required: ["agentWallet", "text"],
+      },
+    },
   ];
 }
 
@@ -197,6 +247,35 @@ export async function handleToolCall(
       return { content: [{ type: "text", text: `Successfully purchased and equipped skill ${skillId}.\nTransaction Signature: ${txSig}` }] };
     } catch (err: any) {
       return { isError: true, content: [{ type: "text", text: `Failed to buy skill: ${err.message}` }] };
+    }
+  }
+
+  if (name === "post_skill_comment") {
+    const skillId = args?.skillId as string;
+    const collectionId = (args?.collectionId as string) ||
+      getSkillsCollectionMint() || "";
+    const text = args?.text as string;
+    const gitLink = args?.gitLink as string | undefined;
+    if (!skillId || !text) throw new Error("Missing required argument: skillId and text");
+    if (!collectionId) throw new Error("collectionId is required (skills collection not configured)");
+    try {
+      const noteId = await postNote(conn, signer, { collectionId, skillId, text, gitLink });
+      return { content: [{ type: "text", text: `Comment posted (id: ${noteId})` }] };
+    } catch (err: any) {
+      return { isError: true, content: [{ type: "text", text: `Failed to post comment: ${err.message}` }] };
+    }
+  }
+
+  if (name === "post_agent_comment") {
+    const agentWallet = args?.agentWallet as string;
+    const text = args?.text as string;
+    const gitLink = args?.gitLink as string | undefined;
+    if (!agentWallet || !text) throw new Error("Missing required argument: agentWallet and text");
+    try {
+      const noteId = await postAgentNote(conn, signer, { agentWallet, text, gitLink });
+      return { content: [{ type: "text", text: `Comment posted (id: ${noteId})` }] };
+    } catch (err: any) {
+      return { isError: true, content: [{ type: "text", text: `Failed to post comment: ${err.message}` }] };
     }
   }
 

@@ -176,6 +176,11 @@ export async function disconnectCloud(): Promise<void> {
 /** @deprecated use disconnectCloud — kept for callers still importing logout. */
 export const logout = disconnectCloud;
 
+// TODO(#34 Part C / #33): Add getAutoPublish() / setAutoPublish() toggle here
+// (same pattern as skill-shopping: config.json "auto_publish", default OFF).
+// The trigger — auto-minting a skill after the agent authors/writes one — lives
+// in #33's authoring flow. Wire it there once #33 lands.
+
 /** Save Google OAuth app credentials without touching the storage kind. */
 export async function saveGoogleCreds(clientId: string, clientSecret: string): Promise<void> {
   await ensureDir(rootDir());

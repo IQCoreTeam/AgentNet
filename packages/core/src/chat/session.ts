@@ -48,6 +48,8 @@ export interface ChatEnv {
   searchSkills?(query: string, kind?: "skill" | "workflow"): Promise<SkillCard[]>;
   getSkillDetail?(mint: string): Promise<import("./marketMessages.js").SkillDetail>;
   buySkill?(skillId: string, creatorWallet?: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
+  // issue #34: post a comment on a skill (holder-gated), returns refreshed notes on success
+  postNote?(skillId: string, skillType: "skill" | "workflow" | undefined, text: string, gitLink?: string): Promise<{ ok: boolean; notes?: import("./marketMessages.js").Note[]; error?: string }>;
   ownedSkills?(): Promise<string[]>; // skill names already installed (panel fill)
   solBalance?(): Promise<number | null>; // wallet's native SOL balance (lamports), for the UI funds display
   // install every owned skill NFT into the runtime skills dir (session start + after a
@@ -344,6 +346,18 @@ export function createChatSession(
       case "getRpcStatus":
         if (env.rpcStatus) sendMarket({ type: "rpcStatus", status: await env.rpcStatus() });
         break;
+      // issue #34: human posts a comment on a skill from the detail view
+      case "postNote": {
+        const req = m as Extract<MarketRequest, { type: "postNote" }>;
+        const res = env.postNote
+          ? await env.postNote(req.skillId, req.skillType, req.text, req.gitLink)
+          : { ok: false, error: "comments unavailable" };
+        sendMarket({ type: "postNoteResult", skillId: req.skillId, ok: res.ok, error: res.error });
+        if (res.ok && res.notes) {
+          sendMarket({ type: "notes", skillId: req.skillId, notes: res.notes });
+        }
+        break;
+      }
       // ── passive skill-shopping toggle (issue #21) ──
       case "getSkillShopping":
         await pushSkillShopping();

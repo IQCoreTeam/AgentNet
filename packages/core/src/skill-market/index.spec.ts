@@ -2,14 +2,24 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { getAgentNetTools, handleToolCall, newVerifyGuard } from "./index.js";
 import { searchSkills } from "../search/search.js";
 import { buySkill } from "../nft/skill.js";
+import { postNote, postAgentNote } from "../notes/notes.js";
 import { readSkillText } from "../nft/token2022.js";
 import { Keypair } from "@solana/web3.js";
 
 vi.mock("../search/search.js", () => ({ searchSkills: vi.fn() }));
 vi.mock("../nft/skill.js", () => ({ buySkill: vi.fn() }));
 vi.mock("../nft/token2022.js", () => ({ readSkillText: vi.fn() }));
+vi.mock("../notes/notes.js", () => ({
+  postNote: vi.fn(),
+  postAgentNote: vi.fn(),
+}));
 vi.mock("../core/chain.js", () => ({
   signerAddress: vi.fn().mockResolvedValue("mockSignerAddress"),
+}));
+
+vi.mock("../core/seed.js", () => ({
+  getSkillsCollectionMint: vi.fn().mockReturnValue("skillsCollection111"),
+  getWorkflowsCollectionMint: vi.fn().mockReturnValue("workflowsCollection111"),
 }));
 
 describe("skill-market", () => {
@@ -24,7 +34,14 @@ describe("skill-market", () => {
 
   it("exposes exactly the L1 trio (no wallet_balance)", () => {
     const tools = getAgentNetTools();
-    expect(tools.map((t) => t.name)).toEqual(["search_skills", "verify_skill", "buy_skill"]);
+    expect(tools).toHaveLength(5);
+    expect(tools.map((t) => t.name)).toEqual([
+      "search_skills",
+      "verify_skill",
+      "buy_skill",
+      "post_skill_comment",
+      "post_agent_comment",
+    ]);
   });
 
   it("search_skills returns empty when there are no results", async () => {
@@ -43,7 +60,79 @@ describe("skill-market", () => {
     expect(result.content[0].text).toContain("skill1");
   });
 
-  it("throws on an unknown tool", async () => {
+  it("should handle buy_skill tool call", async () => {
+    vi.mocked(buySkill).mockResolvedValue("mockTxSig");
+    const result = await handleToolCall(mockConn, signer, "defaultCreator", "buy_skill", { skillId: "skill1" });
+    expect(result.content[0].text).toContain("Successfully purchased");
+    expect(result.content[0].text).toContain("mockTxSig");
+    // Price is read from the item's on-chain config now — the client doesn't pass it.
+    expect(buySkill).toHaveBeenCalledWith(mockConn, signer, {
+      skillId: "skill1",
+      buyerWallet: "mockSignerAddress",
+      creatorWallet: "defaultCreator",
+    });
+  });
+
+  it("should handle buy_skill errors", async () => {
+    vi.mocked(buySkill).mockRejectedValue(new Error("Insufficient funds"));
+    const result = await handleToolCall(mockConn, signer, "defaultCreator", "buy_skill", { skillId: "skill1" });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Insufficient funds");
+  });
+
+  it("should handle post_skill_comment tool call", async () => {
+    vi.mocked(postNote).mockResolvedValue("note:abc:123:xyz");
+    const result = await handleToolCall(mockConn, signer, "defaultCreator", "post_skill_comment", {
+      skillId: "skill1",
+      collectionId: "col1",
+      text: "Great skill!",
+      gitLink: "https://github.com/example",
+    });
+    expect(result.content[0].text).toContain("note:abc:123:xyz");
+    expect(postNote).toHaveBeenCalledWith(mockConn, signer, {
+      collectionId: "col1",
+      skillId: "skill1",
+      text: "Great skill!",
+      gitLink: "https://github.com/example",
+    });
+  });
+
+  it("should surface gate error for post_skill_comment", async () => {
+    vi.mocked(postNote).mockRejectedValue(new Error("Must own ≥1 skill token to post note (balance: 0)"));
+    const result = await handleToolCall(mockConn, signer, "defaultCreator", "post_skill_comment", {
+      skillId: "skill1",
+      collectionId: "col1",
+      text: "No token",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Must own");
+  });
+
+  it("should handle post_agent_comment tool call", async () => {
+    vi.mocked(postAgentNote).mockResolvedValue("note:agent:123:xyz");
+    const result = await handleToolCall(mockConn, signer, "defaultCreator", "post_agent_comment", {
+      agentWallet: "agentWallet1",
+      text: "Awesome agent!",
+    });
+    expect(result.content[0].text).toContain("note:agent:123:xyz");
+    expect(postAgentNote).toHaveBeenCalledWith(mockConn, signer, {
+      agentWallet: "agentWallet1",
+      text: "Awesome agent!",
+      gitLink: undefined,
+    });
+  });
+
+  it("should surface gate error for post_agent_comment", async () => {
+    vi.mocked(postAgentNote).mockRejectedValue(new Error("Must hold ≥1 of agentWallet1's skills to comment"));
+    const result = await handleToolCall(mockConn, signer, "defaultCreator", "post_agent_comment", {
+      agentWallet: "agentWallet1",
+      text: "Not a holder",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Must hold");
+  });
+
+  it("should throw on unknown tool", async () => {
     await expect(handleToolCall(mockConn, signer, "defaultCreator", "unknown_tool", {})).rejects.toThrow("Unknown tool");
   });
 
