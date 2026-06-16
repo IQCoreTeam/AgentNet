@@ -232,7 +232,7 @@ export function Composer({
                 <Text color={on ? colors.iqCyan : undefined} bold={on}>
                   {it.label}
                 </Text>
-                {it.hint ? <Text dimColor> — {it.hint}</Text> : null}
+                {it.hint ? <Text dimColor> · {it.hint}</Text> : null}
               </Box>
             );
           })}

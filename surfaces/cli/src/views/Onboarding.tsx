@@ -206,10 +206,10 @@ export function Onboarding({
       {step === "storage" && (
         <Box flexDirection="column">
           <Text color={colors.iqCyan}>where should your sessions live?</Text>
-          <Text dimColor>(local is always on — a cloud just mirrors it)</Text>
+          <Text dimColor>(local is always on; a cloud just mirrors it)</Text>
           <Select
             options={STORAGE_OPTIONS.map((o) => ({
-              label: `${o.label} — ${o.needs}`,
+              label: `${o.label}: ${o.needs}`,
               value: o.kind,
             }))}
             onChange={(v) => chooseKind(v as StorageKind)}

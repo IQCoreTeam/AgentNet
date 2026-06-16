@@ -121,11 +121,11 @@ export function Chat({
 
   const startBtwQuery = useCallback((question: string) => {
     if (!chat.pendingId) {
-      setNotice("please start/resume a session first — try /resume or say hi");
+      setNotice("please start/resume a session first... try /resume or say hi");
       return;
     }
     if (chat.busy) {
-      setNotice("/btw unavailable while a turn is running — wait for it to finish");
+      setNotice("/btw unavailable while a turn is running... wait for it to finish");
       return;
     }
     // stop any leftover handle from a previous btw query
@@ -308,7 +308,7 @@ export function Chat({
       if (!k) return;
       konami.current = [...konami.current, k].slice(-4);
       if (konami.current.join("") === "UUDD") {
-        setNotice("⚡ turbo glow engaged — you found it ✦");
+        setNotice("⚡ turbo glow engaged... you found it ✦");
         konami.current = [];
       }
     },
@@ -392,7 +392,7 @@ export function Chat({
       return;
     }
     // github
-    setNotice("github linking — coming soon");
+    setNotice("github linking... coming soon");
     setPanelFocused(false);
   }
 
@@ -405,7 +405,7 @@ export function Chat({
       setDasReady(await hasDasRpc());
       setSkills(null);
       void ownedSkills(address).then(setSkills).catch(() => setSkills([]));
-      setNotice(raw.trim() ? "helius key saved" : "helius key cleared — using default rpc");
+      setNotice(raw.trim() ? "helius key saved" : "helius key cleared, using default rpc");
     });
     setPanelFocused(false);
   }
@@ -413,7 +413,7 @@ export function Chat({
   function openMarket() {
     setPanelFocused(false);
     if (!market) {
-      setNotice("skill market — still loading, try again in a moment");
+      setNotice("skill market still loading, try again in a moment");
       return;
     }
     setShowMarket(true);
@@ -431,7 +431,7 @@ export function Chat({
       });
       return;
     }
-    setNotice(`${kind} needs sign-in — re-run onboarding to connect (rm ~/.config/agentnet to reset)`);
+    setNotice(`${kind} needs sign-in: re-run onboarding to connect (rm ~/.config/agentnet to reset)`);
   }
 
   function runSlash(raw: string) {
@@ -446,7 +446,7 @@ export function Chat({
       case "new":
         chat.newSession();
         setPanelFocused(false); // empty session again → panel shows, focus back on composer
-        setNotice("fresh session — say hi");
+        setNotice("fresh session... say hi");
         return;
       case "engine":
         if (arg === "claude" || arg === "codex") {
@@ -497,7 +497,7 @@ export function Chat({
         if (arg && hit) {
           void chat.openSession(hit.sessionId);
           setNotice(`resumed ${hit.title || hit.sessionId.slice(0, 8)}`);
-        } else setNotice("usage: /resume <id-prefix> — see /sessions");
+        } else setNotice("usage: /resume <id-prefix> (see /sessions)");
         return;
       }
       case "wallet":
@@ -524,7 +524,7 @@ export function Chat({
         return;
       case "clear":
         chat.clearView();
-        setNotice("cleared (session kept — /more to restore)");
+        setNotice("cleared (session kept; /more to restore)");
         return;
       case "copy": {
         const lastAsst = [...chat.messages].reverse().find((m) => m.role === "assistant");
@@ -575,7 +575,7 @@ export function Chat({
         setNotice("/new /sessions /resume /more /compact /clear /copy /models /engine /effort /account /settings /wallet /storage /btw <question> /iq /quit · !cmd shell · Esc cancels · Ctrl+A/E/W/U edit");
         return;
       default:
-        setNotice(`unknown command: /${cmd} — try /help`);
+        setNotice(`unknown command: /${cmd} (try /help)`);
     }
   }
 
@@ -642,10 +642,10 @@ export function Chat({
       <Box flexDirection="column" paddingX={1}>
         <Box borderStyle="round" borderColor={colors.iqCyan} flexDirection="column" paddingX={2} paddingY={1}>
           <Text bold color={colors.iqCyan}>storage</Text>
-          <Text dimColor>where your sessions live (local is always on — a cloud just mirrors it)</Text>
+          <Text dimColor>where your sessions live (local is always on; a cloud just mirrors it)</Text>
           <Box marginTop={1}>
             <Select
-              options={STORAGE_OPTIONS.map((o) => ({ label: `${o.label} — ${o.needs}`, value: o.kind }))}
+              options={STORAGE_OPTIONS.map((o) => ({ label: `${o.label}: ${o.needs}`, value: o.kind }))}
               onChange={(v) => applyCloud(v as StorageKind)}
             />
           </Box>
@@ -797,7 +797,7 @@ export function Chat({
         {({ m, i }) => <Message key={`${m.ts}-${i}`} msg={m} />}
       </Static>
 
-      {chat.hasMore ? <Text dimColor>… older history above — /more to load</Text> : null}
+      {chat.hasMore ? <Text dimColor>… older history above · /more to load</Text> : null}
 
       {liveMsg ? <Message msg={liveMsg} live /> : null}
 

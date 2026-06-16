@@ -93,7 +93,7 @@ export const confetti = "·  ✦  ˖  ✧  ·  ⋆  ·";
 export const copy = {
   wordmark: "AgentNet · the agent layer · iqlabs",
   tagline: "the agent layer",
-  emptySessions: "no sessions yet — say hi",
+  emptySessions: "no sessions yet... say hi",
   welcome: "✦ you're on the net",
   signoffs: [
     "brain saved. catch you on the net.",
@@ -102,9 +102,9 @@ export const copy = {
   ],
   idleNudge: "…still here whenever you are",
   iqFacts: [
-    "your session blob is the ONLY thing that lives off-chain — everything else is on-chain.",
+    "your session blob is the ONLY thing that lives off-chain; everything else is on-chain.",
     "a skill is a soulbound Token-2022 mint: supply = popularity, holders = owners.",
-    "claude and codex sessions share one encrypted log — switch engines mid-thought.",
+    "claude and codex sessions share one encrypted log; switch engines mid-thought.",
     "your wallet signature derives the key that encrypts every message you send.",
   ],
 } as const;

@@ -493,9 +493,10 @@ export function chatHtml(): string {
                  font-size: 15px; border-radius: 5px; background: transparent; color: var(--vscode-foreground);
                  opacity: 0.55; border: 1px solid transparent; cursor: pointer; flex: 0 0 auto; }
   #skillsClose:hover { opacity: 1; background: var(--an-bg-1); border-color: var(--an-line); }
-  /* owned-skill grid scrolls once it outgrows ~3 rows instead of pushing the chat up */
+  /* 3-column grid that grows to fill the screen (up to ~60% of the viewport) before
+     it scrolls — the panel takes maximum size rather than capping at ~3 rows. */
   #skillGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
-               max-height: 188px; overflow-y: auto; }
+               max-height: 60vh; overflow-y: auto; }
   /* a skill slot: an item card. empty = a quiet dashed "coming soon" placeholder. */
   .skSlot { aspect-ratio: 1; border-radius: var(--an-radius-sm); display: flex; align-items: center;
             justify-content: center; }
@@ -576,7 +577,8 @@ export function chatHtml(): string {
              border-radius: var(--an-radius); background: var(--an-bg); }
   .mktCard .mc-img { width: 40px; height: 40px; border-radius: 8px; background: var(--an-green-dim);
                      display: flex; align-items: center; justify-content: center; flex: none; }
-  .mktCard .mc-img .wand { width: 20px; height: 20px; color: var(--an-green); }
+  .mktCard .mc-img .wand { width: 24px; height: auto; color: var(--an-green); display: inline-flex; }
+  .mktCard .mc-img .wand svg { width: 100%; height: auto; }
   .mktCard .mc-main { min-width: 0; flex: 1; }
   .mktCard .mc-name { font-weight: 600; }
   .mktCard .mc-desc { opacity: 0.6; font-size: 0.88em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -599,7 +601,8 @@ export function chatHtml(): string {
   #mktDetailBody .dt-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
   #mktDetailBody .dt-img { width: 56px; height: 56px; border-radius: 10px; background: var(--an-green-dim);
                            display: flex; align-items: center; justify-content: center; flex: none; }
-  #mktDetailBody .dt-img .wand { width: 28px; height: 28px; color: var(--an-green); }
+  #mktDetailBody .dt-img .wand { width: 34px; height: auto; color: var(--an-green); display: inline-flex; }
+  #mktDetailBody .dt-img .wand svg { width: 100%; height: auto; }
   #mktDetailBody .dt-name { font-size: 1.15em; font-weight: 700; }
   #mktDetailBody .dt-kind { font-size: 0.7em; text-transform: uppercase; letter-spacing: 0.05em;
                             color: var(--an-green); opacity: 0.8; }
@@ -866,7 +869,7 @@ export function chatHtml(): string {
                border: 2px solid var(--an-green); opacity: 0.8;
                animation: celebRing 0.85s ease-out forwards; }
   .celebRing.r2 { animation-delay: 0.14s; border-color: #e9c46a; }
-  .celebWand { width: 40px; height: 40px; color: var(--an-green); display: inline-flex;
+  .celebWand { width: 46px; height: auto; color: var(--an-green); display: inline-flex; align-items: center;
                filter: drop-shadow(0 0 8px var(--an-green));
                animation: celebWand 0.9s ease-out; }
   .celebWand svg { width: 100%; height: 100%; }
@@ -1085,13 +1088,13 @@ export function chatHtml(): string {
             <button id="attachBtn" title="Attach image">${PAPERCLIP_SVG}</button>
             <input type="file" id="fileInput" accept="image/*" multiple hidden />
             <span id="modelWrap">
-              <button id="modelBtn" title="Model — which model this engine runs">
+              <button id="modelBtn" title="Model: which model this engine runs">
                 <span class="mglyph">◇</span><span id="modelLabel">model</span><span class="mcaret">▾</span>
               </button>
               <div id="modelMenu" style="display:none"></div>
             </span>
             <span id="modeWrap">
-              <button id="modeBtn" title="Permission mode — how tools run before asking you">
+              <button id="modeBtn" title="Permission mode: how tools run before asking you">
                 <span id="modeLabel">mode</span><span class="mcaret">▾</span>
               </button>
               <div id="modeMenu" style="display:none"></div>
@@ -1166,10 +1169,10 @@ export function chatHtml(): string {
         <label class="pubLabel">Image</label>
         <input id="pubImage" type="text" placeholder="https://….png  or  on-chain address (optional)" />
         <div id="pubImageBadge" class="pubBadge" style="display:none">◆ ON-CHAIN</div>
-        <div class="pubHint">A direct image URL, or an on-chain address. Leave empty for the default art. (Uploading an image on-chain: see the IQLabs SDK — https://x.com/spacebuneth/status/2064477269871960574)</div>
+        <div class="pubHint">A direct image URL, or an on-chain address. Leave empty for the default art. (Uploading an image on-chain: see the IQLabs SDK at https://x.com/spacebuneth/status/2064477269871960574)</div>
 
         <label class="pubLabel">Skill text<span class="req">*</span></label>
-        <textarea id="pubText" rows="10" placeholder="# Skill name&#10;&#10;The full SKILL.md body — what the agent reads when this skill fires."></textarea>
+        <textarea id="pubText" rows="10" placeholder="# Skill name&#10;&#10;The full SKILL.md body: what the agent reads when this skill fires."></textarea>
 
         <label class="pubLabel">Price (SOL)<span class="req">*</span></label>
         <input id="pubPrice" type="text" value="0.1" placeholder="0.1" />
@@ -2526,7 +2529,7 @@ export function chatHtml(): string {
     walletSkillList.innerHTML = '';
     if (!ownedSkills.length) {
       const e = document.createElement('div'); e.className = 'wskEmpty';
-      e.textContent = 'No skills yet — buy them in Markets.';
+      e.textContent = 'No skills yet. Buy them in Markets.';
       walletSkillList.appendChild(e);
       return;
     }
@@ -2742,7 +2745,7 @@ export function chatHtml(): string {
     // head: icon + name + kind
     const head = document.createElement('div'); head.className = 'dt-head';
     const img = document.createElement('div'); img.className = 'dt-img';
-    img.innerHTML = '<span class="wand">' + ${JSON.stringify(WAND_SVG)} + '</span>';
+    img.innerHTML = '<span class="wand">' + ${JSON.stringify(IQ_LOGO_SVG)} + '</span>';
     const htxt = document.createElement('div');
     const kind = document.createElement('div'); kind.className = 'dt-kind'; kind.textContent = (c.type || 'skill');
     const nm = document.createElement('div'); nm.className = 'dt-name'; nm.textContent = c.name || c.id || '';
@@ -2799,14 +2802,14 @@ export function chatHtml(): string {
       // empty can mean "no match" OR "no DAS RPC so reads return nothing" — say which.
       mktResults.innerHTML = dasReady
         ? '<div class="mktEmpty">No skills found.</div>'
-        : '<div class="mktEmpty">No skills — the default RPC can\\'t read the marketplace. Add a Helius key (free devnet tier) in the wallet menu \\u2192 RPC.</div>';
+        : '<div class="mktEmpty">No skills found. The default RPC can\\'t read the marketplace. Add a Helius key (free devnet tier) in the wallet menu \\u2192 RPC.</div>';
       return;
     }
     for (const r of results) {
       const owned = ownedSkills.indexOf(r.name) >= 0;
       const card = document.createElement('div'); card.className = 'mktCard';
       const img = document.createElement('div'); img.className = 'mc-img';
-      img.innerHTML = '<span class="wand">' + ${JSON.stringify(WAND_SVG)} + '</span>';
+      img.innerHTML = '<span class="wand">' + ${JSON.stringify(IQ_LOGO_SVG)} + '</span>';
       const main = document.createElement('div'); main.className = 'mc-main';
       const nm = document.createElement('div'); nm.className = 'mc-name'; nm.textContent = r.name || r.id;
       const ds = document.createElement('div'); ds.className = 'mc-desc'; ds.textContent = r.description || '';
@@ -2872,7 +2875,7 @@ export function chatHtml(): string {
       + sparks
       + '<div class="celebBadge"><span class="celebHalo"></span>'
       + '<span class="celebRing"></span><span class="celebRing r2"></span>'
-      + '<span class="celebWand">' + ${JSON.stringify(WAND_SVG)} + '</span></div>'
+      + '<span class="celebWand">' + ${JSON.stringify(IQ_LOGO_SVG)} + '</span></div>'
       + '<div class="celebKicker">Skill acquired</div>'
       + '<div class="celebName">' + safe + '</div>'
       + '<div class="celebSub">Equipped \\u2014 ready to cast</div>'

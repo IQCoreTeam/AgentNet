@@ -113,7 +113,7 @@ export function ConnectCodex() {
                 {codexLoginCode}
               </div>
               <p className="text-center text-xs text-zinc-500">
-                Waiting for approval — this happens automatically once you enter the code.
+                Waiting for approval. This happens automatically once you enter the code.
               </p>
             </>
           )}

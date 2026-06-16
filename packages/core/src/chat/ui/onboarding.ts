@@ -68,7 +68,7 @@ export function onboardingHtml(): string {
 <body>
 <div class="card">
   <h1>AgentNet</h1>
-  <div class="sub">Connect a wallet — your sessions are encrypted to it.</div>
+  <div class="sub">Connect a wallet. Your sessions are encrypted to it.</div>
 
   <!-- STEP 1: wallet. Two modes by surface (filled in by script):
        - local  (vscode/cli): choose / create a Solana keypair by file path
@@ -99,7 +99,7 @@ export function onboardingHtml(): string {
       </div>
       <div class="note">
         Connect your wallet. You'll sign one message so this device can encrypt your
-        sessions to you — it's an off-chain signature, not a transaction (nothing
+        sessions to you: it's an off-chain signature, not a transaction (nothing
         on-chain, no fee). The same wallet decrypts your sessions on any device.
       </div>
     </div>

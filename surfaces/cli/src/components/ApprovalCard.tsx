@@ -34,7 +34,7 @@ export function ApprovalCard({
       marginTop={1}
     >
       <Text color={accent} bold>
-        {danger ? "⚠ DANGER — " : `${glyph.thinking} `}
+        {danger ? "⚠ DANGER · " : `${glyph.thinking} `}
         {req.cli} wants to use {req.tool}
       </Text>
       <Text>{req.title}</Text>
@@ -53,7 +53,7 @@ export function ApprovalCard({
       {reply ? (
         <Box marginTop={1} flexDirection="column">
           <Text color={accent}>
-            {reply === "reason" ? "deny — tell the model why:" : "edit command, then ↵ to run:"}
+            {reply === "reason" ? "deny: tell the model why:" : "edit command, then ↵ to run:"}
           </Text>
           <Box>
             <Text color={colors.iqCyan}>❯ </Text>

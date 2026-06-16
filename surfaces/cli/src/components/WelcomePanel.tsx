@@ -197,7 +197,7 @@ export function WelcomePanel({
               <Text color={colors.iqCyan}>{link(HELIUS_QUICKSTART, HELIUS_QUICKSTART)}</Text>
             </Text>
             <Text dimColor> (⌘/ctrl-click the link, then copy your API key)</Text>
-            <Text dimColor>2. paste it on the line above — the key or the full RPC URL</Text>
+            <Text dimColor>2. paste it on the line above: the key or the full RPC URL</Text>
             <Text dimColor>3. [enter] save · [esc] cancel · empty = use default rpc</Text>
           </Box>
         ) : (
