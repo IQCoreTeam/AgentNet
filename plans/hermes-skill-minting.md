@@ -277,14 +277,14 @@ unlocks. Research/eval only — flags noted.
   AgentNet's marketplace tools plug into (§2). Lowest-friction power-up; usable now.
 
 **E. Position AgentNet as infra beneath agent runtimes/economies.**
-- **[ElizaOS](https://github.com/elizaOS/eliza)** (open framework for autonomous AI agents),
+- **[ElizaOS](https://github.com/elizaOS/eliza)** (open framework for autonomous AI agents) and
   **Olas / Open Autonomy** ([valory-xyz/open-autonomy](https://github.com/valory-xyz/open-autonomy),
-  the Autonolas autonomous-services framework), and **Virtuals Protocol GAME** (modular agentic
-  SDK: [game-by-virtuals/game-python](https://github.com/game-by-virtuals/game-python)).
-- *Unlock:* the README thesis is "AgentNet sits beneath competing runtimes like MCP." Eliza,
-  Olas, and Virtuals are exactly those runtimes (siblings to Hermes/OpenClaw) — each a place that
-  can *rent* a wallet-owned AgentNet agent and fetch the same on-chain skill pool. Treat them as
-  **integration targets**, not dependencies.
+  the Autonolas autonomous-services framework).
+- *Unlock:* the README thesis is "AgentNet sits beneath competing runtimes like MCP." Eliza and
+  Olas are exactly those runtimes (siblings to Hermes/OpenClaw) — each a place that can *rent* a
+  wallet-owned AgentNet agent and fetch the same on-chain skill pool. Treat them as **integration
+  targets**, not dependencies. (Virtuals Protocol is a fourth such ecosystem — left out here only
+  because I haven't verified a canonical repo link.)
 
 ### 5c. Crazy agentic frontier — AgentNet as an on-chain evolutionary skill library
 
@@ -325,34 +325,4 @@ and monetized.** Mapped to the self-improvement loop in §3:
 **D. Letta / MemGPT — memory-first self-improving agent harness.**
 - Letta Code (https://github.com/letta-ai/letta-code): tiered OS-style memory (Core/Recall/
   Archival), agents **rewrite their own context + acquire skills from experience**, identity
-  persists across models.
-- *Unlock:* directly complements the existing **`agentnet-shared-memory`** track — the memory
-  layer that decides *when* a solved task is skill-worthy (§1 judgment) and feeds the mint
-  trigger. Letta's "skill learning from experience" is the engine behind AgentNet's authoring
-  loop.
-
-**The combined "out-of-world" vision:** a Voyager-style agent generates skills → GEPA/ACE refine
-them from traces → DGM-style forking mints each generation as a child NFT → `supply`/reputation
-acts as evolutionary fitness → the best skill lineages propagate across every wallet and runtime.
-**A self-improving agent economy whose evolution is recorded, owned, and selected on-chain** —
-no other skill-library project has the ownership + economic-selection layer AgentNet already has.
-*Flag:* all of §5c is research-grade; the near-term concrete step is still §3 (suggest-and-confirm
-mint) — these define the trajectory, not v1.
-
----
-
-## 6. Hand-off
-
-- This doc is research/design; **no code changes here.**
-- Concrete build items it hands to item-1 / #33: (a) the five-option spawn wiring + the
-  `createSdkMcpServer` adapter (§2), (b) the `publish_skill` MCP tool over existing
-  `publishSkill()` with the suggest-and-confirm gate on the existing `canUseTool` path (§3),
-  (c) a description-quality check at publish (§2).
-- Designed-for-later: the semantic routing index (§4).
-
-**Link-verification status (every external claim is linked + checked):** all GitHub repos,
-docs sites, the ERC-8004 EIP, and the Voyager / DGM / **SkillRouter** arxiv papers in
-§§0,4,5,5b,5c were fetched live and confirmed to exist (June 2026). The SkillRouter paper
-(arxiv 2603.22455, Alibaba) and **Virtuals Protocol GAME** (game-by-virtuals/game-python) are
-now **verified** — every external reference in this doc is linked and was fetched live; nothing
-remains flagged or unlinked. Post-cutoff star/date figures are descriptive only, not load-bearing.
+t
