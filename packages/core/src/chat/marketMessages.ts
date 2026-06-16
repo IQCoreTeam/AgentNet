@@ -60,6 +60,7 @@ export type MarketRequest =
   | { type: "getSkillDetail"; mint: string } // open the detail view for one item
   | { type: "buySkill"; skillId: string; creatorWallet?: string }
   | { type: "ownedSkills" } // ask the host to (re)send the owned list
+  | { type: "getBalance" } // ask the host for the wallet's native SOL balance
   | { type: "setHeliusKey" } // host opens a native input to capture + save the key
   | { type: "useDefaultRpc" } // clear any key, fall back to the default
   | { type: "getRpcStatus" } // ask the host to (re)send rpcStatus
@@ -73,6 +74,7 @@ export type MarketEvent =
   | { type: "skillDetail"; detail: SkillDetail } // full detail for the opened item (includes notes)
   | { type: "buyResult"; skillId: string; ok: boolean; slug?: string; error?: string }
   | { type: "ownedSkills"; names: string[] } // installed skill names (panel fill)
+  | { type: "balance"; lamports: number | null } // wallet SOL balance (null = read failed)
   | { type: "skillActive"; name: string } // a skill fired -> "Casting <name>" cue
   | { type: "rpcStatus"; status: RpcStatus } // DAS-ready? which source? (issue #23)
   // issue #34: comment write result + refreshed comment list

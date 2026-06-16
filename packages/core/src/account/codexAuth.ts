@@ -74,7 +74,11 @@ export function startCodexLogin(codexBin = "codex"): Promise<CodexLogin> {
 
 export async function saveCodexApiKey(key: string): Promise<void> {
   await ensureDir(tokensDir());
-  await writeFile(tokenFile("codex-key"), JSON.stringify({ apiKey: key }), { mode: 0o600 });
+  const path = tokenFile("codex-key");
+  // Unlink before write so the new file is always created with 0o600 — if the file
+  // already existed with looser permissions a plain writeFile would not downgrade them.
+  await rm(path, { force: true });
+  await writeFile(path, JSON.stringify({ apiKey: key }), { mode: 0o600 });
 }
 
 export async function getCodexApiKey(): Promise<string | null> {

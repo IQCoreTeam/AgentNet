@@ -56,7 +56,22 @@ async function writeConfig(cfg: StorageConfig): Promise<void> {
 
 /** True once a storage backend has been chosen on this device. */
 export async function isInitialized(): Promise<boolean> {
-  return (await readConfig()) !== null;
+  return (await readConfig())?.kind != null;
+}
+
+// Passive skill-shopping toggle (issue #21). Lives in the same config.json as the
+// storage choice, but is NOT part of StorageConfig — so we read/write it raw and
+// preserve everything else (storage fields + google creds) across writes. Default ON:
+// absent flag → true; only an explicit `false` turns it off.
+export async function getSkillShopping(): Promise<boolean> {
+  const raw = await readRawConfig();
+  return raw.skillShopping !== false;
+}
+
+export async function setSkillShopping(on: boolean): Promise<void> {
+  await ensureDir(rootDir());
+  const prev = await readRawConfig();
+  await writeFile(configFile(), JSON.stringify({ ...prev, skillShopping: on }, null, 2));
 }
 
 // First-run setup: record the chosen backend and (for gdrive) run Google sign-in.
@@ -165,3 +180,19 @@ export const logout = disconnectCloud;
 // (same pattern as skill-shopping: config.json "auto_publish", default OFF).
 // The trigger — auto-minting a skill after the agent authors/writes one — lives
 // in #33's authoring flow. Wire it there once #33 lands.
+
+/** Save Google OAuth app credentials without touching the storage kind. */
+export async function saveGoogleCreds(clientId: string, clientSecret: string): Promise<void> {
+  await ensureDir(rootDir());
+  const prev = await readRawConfig();
+  await writeFile(
+    configFile(),
+    JSON.stringify({ ...prev, google_client_id: clientId, google_client_secret: clientSecret }, null, 2),
+  );
+}
+
+/** True if Google OAuth app credentials are present in config. */
+export async function hasGoogleCreds(): Promise<boolean> {
+  const raw = await readRawConfig();
+  return !!(raw.google_client_id);
+}

@@ -60,6 +60,19 @@ export interface ChatMessage {
   // summary subsumes everything before its own ts.
   replacesUpTo?: number;
   partial?: boolean; // true = streaming delta (future); absent/false = complete
+  // For role:"user" — how many images the user attached to this turn. ONLY a count is
+  // stored (never the base64 payload — that would bloat the encrypted log); the live UI
+  // renders real thumbnails from the in-memory attachments, history shows a count chip.
+  imageCount?: number;
+}
+
+// An image attached to a user turn. `dataBase64` is the RAW base64 (no data: prefix).
+// Neutral across engines: claude takes it inline as a base64 content block; codex needs
+// a file path, so the spawn layer writes it to a temp file and passes that.
+export interface ImageInput {
+  mime: string; // e.g. "image/png"
+  dataBase64: string; // raw base64, no "data:...;base64," prefix
+  name?: string; // original filename, for display only
 }
 
 // One tool/agent action surfaced in the transcript (bash run, file edit, read…).
@@ -76,10 +89,17 @@ export interface ToolAction {
 export interface SessionHandle {
   readonly sessionId: string; // from the CLI's system/init
   readonly cli: "claude" | "codex";
-  send(userText: string): void; // user input → CLI stdin
+  send(userText: string, images?: ImageInput[]): void; // user input (+ attached images) → CLI
   onMessage(cb: (msg: ChatMessage) => void): void; // CLI output (UI renders)
   onTurnEnd(cb: () => void): void; // turn finished (runtime auto-saves here)
   onSkill(cb: (name: string) => void): void; // a skill fired → UI "Casting <skill>" cue
+  // real context-window occupancy (tokens) reported by the engine each turn. Optional
+  // for the UI to use (e.g. a context-left meter); surfaces may ignore it.
+  onUsage(cb: (contextTokens: number) => void): void;
+  // interrupt the CURRENT turn but keep the session alive (claude q.interrupt / codex
+  // turn/interrupt) — the next send continues the same conversation. Distinct from
+  // stop(), which tears the whole handle down.
+  interrupt(): void;
   stop(): void;
 }
 
@@ -92,10 +112,25 @@ export interface AgentRuntime {
     cwd: string;
     sessionId?: string; // present = resume, absent = new
     model?: string;
+    // permission/approval mode. claude → SDK permissionMode (default | acceptEdits |
+    // plan | bypassPermissions); codex → a sandbox+approval preset key (readonly |
+    // auto | full). Omit → the engine's safe default (claude "default", codex "auto").
+    mode?: string;
+    // opt-in token streaming: when true, the engine emits partial assistant deltas
+    // (ChatMessage.partial:true) followed by a final partial:false message. Surfaces that
+    // don't set this (e.g. vscode) keep the whole-turn behavior unchanged. Partials are
+    // rendered but NOT persisted — only the final message is written to the log.
+    stream?: boolean;
     // who decides tool approvals for THIS session. Per-session (not per-runtime) so
     // multiple chat panels sharing one runtime each route approvals to their OWN
     // panel. Omit → the runtime's default channel (or auto-allow).
     approval?: ApprovalChannel;
+    // Optional Codex API Key (Stage 1)
+    apiKey?: string;
+    // Ephemeral (side-channel /btw) session that doesn't save messages to the store.
+    ephemeral?: boolean;
+    // Reasoning effort level (claude: adaptive thinking depth; codex: reasoning_effort).
+    effort?: "low" | "medium" | "high" | "xhigh" | "max";
   }): Promise<SessionHandle>;
 
   // list the wallet's saved sessions (for the UI's session list)

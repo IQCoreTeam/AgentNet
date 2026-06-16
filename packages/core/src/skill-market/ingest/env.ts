@@ -14,6 +14,7 @@ import type { Wallet } from "../../runtime/contract.js";
 import { searchSkills } from "../../search/index.js";
 import { dasSource, indexerSource } from "../../core/skillSource.js";
 import { buySkill } from "../../nft/skill.js";
+import { getSolBalance } from "../../notes/index.js";
 import { readSkillText } from "../../nft/token2022.js";
 import { claudeSkillsDir } from "../../core/paths.js";
 import { resolveRpcUrl } from "../../core/rpc.js";
@@ -131,6 +132,17 @@ export async function marketplaceEnv(wallet: Wallet) {
         skills.injectOwned("codex", wallet.address),
       ]);
       return c;
+    },
+
+    // Native SOL balance (lamports) of the connected wallet — surfaced in the wallet
+    // dropdown + market header so a buyer always sees their funds before/after a buy.
+    // null on a read failure (bad RPC) so the UI can show "—" instead of hanging.
+    async solBalance(): Promise<number | null> {
+      try {
+        return await getSolBalance(conn, wallet.address);
+      } catch {
+        return null;
+      }
     },
 
     // installed skill names = the dir names under the Claude skills dir (each is a slug).

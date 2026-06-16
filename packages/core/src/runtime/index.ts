@@ -4,10 +4,15 @@
 // Messages seen before the real sessionId arrives are queued, then flushed once
 // the CLI reveals its id. The UI just calls startSession + send + onMessage.
 
+import { Connection } from "@solana/web3.js";
 import { spawnCli } from "./spawn.js";
 import { SessionStore } from "../account/store.js";
 import { prepareResume } from "./inject/index.js";
 import { MemorySync } from "../memory/index.js";
+import { getSkillShopping } from "../account/login.js";
+import { setSkillShoppingActive } from "../skill-market/passive.js";
+import { createAgentSdkMcpServer, newVerifyGuard } from "../skill-market/index.js";
+import { getCodexApiKey } from "../account/codexAuth.js";
 import type { ApprovalChannel } from "./approval/channel.js";
 import type {
   AgentRuntime,
@@ -17,6 +22,47 @@ import type {
   StorageAdapter,
   Wallet,
 } from "./contract.js";
+
+const MARKET_TOOLS = [
+  "mcp__agentnet-marketplace__search_skills",
+  "mcp__agentnet-marketplace__verify_skill",
+  "mcp__agentnet-marketplace__buy_skill",
+];
+
+// Skill-shopping wiring (plans/skill-shopping.md), built fresh per session from the
+// persisted toggle. ON installs the bundled skill-shopping SKILL.md into both runtimes'
+// skills dirs (so either engine discovers it) and — for Claude — wires the marketplace
+// MCP tools so the agent can act on it; OFF moves the skill out to the holding dir and
+// wires no tools (fully quiet, no marketplace surface). All best-effort: a failure here
+// must not block the session, just leave skill-shopping inert this run.
+//
+// Codex gets the SKILL.md but no MCP tools (codex-sdk exposes no mcpServers option yet —
+// deferred); the skill's prose still guides it to the (unavailable) tools, harmlessly.
+async function buildPassiveSpawn(
+  cli: "claude" | "codex",
+  wallet: Wallet,
+): Promise<{ mcpServers?: Record<string, unknown>; allowedTools?: string[] }> {
+  const on = await getSkillShopping().catch(() => true);
+
+  // Move the bundled skill into / out of the scanned skills dirs (both engines).
+  try {
+    await setSkillShoppingActive(on);
+  } catch (e) {
+    console.warn("[skill-shopping] toggle install failed:", e);
+  }
+
+  // OFF, or codex (no MCP option yet): the SKILL.md placement above is all we do.
+  if (!on || cli === "codex") return {};
+
+  // Claude + ON: wire the marketplace MCP tools (search → verify → buy) with a per-spawn
+  // verify guard. Needs a DAS-capable RPC; without one the tools can't read the market, so
+  // leave them off (the skill is present but inert) rather than wire dead tools.
+  const rpcUrl = process.env.DAS_RPC_URL || process.env.SOLANA_RPC_URL;
+  if (!rpcUrl) return {};
+  const conn = new Connection(rpcUrl, "confirmed");
+  const server = createAgentSdkMcpServer(conn, wallet, wallet.address, newVerifyGuard());
+  return { mcpServers: { "agentnet-marketplace": server }, allowedTools: MARKET_TOOLS };
+}
 
 // `approval` is the swappable decision source (webview buttons / auto / push). The
 // surface passes one in; omit it and tool use auto-allows (safe local default).
@@ -38,7 +84,7 @@ export function createRuntime(
       // FRESH: no sessionId; the cli mints its own, which becomes the canonical id.
       const resuming = !!opts.sessionId;
       const nativeId = resuming
-        ? await prepareResume(store, opts.cli, opts.cwd, opts.sessionId!)
+        ? await prepareResume(store, opts.cli, opts.cwd, opts.sessionId!, opts.ephemeral)
         : undefined;
 
       // Inject the project's shared memory into this CLI's native files (Claude's
@@ -50,9 +96,19 @@ export function createRuntime(
         console.warn("[memory] inject failed:", e);
       }
 
+      // Skill-shopping (plans/skill-shopping.md): install/remove the bundled skill per the
+      // toggle + (Claude, ON) wire the marketplace MCP tools. Best-effort.
+      let passive: Awaited<ReturnType<typeof buildPassiveSpawn>> = {};
+      try {
+        passive = await buildPassiveSpawn(opts.cli, wallet);
+      } catch (e) {
+        console.warn("[skill-shopping] setup failed:", e);
+      }
+
       // per-session approval channel (each panel passes its own) wins; fall back to
       // the runtime-level default channel.
-      const cli = spawnCli({ ...opts, sessionId: nativeId, approval: opts.approval ?? approval });
+      const apiKey = opts.apiKey || (opts.cli === "codex" ? (await getCodexApiKey().catch(() => undefined)) ?? undefined : undefined);
+      const cli = spawnCli({ ...opts, sessionId: nativeId, approval: opts.approval ?? approval, apiKey, ...passive });
 
       // Storage key stays the CANONICAL id while resuming; the cli's emitted (native)
       // id must NOT overwrite it, or appended turns land in the wrong log.
@@ -61,6 +117,7 @@ export function createRuntime(
       const msgCbs: Array<(m: ChatMessage) => void> = [];
       const turnCbs: Array<() => void> = [];
       const skillCbs: Array<(name: string) => void> = []; // "Casting <skill>" marquee
+      const usageCbs: Array<(n: number) => void> = [];
       const pending: ChatMessage[] = []; // messages awaiting a known sessionId
 
       const meta = () => ({ sessionId, cli: opts.cli, title, ts: Date.now() });
@@ -73,6 +130,10 @@ export function createRuntime(
         if (!m.cli) m.cli = opts.cli;
         if (!title && m.role === "user") title = m.text.slice(0, 60);
         for (const cb of msgCbs) cb(m);
+        // streaming deltas are for the live UI only — never persist them. The final
+        // (partial:false) assistant message carries the full text and IS stored below.
+        if (m.partial) return;
+        if (opts.ephemeral) return; // Do not save ephemeral messages to the store.
         if (sessionId) void store.appendMessage(meta(), m);
         else pending.push(m);
       };
@@ -93,7 +154,12 @@ export function createRuntime(
       // A skill firing is a transient UI cue, not a transcript entry — fan it out to
       // listeners without persisting it (issue #17).
       cli.onSkill((name: string) => { for (const cb of skillCbs) cb(name); });
+      cli.onUsage((n: number) => { for (const cb of usageCbs) cb(n); });
       cli.onTurnEnd(() => {
+        if (opts.ephemeral) {
+          for (const cb of turnCbs) cb();
+          return;
+        }
         void flush().then(() => {
           for (const cb of turnCbs) cb();
         });
@@ -122,9 +188,11 @@ export function createRuntime(
           return sessionId;
         },
         cli: opts.cli,
-        send(userText: string) {
-          emit({ role: "user", text: userText, ts: Date.now() });
-          cli.send(userText);
+        send(userText: string, images?: import("./contract.js").ImageInput[]) {
+          // Persist only a COUNT of attached images, never the base64 (keeps the encrypted
+          // log small). The live UI still gets thumbnails — it holds the originals itself.
+          emit({ role: "user", text: userText, ts: Date.now(), imageCount: images?.length || undefined });
+          cli.send(userText, images);
         },
         onMessage(cb) {
           msgCbs.push(cb);
@@ -134,6 +202,12 @@ export function createRuntime(
         },
         onSkill(cb) {
           skillCbs.push(cb);
+        },
+        onUsage(cb) {
+          usageCbs.push(cb);
+        },
+        interrupt() {
+          cli.interrupt(); // stop the current turn; the session stays open for the next send
         },
         stop() {
           stopped = true; // mark so the resulting exit isn't reported as a failure

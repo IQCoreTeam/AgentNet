@@ -15,7 +15,7 @@ const OUTPUT_CAP = 4000;
 // from the event itself: any command/path that references our skills dir means an
 // installed skill is being used. We own that dir, so matching its path is reliable —
 // extract the <slug> right after it. Returns the skill slug, or undefined.
-function skillFromPath(text: string | undefined): string | undefined {
+export function skillFromPath(text: string | undefined): string | undefined {
   if (!text) return undefined;
   const root = codexSkillsDir();
   const i = text.indexOf(root + "/");
@@ -33,6 +33,9 @@ export function mapCodexEvent(ev: unknown): ParseResult {
   const e = ev as {
     type?: string;
     thread_id?: string;
+    message?: string; // stream-level error event
+    error?: { message?: string }; // turn.failed
+    usage?: { input_tokens?: number; cached_input_tokens?: number };
     item?: {
       type?: string;
       text?: string;
@@ -40,10 +43,20 @@ export function mapCodexEvent(ev: unknown): ParseResult {
       aggregated_output?: string;
       exit_code?: number;
       changes?: { path: string; kind: string }[];
+      items?: { text: string; completed: boolean }[];
     };
   };
 
   if (e.type === "thread.started" && e.thread_id) out.sessionId = e.thread_id;
+
+  // STREAMING: codex has no token-delta event, but item.updated re-emits the agent_message
+  // with its full text-so-far (a snapshot, not a delta). Surface it as a partial — the
+  // surface replaces the live line each time (same replace-semantics claude's accumulated
+  // partials use). Only agent_message; other items settle via item.completed below.
+  if (e.type === "item.updated" && e.item?.type === "agent_message" && e.item.text) {
+    out.messages.push({ role: "assistant", text: e.item.text, ts: Date.now(), partial: true });
+    return out;
+  }
 
   // we surface each item ONCE, on completion (item.completed), to avoid duplicating
   // the in-progress/updated frames of the same item.
@@ -62,6 +75,11 @@ export function mapCodexEvent(ev: unknown): ParseResult {
       });
       // a command touching our skills dir = an installed skill firing → "Casting" cue
       out.skill = skillFromPath(it.command) ?? out.skill;
+    } else if (it.type === "todo_list" && Array.isArray(it.items)) {
+      // normalize codex todos {text,completed} → the neutral TodoWrite shape so the same
+      // checklist panel renders for both engines.
+      const todos = it.items.map((t) => ({ content: t.text, status: t.completed ? "completed" : "pending" }));
+      out.messages.push({ role: "tool", text: "TodoWrite", ts: Date.now(), tool: { name: "TodoWrite", output: JSON.stringify(todos) } });
     } else if (it.type === "file_change" && Array.isArray(it.changes)) {
       // codex reports WHICH files changed (add/update/delete) but not a line diff;
       // surface each as a file-op tool card.
@@ -76,6 +94,18 @@ export function mapCodexEvent(ev: unknown): ParseResult {
     }
   }
 
+  // surface a readable failure (usage limit, etc.) instead of letting the engine wrapper
+  // report a cryptic non-zero exit. Both the stream `error` event and `turn.failed` carry
+  // a message — show it as a tool/error card.
+  const failMsg = e.type === "error" ? e.message : e.type === "turn.failed" ? e.error?.message : undefined;
+  if (failMsg) {
+    out.messages.push({ role: "tool", text: failMsg, ts: Date.now(), tool: { name: "Error", output: failMsg, exitCode: 1 } });
+  }
+
   if (e.type === "turn.completed" || e.type === "turn.failed") out.turnEnded = true;
+  // codex reports per-turn usage on completion; context occupancy = input + cached input.
+  if (e.type === "turn.completed" && e.usage) {
+    out.contextTokens = (e.usage.input_tokens ?? 0) + (e.usage.cached_input_tokens ?? 0);
+  }
   return out;
 }

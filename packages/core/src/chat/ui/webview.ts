@@ -32,6 +32,7 @@ function markdownLibs(): string {
 // A small magic-wand glyph (line art, currentColor) — the skills affordance. Drawn
 // as SVG instead of an emoji so it matches the UI weight and themes cleanly.
 const WAND_SVG = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l7-7"/><path d="M9.5 4.5l2 2"/><path d="M12.5 2v2M14.5 3.5h-2M13 6.2l1 .4M12.6 1.2l.4 1"/></svg>';
+const PAPERCLIP_SVG = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 6.5l-5.6 5.6a2.5 2.5 0 0 1-3.5-3.5L9 3a1.7 1.7 0 0 1 2.4 2.4l-5.4 5.4a0.85 0.85 0 0 1-1.2-1.2l5-5"/></svg>';
 
 export function chatHtml(): string {
   return /* html */ `<!DOCTYPE html>
@@ -188,6 +189,19 @@ export function chatHtml(): string {
   .wmItem.disabled { opacity: 0.4; cursor: default; }
   .wmItem .soon { margin-left: auto; font-size: 0.72em; opacity: 0.6; border: 1px solid var(--an-line);
                   border-radius: 999px; padding: 0 7px; }
+  /* caret sits at the right edge; when the count badge is shown it already grabs the
+     space (margin-left:auto), so the caret just trails it with a small gap. */
+  .wmItem .wmCaret { margin-left: auto; font-size: 0.7em; opacity: 0.5; transition: transform 0.12s; }
+  .wmItem .soon:not([style*="none"]) + .wmCaret { margin-left: 6px; }
+  .wmItem.open .wmCaret { transform: rotate(90deg); }
+  /* inline owned-skill list inside the wallet dropdown: scrollable, no buy/nav */
+  #walletSkillList { max-height: 184px; overflow-y: auto; margin: 2px 4px 4px; padding: 2px;
+                     display: flex; flex-direction: column; gap: 3px; }
+  #walletSkillList .wskRow { display: flex; align-items: center; gap: 8px; padding: 7px 9px;
+                     border-radius: var(--an-radius-sm); background: var(--an-bg-1);
+                     border: 1px solid var(--an-green-line); font-size: 0.86em; }
+  #walletSkillList .wskRow .wand { width: 13px; height: 13px; color: var(--an-green); flex: 0 0 auto; }
+  #walletSkillList .wskEmpty { padding: 9px; font-size: 0.82em; opacity: 0.55; text-align: center; }
 
   /* right chat area */
   #main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
@@ -230,6 +244,15 @@ export function chatHtml(): string {
   .turnHead .uq { color: var(--an-green); font-weight: 700; flex: none; line-height: 1.5; opacity: 0.8; }
   .turnHead .utext { flex: 1; min-width: 0; white-space: pre-wrap; line-height: 1.5; font-size: 0.95em;
                      font-weight: 600; overflow-wrap: anywhere; }
+  /* a long user message collapses to a few lines; "Show more" expands it (capped to
+     ~40vh with an inner scroll so a huge paste never eats the whole screen). */
+  .utextWrap { flex: 1; min-width: 0; }
+  .utextWrap .utext { width: 100%; }
+  .utextWrap.collapsed .utext { max-height: 4.5em; overflow: hidden; }
+  .utextWrap.expanded .utext { max-height: 40vh; overflow-y: auto; }
+  .utextToggle { margin-top: 4px; font-size: 0.8em; font-weight: 600; color: var(--an-green);
+                 opacity: 0.85; cursor: pointer; user-select: none; display: inline-block; }
+  .utextToggle:hover { opacity: 1; text-decoration: underline; }
   /* the timeline body: a left rail; each child item gets a dot via ::before */
   .turnBody { padding: 4px 16px 16px 16px; margin-left: 7px;
               border-left: 1.5px solid var(--an-line-soft); display: flex; flex-direction: column; gap: 2px; }
@@ -389,6 +412,25 @@ export function chatHtml(): string {
   .apResolved { padding: 8px 12px; font-size: 0.82em; border-top: 1px solid var(--an-green-dim); }
   .apResolved.allowed { color: var(--an-green); }
   .apResolved.denied { color: #e07a7a; }
+  /* AskUserQuestion card: one block per question, options as selectable chips. The
+     user's pick becomes the tool result (sent as answers), so there is no Approve/
+     Deny — just option chips + a Send that unlocks once every question is answered. */
+  .qBlock { padding: 9px 12px; border-top: 1px solid var(--an-green-dim); }
+  .qBlock:first-child { border-top: none; }
+  .qHeader { display: inline-block; font-size: 0.7em; font-weight: 600; text-transform: uppercase;
+             letter-spacing: 0.04em; color: var(--an-green); background: var(--an-green-dim);
+             padding: 1px 6px; border-radius: 4px; margin-bottom: 5px; }
+  .qText { font-size: 0.88em; font-weight: 600; margin-bottom: 7px; }
+  .qOpts { display: flex; flex-direction: column; gap: 6px; }
+  .qOpt { text-align: left; padding: 7px 10px; border-radius: 8px; cursor: pointer;
+          border: 1px solid var(--an-line); background: transparent; transition: border-color 0.12s, background 0.12s; }
+  .qOpt:hover { border-color: var(--an-green-line); }
+  .qOpt.on { border-color: var(--an-green); background: var(--an-green-dim); }
+  .qOptLabel { font-size: 0.85em; font-weight: 600; }
+  .qOptDesc { font-size: 0.78em; opacity: 0.7; margin-top: 2px; line-height: 1.35; }
+  .apBtn.ok:disabled { opacity: 0.4; cursor: not-allowed; filter: none; }
+  /* plan card body: wrap prose (not break-all like a path/command) */
+  .apBody.planBody { word-break: normal; overflow-wrap: anywhere; }
   .cursor::after { content: "\\u258B"; opacity: 0.6; animation: blink 1s step-end infinite; }
   @keyframes blink { 50% { opacity: 0; } }
 
@@ -442,25 +484,34 @@ export function chatHtml(): string {
                          font-weight: 600; opacity: 0.85; margin-bottom: 9px; }
   #skillsPanel .skHead .wand { width: 14px; height: 14px; color: var(--an-green); }
   #skillsPanel .skMuted { margin-left: auto; font-weight: 400; opacity: 0.5; font-size: 0.92em; }
-  #skillGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  #skillsClose { margin-left: 8px; width: 20px; height: 20px; padding: 0; line-height: 18px; text-align: center;
+                 font-size: 15px; border-radius: 5px; background: transparent; color: var(--vscode-foreground);
+                 opacity: 0.55; border: 1px solid transparent; cursor: pointer; flex: 0 0 auto; }
+  #skillsClose:hover { opacity: 1; background: var(--an-bg-1); border-color: var(--an-line); }
+  /* owned-skill grid scrolls once it outgrows ~3 rows instead of pushing the chat up */
+  #skillGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+               max-height: 188px; overflow-y: auto; }
   /* a skill slot: an item card. empty = a quiet dashed "coming soon" placeholder. */
   .skSlot { aspect-ratio: 1; border-radius: var(--an-radius-sm); display: flex; align-items: center;
             justify-content: center; }
   .skSlot.empty { border: 1.5px dashed var(--an-line-soft); background: var(--an-bg-1); opacity: 0.5; }
   .skSlot.empty::after { content: ''; width: 16px; height: 16px; border-radius: 4px;
                          background: var(--an-line-soft); }
-  /* an ACTIVE skill = a live item card: green-edged, gently breathing glow (not neon) */
+  /* an OWNED skill = a live item card: green-edged, but STATIC. It only glows while the
+     skill is actually firing (.firing, toggled by flashSkill), not just because it's owned. */
   .skSlot.item { flex-direction: column; gap: 5px; padding: 8px 6px; aspect-ratio: auto;
                  border: 1px solid var(--an-green-line); background: var(--an-green-dim);
-                 color: var(--an-green); position: relative; overflow: hidden;
-                 animation: skBreath 3.2s ease-in-out infinite; }
-  .skSlot.item .skWand { width: 18px; height: 18px; display: inline-flex; filter: drop-shadow(0 0 4px var(--an-green)); }
+                 color: var(--an-green); position: relative; overflow: hidden; }
+  .skSlot.item .skWand { width: 18px; height: 18px; display: inline-flex; }
   .skSlot.item .skName { font-size: 0.72em; color: var(--vscode-foreground); opacity: 0.92;
                          text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
                          max-width: 100%; }
+  /* the glow — on only while THIS skill is being used (a quicker pulse than a breath) */
+  .skSlot.item.firing { animation: skBreath 1.4s ease-in-out infinite; }
+  .skSlot.item.firing .skWand { filter: drop-shadow(0 0 5px var(--an-green)); }
   @keyframes skBreath {
     0%, 100% { box-shadow: 0 0 0 0 transparent; border-color: var(--an-green-line); }
-    50%      { box-shadow: 0 0 10px -2px var(--an-green); border-color: var(--an-green); }
+    50%      { box-shadow: 0 0 12px -1px var(--an-green); border-color: var(--an-green); }
   }
   /* header "Casting: …" glows softly when something is active */
   #skillsPanel.casting .skMuted { color: var(--an-green); opacity: 0.95; font-weight: 600;
@@ -468,6 +519,21 @@ export function chatHtml(): string {
   /* the skills BUTTON also hints when casting (badge already shows the count) */
   #skillsBtn.casting { color: var(--an-green); }
   .skNote { margin-top: 10px; font-size: 0.76em; opacity: 0.5; line-height: 1.5; }
+
+  /* passive skill-shopping toggle row (issue #21) */
+  #shopToggleRow { display: flex; align-items: center; gap: 7px; margin-top: 10px;
+                   padding-top: 9px; border-top: 1px solid var(--an-line); font-size: 0.82em; }
+  #shopToggleLabel { font-weight: 600; }
+  .shopToggleHint { opacity: 0.5; font-size: 0.92em; flex: 1; min-width: 0;
+                    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #shopToggle { position: relative; width: 32px; height: 18px; flex: none; border-radius: 999px;
+                background: var(--an-bg-2); border: 1px solid var(--an-line); cursor: pointer; padding: 0;
+                transition: background 0.15s, border-color 0.15s; }
+  #shopToggle .knob { position: absolute; top: 1px; left: 1px; width: 14px; height: 14px;
+                      border-radius: 50%; background: var(--an-fg, currentColor); opacity: 0.6;
+                      transition: left 0.15s, opacity 0.15s; }
+  #shopToggle.on { background: var(--an-green-dim); border-color: var(--an-green-line); }
+  #shopToggle.on .knob { left: 15px; background: var(--an-green); opacity: 1; }
 
   /* marketplace shop inside the skills panel */
   #skillShop { margin-top: 10px; }
@@ -477,7 +543,8 @@ export function chatHtml(): string {
   #skillSearch:focus { border-color: var(--an-green-line); }
   #skillSearchBtn { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
                     border-radius: var(--an-radius); padding: 5px 11px; font-size: 0.82em; cursor: pointer; }
-  #skillResults { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  #skillResults { margin-top: 8px; display: flex; flex-direction: column; gap: 6px;
+                  max-height: 240px; overflow-y: auto; }
   .shopItem { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--an-line);
               border-radius: var(--an-radius); font-size: 0.82em; }
   .shopItem .si-main { min-width: 0; flex: 1; }
@@ -608,7 +675,9 @@ export function chatHtml(): string {
                background: var(--an-bg-2); overflow: hidden; transition: border-color 0.12s; }
   #input { width: 100%; box-sizing: border-box; padding: 11px 12px 8px; background: transparent;
            color: var(--vscode-input-foreground); border: none; resize: none; font-family: inherit;
-           font-size: 0.95em; display: block; }
+           font-size: 0.95em; display: block; line-height: 1.5;
+           /* autoGrow JS caps the height (~2.5x) via inline style; this scrolls past it */
+           overflow-y: auto; }
   #input:focus { outline: none; }
   #input:disabled { opacity: 0.5; cursor: not-allowed; }
   #inputWrap:focus-within { box-shadow: 0 0 0 2px var(--engSoft); }
@@ -619,17 +688,197 @@ export function chatHtml(): string {
   #controls { display: flex; gap: 8px; align-items: center; padding: 4px 8px 7px; font-size: 0.82em; }
   #model { background: var(--an-bg-1); color: var(--vscode-foreground);
            border: 1px solid var(--an-line); border-radius: 6px; padding: 3px 7px; font-size: 0.92em; }
-  #autoEdit { display: flex; align-items: center; gap: 4px; opacity: 0.7; cursor: pointer; font-size: 0.92em; }
-  #autoEdit input { margin: 0; accent-color: var(--eng); }
-  #send { margin-left: auto; padding: 6px 16px; background: var(--eng); color: #1a1205; font-weight: 600;
-          border: none; border-radius: 6px; cursor: pointer; }
-  #composer[data-cli="codex"] #send { color: #06231a; }
-  #send:hover { filter: brightness(1.08); }
+  /* permission-mode picker, modelled on the mode pickers in Claude Code / Codex
+     rather than a raw OS select: an engine-tinted chip showing the current mode,
+     and a popover that lists each mode with a one-line description. The popover is
+     position:fixed so it escapes #inputWrap's overflow:hidden (which would clip it). */
+  #modeWrap { position: relative; display: inline-flex; }
+  #modeBtn { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+             background: var(--engSoft); color: var(--vscode-foreground); font-weight: 600;
+             border: 1px solid var(--engLine); border-radius: 999px; padding: 3px 10px;
+             font-size: 0.92em; font-family: inherit; }
+  #modeBtn:hover { border-color: var(--eng); }
+  #modeBtn .mcaret { opacity: 0.5; font-size: 0.8em; }
+  #modeMenu { position: fixed; z-index: 60; min-width: 234px; padding: 5px;
+              background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+              border: 1px solid var(--an-line); border-radius: var(--an-radius);
+              box-shadow: 0 8px 28px rgba(0,0,0,0.4); }
+  .modeOpt { display: flex; align-items: flex-start; gap: 8px; padding: 7px 9px;
+             border-radius: var(--an-radius-sm); cursor: pointer; }
+  .modeOpt:hover { background: var(--an-bg-1); }
+  .modeOpt.sel { background: var(--engSoft); }
+  .modeOpt .mtext { flex: 1; min-width: 0; }
+  .modeOpt .mlabel { font-weight: 600; font-size: 0.92em; }
+  .modeOpt .mdesc { font-size: 0.78em; opacity: 0.6; margin-top: 1px; line-height: 1.35; }
+  .modeOpt .mcheck { color: var(--eng); font-weight: 700; opacity: 0; flex: none; }
+  .modeOpt.sel .mcheck { opacity: 1; }
+  /* model chip: same chip+popover language as the mode chip, but neutral (un-tinted)
+     so the engine-colored mode chip stays the prominent one. */
+  #modelWrap { position: relative; display: inline-flex; }
+  #modelBtn { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+              background: var(--an-bg-1); color: var(--vscode-foreground); font-weight: 600;
+              border: 1px solid var(--an-line); border-radius: 999px; padding: 3px 10px;
+              font-size: 0.92em; font-family: inherit; }
+  #modelBtn:hover { border-color: var(--eng); }
+  #modelBtn .mglyph { opacity: 0.5; font-size: 0.82em; font-weight: 700; letter-spacing: 0.02em; }
+  #modelBtn .mcaret { opacity: 0.5; font-size: 0.8em; }
+  #modelMenu { position: fixed; z-index: 60; min-width: 176px; padding: 5px;
+               background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+               border: 1px solid var(--an-line); border-radius: var(--an-radius);
+               box-shadow: 0 8px 28px rgba(0,0,0,0.4); }
+  /* send/stop: a single small, flat, round icon button (Claude/Codex style) —
+     no text, no gradient, no lift. Engine accent when ready, neutral when empty. */
+  #send { margin-left: auto; display: inline-flex; align-items: center; justify-content: center;
+          width: 28px; height: 28px; padding: 0; flex: none;
+          color: #fff; border: none; border-radius: 999px; cursor: pointer;
+          background: var(--eng); transition: background 0.12s ease, opacity 0.12s ease; }
+  #send:hover { background: color-mix(in srgb, var(--eng) 88%, #fff); }
+  #send:disabled { background: var(--an-bg-2, var(--an-bg-1)); color: var(--vscode-foreground);
+                   opacity: 0.4; cursor: default; }
+  #send svg { width: 15px; height: 15px; flex: none; }
+  #send .lbl { display: none; }
+  #send .ic-stop { display: none; }
+  #send.stopping .ic-send { display: none; }
+  #send.stopping .ic-stop { display: inline-block; }
+  #send.stopping { background: var(--vscode-foreground); color: var(--vscode-editor-background); opacity: 0.85; }
+  #send.stopping:hover { opacity: 1; }
+
+  /* attach (paperclip): a quiet icon button that tints to the engine accent on hover */
+  #attachBtn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
+               padding: 0; background: var(--an-bg-1); color: var(--vscode-foreground); opacity: 0.75;
+               border: 1px solid var(--an-line); border-radius: 999px; cursor: pointer; }
+  #attachBtn svg { width: 15px; height: 15px; }
+  #attachBtn:hover { opacity: 1; border-color: var(--eng); color: var(--eng); }
+  /* thumbnails of attached images, above the textarea. Each is a tile with a hover × */
+  #attachStrip { display: flex; flex-wrap: wrap; gap: 7px; padding: 9px 10px 2px; }
+  .thumb { position: relative; width: 52px; height: 52px; border-radius: 7px; overflow: hidden;
+           border: 1px solid var(--engLine); background: var(--an-bg-1); flex: 0 0 auto; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb .rm { position: absolute; top: 1px; right: 1px; width: 16px; height: 16px; border-radius: 50%;
+               border: none; cursor: pointer; font-size: 11px; line-height: 16px; padding: 0; text-align: center;
+               background: rgba(0,0,0,0.66); color: #fff; opacity: 0; transition: opacity 0.1s; }
+  .thumb:hover .rm { opacity: 1; }
+  /* drag-over affordance: the whole input box glows in the engine accent */
+  #inputWrap.dragover { border-color: var(--eng); box-shadow: 0 0 0 2px var(--engSoft); }
+  /* a sent user bubble's image row (live thumbs) + the history "N image" chip */
+  .msgImgs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .msgImgs img { max-width: 168px; max-height: 168px; border-radius: 8px; border: 1px solid var(--an-line); display: block; }
+  .imgChip { display: inline-flex; align-items: center; gap: 5px; margin-top: 6px; padding: 2px 9px;
+             font-size: 0.82em; opacity: 0.7; border: 1px solid var(--an-line); border-radius: 999px; }
   button { background: var(--vscode-button-background); color: var(--vscode-button-foreground);
            border: none; border-radius: 6px; cursor: pointer; }
+
+  /* ---- skill-acquired celebration: a popup that bursts in when a buy succeeds.
+       Centered card (wand + "Skill acquired" + name) over a soft backdrop, with a
+       ring shockwave and sparkle particles flying out, then auto-fades. ---- */
+  #celebrate { position: fixed; inset: 0; z-index: 999; display: none; align-items: center;
+               justify-content: center; cursor: pointer;
+               background: rgba(6,9,11,0.74); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+  #celebrate.show { display: flex; animation: celebFade 0.28s ease; }
+  #celebrate.out { animation: celebFadeOut 0.4s ease forwards; }
+  /* confetti layer: colorful pieces raining down behind the card (the delight cue) */
+  .celebConfetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+  .cfetti { position: absolute; top: -18px; width: 9px; height: 14px; border-radius: 2px; opacity: 0;
+            animation: cfettiFall var(--dur) cubic-bezier(0.25,0.5,0.45,1) var(--del) forwards; }
+  .celebCard { position: relative; display: flex; flex-direction: column; align-items: center;
+               gap: 12px; padding: 30px 46px 26px; border-radius: 20px;
+               background: linear-gradient(180deg, color-mix(in srgb, var(--an-green) 7%, var(--an-bg-1)), var(--an-bg-0));
+               border: 1px solid var(--an-green-line);
+               box-shadow: 0 0 0 1px var(--an-green-dim), 0 22px 70px rgba(0,0,0,0.6),
+                           0 0 60px var(--an-green-soft);
+               animation: celebPop 0.55s cubic-bezier(0.18,0.9,0.28,1.3); }
+  /* medal badge: a glowing disc holding the wand, ringed by a slow-rotating conic halo */
+  .celebBadge { position: relative; width: 78px; height: 78px; display: flex; align-items: center;
+                justify-content: center; border-radius: 50%; margin-top: 4px;
+                background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--an-green) 34%, var(--an-bg-1)), var(--an-bg-1));
+                box-shadow: inset 0 0 0 1.5px var(--an-green-line), 0 0 26px var(--an-green-soft); }
+  .celebHalo { position: absolute; inset: -9px; border-radius: 50%; z-index: -1; filter: blur(6px); opacity: 0.55;
+               background: conic-gradient(from 0deg, transparent, var(--an-green), transparent 48%, #e9c46a, transparent);
+               animation: celebSpin 3.4s linear infinite; }
+  .celebRing { position: absolute; width: 78px; height: 78px; border-radius: 50%;
+               border: 2px solid var(--an-green); opacity: 0.8;
+               animation: celebRing 0.85s ease-out forwards; }
+  .celebRing.r2 { animation-delay: 0.14s; border-color: #e9c46a; }
+  .celebWand { width: 40px; height: 40px; color: var(--an-green); display: inline-flex;
+               filter: drop-shadow(0 0 8px var(--an-green));
+               animation: celebWand 0.9s ease-out; }
+  .celebWand svg { width: 100%; height: 100%; }
+  .celebKicker { font-size: 0.72em; letter-spacing: 0.2em; text-transform: uppercase;
+                 color: var(--an-green); font-weight: 800; opacity: 0.95; }
+  .celebName { font-size: 1.4em; font-weight: 800; color: var(--vscode-foreground);
+               text-align: center; max-width: 320px; line-height: 1.15; }
+  .celebSub { font-size: 0.8em; color: var(--vscode-descriptionForeground); opacity: 0.85;
+              display: inline-flex; align-items: center; gap: 5px; }
+  .celebSub::before { content: '\\2713'; color: var(--an-green); font-weight: 700; }
+  .celebSpark { position: absolute; left: 50%; top: 38%; width: 6px; height: 6px; border-radius: 50%;
+                background: var(--an-green); pointer-events: none;
+                box-shadow: 0 0 8px var(--an-green);
+                animation: celebSpark 0.95s ease-out forwards; }
+  @keyframes celebFade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes celebFadeOut { to { opacity: 0; } }
+  @keyframes celebPop { 0% { transform: scale(0.72) translateY(8px); opacity: 0; }
+                        60% { transform: scale(1.04) translateY(0); opacity: 1; }
+                        100% { transform: scale(1); } }
+  @keyframes celebSpin { to { transform: rotate(360deg); } }
+  @keyframes celebRing { 0% { transform: scale(0.45); opacity: 0.85; }
+                         100% { transform: scale(2.5); opacity: 0; } }
+  @keyframes celebWand { 0% { transform: scale(0.5) rotate(-18deg); }
+                         55% { transform: scale(1.18) rotate(6deg); }
+                         100% { transform: scale(1) rotate(0); } }
+  @keyframes celebSpark { 0% { transform: translate(-50%,-50%) translate(0,0) scale(1); opacity: 1; }
+                          100% { transform: translate(-50%,-50%) translate(var(--dx),var(--dy)) scale(0.2);
+                                 opacity: 0; } }
+  @keyframes cfettiFall { 0% { opacity: 0; transform: translateY(0) rotate(var(--rot)); }
+                          12% { opacity: 1; }
+                          100% { opacity: 0.9; transform: translateY(102vh) rotate(calc(var(--rot) + var(--spin))); } }
+  @media (prefers-reduced-motion: reduce) {
+    .celebCard, .celebWand, .celebRing, .celebSpark, .celebHalo, .cfetti { animation-duration: 0.01ms; }
+  }
+
+  /* ---- wallet balance (dropdown) + market balance chip ---- */
+  /* balance block, right-aligned in the wallet header: tiny caption over the SOL amount */
+  .walletBal { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end;
+               gap: 1px; text-align: right; white-space: nowrap; }
+  .walletBal .balLabel { font-size: 0.6em; text-transform: uppercase; letter-spacing: 0.08em;
+                         opacity: 0.45; font-weight: 700; }
+  .walletBal .balAmt { font-size: 0.98em; font-weight: 600; color: var(--an-green);
+                       display: flex; align-items: center; gap: 4px; }
+  .walletBal .balAmt::before { content: '◎'; opacity: 0.8; font-weight: 400; } /* SOL glyph */
+  .walletBal.low .balAmt { color: var(--an-amber); }
+  .mktTitleRow { display: flex; align-items: center; gap: 10px; }
+  .mktBal { font-size: 0.82em; font-weight: 600; color: var(--an-green); white-space: nowrap;
+            padding: 2px 9px; border-radius: 999px; border: 1px solid var(--an-green-line);
+            background: var(--an-green-dim); display: inline-flex; align-items: center; gap: 4px; }
+  .mktBal::before { content: '◎'; opacity: 0.85; font-weight: 400; }
+  .mktBal.low { color: var(--an-amber); border-color: color-mix(in srgb, var(--an-amber) 45%, transparent);
+                background: color-mix(in srgb, var(--an-amber) 10%, transparent); }
+
+  /* ---- buy-failure banner: orange-bordered box with an (i) icon (issue: buy errors) ---- */
+  #buyErr { position: fixed; left: 50%; transform: translateX(-50%) translateY(-8px);
+            top: 14px; z-index: 1000; max-width: min(460px, 90vw); display: none;
+            opacity: 0; transition: opacity 0.2s ease, transform 0.2s ease; }
+  #buyErr.show { display: block; opacity: 1; transform: translateX(-50%) translateY(0); }
+  .buyErrBox { display: flex; align-items: flex-start; gap: 10px; padding: 11px 12px;
+               border-radius: var(--an-radius-sm); border: 1px solid var(--an-amber);
+               background: color-mix(in srgb, var(--an-amber) 12%, var(--an-bg));
+               box-shadow: 0 6px 22px rgba(0,0,0,0.35); }
+  .buyErrIcon { flex: none; width: 18px; height: 18px; border-radius: 50%; margin-top: 1px;
+                border: 1.5px solid var(--an-amber); color: var(--an-amber); font-weight: 700;
+                font-size: 0.8em; font-style: italic; display: flex; align-items: center;
+                justify-content: center; font-family: Georgia, serif; }
+  .buyErrText { flex: 1; min-width: 0; font-size: 0.86em; line-height: 1.4; color: var(--an-fg); }
+  .buyErrText .t { font-weight: 600; color: var(--an-amber); display: block; margin-bottom: 1px; }
+  .buyErrText .m { opacity: 0.85; word-break: break-word; }
+  .buyErrClose { flex: none; background: none; border: none; color: var(--an-fg); opacity: 0.5;
+                 cursor: pointer; font-size: 1.1em; line-height: 1; padding: 0 2px; }
+  .buyErrClose:hover { opacity: 1; }
 </style>
 </head>
 <body>
+  <!-- skill-acquired celebration overlay (filled + shown by celebrateSkill on buy success) -->
+  <div id="celebrate"></div>
+  <!-- buy-failure banner (orange-bordered, (i) icon) — filled + shown by showBuyError -->
+  <div id="buyErr" class="buyErr" style="display:none"></div>
   <!-- No top tab bar: the wallet card (bottom-left) is the entry to My Wallet. -->
 
   <!-- CHAT view -->
@@ -665,6 +914,11 @@ export function chatHtml(): string {
         <div id="wName2">My Wallet</div>
         <div id="wAddr" class="muted">connecting…</div>
       </div>
+      <!-- balance pinned to the right of the header: a small caption + the SOL amount -->
+      <div id="wBalance" class="walletBal" style="display:none">
+        <span class="balLabel">balance</span>
+        <span class="balAmt"></span>
+      </div>
     </div>
     <!-- storage / Google Drive info, moved here from the top bar -->
     <div class="wmSection">
@@ -688,7 +942,10 @@ export function chatHtml(): string {
       <div id="rpcHint" class="muted small" style="display:none;margin-top:3px"></div>
     </div>
     <div class="wmItem" id="openWalletPage">Wallet page</div>
-    <div class="wmItem disabled"><span class="wand">${WAND_SVG}</span> Skills <span class="soon">soon</span></div>
+    <div class="wmItem" id="walletSkills"><span class="wand">${WAND_SVG}</span> Skills <span class="soon" id="walletSkillCount" style="display:none"></span><span class="wmCaret" id="walletSkillCaret">▸</span></div>
+    <!-- inline, scrollable list of the skills THIS wallet owns. No buy / no navigation —
+         purchases happen in the Markets tab. Just "what do I own", scroll through it. -->
+    <div id="walletSkillList" style="display:none"></div>
   </div>
 
   <div id="wrap">
@@ -708,6 +965,7 @@ export function chatHtml(): string {
           <span class="wand">${WAND_SVG}</span>
           <span>Equipped skills</span>
           <span class="skMuted" id="skillStatus">none active</span>
+          <button id="skillsClose" title="Close">×</button>
         </div>
         <div id="skillGrid">
           <!-- coming-soon grey slots (no lie: nothing equipped yet) -->
@@ -717,6 +975,13 @@ export function chatHtml(): string {
         </div>
         <!-- marketplace: search the on-chain catalog, buy a soulbound skill, and it's
              installed into the runtime's skills dir (discovered next session). -->
+        <!-- passive skill-shopping toggle (issue #21): ON = the agent shops for a
+             missing capability (verify → confirm → buy); OFF = owned-only, never buys. -->
+        <div id="shopToggleRow">
+          <label id="shopToggleLabel" for="shopToggle">Shop for me</label>
+          <span class="shopToggleHint">agent buys skills it needs (with your OK)</span>
+          <button id="shopToggle" role="switch" aria-checked="true" class="on" title="Toggle passive skill-shopping"><span class="knob"></span></button>
+        </div>
         <div id="skillShop">
           <div class="shopRow">
             <input id="skillSearch" type="text" placeholder="Search skills to buy…" />
@@ -743,13 +1008,25 @@ export function chatHtml(): string {
           </div>
         </div>
         <div id="inputWrap">
+          <!-- attached-image thumbnails (hidden until you add one). Each has an × to remove. -->
+          <div id="attachStrip" style="display:none"></div>
           <textarea id="input" rows="1" placeholder="Message claude... (Enter to send)"></textarea>
           <div id="controls">
-            <select id="model"></select>
-            <label id="autoEdit" title="Auto-approve edits (skip the approval card for file edits)">
-              <input type="checkbox" id="autoEditChk" /> auto-edit
-            </label>
-            <button id="send">Send</button>
+            <button id="attachBtn" title="Attach image">${PAPERCLIP_SVG}</button>
+            <input type="file" id="fileInput" accept="image/*" multiple hidden />
+            <span id="modelWrap">
+              <button id="modelBtn" title="Model — which model this engine runs">
+                <span class="mglyph">◇</span><span id="modelLabel">model</span><span class="mcaret">▾</span>
+              </button>
+              <div id="modelMenu" style="display:none"></div>
+            </span>
+            <span id="modeWrap">
+              <button id="modeBtn" title="Permission mode — how tools run before asking you">
+                <span id="modeLabel">mode</span><span class="mcaret">▾</span>
+              </button>
+              <div id="modeMenu" style="display:none"></div>
+            </span>
+            <button id="send" title="Send" aria-label="Send"><svg class="ic-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg><svg class="ic-stop" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="1.5"/></svg><span class="lbl">Send</span></button>
           </div>
         </div>
       </div>
@@ -793,7 +1070,10 @@ export function chatHtml(): string {
       <div id="mktList">
         <div id="backToChatM" class="muted" style="cursor:pointer;margin-bottom:10px">‹ Back to chat</div>
         <div class="mktHead">
-          <div class="mktTitle"><span class="wand">${WAND_SVG}</span> Skill Market</div>
+          <div class="mktTitleRow">
+            <div class="mktTitle"><span class="wand">${WAND_SVG}</span> Skill Market</div>
+            <span id="mktBalance" class="mktBal" title="Your wallet balance" style="display:none"></span>
+          </div>
           <div class="muted small">Popular first. Buy an item (soulbound) and your agent equips it.</div>
         </div>
         <div class="mktTabs">
@@ -886,9 +1166,13 @@ export function chatHtml(): string {
   const sessList = document.getElementById('sessList');
   const showAll = document.getElementById('showAll');
   const emptyEl = document.getElementById('empty');
-  const modelSel = document.getElementById('model');
+  const modelBtn = document.getElementById('modelBtn');
+  const modelMenu = document.getElementById('modelMenu');
+  const modelLabel = document.getElementById('modelLabel');
   const composer = document.getElementById('composer');
-  const autoEditChk = document.getElementById('autoEditChk');
+  const modeBtn = document.getElementById('modeBtn');
+  const modeMenu = document.getElementById('modeMenu');
+  const modeLabel = document.getElementById('modeLabel');
   const approvalDock = document.getElementById('approvalDock');
   const tabs = Array.from(document.querySelectorAll('.etab'));
 
@@ -916,16 +1200,106 @@ export function chatHtml(): string {
       { value: 'o3',           label: 'o3' },
     ],
   };
+  // Permission/approval mode per engine. claude → SDK permissionMode; codex → a
+  // sandbox+approval preset (mapped host-side in spawn). Like MODELS this is just a
+  // wrapper label table — when a CLI changes its modes, only this list needs editing.
+  // English labels mirror what each CLI calls these modes natively.
+  const MODES = {
+    claude: [
+      { value: 'default',     label: 'Ask edits',    title: 'Ask before each file edit (default)' },
+      { value: 'acceptEdits', label: 'Auto edit',    title: 'Auto-accept file edits; still ask for other tools' },
+      { value: 'plan',        label: 'Plan',         title: 'Plan mode: read-only until you approve the plan' },
+    ],
+    codex: [
+      { value: 'readonly', label: 'Read only',   title: 'Read-only sandbox; ask before edits, commands, network' },
+      { value: 'auto',     label: 'Auto accept', title: 'Auto-accept edits + run inside the workspace; approve on failure (default)' },
+      { value: 'full',     label: 'Full access', title: 'Full disk + network access, never ask (use with care)' },
+    ],
+  };
+  // remember the chosen mode + model per engine so switching tabs restores them
+  const modeByCli = { claude: 'acceptEdits', codex: 'auto' };
+  const modelByCli = { claude: 'default', codex: 'default' };
   let cli = 'claude';
 
-  // ---- platform tabs + model dropdown ----
+  // ---- platform tabs + model picker (chip + popover, mirroring the mode picker) ----
+  function currentModel() {
+    const opts = MODELS[cli] || [];
+    return modelByCli[cli] || (opts[0] && opts[0].value);
+  }
+  // Build the model picker for the active engine: set the chip label to the current
+  // model and render one popover row per model (label + a check on the selected one).
   function fillModels() {
-    modelSel.innerHTML = '';
-    for (const m of (MODELS[cli] || [{ value: 'default', label: 'default' }])) {
-      const o = document.createElement('option');
-      o.value = m.value; o.textContent = m.label;
-      modelSel.appendChild(o);
+    const opts = MODELS[cli] || [{ value: 'default', label: 'default' }];
+    const cur = currentModel();
+    const curOpt = opts.find(o => o.value === cur) || opts[0];
+    modelLabel.textContent = curOpt ? curOpt.label : 'model';
+    modelMenu.innerHTML = '';
+    for (const m of opts) {
+      const row = document.createElement('div');
+      row.className = 'modeOpt' + (m.value === cur ? ' sel' : '');
+      const txt = document.createElement('div'); txt.className = 'mtext';
+      const lab = document.createElement('div'); lab.className = 'mlabel'; lab.textContent = m.label;
+      txt.appendChild(lab);
+      const chk = document.createElement('span'); chk.className = 'mcheck'; chk.textContent = '✓';
+      row.appendChild(txt); row.appendChild(chk);
+      row.addEventListener('click', (e) => {
+        e.stopPropagation();
+        modelByCli[cli] = m.value;
+        modelMenu.style.display = 'none';
+        fillModels();
+        vscode.postMessage({ type: 'model', model: m.value });
+      });
+      modelMenu.appendChild(row);
     }
+  }
+  // open the model popover anchored above its chip (composer is at the bottom, so it
+  // opens upward); position:fixed keeps it out of #inputWrap's overflow clip.
+  function openModelMenu() {
+    const r = modelBtn.getBoundingClientRect();
+    modelMenu.style.display = 'block';
+    modelMenu.style.left = r.left + 'px';
+    modelMenu.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+  }
+  // the currently selected permission mode for the active engine
+  function currentMode() {
+    const opts = MODES[cli] || [];
+    return modeByCli[cli] || (opts[0] && opts[0].value);
+  }
+  // Build the mode picker for the active engine: set the chip label to the current
+  // mode and render one popover row per mode (label + description + a check on the
+  // selected one). Re-run on tab switch and after a selection so both stay in sync.
+  function fillModes() {
+    const opts = MODES[cli] || [{ value: 'default', label: 'default' }];
+    const cur = currentMode();
+    const curOpt = opts.find(o => o.value === cur) || opts[0];
+    modeLabel.textContent = curOpt ? curOpt.label : 'mode';
+    modeMenu.innerHTML = '';
+    for (const m of opts) {
+      const row = document.createElement('div');
+      row.className = 'modeOpt' + (m.value === cur ? ' sel' : '');
+      const txt = document.createElement('div'); txt.className = 'mtext';
+      const lab = document.createElement('div'); lab.className = 'mlabel'; lab.textContent = m.label;
+      txt.appendChild(lab);
+      if (m.title) { const d = document.createElement('div'); d.className = 'mdesc'; d.textContent = m.title; txt.appendChild(d); }
+      const chk = document.createElement('span'); chk.className = 'mcheck'; chk.textContent = '✓';
+      row.appendChild(txt); row.appendChild(chk);
+      row.addEventListener('click', (e) => {
+        e.stopPropagation();
+        modeByCli[cli] = m.value;
+        modeMenu.style.display = 'none';
+        fillModes();
+        vscode.postMessage({ type: 'mode', mode: m.value });
+      });
+      modeMenu.appendChild(row);
+    }
+  }
+  // open the popover anchored above the chip (composer sits at the bottom of the
+  // panel, so it opens upward); position:fixed keeps it out of #inputWrap's clip.
+  function openModeMenu() {
+    const r = modeBtn.getBoundingClientRect();
+    modeMenu.style.display = 'block';
+    modeMenu.style.left = r.left + 'px';
+    modeMenu.style.bottom = (window.innerHeight - r.top + 6) + 'px';
   }
   function setTab(next) {
     if (next !== 'claude' && next !== 'codex') return;
@@ -934,16 +1308,34 @@ export function chatHtml(): string {
     composer.dataset.cli = cli;                       // tints the input (claude=orange/codex=green)
     input.placeholder = 'Message ' + cli + '... (Enter to send)';
     fillModels();
+    fillModes();
   }
   function selectTab(next) {
     if (next === cli) return;
     setTab(next);
     vscode.postMessage({ type: 'platform', cli });
-    vscode.postMessage({ type: 'model', model: modelSel.value });
+    vscode.postMessage({ type: 'model', model: currentModel() });
+    vscode.postMessage({ type: 'mode', mode: currentMode() });
   }
   tabs.forEach(t => t.addEventListener('click', () => selectTab(t.dataset.cli)));
-  modelSel.addEventListener('change', () => vscode.postMessage({ type: 'model', model: modelSel.value }));
+  // each chip toggles its own popover; clicking it again (while open) closes it
+  modelBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (modelMenu.style.display === 'block') { modelMenu.style.display = 'none'; return; }
+    modeMenu.style.display = 'none'; closeMenus();
+    openModelMenu();
+  });
+  modelMenu.addEventListener('click', (e) => e.stopPropagation());
+  modeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (modeMenu.style.display === 'block') { modeMenu.style.display = 'none'; return; }
+    modelMenu.style.display = 'none'; closeMenus(); // also close the hist/wallet menus (hoisted, defined below)
+    openModeMenu();
+  });
+  modeMenu.addEventListener('click', (e) => e.stopPropagation());
+  document.addEventListener('click', () => { modeMenu.style.display = 'none'; modelMenu.style.display = 'none'; });
   fillModels();
+  fillModes();
 
   // ---- relative time ("3개월", "1일", "방금") ----
   function rel(ts) {
@@ -964,14 +1356,35 @@ export function chatHtml(): string {
   let headTurn = null; // the turn prepended (top, older) replies attach to
 
   // Open a new turn at the bottom (a fresh user command). Returns its body element.
-  function startTurn(userText, badgeCli) {
+  // Build the user-message block for a turn head. A long message starts COLLAPSED
+  // (a few lines) with a "Show more" toggle; expanded it caps at 40vh and scrolls
+  // inside, so a huge paste never pushes the chat off-screen.
+  function makeUtext(userText) {
+    const wrap = document.createElement('div'); wrap.className = 'utextWrap';
+    const ut = document.createElement('div'); ut.className = 'utext'; ut.textContent = userText;
+    wrap.appendChild(ut);
+    const longMsg = (userText.split('\\n').length > 4) || (userText.length > 280);
+    if (longMsg) {
+      wrap.classList.add('collapsed');
+      const tog = document.createElement('div'); tog.className = 'utextToggle'; tog.textContent = 'Show more';
+      tog.addEventListener('click', () => {
+        const exp = wrap.classList.toggle('expanded');
+        wrap.classList.toggle('collapsed', !exp);
+        tog.textContent = exp ? 'Show less' : 'Show more';
+      });
+      wrap.appendChild(tog);
+    }
+    return wrap;
+  }
+  function startTurn(userText, badgeCli, imageInfo) {
     const turn = document.createElement('div'); turn.className = 'turn';
     const head = document.createElement('div'); head.className = 'turnHead';
     head.innerHTML = '<span class="uq">&gt;</span>';
-    const ut = document.createElement('div'); ut.className = 'utext'; ut.textContent = userText;
-    head.appendChild(ut);
+    head.appendChild(makeUtext(userText));
     if (badgeCli) { const b = document.createElement('span'); b.className = 'badge ' + badgeCli;
       b.textContent = badgeCli === 'codex' ? 'codex · gpt' : 'claude'; head.appendChild(b); }
+    const imgEl = userImagesEl(imageInfo);
+    if (imgEl) head.appendChild(imgEl);
     const body = document.createElement('div'); body.className = 'turnBody';
     turn.appendChild(head); turn.appendChild(body);
     log.appendChild(turn);
@@ -985,8 +1398,7 @@ export function chatHtml(): string {
     const turn = document.createElement('div'); turn.className = 'turn';
     const head = document.createElement('div'); head.className = 'turnHead';
     head.innerHTML = '<span class="uq">&gt;</span>';
-    const ut = document.createElement('div'); ut.className = 'utext'; ut.textContent = userText;
-    head.appendChild(ut);
+    head.appendChild(makeUtext(userText));
     if (badgeCli) { const b = document.createElement('span'); b.className = 'badge ' + badgeCli;
       b.textContent = badgeCli === 'codex' ? 'codex · gpt' : 'claude'; head.appendChild(b); }
     const body = document.createElement('div'); body.className = 'turnBody';
@@ -1212,26 +1624,74 @@ export function chatHtml(): string {
   // it wants to do (the command / file / diff) with [Approve] [Always] [Deny] buttons.
   // Clicking posts the decision back; the card then locks to show the resolution.
   function renderApproval(req) {
-    // auto-edit: if the toggle is on and this is a file edit/write, approve it
-    // silently (the tool card the engine emits already shows what changed).
-    if (autoEditChk && autoEditChk.checked && (req.kind === 'edit' || req.kind === 'write')) {
-      vscode.postMessage({ type: 'approvalDecision', id: req.id, outcome: 'once' });
-      return;
-    }
     const card = document.createElement('div');
     card.className = 'approvalCard';
 
+    // ── AskUserQuestion: a multiple-choice prompt (claude/codex both route here). The
+    // user's PICK becomes the tool result, so this card renders options as chips and
+    // sends answers (question text -> chosen label[s]) — no Approve/Deny. Without this
+    // branch the engine never received an answer and the SDK stalled on its own picker.
+    if (req.kind === 'question' && Array.isArray(req.questions) && req.questions.length) {
+      const sel = {}; // qIndex → array of chosen labels
+      const submit = document.createElement('button');
+      submit.className = 'apBtn ok'; submit.textContent = 'Send'; submit.disabled = true;
+      const refresh = () => {
+        submit.disabled = !req.questions.every((q, qi) => sel[qi] && sel[qi].length);
+      };
+      req.questions.forEach((q, qi) => {
+        const block = document.createElement('div'); block.className = 'qBlock';
+        if (q.header) { const h = document.createElement('span'); h.className = 'qHeader'; h.textContent = q.header; block.appendChild(h); }
+        const qt = document.createElement('div'); qt.className = 'qText'; qt.textContent = q.question; block.appendChild(qt);
+        const opts = document.createElement('div'); opts.className = 'qOpts';
+        (q.options || []).forEach((opt) => {
+          const b = document.createElement('button'); b.type = 'button'; b.className = 'qOpt';
+          const t = document.createElement('div'); t.className = 'qOptLabel'; t.textContent = opt.label; b.appendChild(t);
+          if (opt.description) { const d = document.createElement('div'); d.className = 'qOptDesc'; d.textContent = opt.description; b.appendChild(d); }
+          b.addEventListener('click', () => {
+            const cur = sel[qi] || [];
+            if (q.multiSelect) {
+              sel[qi] = cur.indexOf(opt.label) >= 0 ? cur.filter((l) => l !== opt.label) : cur.concat(opt.label);
+            } else {
+              sel[qi] = cur[0] === opt.label ? [] : [opt.label];
+            }
+            Array.from(opts.children).forEach((c, i) => c.classList.toggle('on', (sel[qi] || []).indexOf((q.options[i] || {}).label) >= 0));
+            refresh();
+          });
+          opts.appendChild(b);
+        });
+        block.appendChild(opts);
+        card.appendChild(block);
+      });
+      const actions = document.createElement('div'); actions.className = 'apActions';
+      submit.addEventListener('click', () => {
+        const answers = {};
+        req.questions.forEach((q, qi) => { answers[q.question] = (sel[qi] || []).join(', '); });
+        vscode.postMessage({ type: 'approvalDecision', id: req.id, outcome: 'once', answers });
+        card.remove(); syncComposerLock();
+      });
+      actions.appendChild(submit);
+      card.appendChild(actions);
+      approvalDock.insertBefore(card, approvalDock.firstChild);
+      syncComposerLock();
+      return;
+    }
+
+    // ── plan / bash / edit / read / write: a yes-or-no permission card ──
+    const isPlan = req.kind === 'plan';
     const head = document.createElement('div'); head.className = 'apHead';
-    head.innerHTML = '<span class="apk">' + (req.kind === 'bash' ? '$' : req.kind === 'read' ? '📖' : '✎') + '</span>';
+    head.innerHTML = '<span class="apk">' + (req.kind === 'bash' ? '$' : req.kind === 'read' ? '📖' : isPlan ? '✦' : '✎') + '</span>';
     const ttl = document.createElement('span'); ttl.className = 'apTitle'; ttl.textContent = req.title || req.tool;
     head.appendChild(ttl);
     const tag = document.createElement('span'); tag.className = 'apTag'; tag.textContent = req.cli;
     head.appendChild(tag);
     card.appendChild(head);
 
-    // detail: command for bash, diff for edit, file for read/write
+    // detail: command for bash, plan text for plan, diff for edit, file for read/write
     if (req.command) {
       const pre = document.createElement('pre'); pre.className = 'apBody'; pre.textContent = req.command;
+      card.appendChild(pre);
+    } else if (req.plan) {
+      const pre = document.createElement('pre'); pre.className = 'apBody planBody'; pre.textContent = req.plan;
       card.appendChild(pre);
     } else if (req.diff) {
       const pre = document.createElement('pre'); pre.className = 'apBody diffBody';
@@ -1256,7 +1716,10 @@ export function chatHtml(): string {
       const b = document.createElement('button'); b.className = 'apBtn ' + cls; b.textContent = label;
       b.addEventListener('click', () => decide(outcome)); return b;
     };
-    const btns = [mk('Approve', 'once', 'ok'), mk('Always', 'always', 'always'), mk('Deny', 'deny', 'no')];
+    // plan has no "Always" (you approve THIS plan or send it back to revise)
+    const btns = isPlan
+      ? [mk('Approve plan', 'once', 'ok'), mk('Keep planning', 'deny', 'no')]
+      : [mk('Approve', 'once', 'ok'), mk('Always', 'always', 'always'), mk('Deny', 'deny', 'no')];
     for (const b of btns) actions.appendChild(b);
     card.appendChild(actions);
 
@@ -1271,14 +1734,23 @@ export function chatHtml(): string {
     // dock it just above the composer (newest on top), not inside the scrolling log
     approvalDock.insertBefore(card, approvalDock.firstChild);
     syncComposerLock(); // freeze the input while this (and any other) approval is open
-    btns[0].focus(); // default focus on Approve so Enter approves right away
+    // Default focus = Approve so Enter approves right away — BUT only when THIS panel is
+    // the one the user is actually in. Each VSCode webview is its own document, so an
+    // approval popping in a BACKGROUND session would otherwise yank focus out of the
+    // panel the user is typing in. document.hasFocus() is false for that background
+    // webview, so we skip the auto-focus there and leave the active panel alone.
+    if (document.hasFocus()) btns[0].focus();
   }
 
   function onMessage(msg) {
     // a user command OPENS a new turn (its sticky header); everything after attaches
     // to that turn until the next user command.
     if (msg.role === 'user') {
-      const body = startTurn(msg.text, undefined);
+      // live thumbnails if THIS echo matches the images we just sent; otherwise (history
+      // replay) a lightweight "N image" chip from the stored count — base64 isn't persisted.
+      const info = pendingSentImages.length ? { thumbs: pendingSentImages.splice(0) }
+                 : msg.imageCount ? { count: msg.imageCount } : undefined;
+      const body = startTurn(msg.text, undefined, info);
       if (typingEl) body.appendChild(typingEl);
       return;
     }
@@ -1293,6 +1765,7 @@ export function chatHtml(): string {
     const badge = (msg.role === 'assistant' && msg.cli) ? msg.cli : undefined;
     // assistant text is markdown; user/thinking stay plain. While streaming we show
     // raw accumulating text (cheap), then render md once the turn's text is complete.
+    // Some runtimes send token deltas; others resend the full text-so-far. Accept both.
     const asMd = (el, raw) => { if (msg.role === 'assistant') renderMd(el, raw); else { el.textContent = raw; el.dataset.md = raw; } };
     if (msg.partial) {
       if (!streaming || streaming.dataset.role !== msg.role) {
@@ -1301,11 +1774,17 @@ export function chatHtml(): string {
         streaming.dataset.acc = '';
         streaming.classList.add('cursor');
       }
-      streaming.dataset.acc += msg.text;
-      streaming.textContent = streaming.dataset.acc; // raw during stream
+      // Producers always send partials as the cumulative "full text so far"
+      // (replace-semantics — see runtime/spawn.ts). So REPLACE the bubble, never
+      // append. The old startsWith()+append heuristic desynced on any hiccup and
+      // then compounded every later snapshot into quadratic repeated text (the
+      // runaway streaming-duplication bug).
+      streaming.dataset.acc = msg.text;
+      streaming.textContent = msg.text; // raw during stream
     } else {
       if (streaming && streaming.dataset.role === msg.role) {
-        const raw = (streaming.dataset.acc || '') + msg.text;
+        const prev = streaming.dataset.acc || '';
+        const raw = msg.text.startsWith(prev) ? msg.text : prev + msg.text;
         streaming.classList.remove('cursor');
         asMd(streaming, raw);
         streaming = null;
@@ -1360,6 +1839,7 @@ export function chatHtml(): string {
   // ---- typing indicator (shown while the engine works, until turn end) ----
   let typingEl = null;
   function showTyping() {
+    setBusy(true); // a turn is running → the Send button becomes Stop
     if (typingEl) return;
     const node = document.createElement('div');
     node.className = 'node typing';
@@ -1369,7 +1849,28 @@ export function chatHtml(): string {
     log.scrollTop = log.scrollHeight;
     typingEl = node;
   }
-  function hideTyping() { if (typingEl) { typingEl.remove(); typingEl = null; } }
+  function hideTyping() { setBusy(false); if (typingEl) { typingEl.remove(); typingEl = null; } }
+
+  // Send ⇄ Stop: while a turn runs, the primary button interrupts it (claude q.interrupt
+  // / codex turn/interrupt) instead of sending. The session survives — the next message
+  // continues the same conversation.
+  let busy = false;
+  function setBusy(b) {
+    if (busy === b) return;
+    busy = b;
+    const btn = document.getElementById('send');
+    if (!btn) return;
+    const lbl = btn.querySelector('.lbl');
+    if (lbl) lbl.textContent = b ? 'Stop' : 'Send';
+    btn.title = b ? 'Stop' : 'Send';
+    btn.setAttribute('aria-label', b ? 'Stop' : 'Send');
+    btn.classList.toggle('stopping', b);
+  }
+  function interruptTurn() {
+    vscode.postMessage({ type: 'interrupt' });
+    setBusy(false); // optimistic: drop the dots now; the engine's turnEnd confirms
+    hideTyping();
+  }
 
   // While a tool approval is pending, freeze the composer: the user must answer the
   // approval before sending more. We DON'T clear what they've typed — input.value is
@@ -1386,10 +1887,83 @@ export function chatHtml(): string {
       : 'Message ' + (composer.dataset.cli || 'claude') + '... (Enter to send)';
   }
 
+  // ---- image attachments (paperclip / paste / drag-drop) ----
+  // each: { dataUrl, mime, dataBase64, name }. dataUrl drives the thumbnail + the live
+  // sent-bubble; {mime, dataBase64, name} is the payload posted to the host.
+  let attached = [];
+  // images we just sent, held until the host echoes the user turn so we can paint the
+  // real thumbnails onto that bubble (base64 is never persisted, so history can't).
+  let pendingSentImages = [];
+  const attachStrip = document.getElementById('attachStrip');
+  const fileInput = document.getElementById('fileInput');
+  const attachBtn = document.getElementById('attachBtn');
+  const inputWrap = document.getElementById('inputWrap');
+
+  function renderAttachStrip() {
+    attachStrip.innerHTML = '';
+    attachStrip.style.display = attached.length ? 'flex' : 'none';
+    attached.forEach((a, i) => {
+      const t = document.createElement('div'); t.className = 'thumb';
+      const img = document.createElement('img'); img.src = a.dataUrl; img.alt = a.name || 'image';
+      const rm = document.createElement('button'); rm.className = 'rm'; rm.textContent = '×'; rm.title = 'Remove';
+      rm.addEventListener('click', () => { attached.splice(i, 1); renderAttachStrip(); });
+      t.appendChild(img); t.appendChild(rm); attachStrip.appendChild(t);
+    });
+  }
+  // build the image row for a user bubble: live thumbs ({thumbs:[url]}) or a count chip
+  // ({count:N}) for replayed history where the base64 is gone.
+  function userImagesEl(info) {
+    if (!info) return null;
+    if (info.thumbs && info.thumbs.length) {
+      const row = document.createElement('div'); row.className = 'msgImgs';
+      info.thumbs.forEach((u) => { const im = document.createElement('img'); im.src = u; row.appendChild(im); });
+      return row;
+    }
+    if (info.count) {
+      const chip = document.createElement('span'); chip.className = 'imgChip';
+      chip.textContent = '🖼 ' + info.count + (info.count > 1 ? ' images' : ' image');
+      return chip;
+    }
+    return null;
+  }
+  function addFiles(files) {
+    for (const f of files) {
+      if (!f.type || f.type.indexOf('image/') !== 0) continue; // images only
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = String(reader.result || '');
+        const comma = dataUrl.indexOf(',');
+        if (comma < 0) return;
+        attached.push({ dataUrl, mime: f.type, dataBase64: dataUrl.slice(comma + 1), name: f.name || 'pasted' });
+        renderAttachStrip();
+      };
+      reader.readAsDataURL(f);
+    }
+  }
+  attachBtn.addEventListener('click', () => { if (!input.disabled) fileInput.click(); });
+  fileInput.addEventListener('change', () => { addFiles(fileInput.files || []); fileInput.value = ''; });
+  // paste an image straight from the clipboard
+  input.addEventListener('paste', (e) => {
+    const items = (e.clipboardData && e.clipboardData.items) || [];
+    const imgs = [];
+    for (const it of items) { if (it.kind === 'file' && it.type.indexOf('image/') === 0) { const f = it.getAsFile(); if (f) imgs.push(f); } }
+    if (imgs.length) { e.preventDefault(); addFiles(imgs); }
+  });
+  // drag an image file onto the composer
+  ['dragenter', 'dragover'].forEach((ev) => inputWrap.addEventListener(ev, (e) => {
+    if (e.dataTransfer && Array.from(e.dataTransfer.types || []).indexOf('Files') >= 0) {
+      e.preventDefault(); inputWrap.classList.add('dragover');
+    }
+  }));
+  ['dragleave', 'drop'].forEach((ev) => inputWrap.addEventListener(ev, (e) => {
+    if (ev === 'drop') { e.preventDefault(); if (e.dataTransfer) addFiles(e.dataTransfer.files || []); }
+    inputWrap.classList.remove('dragover');
+  }));
+
   function send() {
     if (input.disabled) return;       // frozen while an approval is pending
     const text = input.value.trim();
-    if (!text) return;
+    if (!text && !attached.length) return; // nothing to send (no text, no images)
     // local slash commands handled in the webview (not sent to the agent).
     // /mockupskills [name ...]  → demo the "Casting" UI with the given skills (none = idle).
     if (text === '/mockupskills' || text.startsWith('/mockupskills ')) {
@@ -1405,11 +1979,16 @@ export function chatHtml(): string {
       input.value = '';
       return;
     }
-    vscode.postMessage({ type: 'send', text });
+    const images = attached.map((a) => ({ mime: a.mime, dataBase64: a.dataBase64, name: a.name }));
+    pendingSentImages = attached.map((a) => a.dataUrl); // painted onto the echoed bubble
+    vscode.postMessage({ type: 'send', text, images });
+    attached = []; renderAttachStrip();
     input.value = '';
+    input.style.height = 'auto'; // collapse back to one row after sending
     showTyping();
   }
-  document.getElementById('send').addEventListener('click', send);
+  // the primary button sends when idle, interrupts when a turn is running
+  document.getElementById('send').addEventListener('click', () => { busy ? interruptTurn() : send(); });
   document.getElementById('newBtn').addEventListener('click', () => { vscode.postMessage({ type: 'new' }); closeMenus(); });
   document.getElementById('newTabBtn').addEventListener('click', () => vscode.postMessage({ type: 'newTab' }));
   input.addEventListener('keydown', (e) => {
@@ -1417,7 +1996,18 @@ export function chatHtml(): string {
     // a half-formed syllable. keyCode 229 is the legacy IME-in-progress signal.
     if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    if (e.key === 'Escape' && busy) { e.preventDefault(); interruptTurn(); } // Esc stops the turn
   });
+  // Esc interrupts the running turn (Claude-Code style) even when the input isn't focused
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && busy) { e.preventDefault(); interruptTurn(); } });
+  // Grow the textarea with its content; CSS max-height (~2.5x) then scrolls inside.
+  // Reset to auto first so it shrinks when text is deleted; pasting a long message
+  // grows to the cap and scrolls rather than pushing the chat off-screen.
+  function autoGrowInput() {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 220) + 'px';
+  }
+  input.addEventListener('input', autoGrowInput);
 
   // ---- storage pill (Local always on; Cloud optional mirror) ----
   const cloudState = document.getElementById('cloudState');
@@ -1486,7 +2076,11 @@ export function chatHtml(): string {
     el.style.display = open ? 'none' : 'block';
   }
   document.getElementById('histBtn').addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(histMenu, 'hist'); });
-  document.getElementById('walletPill').addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(walletMenu, 'wallet'); });
+  document.getElementById('walletPill').addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleMenu(walletMenu, 'wallet');
+    if (walletMenu.style.display !== 'none') vscode.postMessage({ type: 'getBalance' }); // refresh funds on open
+  });
   document.getElementById('openWalletPage').addEventListener('click', () => { closeMenus(); showView('wallet'); });
   // click outside closes any open menu
   document.addEventListener('click', () => closeMenus());
@@ -1496,11 +2090,45 @@ export function chatHtml(): string {
   // equipped-skills panel: inline toggle above the composer (not an absolute dropdown)
   const skillsBtn = document.getElementById('skillsBtn');
   const skillsPanel = document.getElementById('skillsPanel');
+  function closeSkillsPanel() { skillsPanel.style.display = 'none'; skillsBtn.classList.remove('on'); }
   skillsBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     const open = skillsPanel.style.display !== 'none';
     skillsPanel.style.display = open ? 'none' : 'block';
     skillsBtn.classList.toggle('on', !open);
+  });
+  // explicit close (×) on the panel header — the panel was un-dismissable before
+  const skillsCloseBtn = document.getElementById('skillsClose');
+  if (skillsCloseBtn) skillsCloseBtn.addEventListener('click', (e) => { e.stopPropagation(); closeSkillsPanel(); });
+
+  // wallet-menu "Skills" entry → expand an INLINE, scrollable list of owned skills right
+  // here in the dropdown. No buy / no page jump (purchases live in the Markets tab); just
+  // "what do I own". Clicking again collapses it.
+  const walletSkillsItem = document.getElementById('walletSkills');
+  const walletSkillList = document.getElementById('walletSkillList');
+  function renderWalletSkillList() {
+    if (!walletSkillList) return;
+    walletSkillList.innerHTML = '';
+    if (!ownedSkills.length) {
+      const e = document.createElement('div'); e.className = 'wskEmpty';
+      e.textContent = 'No skills yet — buy them in Markets.';
+      walletSkillList.appendChild(e);
+      return;
+    }
+    for (const name of ownedSkills) {
+      const row = document.createElement('div'); row.className = 'wskRow';
+      row.innerHTML = '<span class="wand">' + ${JSON.stringify(WAND_SVG)} + '</span>';
+      const lbl = document.createElement('span'); lbl.textContent = name; lbl.title = name;
+      row.appendChild(lbl); walletSkillList.appendChild(row);
+    }
+  }
+  if (walletSkillsItem && walletSkillList) walletSkillsItem.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = walletSkillList.style.display !== 'none';
+    if (open) { walletSkillList.style.display = 'none'; walletSkillsItem.classList.remove('open'); return; }
+    renderWalletSkillList();
+    walletSkillList.style.display = 'flex';
+    walletSkillsItem.classList.add('open');
   });
   // The agent's OWNED skills (array of names) — everything owned is "active" (no
   // separate active state). Renders each as an item card in the panel; empty slots
@@ -1510,8 +2138,8 @@ export function chatHtml(): string {
     const grid = document.getElementById('skillGrid');
     const status = document.getElementById('skillStatus');
     const n = names.length;
-    document.getElementById('skillsPanel').classList.toggle('casting', n > 0);
-    document.getElementById('skillsBtn').classList.toggle('casting', n > 0);
+    // NOTE: do NOT light up "casting" here — owning a skill is not the same as using it.
+    // The glow (panel/button/slot) is driven only by flashSkill when a skill actually fires.
     status.textContent = n ? (n === 1 ? '1 skill' : n + ' skills') : 'none yet';
     grid.innerHTML = '';
     for (const name of names) {
@@ -1523,6 +2151,12 @@ export function chatHtml(): string {
     const fill = Math.max(0, 3 - n);
     for (let i = 0; i < fill; i++) { const s = document.createElement('div'); s.className = 'skSlot empty'; grid.appendChild(s); }
     ownedSkills = names;
+    // mirror the owned count onto the wallet-menu Skills entry (badge hidden when 0)
+    const wc = document.getElementById('walletSkillCount');
+    if (wc) { wc.textContent = n ? String(n) : ''; wc.style.display = n ? '' : 'none'; }
+    // keep the inline wallet list fresh if it's currently expanded
+    const wsl = document.getElementById('walletSkillList');
+    if (wsl && wsl.style.display !== 'none') renderWalletSkillList();
   }
   let ownedSkills = [];
   setSkills([]); // idle: grey coming-soon slots
@@ -1565,6 +2199,19 @@ export function chatHtml(): string {
   }
   vscode.postMessage({ type: 'ownedSkills' }); // hydrate the panel on load
 
+  // ---- passive skill-shopping toggle (issue #21) ----
+  const shopToggle = document.getElementById('shopToggle');
+  function setShopToggle(on) {
+    shopToggle.classList.toggle('on', !!on);
+    shopToggle.setAttribute('aria-checked', on ? 'true' : 'false');
+  }
+  shopToggle.addEventListener('click', () => {
+    const next = !shopToggle.classList.contains('on');
+    setShopToggle(next); // optimistic; the host echoes the persisted value back
+    vscode.postMessage({ type: 'setSkillShopping', on: next });
+  });
+  vscode.postMessage({ type: 'getSkillShopping' }); // hydrate the switch on load
+
   // ---- Markets full-screen view (same contract, marketplace design) ----
   const mktSearch = document.getElementById('mktSearch');
   const mktResults = document.getElementById('mktResults');
@@ -1584,6 +2231,7 @@ export function chatHtml(): string {
     mktResults.innerHTML = '<div class="mktEmpty">Loading…</div>';
     vscode.postMessage({ type: 'searchSkills', query: '', kind: currentKind });
     vscode.postMessage({ type: 'ownedSkills' });
+    vscode.postMessage({ type: 'getBalance' }); // show funds in the market header
   }
   function showMktList() { mktListEl.style.display = 'block'; mktDetailEl.style.display = 'none'; }
   function showMktDetail() { mktListEl.style.display = 'none'; mktDetailEl.style.display = 'block'; }
@@ -1664,6 +2312,13 @@ export function chatHtml(): string {
     mktDetailBody.appendChild(wrap);
   }
 
+  // the item the detail view is currently showing, so a buy result that arrives while
+  // it's open can flip its button to "Owned" (the buy can happen right here in detail).
+  let currentDetailName = null, detailBuyBtn = null;
+  function refreshDetailOwned() {
+    if (mktDetailEl.style.display === 'none' || !detailBuyBtn || !currentDetailName) return;
+    if (ownedSkills.indexOf(currentDetailName) >= 0) { detailBuyBtn.textContent = 'Owned'; detailBuyBtn.disabled = true; }
+  }
   function renderDetail(detail) {
     const c = (detail && detail.card) || {};
     const owned = ownedSkills.indexOf(c.name) >= 0;
@@ -1696,6 +2351,7 @@ export function chatHtml(): string {
       vscode.postMessage({ type: 'buySkill', skillId: c.id, creatorWallet: c.creator });
     });
     mktDetailBody.appendChild(buy);
+    detailBuyBtn = buy; currentDetailName = c.name || null; // remember so buyResult can update it
     // required skills (workflow only) — clickable rows
     const reqs = (detail && detail.requiredCards) || [];
     if (reqs.length) {
@@ -1750,6 +2406,114 @@ export function chatHtml(): string {
       card.appendChild(img); card.appendChild(main); card.appendChild(sup); card.appendChild(buy);
       mktResults.appendChild(card);
     }
+  }
+
+  // resolve a skill display name from a buy result's id, using the last search results.
+  function nameForId(id) {
+    for (const r of lastMarketResults) if (r.id === id) return r.name || r.id;
+    return null;
+  }
+
+  // ---- skill-acquired celebration: pop the overlay, fire sparkles, auto-dismiss ----
+  const celebrateEl = document.getElementById('celebrate');
+  let celebTimer = null;
+  function celebrateSkill(name) {
+    const safe = escapeHtml(name || 'New skill');
+    // confetti: colorful pieces raining from the top, each with its own column, speed,
+    // delay, start-rotation and spin so the burst looks organic (green + gold + white).
+    const COLORS = ['var(--an-green)', '#e9c46a', '#ffffff', '#7ad6a0', 'var(--an-green)'];
+    let confetti = '';
+    const C = 32;
+    for (let i = 0; i < C; i++) {
+      const left = Math.round(Math.random() * 100);
+      const dur = (1.7 + Math.random() * 1.1).toFixed(2);
+      const del = (Math.random() * 0.5).toFixed(2);
+      const rot = Math.round(Math.random() * 360);
+      const spin = (180 + Math.round(Math.random() * 600)) + 'deg';
+      const w = 6 + Math.round(Math.random() * 6);
+      confetti += '<span class="cfetti" style="left:' + left + '%;--dur:' + dur + 's;--del:' + del
+        + 's;--rot:' + rot + 'deg;--spin:' + spin + ';width:' + w + 'px;background:' + COLORS[i % COLORS.length] + '"></span>';
+    }
+    // a ring of sparkles flung outward from the badge at varied angles/distances
+    let sparks = '';
+    const N = 14;
+    for (let i = 0; i < N; i++) {
+      const ang = (i / N) * Math.PI * 2 + Math.random() * 0.5;
+      const dist = 64 + Math.random() * 64;
+      const dx = Math.round(Math.cos(ang) * dist);
+      const dy = Math.round(Math.sin(ang) * dist);
+      const delay = (Math.random() * 0.12).toFixed(2);
+      sparks += '<span class="celebSpark" style="--dx:' + dx + 'px;--dy:' + dy + 'px;animation-delay:' + delay + 's"></span>';
+    }
+    celebrateEl.innerHTML =
+      '<div class="celebConfetti">' + confetti + '</div>'
+      + '<div class="celebCard">'
+      + sparks
+      + '<div class="celebBadge"><span class="celebHalo"></span>'
+      + '<span class="celebRing"></span><span class="celebRing r2"></span>'
+      + '<span class="celebWand">' + ${JSON.stringify(WAND_SVG)} + '</span></div>'
+      + '<div class="celebKicker">Skill acquired</div>'
+      + '<div class="celebName">' + safe + '</div>'
+      + '<div class="celebSub">Equipped \\u2014 ready to cast</div>'
+      + '</div>';
+    celebrateEl.classList.remove('out');
+    celebrateEl.classList.add('show');
+    clearTimeout(celebTimer);
+    celebTimer = setTimeout(() => {
+      celebrateEl.classList.add('out');
+      setTimeout(() => { celebrateEl.classList.remove('show', 'out'); celebrateEl.innerHTML = ''; }, 450);
+    }, 2400);
+  }
+  celebrateEl.addEventListener('click', () => { // click to dismiss early
+    clearTimeout(celebTimer);
+    celebrateEl.classList.remove('show', 'out'); celebrateEl.innerHTML = '';
+  });
+
+  // ---- wallet SOL balance: shown in the wallet dropdown + market header ----
+  let solLamports = null; // last known balance (lamports); null = unknown/failed
+  function fmtSol(lamports) {
+    if (lamports == null) return null;
+    const sol = lamports / 1e9;
+    // compact: up to 4 dp, trim trailing zeros (e.g. 1.5 SOL, 0.0123 SOL, 0 SOL)
+    const s = sol < 1 ? sol.toFixed(4) : sol.toFixed(3);
+    return s.replace(/\\.?0+$/, '') + ' SOL';
+  }
+  function renderBalance() {
+    const txt = fmtSol(solLamports);
+    const low = solLamports != null && solLamports < 5000; // basically can't even pay a tx fee
+    const wb = document.getElementById('wBalance');
+    const mb = document.getElementById('mktBalance');
+    if (wb) {
+      const amt = wb.querySelector('.balAmt');
+      if (txt == null) { wb.style.display = 'none'; }
+      else { if (amt) amt.textContent = txt; wb.style.display = 'flex'; wb.classList.toggle('low', low); }
+    }
+    if (mb) {
+      if (txt == null) { mb.style.display = 'none'; }
+      else { mb.textContent = txt; mb.style.display = 'inline-flex'; mb.classList.toggle('low', low); }
+    }
+  }
+
+  // ---- buy-failure banner: orange-bordered box with an (i) icon, auto-dismiss ----
+  const buyErrEl = document.getElementById('buyErr');
+  let buyErrTimer = null;
+  function showBuyError(msg) {
+    buyErrEl.innerHTML =
+      '<div class="buyErrBox">'
+      + '<span class="buyErrIcon">i</span>'
+      + '<div class="buyErrText"><span class="t">Purchase failed</span>'
+      + '<span class="m">' + escapeHtml(msg || 'Something went wrong. Please try again.') + '</span></div>'
+      + '<button class="buyErrClose" title="Dismiss">\\u00d7</button>'
+      + '</div>';
+    buyErrEl.classList.add('show'); buyErrEl.style.display = 'block';
+    buyErrEl.querySelector('.buyErrClose').addEventListener('click', hideBuyError);
+    clearTimeout(buyErrTimer);
+    buyErrTimer = setTimeout(hideBuyError, 7000); // long enough to read, then fade
+  }
+  function hideBuyError() {
+    clearTimeout(buyErrTimer);
+    buyErrEl.classList.remove('show');
+    setTimeout(() => { if (!buyErrEl.classList.contains('show')) { buyErrEl.style.display = 'none'; buyErrEl.innerHTML = ''; } }, 220);
   }
 
   // ---- RPC status (issue #23): show whether a DAS-capable RPC (Helius) is set ----
@@ -1811,6 +2575,24 @@ export function chatHtml(): string {
       activityBar.classList.add('out');
       setTimeout(() => { activityBar.style.display = 'none'; activityBar.classList.remove('out'); }, 250);
     }, dwell);
+    lightSkillSlot(name, dwell); // glow the matching equipped slot + header while it fires
+  }
+  // Glow only while a skill is actually firing: the matching slot (.firing) plus the
+  // header/button accent, then clear after the same dwell as the marquee.
+  let firingTimer = null;
+  function lightSkillSlot(name, dwell) {
+    const grid = document.getElementById('skillGrid');
+    const panel = document.getElementById('skillsPanel');
+    const btn = document.getElementById('skillsBtn');
+    const clear = () => {
+      grid.querySelectorAll('.skSlot.item.firing').forEach((s) => s.classList.remove('firing'));
+      panel.classList.remove('casting'); btn.classList.remove('casting');
+    };
+    clear();
+    grid.querySelectorAll('.skSlot.item').forEach((s) => { if (s.title === name) s.classList.add('firing'); });
+    panel.classList.add('casting'); btn.classList.add('casting'); // header/button cue even if the name has no slot
+    clearTimeout(firingTimer);
+    firingTimer = setTimeout(clear, Math.max(dwell || 0, 1400));
   }
   function hideActivity() { clearTimeout(actTimer); activityBar.classList.remove('out'); activityBar.style.display = 'none'; }
   function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
@@ -1865,21 +2647,22 @@ export function chatHtml(): string {
     const realLog = log;
     const frag = document.createElement('div');
     let body = null; // current turn body within the fragment
-    const openTurn = (userText, badge) => {
+    const openTurn = (userText, badge, imageCount) => {
       const turn = document.createElement('div'); turn.className = 'turn';
       const head = document.createElement('div'); head.className = 'turnHead';
       head.innerHTML = '<span class="uq">&gt;</span>';
-      const ut = document.createElement('div'); ut.className = 'utext'; ut.textContent = userText;
-      head.appendChild(ut);
+      head.appendChild(makeUtext(userText));
       if (badge) { const b = document.createElement('span'); b.className = 'badge ' + badge;
         b.textContent = badge === 'codex' ? 'codex · gpt' : 'claude'; head.appendChild(b); }
+      const imgEl = userImagesEl(imageCount ? { count: imageCount } : undefined);
+      if (imgEl) head.appendChild(imgEl);
       const b = document.createElement('div'); b.className = 'turnBody';
       turn.appendChild(head); turn.appendChild(b); frag.appendChild(turn); return b;
     };
     const node = (cls) => { const n = document.createElement('div'); n.className = 'node ' + cls;
       (body || (body = openTurn('', undefined))).appendChild(n); return n; };
     for (const m of messages) {
-      if (m.role === 'user') { body = openTurn(m.text, undefined); continue; }
+      if (m.role === 'user') { body = openTurn(m.text, undefined, m.imageCount); continue; }
       if (m.role === 'tool') { renderToolInto(node('tool'), m); continue; }
       if (m.role === 'summary') {
         const n = node('summary');
@@ -1914,6 +2697,7 @@ export function chatHtml(): string {
     else if (m.type === 'turnEnd') { hideTyping(); hideActivity(); }
     else if (m.type === 'skillActive') flashSkill(m.name); // a real skill fired (was /mockskill)
     else if (m.type === 'rpcStatus') renderRpcStatus(m.status);
+    else if (m.type === 'skillShopping') setShopToggle(m.on);
     else if (m.type === 'searchResults') {
       lastMarketResults = m.results || [];
       renderSkillResults(m.results);           // the small skills-panel shop
@@ -1938,17 +2722,28 @@ export function chatHtml(): string {
     }
     else if (m.type === 'ownedSkills') {
       setSkills(m.names || []);                // updates ownedSkills used by both renders
-      if (panels.market.style.display !== 'none') renderMarketResults(lastMarketResults); // refresh Owned badges
+      // flip Buy → Owned everywhere the item can appear: list cards, small panel, open detail
+      if (panels.market.style.display !== 'none') renderMarketResults(lastMarketResults);
+      renderSkillResults(lastMarketResults);   // small skills-panel shop badges
+      refreshDetailOwned();                    // detail view (if open) — clears its "Buying…"
     }
     else if (m.type === 'buyResult') {
-      const marketOpen = panels.market.style.display !== 'none';
-      if (m.ok) { marketOpen ? runMarketSearch() : runSkillSearch(); } // refresh so the bought item shows "Owned"
-      else {
-        const msg = 'Buy failed: ' + escapeHtml(m.error || 'unknown');
-        if (marketOpen) mktResults.innerHTML = '<div class="mktEmpty">' + msg + '</div>';
-        else skillResults.innerHTML = '<div class="shopEmpty">' + msg + '</div>';
+      if (m.ok) {
+        // celebrate wherever the buy came from: prefer the bought item's catalog name,
+        // fall back to the open detail's name, then the slug. (the ownedSkills message
+        // that follows flips every Buy button to "Owned".)
+        celebrateSkill(nameForId(m.skillId) || currentDetailName || m.slug);
+        vscode.postMessage({ type: 'getBalance' }); // funds dropped after a buy — refresh
+      } else {
+        // a failed buy must NOT wipe the catalog: show the reason in a dismissible
+        // orange (i) banner and just re-enable the buttons that were mid-"Buying…".
+        showBuyError(m.error);
+        if (detailBuyBtn) { detailBuyBtn.disabled = false; detailBuyBtn.textContent = 'Buy'; }
+        renderMarketResults(lastMarketResults); // restore any card stuck on "Buying…"
+        renderSkillResults(lastMarketResults);
       }
     }
+    else if (m.type === 'balance') { solLamports = m.lamports; renderBalance(); }
     else if (m.type === 'platform') setTab(m.cli); // extension switched CLI (e.g. on session open)
     else if (m.type === 'storage') { renderStorage(m.info, m.options); renderWalletStorage(); }
     else if (m.type === 'cloudSync') renderCloudSync(m.status);
@@ -1963,6 +2758,7 @@ export function chatHtml(): string {
 
   vscode.postMessage({ type: 'ready' });
   vscode.postMessage({ type: 'wallet' }); // fill the bottom-left wallet card on load
+  vscode.postMessage({ type: 'getBalance' }); // and prime the SOL balance display
 </script>
 </body>
 </html>`;

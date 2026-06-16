@@ -28,8 +28,10 @@ export interface ApprovalRequest {
   kind: "bash" | "edit" | "write" | "read" | "question" | "plan" | "other";
   title: string;          // one-line human summary ("Run: npm test", "Edit foo.ts")
   command?: string;       // bash/shell command, when kind === "bash"
+  cwd?: string;           // working dir the action runs in (so a surface can show WHERE)
   file?: string;          // target path, for edit/write/read
   diff?: string;          // unified-ish diff for an edit ("-old"/"+new" lines)
+  risk?: "danger";        // flagged destructive/irreversible action — surface should alarm
   questions?: ApprovalQuestion[]; // when kind === "question": the choices to present
   plan?: string;          // when kind === "plan": the plan text awaiting approval
   input?: Record<string, unknown>; // raw tool input, for surfaces that want detail
