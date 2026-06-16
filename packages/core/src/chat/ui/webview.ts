@@ -412,9 +412,9 @@ export function chatHtml(): string {
   .apResolved { padding: 8px 12px; font-size: 0.82em; border-top: 1px solid var(--an-green-dim); }
   .apResolved.allowed { color: var(--an-green); }
   .apResolved.denied { color: #e07a7a; }
-  /* AskUserQuestion card: one block per question, options as selectable chips. The
-     user's pick becomes the tool result (sent as answers), so there is no Approve/
-     Deny — just option chips + a Send that unlocks once every question is answered. */
+  /* AskUserQuestion card: one block per question, options as selectable chips plus an
+     optional free-text field. The user's answer becomes the tool result, so there is no
+     Approve/Deny — just answering and sending. */
   .qBlock { padding: 9px 12px; border-top: 1px solid var(--an-green-dim); }
   .qBlock:first-child { border-top: none; }
   .qHeader { display: inline-block; font-size: 0.7em; font-weight: 600; text-transform: uppercase;
@@ -428,6 +428,11 @@ export function chatHtml(): string {
   .qOpt.on { border-color: var(--an-green); background: var(--an-green-dim); }
   .qOptLabel { font-size: 0.85em; font-weight: 600; }
   .qOptDesc { font-size: 0.78em; opacity: 0.7; margin-top: 2px; line-height: 1.35; }
+  .qOtherLabel { margin-top: 8px; font-size: 0.76em; opacity: 0.72; }
+  .qOtherInput { width: 100%; margin-top: 6px; border-radius: 8px; border: 1px solid var(--an-line);
+                 background: var(--an-bg-1); color: var(--vscode-foreground); padding: 8px 10px;
+                 font: inherit; resize: vertical; box-sizing: border-box; }
+  .qOtherInput:focus { outline: none; border-color: var(--an-green); }
   .apBtn.ok:disabled { opacity: 0.4; cursor: not-allowed; filter: none; }
   /* plan card body: wrap prose (not break-all like a path/command) */
   .apBody.planBody { word-break: normal; overflow-wrap: anywhere; }
@@ -576,6 +581,7 @@ export function chatHtml(): string {
   .mktCard .mc-name { font-weight: 600; }
   .mktCard .mc-desc { opacity: 0.6; font-size: 0.88em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mktCard .mc-sup { opacity: 0.5; font-size: 0.85em; white-space: nowrap; }
+  .mktCard .mc-price { color: var(--an-green); font-size: 0.82em; font-weight: 600; white-space: nowrap; }
   .mktCard .mc-buy { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
                      border-radius: var(--an-radius); padding: 6px 14px; cursor: pointer; white-space: nowrap; font-weight: 600; }
   .mktCard .mc-buy[disabled] { opacity: 0.5; cursor: default; }
@@ -1741,16 +1747,19 @@ export function chatHtml(): string {
     const card = document.createElement('div');
     card.className = 'approvalCard';
 
-    // ── AskUserQuestion: a multiple-choice prompt (claude/codex both route here). The
-    // user's PICK becomes the tool result, so this card renders options as chips and
-    // sends answers (question text -> chosen label[s]) — no Approve/Deny. Without this
-    // branch the engine never received an answer and the SDK stalled on its own picker.
+    // ── AskUserQuestion: a choice/free-text prompt (claude/codex both route here). The
+    // user's answer becomes the tool result, so this card renders options as chips plus
+    // an optional input field and sends structured questionResponses — no Approve/Deny.
     if (req.kind === 'question' && Array.isArray(req.questions) && req.questions.length) {
       const sel = {}; // qIndex → array of chosen labels
+      const free = {}; // qIndex → typed answer
       const submit = document.createElement('button');
       submit.className = 'apBtn ok'; submit.textContent = 'Send'; submit.disabled = true;
       const refresh = () => {
-        submit.disabled = !req.questions.every((q, qi) => sel[qi] && sel[qi].length);
+        submit.disabled = !req.questions.every((q, qi) => {
+          const typed = (free[qi] || '').trim();
+          return typed.length > 0 || (sel[qi] && sel[qi].length);
+        });
       };
       req.questions.forEach((q, qi) => {
         const block = document.createElement('div'); block.className = 'qBlock';
@@ -1763,24 +1772,52 @@ export function chatHtml(): string {
           if (opt.description) { const d = document.createElement('div'); d.className = 'qOptDesc'; d.textContent = opt.description; b.appendChild(d); }
           b.addEventListener('click', () => {
             const cur = sel[qi] || [];
+            delete free[qi];
             if (q.multiSelect) {
               sel[qi] = cur.indexOf(opt.label) >= 0 ? cur.filter((l) => l !== opt.label) : cur.concat(opt.label);
             } else {
               sel[qi] = cur[0] === opt.label ? [] : [opt.label];
             }
             Array.from(opts.children).forEach((c, i) => c.classList.toggle('on', (sel[qi] || []).indexOf((q.options[i] || {}).label) >= 0));
+            if (otherInput) otherInput.value = '';
             refresh();
           });
           opts.appendChild(b);
         });
         block.appendChild(opts);
+        let otherInput = null;
+        if (q.allowCustomInput) {
+          const label = document.createElement('div');
+          label.className = 'qOtherLabel';
+          label.textContent = q.options && q.options.length ? 'Or type your own answer' : 'Type your answer';
+          block.appendChild(label);
+          otherInput = q.secret ? document.createElement('input') : document.createElement('textarea');
+          otherInput.className = 'qOtherInput';
+          otherInput.placeholder = 'Type your answer…';
+          if (q.secret) otherInput.type = 'password';
+          else otherInput.rows = 3;
+          otherInput.addEventListener('input', () => {
+            free[qi] = otherInput.value;
+            sel[qi] = [];
+            Array.from(opts.children).forEach((c) => c.classList.remove('on'));
+            refresh();
+          });
+          block.appendChild(otherInput);
+        }
         card.appendChild(block);
       });
       const actions = document.createElement('div'); actions.className = 'apActions';
       submit.addEventListener('click', () => {
-        const answers = {};
-        req.questions.forEach((q, qi) => { answers[q.question] = (sel[qi] || []).join(', '); });
-        vscode.postMessage({ type: 'approvalDecision', id: req.id, outcome: 'once', answers });
+        const questionResponses = req.questions.map((q, qi) => {
+          const typed = (free[qi] || '').trim();
+          return {
+            question: q.question,
+            questionId: q.id,
+            selected: typed ? [] : (sel[qi] || []),
+            ...(typed ? { text: typed } : {}),
+          };
+        });
+        vscode.postMessage({ type: 'approvalDecision', id: req.id, outcome: 'once', questionResponses });
         card.remove(); syncComposerLock();
       });
       actions.appendChild(submit);
@@ -2720,10 +2757,13 @@ export function chatHtml(): string {
     if (c.category) addTag(c.category);
     for (const h of (c.hashtags || [])) addTag('#' + h);
     if (typeof c.supply === 'number') addTag(c.supply + '\\u00d7 owned');
+    const detailPrice = fmtPrice(c.price);
+    if (detailPrice) addTag(detailPrice); // "Free" / "0.1 SOL"
     if (meta.childElementCount) mktDetailBody.appendChild(meta);
-    // buy
+    // buy — show the price on the button too, so the spend is obvious before clicking
     const buy = document.createElement('button'); buy.className = 'dt-buy';
-    buy.textContent = owned ? 'Owned' : 'Buy'; buy.disabled = owned;
+    const buyLabel = detailPrice && detailPrice !== 'Free' ? ('Buy · ' + detailPrice) : 'Buy';
+    buy.textContent = owned ? 'Owned' : buyLabel; buy.disabled = owned;
     buy.addEventListener('click', () => {
       buy.disabled = true; buy.textContent = 'Buying…';
       vscode.postMessage({ type: 'buySkill', skillId: c.id, creatorWallet: c.creator });
@@ -2773,7 +2813,10 @@ export function chatHtml(): string {
       main.appendChild(nm); main.appendChild(ds);
       main.addEventListener('click', () => openDetail(r.id)); // card body → detail view
       const sup = document.createElement('span'); sup.className = 'mc-sup';
+      const priceTxt = fmtPrice(r.price);
       sup.textContent = (typeof r.supply === 'number') ? (r.supply + '\\u00d7') : '';
+      const pr = document.createElement('span'); pr.className = 'mc-price';
+      if (priceTxt) pr.textContent = priceTxt; // "Free" / "0.1 SOL"; empty when unknown
       const buy = document.createElement('button'); buy.className = 'mc-buy';
       buy.textContent = owned ? 'Owned' : 'Buy'; buy.disabled = owned;
       buy.addEventListener('click', (e) => {
@@ -2781,7 +2824,7 @@ export function chatHtml(): string {
         buy.disabled = true; buy.textContent = 'Buying…';
         vscode.postMessage({ type: 'buySkill', skillId: r.id, creatorWallet: r.creator });
       });
-      card.appendChild(img); card.appendChild(main); card.appendChild(sup); card.appendChild(buy);
+      card.appendChild(img); card.appendChild(main); card.appendChild(sup); card.appendChild(pr); card.appendChild(buy);
       mktResults.appendChild(card);
     }
   }
@@ -2855,6 +2898,14 @@ export function chatHtml(): string {
     // compact: up to 4 dp, trim trailing zeros (e.g. 1.5 SOL, 0.0123 SOL, 0 SOL)
     const s = sol < 1 ? sol.toFixed(4) : sol.toFixed(3);
     return s.replace(/\\.?0+$/, '') + ' SOL';
+  }
+  // An item's price (lamports string from chain) → display: "Free" at 0, else SOL.
+  // null/undefined = price unknown (indexer didn't read it) → no label.
+  function fmtPrice(price) {
+    if (price == null) return null;
+    const n = Number(price);
+    if (!Number.isFinite(n)) return null;
+    return n === 0 ? 'Free' : fmtSol(n);
   }
   function renderBalance() {
     const txt = fmtSol(solLamports);
