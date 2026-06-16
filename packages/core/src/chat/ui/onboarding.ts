@@ -85,6 +85,18 @@ export function onboardingHtml(): string {
       <input id="walletPath" spellcheck="false" placeholder="/path/to/id.json" />
       <div class="hint" id="walletHint">If no keypair exists here, a new one is created at this path.</div>
       <button class="primary" id="connectBtn">Use this wallet</button>
+
+      <div style="margin-top: 10px; display: flex; flex-direction: column; align-items: center;">
+        <div style="width: 100%; height: 1px; background: var(--vscode-panel-border); margin: 12px 0;"></div>
+        <button class="ghost" id="qrLoginBtn" style="margin-top: 0;">QR to login (Phone wallet)</button>
+      </div>
+
+      <div id="qrContainer" style="display: none; flex-direction: column; align-items: center; margin-top: 15px;">
+        <div style="font-size: 0.9em; font-weight: bold; margin-bottom: 8px; text-align: center; color: var(--vscode-foreground);">Scan with Phantom / Solflare</div>
+        <img id="qrCodeImg" style="width: 200px; height: 200px; padding: 10px; background: white; border-radius: 8px;" />
+        <div style="font-size: 0.85em; opacity: 0.7; margin-top: 8px; text-align: center; color: var(--vscode-foreground);">Waiting for approval on your phone...</div>
+      </div>
+
       <div class="note">
         This keypair is your wallet. The same wallet = the same key that decrypts
         your sessions on any device.
@@ -265,6 +277,9 @@ export function onboardingHtml(): string {
     vscode.postMessage({ type: 'connectWallet', path: p });
   });
   if (!WEB) $('walletPath').addEventListener('input', () => $('walletPath').classList.remove('bad'));
+  if (!WEB) $('qrLoginBtn').addEventListener('click', () => {
+    vscode.postMessage({ type: 'startQrLogin' });
+  });
 
   function pickOption(el, kind) {
     chosenKind = kind;
@@ -303,6 +318,13 @@ export function onboardingHtml(): string {
     if (m.type === 'init') {
       if (m.defaultPath) $('walletPath').value = m.defaultPath;
       cloudPreselect = m.cloudKind || null; // e.g. "gdrive" if already connected
+    } else if (m.type === 'showQr') {
+      $('walletPath').style.display = 'none';
+      $('connectBtn').style.display = 'none';
+      $('walletHint').style.display = 'none';
+      $('qrLoginBtn').style.display = 'none';
+      $('qrContainer').style.display = 'flex';
+      $('qrCodeImg').src = m.qrImage;
     } else if (m.type === 'walletConnected') {
       // Browser/mobile: the wallet is the whole onboarding — local save is always on
       // and a cloud can be added later from chat, so go straight to chat (this socket

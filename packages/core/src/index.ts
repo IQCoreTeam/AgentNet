@@ -84,6 +84,8 @@ export type { WalletFileState, LoadResult } from "./account/localWallet.js";
 // front-end's signature over the fixed session-key message — wallet-agnostic, the
 // front-end picks the provider. Local surfaces use localWallet; web uses this.
 export { webWallet, SESSION_KEY_MESSAGE } from "./account/webWallet.js";
+export { remoteWallet } from "./account/transport.js";
+export type { WalletTransport } from "./account/transport.js";
 export {
   startClaudeLogin,
   isClaudeLoggedIn,
@@ -116,6 +118,7 @@ export {
   saveGoogleCreds,
   hasGoogleCreds,
 } from "./account/login.js";
+export type { LogoutPolicy } from "./account/login.js";
 export { STORAGE_OPTIONS } from "./account/storage/adapter.js";
 export type { StorageConfig, StorageKind } from "./account/storage/adapter.js";
 export { manualStorage } from "./account/storage/manual.js";

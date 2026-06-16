@@ -124,6 +124,57 @@ class WalletBridge(
         }
     }
 
+    @JavascriptInterface
+    fun signTransaction(requestJson: String) {
+        val req = runCatching { JSONObject(requestJson) }.getOrNull()
+        val id = req?.optString("id").orEmpty()
+        val txJson = req?.optJSONArray("transaction")
+        if (id.isEmpty() || txJson == null) {
+            Log.e(TAG, "signTransaction: malformed request")
+            if (id.isNotEmpty()) pushError(id, "Malformed signTransaction request.", "Failure")
+            return
+        }
+        val txBytes = ByteArray(txJson.length())
+        for (i in 0 until txBytes.size) {
+            txBytes[i] = txJson.getInt(i).toByte()
+        }
+        activity.lifecycleScope.launch {
+            try {
+                runSignTransaction(id, txBytes)
+            } catch (e: Exception) {
+                Log.e(TAG, "signTransaction threw", e)
+                pushError(id, e.message ?: "Wallet transaction signing failed.", "Failure")
+            }
+        }
+    }
+
+    private suspend fun runSignTransaction(id: String, txBytes: ByteArray) {
+        val result = walletAdapter.transact(sender) {
+            val signResult = signTransactions(
+                transactions = arrayOf(txBytes)
+            )
+            signResult.transactions.first()
+        }
+        when (result) {
+            is TransactionResult.Success -> {
+                val signedTx = result.payload
+                pushTxSuccess(id, signedTx)
+            }
+            is TransactionResult.NoWalletFound ->
+                pushError(id, "No compatible wallet app is installed.", "NoWalletFound")
+            is TransactionResult.Failure ->
+                pushError(id, result.e.message ?: "Wallet request failed.", "Failure")
+        }
+    }
+
+    private fun pushTxSuccess(id: String, signedTx: ByteArray) {
+        val json = JSONObject()
+            .put("id", id)
+            .put("ok", true)
+            .put("transaction", bytesToJson(signedTx))
+        dispatch(json.toString())
+    }
+
     private fun bytesToJson(bytes: ByteArray): JSONArray {
         val arr = JSONArray()
         for (b in bytes) arr.put(b.toInt() and 0xFF)

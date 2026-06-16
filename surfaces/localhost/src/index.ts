@@ -24,6 +24,7 @@
 
 import { createServer, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
+import { Transaction, VersionedTransaction } from "@solana/web3.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, normalize, extname } from "node:path";
 import {
@@ -39,6 +40,7 @@ import {
   startCodexLogin,
   markCodexConnected,
   saveCodexApiKey,
+  logout,
   type AgentRuntime,
   type CloudStatus,
   type ClaudeLogin,
@@ -107,6 +109,9 @@ let wallet: Wallet | null = null;
 let runtime: AgentRuntime | null = null;
 let walletAddress: string | null = null;
 
+let nextTxRequestId = 0;
+const pendingTxRequests = new Map<string, { resolve: (tx: any) => void; reject: (err: Error) => void }>();
+
 // Latest drive-mirror sync result + the hook the active chat sets to surface it
 // (cloud writes are otherwise silent). One value; the connected chat reflects it.
 let lastCloudStatus: CloudStatus | null = null;
@@ -117,7 +122,35 @@ let googleLoginSession: GoogleLogin | null = null;
 // second connect with the same address is a no-op so re-opened tabs don't rebuild).
 async function connectWallet(address: string, signature: Uint8Array): Promise<void> {
   if (runtime && walletAddress === address) return;
-  wallet = webWallet(address, signature);
+
+  const handleSignTransaction = async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
+    const id = `tx-req-${++nextTxRequestId}`;
+    const isVersioned = "version" in (tx as any);
+    const serialized = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+
+    return new Promise<T>((resolve, reject) => {
+      pendingTxRequests.set(id, { resolve, reject });
+
+      const msg = {
+        type: "signTransactionRequest",
+        id,
+        transaction: Array.from(serialized),
+        isVersioned
+      };
+
+      for (const client of clients.values()) {
+        client.send(msg);
+      }
+
+      setTimeout(() => {
+        if (pendingTxRequests.delete(id)) {
+          reject(new Error("Transaction signing timed out."));
+        }
+      }, 180000);
+    });
+  };
+
+  wallet = webWallet(address, signature, handleSignTransaction);
   walletAddress = address;
   // Only build the runtime immediately if storage is already configured (returning user).
   // First-time users go through onboarding (storage picker) before runtime is needed;
@@ -215,7 +248,15 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
       }
     },
     disconnectWallet: async () => {
-      await disconnectCloud();
+      await logout({ policy: "soft" });
+      wallet = null;
+      walletAddress = null;
+      runtime = null;
+      c.send({ type: "clear" });
+      c.send({ type: "init", defaultPath: null, cloudKind: null });
+    },
+    logoutFull: async () => {
+      await logout({ policy: "full", address: walletAddress || undefined });
       wallet = null;
       walletAddress = null;
       runtime = null;
@@ -493,10 +534,29 @@ const http = createServer(async (req, res) => {
     const id = url.searchParams.get("client") ?? "";
     const c = clients.get(id);
     if (!c || c.recvs.length === 0) { res.writeHead(409).end("no such client"); return; }
-    let msg: unknown;
+    let msg: any;
     try { msg = JSON.parse(await readBody(req)); } catch { res.writeHead(400).end("bad json"); return; }
     // Ack immediately; surface a thrown handler instead of letting it vanish.
     res.writeHead(204).end();
+
+    // Intercept transaction signing response
+    if (msg && msg.type === "signTransactionResponse" && typeof msg.id === "string" && Array.isArray(msg.transaction)) {
+      const pending = pendingTxRequests.get(msg.id);
+      if (pending) {
+        pendingTxRequests.delete(msg.id);
+        try {
+          const bytes = Uint8Array.from(msg.transaction);
+          const signedTx = msg.isVersioned
+            ? VersionedTransaction.deserialize(bytes)
+            : Transaction.from(bytes);
+          pending.resolve(signedTx);
+        } catch (err) {
+          pending.reject(err instanceof Error ? err : new Error(String(err)));
+        }
+      }
+      return;
+    }
+
     // Fan out to every subscriber (dispatcher + approval channel). A handler that doesn't
     // recognize the message just ignores it (their switches guard each type).
     for (const recv of c.recvs) {
