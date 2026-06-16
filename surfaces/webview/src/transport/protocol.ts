@@ -35,10 +35,20 @@ export type ApprovalKind = "bash" | "edit" | "write" | "read" | "question" | "pl
 
 // A choice question (claude's AskUserQuestion) carried inside an ApprovalRequest.
 export interface ApprovalQuestion {
+  id?: string;
   question: string;
   header?: string;
   multiSelect?: boolean;
+  allowCustomInput?: boolean;
+  secret?: boolean;
   options: { label: string; description?: string }[];
+}
+
+export interface ApprovalQuestionResponse {
+  question: string;
+  questionId?: string;
+  selected: string[];
+  text?: string;
 }
 
 export interface ApprovalRequest {
@@ -68,6 +78,7 @@ export type ClientMessage =
   | { type: "platform"; cli: Cli }
   | { type: "model"; model?: string }
   | { type: "send"; text: string }
+  | { type: "interrupt" }
   | { type: "loadMore"; cursor: number }
   | { type: "delete"; sessionId: string }
   | { type: "wallet" }
@@ -79,7 +90,7 @@ export type ClientMessage =
   // passive skill-shopping toggle (issue #21)
   | { type: "getSkillShopping" }
   | { type: "setSkillShopping"; on: boolean }
-  | { type: "approvalDecision"; id: string; outcome: ApprovalOutcome; reason?: string; answers?: Record<string, string> }
+  | { type: "approvalDecision"; id: string; outcome: ApprovalOutcome; reason?: string; questionResponses?: ApprovalQuestionResponse[] }
   // onboarding-only:
   | { type: "connectWallet"; address: string; signature: number[] }
   | { type: "startClaudeLogin" }

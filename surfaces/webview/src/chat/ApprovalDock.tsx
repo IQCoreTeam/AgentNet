@@ -1,20 +1,24 @@
 import { useState } from "react";
-import type { ApprovalOutcome, ApprovalRequest } from "../transport/protocol";
+import type {
+  ApprovalOutcome,
+  ApprovalQuestionResponse,
+  ApprovalRequest,
+} from "../transport/protocol";
 import { useStore } from "../state/store";
 
 // Pending tool approvals, docked just above the composer (newest first). Most are a
 // yes/no permission (bash/edit/…). Two are different:
-//   - "question" (claude's AskUserQuestion): a multiple-choice prompt — the user PICKS an
-//     option and that choice becomes the tool result (sent as `answers`).
+//   - "question" (claude's AskUserQuestion / codex requestUserInput): a structured or
+//     free-text prompt — the user's answer becomes the tool result.
 //   - "plan" (ExitPlanMode): show the plan, approve to implement or send back to revise.
 // While any card is present the composer is frozen (see Composer).
 export function ApprovalDock() {
   const { state, send, resolveApproval } = useStore();
   if (state.approvals.length === 0) return null;
 
-  function decide(req: ApprovalRequest, outcome: ApprovalOutcome, answers?: Record<string, string>) {
+  function decide(req: ApprovalRequest, outcome: ApprovalOutcome, questionResponses?: ApprovalQuestionResponse[]) {
     resolveApproval(req.id);
-    send({ type: "approvalDecision", id: req.id, outcome, answers });
+    send({ type: "approvalDecision", id: req.id, outcome, questionResponses });
   }
 
   return (
@@ -30,20 +34,27 @@ export function ApprovalDock() {
   );
 }
 
-// AskUserQuestion: render each question with its options as selectable chips. Single- or
-// multi-select per question; "Send" is enabled once every question has an answer.
+// AskUserQuestion: render each question with selectable options and, when allowed, a
+// free-text field. "Send" is enabled once every question has an answer.
 function QuestionCard({
   req,
   onAnswer,
 }: {
   req: ApprovalRequest;
-  onAnswer: (answers: Record<string, string>) => void;
+  onAnswer: (questionResponses: ApprovalQuestionResponse[]) => void;
 }) {
   const questions = req.questions ?? [];
   // selections[qIndex] = set of chosen labels for that question
   const [selections, setSelections] = useState<Record<number, string[]>>({});
+  const [customInput, setCustomInput] = useState<Record<number, string>>({});
 
   function toggle(qi: number, label: string, multi: boolean) {
+    setCustomInput((prev) => {
+      if (!(qi in prev)) return prev;
+      const next = { ...prev };
+      delete next[qi];
+      return next;
+    });
     setSelections((prev) => {
       const cur = prev[qi] ?? [];
       if (multi) {
@@ -53,14 +64,27 @@ function QuestionCard({
     });
   }
 
-  const allAnswered = questions.every((_, qi) => (selections[qi]?.length ?? 0) > 0);
+  function setTypedAnswer(qi: number, value: string) {
+    setCustomInput((prev) => ({ ...prev, [qi]: value }));
+    setSelections((prev) => ({ ...prev, [qi]: [] }));
+  }
+
+  const allAnswered = questions.every((_, qi) => {
+    const typed = customInput[qi]?.trim();
+    return !!typed || (selections[qi]?.length ?? 0) > 0;
+  });
 
   function submit() {
-    const answers: Record<string, string> = {};
-    questions.forEach((q, qi) => {
-      answers[q.question] = (selections[qi] ?? []).join(", ");
+    const questionResponses = questions.map((q, qi) => {
+      const typed = customInput[qi]?.trim();
+      return {
+        question: q.question,
+        questionId: q.id,
+        selected: typed ? [] : (selections[qi] ?? []),
+        ...(typed ? { text: typed } : {}),
+      };
     });
-    onAnswer(answers);
+    onAnswer(questionResponses);
   }
 
   return (
@@ -73,27 +97,53 @@ function QuestionCard({
             </div>
           )}
           <div className="mb-2 font-medium text-zinc-100">{q.question}</div>
-          <div className="flex flex-col gap-1.5">
-            {q.options.map((opt) => {
-              const chosen = (selections[qi] ?? []).includes(opt.label);
-              return (
-                <button
-                  key={opt.label}
-                  onClick={() => toggle(qi, opt.label, q.multiSelect === true)}
-                  className={`rounded-lg border px-3 py-2 text-left transition ${
-                    chosen
-                      ? "border-emerald-500 bg-emerald-600/20"
-                      : "border-zinc-700 hover:border-zinc-600"
-                  }`}
-                >
-                  <div className="text-sm font-medium text-zinc-100">{opt.label}</div>
-                  {opt.description && (
-                    <div className="mt-0.5 text-xs leading-snug text-zinc-400">{opt.description}</div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          {q.options.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              {q.options.map((opt) => {
+                const chosen = (selections[qi] ?? []).includes(opt.label);
+                return (
+                  <button
+                    key={opt.label}
+                    onClick={() => toggle(qi, opt.label, q.multiSelect === true)}
+                    className={`rounded-lg border px-3 py-2 text-left transition ${
+                      chosen
+                        ? "border-emerald-500 bg-emerald-600/20"
+                        : "border-zinc-700 hover:border-zinc-600"
+                    }`}
+                  >
+                    <div className="text-sm font-medium text-zinc-100">{opt.label}</div>
+                    {opt.description && (
+                      <div className="mt-0.5 text-xs leading-snug text-zinc-400">{opt.description}</div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {q.allowCustomInput && (
+            <div className="mt-2 flex flex-col gap-1.5">
+              <div className="text-xs text-zinc-400">
+                {q.options.length > 0 ? "Or type your own answer" : "Type your answer"}
+              </div>
+              {q.secret ? (
+                <input
+                  type="password"
+                  value={customInput[qi] ?? ""}
+                  onChange={(e) => setTypedAnswer(qi, e.target.value)}
+                  placeholder="Type your answer…"
+                  className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-500"
+                />
+              ) : (
+                <textarea
+                  rows={3}
+                  value={customInput[qi] ?? ""}
+                  onChange={(e) => setTypedAnswer(qi, e.target.value)}
+                  placeholder="Type your answer…"
+                  className="resize-y rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-500"
+                />
+              )}
+            </div>
+          )}
         </div>
       ))}
       <div className="px-3 py-2">

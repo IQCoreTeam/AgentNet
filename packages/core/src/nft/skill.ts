@@ -34,6 +34,12 @@ export interface PublishSkillInput {
   category?: string; // e.g. "clean-code"
   hashtags?: string[]; // e.g. ["refactoring"]
   price?: bigint; // lamports (0n = free, omit = DEFAULT_SKILL_PRICE_LAMPORTS)
+  // optional cover image (skill-nft-json.md §3). The value's SHAPE says where it
+  // lives — no isOnchain flag: an http URL / *.png renders directly, a base58
+  // txid/PDA is an on-chain (code-in) image decoded via the gateway. Omit = the
+  // viewer's default skill-document art. Uploading an image on-chain is a later
+  // step (see https://x.com/spacebuneth/status/2064477269871960574).
+  image?: string;
 }
 
 /**
@@ -63,6 +69,7 @@ export async function publishSkill(
   const skillJson = JSON.stringify({
     name: input.name,
     description: input.description,
+    ...(input.image ? { image: input.image } : {}), // §3 — omit when absent
     attributes,
     skillText: input.text,
   });

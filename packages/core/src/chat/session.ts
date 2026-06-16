@@ -57,6 +57,17 @@ export interface ChatEnv {
   buyAllSkills?(wallet: string): Promise<{ ok: boolean; bought: number; failed: number; error?: string }>;
   postAgentNote?(agentWallet: string, text: string, gitLink?: string): Promise<{ ok: boolean; notes?: import("./marketMessages.js").Note[]; error?: string }>;
   solBalance?(): Promise<number | null>; // wallet's native SOL balance (lamports), for the UI funds display
+  // make-skill: publish a new skill from the UI. priceSol is the human SOL string; the
+  // host converts to lamports and calls core publishSkill. Returns the new mint on success.
+  publishSkill?(input: {
+    name: string;
+    description: string;
+    text: string;
+    category?: string;
+    hashtags?: string[];
+    priceSol: string;
+    image?: string;
+  }): Promise<{ ok: boolean; mint?: string; error?: string }>;
   // install every owned skill NFT into the runtime skills dir (session start + after a
   // buy), so the agent always has its owned skills present + discoverable. Returns slugs.
   loadOwnedSkills?(): Promise<string[]>;
@@ -410,6 +421,20 @@ export function createChatSession(
           // re-push refreshed profile so blog updates without a manual reload
           const profile = await env.getAgentProfile(req.agentWallet).catch(() => null);
           if (profile) sendMarket({ type: "agentProfile", profile });
+        }
+        break;
+      }
+      // make-skill: publish a new skill from the UI
+      case "publishSkill": {
+        const req = m as Extract<MarketRequest, { type: "publishSkill" }>;
+        const res = env.publishSkill
+          ? await env.publishSkill(req)
+          : { ok: false, error: "publishing unavailable" };
+        sendMarket({ type: "publishResult", ok: res.ok, mint: res.mint, error: res.error });
+        if (res.ok) {
+          // a fresh skill is owned by its creator — refresh owned + the market list
+          await env.loadOwnedSkills?.();
+          if (env.ownedSkills) sendMarket({ type: "ownedSkills", names: await env.ownedSkills() });
         }
         break;
       }

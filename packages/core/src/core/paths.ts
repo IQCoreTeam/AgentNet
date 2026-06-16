@@ -116,6 +116,14 @@ export function inactiveSkillsDir(cli: "claude" | "codex"): string {
   return join(rootDir(), "inactive-skills", cli);
 }
 
+/** Skill-origin manifest (slug → NFT mint). A SKILL.md on disk is identical whatever its
+ *  source, so origin can't be read from the file — this side record is the source of truth
+ *  for "this installed skill was bought as an NFT". Local, never synced. See
+ *  skill-market/registry.ts. */
+export function skillsManifestFile(): string {
+  return join(rootDir(), "skills.json");
+}
+
 /** Ensure a directory exists (mkdir -p) with 0o700 so only the owner can enter. */
 export async function ensureDir(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true, mode: 0o700 });

@@ -70,6 +70,18 @@ export type { VerifyGuard } from "./skill-market/index.js";
 export { browseSkills } from "./skill-market/browse.js";
 export type { BrowseResult } from "./skill-market/browse.js";
 export { setSkillShoppingActive, PASSIVE_SKILL_SLUG } from "./skill-market/passive.js";
+// skill-origin registry — distinguish bundled (skill-shopping / make-skill) vs NFT-bought
+// vs local installed skills (the SKILL.md file can't say which; this side manifest can).
+export {
+  BUNDLED_SKILLS,
+  MAKE_SKILL_SLUG,
+  classifySkills,
+  skillOrigin,
+  readSkillManifest,
+  recordNftSkill,
+  forgetNftSkill,
+} from "./skill-market/registry.js";
+export type { SkillOrigin, ClassifiedSkill, SkillManifest, NftSkillRecord } from "./skill-market/registry.js";
 
 export { createRuntime } from "./runtime/index.js";
 export { detectCli } from "./runtime/detect.js";

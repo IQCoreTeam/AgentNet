@@ -412,9 +412,9 @@ export function chatHtml(): string {
   .apResolved { padding: 8px 12px; font-size: 0.82em; border-top: 1px solid var(--an-green-dim); }
   .apResolved.allowed { color: var(--an-green); }
   .apResolved.denied { color: #e07a7a; }
-  /* AskUserQuestion card: one block per question, options as selectable chips. The
-     user's pick becomes the tool result (sent as answers), so there is no Approve/
-     Deny — just option chips + a Send that unlocks once every question is answered. */
+  /* AskUserQuestion card: one block per question, options as selectable chips plus an
+     optional free-text field. The user's answer becomes the tool result, so there is no
+     Approve/Deny — just answering and sending. */
   .qBlock { padding: 9px 12px; border-top: 1px solid var(--an-green-dim); }
   .qBlock:first-child { border-top: none; }
   .qHeader { display: inline-block; font-size: 0.7em; font-weight: 600; text-transform: uppercase;
@@ -428,6 +428,11 @@ export function chatHtml(): string {
   .qOpt.on { border-color: var(--an-green); background: var(--an-green-dim); }
   .qOptLabel { font-size: 0.85em; font-weight: 600; }
   .qOptDesc { font-size: 0.78em; opacity: 0.7; margin-top: 2px; line-height: 1.35; }
+  .qOtherLabel { margin-top: 8px; font-size: 0.76em; opacity: 0.72; }
+  .qOtherInput { width: 100%; margin-top: 6px; border-radius: 8px; border: 1px solid var(--an-line);
+                 background: var(--an-bg-1); color: var(--vscode-foreground); padding: 8px 10px;
+                 font: inherit; resize: vertical; box-sizing: border-box; }
+  .qOtherInput:focus { outline: none; border-color: var(--an-green); }
   .apBtn.ok:disabled { opacity: 0.4; cursor: not-allowed; filter: none; }
   /* plan card body: wrap prose (not break-all like a path/command) */
   .apBody.planBody { word-break: normal; overflow-wrap: anywhere; }
@@ -576,6 +581,7 @@ export function chatHtml(): string {
   .mktCard .mc-name { font-weight: 600; }
   .mktCard .mc-desc { opacity: 0.6; font-size: 0.88em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mktCard .mc-sup { opacity: 0.5; font-size: 0.85em; white-space: nowrap; }
+  .mktCard .mc-price { color: var(--an-green); font-size: 0.82em; font-weight: 600; white-space: nowrap; }
   .mktCard .mc-buy { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
                      border-radius: var(--an-radius); padding: 6px 14px; cursor: pointer; white-space: nowrap; font-weight: 600; }
   .mktCard .mc-buy[disabled] { opacity: 0.5; cursor: default; }
@@ -803,6 +809,32 @@ export function chatHtml(): string {
   .pr-confirm .confirm-btns { display:flex; gap:8px; }
   .pr-confirm .confirm-btns button { flex:1; }
 
+  /* ── make-skill: topbar/header/panel entry buttons + publish form ── */
+  #makeSkillBtn { color: var(--an-green); }
+  .mktMake, .skMake { margin-left: auto; background: var(--an-green-dim); color: var(--an-green);
+                      border: 1px solid var(--an-green-line); border-radius: var(--an-radius);
+                      padding: 3px 10px; font-size: 0.8em; cursor: pointer; white-space: nowrap; }
+  .skMake { margin-left: 0; padding: 2px 8px; font-size: 0.74em; }
+  .mktMake:hover, .skMake:hover { background: var(--an-green-line); }
+  .pubForm { display: flex; flex-direction: column; }
+  .pubLabel { font-size: 0.8em; font-weight: 600; margin: 12px 0 4px; color: var(--vscode-foreground); }
+  .pubLabel .req { color: var(--an-green); margin-left: 2px; }
+  .pubForm input[type=text], .pubForm textarea {
+    width: 100%; box-sizing: border-box; padding: 8px 10px; background: var(--an-bg-2);
+    color: var(--vscode-foreground); border: 1px solid var(--an-line);
+    border-radius: var(--an-radius); font-family: inherit; font-size: 0.9em; resize: vertical; }
+  .pubForm textarea { font-family: var(--vscode-editor-font-family, monospace); }
+  .pubHint { font-size: 0.76em; opacity: 0.55; margin-top: 4px; }
+  /* on-chain badge — mirrors iq-wide-web's OnChainBadge (◆ ON-CHAIN) */
+  .pubBadge { display: inline-block; margin-top: 6px; font-size: 0.7em; font-weight: 700;
+              letter-spacing: 0.04em; color: var(--an-green); border: 1px solid var(--an-green-line);
+              background: var(--an-green-dim); border-radius: 999px; padding: 2px 8px; }
+  .pubError { color: #e05252; font-size: 0.82em; margin-top: 10px; }
+  .pubSubmit { margin-top: 16px; align-self: flex-start; background: var(--an-green, #3fa37a);
+               color: #06231a; font-weight: 700; border: none; border-radius: var(--an-radius);
+               padding: 8px 20px; cursor: pointer; font-size: 0.92em; }
+  .pubSubmit:disabled { opacity: 0.5; cursor: default; }
+
   /* ---- skill-acquired celebration: a popup that bursts in when a buy succeeds.
        Centered card (wand + "Skill acquired" + name) over a soft backdrop, with a
        ring shockwave and sparkle particles flying out, then auto-fades. ---- */
@@ -929,6 +961,7 @@ export function chatHtml(): string {
     </button>
     <button id="marketsBtn" title="Skill marketplace">Markets</button>
     <button id="agentsBtn" title="Agent directory">Agents</button>
+    <button id="makeSkillBtn" title="Publish a new skill">＋ Make skill</button>
     <div class="spacer"></div>
     <button id="histBtn" title="Recent chats">↻ History <span class="caret">▾</span></button>
     <button id="newTabBtn" title="Open another chat in a new tab">+</button>
@@ -1001,6 +1034,7 @@ export function chatHtml(): string {
           <span class="wand">${WAND_SVG}</span>
           <span>Equipped skills</span>
           <span class="skMuted" id="skillStatus">none active</span>
+          <button id="panelMakeSkillBtn" class="skMake" title="Publish a new skill">＋ Make skill</button>
           <button id="skillsClose" title="Close">×</button>
         </div>
         <div id="skillGrid">
@@ -1107,6 +1141,46 @@ export function chatHtml(): string {
     </div>
   </div>
 
+  <!-- Make skill: author + publish a new skill (mints a Token-2022 soulbound NFT +
+       code-in JSON). Opened from the topbar, the market header, or the skills panel. -->
+  <div id="publishView" class="panel" style="display:none">
+    <div class="page">
+      <div id="backToChatP" class="muted" style="cursor:pointer;margin-bottom:10px">‹ Back to chat</div>
+      <div class="mktHead">
+        <div class="mktTitle"><span class="wand">${WAND_SVG}</span> Make a skill</div>
+        <div class="muted small">Publish a skill others can buy. It mints a soulbound NFT and the body is stored on-chain.</div>
+      </div>
+      <div class="pubForm">
+        <label class="pubLabel">Name<span class="req">*</span></label>
+        <input id="pubName" type="text" placeholder="clean-code-refactor" />
+
+        <label class="pubLabel">Description<span class="req">*</span></label>
+        <textarea id="pubDesc" rows="2" placeholder="One or two lines on what this skill does."></textarea>
+
+        <label class="pubLabel">Category</label>
+        <input id="pubCategory" type="text" placeholder="clean-code (optional)" />
+
+        <label class="pubLabel">Hashtags</label>
+        <input id="pubHashtags" type="text" placeholder="refactoring, testing (comma-separated, optional)" />
+
+        <label class="pubLabel">Image</label>
+        <input id="pubImage" type="text" placeholder="https://….png  or  on-chain address (optional)" />
+        <div id="pubImageBadge" class="pubBadge" style="display:none">◆ ON-CHAIN</div>
+        <div class="pubHint">A direct image URL, or an on-chain address. Leave empty for the default art. (Uploading an image on-chain: see the IQLabs SDK — https://x.com/spacebuneth/status/2064477269871960574)</div>
+
+        <label class="pubLabel">Skill text<span class="req">*</span></label>
+        <textarea id="pubText" rows="10" placeholder="# Skill name&#10;&#10;The full SKILL.md body — what the agent reads when this skill fires."></textarea>
+
+        <label class="pubLabel">Price (SOL)<span class="req">*</span></label>
+        <input id="pubPrice" type="text" value="0.1" placeholder="0.1" />
+        <div class="pubHint">What buyers pay to unlock it. Set 0 for a free skill.</div>
+
+        <div id="pubError" class="pubError" style="display:none"></div>
+        <button id="pubSubmit" class="pubSubmit">Publish skill</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Markets: the full-screen skill marketplace (search → results → buy). Reuses the
        shared market message contract; the same screens get a mobile design later. -->
   <div id="marketView" class="panel" style="display:none">
@@ -1118,6 +1192,7 @@ export function chatHtml(): string {
           <div class="mktTitleRow">
             <div class="mktTitle"><span class="wand">${WAND_SVG}</span> Skill Market</div>
             <span id="mktBalance" class="mktBal" title="Your wallet balance" style="display:none"></span>
+            <button id="mktMakeSkillBtn" class="mktMake" title="Publish a new skill">＋ Make skill</button>
           </div>
           <div class="muted small">Popular first. Buy an item (soulbound) and your agent equips it.</div>
         </div>
@@ -1672,16 +1747,19 @@ export function chatHtml(): string {
     const card = document.createElement('div');
     card.className = 'approvalCard';
 
-    // ── AskUserQuestion: a multiple-choice prompt (claude/codex both route here). The
-    // user's PICK becomes the tool result, so this card renders options as chips and
-    // sends answers (question text -> chosen label[s]) — no Approve/Deny. Without this
-    // branch the engine never received an answer and the SDK stalled on its own picker.
+    // ── AskUserQuestion: a choice/free-text prompt (claude/codex both route here). The
+    // user's answer becomes the tool result, so this card renders options as chips plus
+    // an optional input field and sends structured questionResponses — no Approve/Deny.
     if (req.kind === 'question' && Array.isArray(req.questions) && req.questions.length) {
       const sel = {}; // qIndex → array of chosen labels
+      const free = {}; // qIndex → typed answer
       const submit = document.createElement('button');
       submit.className = 'apBtn ok'; submit.textContent = 'Send'; submit.disabled = true;
       const refresh = () => {
-        submit.disabled = !req.questions.every((q, qi) => sel[qi] && sel[qi].length);
+        submit.disabled = !req.questions.every((q, qi) => {
+          const typed = (free[qi] || '').trim();
+          return typed.length > 0 || (sel[qi] && sel[qi].length);
+        });
       };
       req.questions.forEach((q, qi) => {
         const block = document.createElement('div'); block.className = 'qBlock';
@@ -1694,24 +1772,52 @@ export function chatHtml(): string {
           if (opt.description) { const d = document.createElement('div'); d.className = 'qOptDesc'; d.textContent = opt.description; b.appendChild(d); }
           b.addEventListener('click', () => {
             const cur = sel[qi] || [];
+            delete free[qi];
             if (q.multiSelect) {
               sel[qi] = cur.indexOf(opt.label) >= 0 ? cur.filter((l) => l !== opt.label) : cur.concat(opt.label);
             } else {
               sel[qi] = cur[0] === opt.label ? [] : [opt.label];
             }
             Array.from(opts.children).forEach((c, i) => c.classList.toggle('on', (sel[qi] || []).indexOf((q.options[i] || {}).label) >= 0));
+            if (otherInput) otherInput.value = '';
             refresh();
           });
           opts.appendChild(b);
         });
         block.appendChild(opts);
+        let otherInput = null;
+        if (q.allowCustomInput) {
+          const label = document.createElement('div');
+          label.className = 'qOtherLabel';
+          label.textContent = q.options && q.options.length ? 'Or type your own answer' : 'Type your answer';
+          block.appendChild(label);
+          otherInput = q.secret ? document.createElement('input') : document.createElement('textarea');
+          otherInput.className = 'qOtherInput';
+          otherInput.placeholder = 'Type your answer…';
+          if (q.secret) otherInput.type = 'password';
+          else otherInput.rows = 3;
+          otherInput.addEventListener('input', () => {
+            free[qi] = otherInput.value;
+            sel[qi] = [];
+            Array.from(opts.children).forEach((c) => c.classList.remove('on'));
+            refresh();
+          });
+          block.appendChild(otherInput);
+        }
         card.appendChild(block);
       });
       const actions = document.createElement('div'); actions.className = 'apActions';
       submit.addEventListener('click', () => {
-        const answers = {};
-        req.questions.forEach((q, qi) => { answers[q.question] = (sel[qi] || []).join(', '); });
-        vscode.postMessage({ type: 'approvalDecision', id: req.id, outcome: 'once', answers });
+        const questionResponses = req.questions.map((q, qi) => {
+          const typed = (free[qi] || '').trim();
+          return {
+            question: q.question,
+            questionId: q.id,
+            selected: typed ? [] : (sel[qi] || []),
+            ...(typed ? { text: typed } : {}),
+          };
+        });
+        vscode.postMessage({ type: 'approvalDecision', id: req.id, outcome: 'once', questionResponses });
         card.remove(); syncComposerLock();
       });
       actions.appendChild(submit);
@@ -2098,11 +2204,13 @@ export function chatHtml(): string {
     wallet: document.getElementById('walletView'),
     market: document.getElementById('marketView'),
     agents: document.getElementById('agentsView'),
+    publish: document.getElementById('publishView'),
   };
   function showView(name) {
     for (const k in panels) panels[k].style.display = (k === name) ? 'flex' : 'none';
     document.getElementById('marketsBtn').classList.toggle('on', name === 'market');
     document.getElementById('agentsBtn').classList.toggle('on', name === 'agents');
+    document.getElementById('makeSkillBtn').classList.toggle('on', name === 'publish');
     if (name === 'wallet') vscode.postMessage({ type: 'wallet' }); // refresh address
     if (name === 'market') openMarket();
     if (name === 'agents') openAgents();
@@ -2110,8 +2218,57 @@ export function chatHtml(): string {
   document.getElementById('backToChat').addEventListener('click', () => showView('chat'));
   document.getElementById('backToChatM').addEventListener('click', () => showView('chat'));
   document.getElementById('backToChatA').addEventListener('click', () => showView('chat'));
+  document.getElementById('backToChatP').addEventListener('click', () => showView('chat'));
   document.getElementById('marketsBtn').addEventListener('click', () => { closeMenus(); showView('market'); });
   document.getElementById('agentsBtn').addEventListener('click', () => { closeMenus(); showView('agents'); });
+  // make-skill: three entry points (topbar, market header, skills panel) → publish view
+  document.getElementById('makeSkillBtn').addEventListener('click', () => { closeMenus(); showView('publish'); });
+  document.getElementById('mktMakeSkillBtn').addEventListener('click', () => showView('publish'));
+  document.getElementById('panelMakeSkillBtn').addEventListener('click', () => {
+    document.getElementById('skillsPanel').style.display = 'none'; // close the panel popover
+    showView('publish');
+  });
+
+  // ---- make-skill: publish form (issue: author + publish a skill from the UI) ----
+  const pubImage = document.getElementById('pubImage');
+  const pubImageBadge = document.getElementById('pubImageBadge');
+  const pubSubmit = document.getElementById('pubSubmit');
+  const pubError = document.getElementById('pubError');
+  // an on-chain image value is a base58 txid/PDA — NOT an http url and NOT a *.png/etc.
+  // (skill-nft-json §3: the value's shape says where it lives, no isOnchain flag).
+  function looksOnChain(v) {
+    const s = (v || '').trim();
+    if (!s) return false;
+    if (/^https?:/i.test(s)) return false;
+    if (/\\.(png|jpe?g|gif|webp|svg)$/i.test(s)) return false;
+    return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s); // base58 address shape
+  }
+  pubImage.addEventListener('input', () => {
+    pubImageBadge.style.display = looksOnChain(pubImage.value) ? 'inline-block' : 'none';
+  });
+  pubSubmit.addEventListener('click', () => {
+    const name = document.getElementById('pubName').value.trim();
+    const description = document.getElementById('pubDesc').value.trim();
+    const text = document.getElementById('pubText').value.trim();
+    const priceSol = document.getElementById('pubPrice').value.trim();
+    const category = document.getElementById('pubCategory').value.trim();
+    const hashtags = document.getElementById('pubHashtags').value.split(',').map(h => h.trim()).filter(Boolean);
+    const image = pubImage.value.trim();
+    pubError.style.display = 'none';
+    const fail = (msg) => { pubError.textContent = msg; pubError.style.display = 'block'; };
+    if (!name) return fail('Name is required.');
+    if (!description) return fail('Description is required.');
+    if (!text) return fail('Skill text is required.');
+    if (!priceSol) return fail('Enter a price in SOL (use 0 for free).');
+    if (!/^\\d+(\\.\\d+)?$/.test(priceSol)) return fail('Price must be a number in SOL (e.g. 0.1).');
+    pubSubmit.disabled = true; pubSubmit.textContent = 'Publishing…';
+    vscode.postMessage({
+      type: 'publishSkill', name, description, text, priceSol,
+      category: category || undefined,
+      hashtags: hashtags.length ? hashtags : undefined,
+      image: image || undefined,
+    });
+  });
 
   // ---- agent directory + profile (issue #35) ----
   let currentProfileWallet = null;
@@ -2600,10 +2757,13 @@ export function chatHtml(): string {
     if (c.category) addTag(c.category);
     for (const h of (c.hashtags || [])) addTag('#' + h);
     if (typeof c.supply === 'number') addTag(c.supply + '\\u00d7 owned');
+    const detailPrice = fmtPrice(c.price);
+    if (detailPrice) addTag(detailPrice); // "Free" / "0.1 SOL"
     if (meta.childElementCount) mktDetailBody.appendChild(meta);
-    // buy
+    // buy — show the price on the button too, so the spend is obvious before clicking
     const buy = document.createElement('button'); buy.className = 'dt-buy';
-    buy.textContent = owned ? 'Owned' : 'Buy'; buy.disabled = owned;
+    const buyLabel = detailPrice && detailPrice !== 'Free' ? ('Buy · ' + detailPrice) : 'Buy';
+    buy.textContent = owned ? 'Owned' : buyLabel; buy.disabled = owned;
     buy.addEventListener('click', () => {
       buy.disabled = true; buy.textContent = 'Buying…';
       vscode.postMessage({ type: 'buySkill', skillId: c.id, creatorWallet: c.creator });
@@ -2653,7 +2813,10 @@ export function chatHtml(): string {
       main.appendChild(nm); main.appendChild(ds);
       main.addEventListener('click', () => openDetail(r.id)); // card body → detail view
       const sup = document.createElement('span'); sup.className = 'mc-sup';
+      const priceTxt = fmtPrice(r.price);
       sup.textContent = (typeof r.supply === 'number') ? (r.supply + '\\u00d7') : '';
+      const pr = document.createElement('span'); pr.className = 'mc-price';
+      if (priceTxt) pr.textContent = priceTxt; // "Free" / "0.1 SOL"; empty when unknown
       const buy = document.createElement('button'); buy.className = 'mc-buy';
       buy.textContent = owned ? 'Owned' : 'Buy'; buy.disabled = owned;
       buy.addEventListener('click', (e) => {
@@ -2661,7 +2824,7 @@ export function chatHtml(): string {
         buy.disabled = true; buy.textContent = 'Buying…';
         vscode.postMessage({ type: 'buySkill', skillId: r.id, creatorWallet: r.creator });
       });
-      card.appendChild(img); card.appendChild(main); card.appendChild(sup); card.appendChild(buy);
+      card.appendChild(img); card.appendChild(main); card.appendChild(sup); card.appendChild(pr); card.appendChild(buy);
       mktResults.appendChild(card);
     }
   }
@@ -2735,6 +2898,14 @@ export function chatHtml(): string {
     // compact: up to 4 dp, trim trailing zeros (e.g. 1.5 SOL, 0.0123 SOL, 0 SOL)
     const s = sol < 1 ? sol.toFixed(4) : sol.toFixed(3);
     return s.replace(/\\.?0+$/, '') + ' SOL';
+  }
+  // An item's price (lamports string from chain) → display: "Free" at 0, else SOL.
+  // null/undefined = price unknown (indexer didn't read it) → no label.
+  function fmtPrice(price) {
+    if (price == null) return null;
+    const n = Number(price);
+    if (!Number.isFinite(n)) return null;
+    return n === 0 ? 'Free' : fmtSol(n);
   }
   function renderBalance() {
     const txt = fmtSol(solLamports);
@@ -3026,6 +3197,20 @@ export function chatHtml(): string {
       }
     }
     else if (m.type === 'balance') { solLamports = m.lamports; renderBalance(); }
+    // make-skill: publish finished — reset the button, then on success celebrate + go to market
+    else if (m.type === 'publishResult') {
+      pubSubmit.disabled = false; pubSubmit.textContent = 'Publish skill';
+      if (m.ok) {
+        const nm = document.getElementById('pubName').value.trim();
+        ['pubName','pubDesc','pubCategory','pubHashtags','pubImage','pubText'].forEach(id => { document.getElementById(id).value = ''; });
+        document.getElementById('pubPrice').value = '0.1';
+        pubImageBadge.style.display = 'none';
+        celebrateSkill(nm || 'your skill');
+        showView('market'); // see it listed (it's owned by you now)
+      } else {
+        pubError.textContent = m.error || 'Publish failed.'; pubError.style.display = 'block';
+      }
+    }
     else if (m.type === 'platform') setTab(m.cli); // extension switched CLI (e.g. on session open)
     else if (m.type === 'storage') { renderStorage(m.info, m.options); renderWalletStorage(); }
     else if (m.type === 'cloudSync') renderCloudSync(m.status);

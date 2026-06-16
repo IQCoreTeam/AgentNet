@@ -8,12 +8,13 @@
 // wallet's whole owned set at session start, the agent's own search-and-buy, and the
 // passive verify gate are deliberately out of scope (next PR).
 
-import { rm, writeFile } from "node:fs/promises";
+import { access, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Connection } from "@solana/web3.js";
 import { claudeSkillsDir, codexSkillsDir, ensureDir } from "../../core/paths.js";
 import { readSkillMintMetadata } from "../../nft/token2022.js";
 import { ownedSkillMints } from "../../core/skillSource.js";
+import { recordNftSkill, forgetNftSkill } from "../registry.js";
 import { toSkillMd, skillSlug } from "./convert.js";
 
 export type Cli = "claude" | "codex";
@@ -39,6 +40,10 @@ export class SkillSync {
     const dir = join(skillsDir(cli), slug);
     await ensureDir(dir);
     await writeFile(join(dir, "SKILL.md"), toSkillMd(meta, skillMint));
+    // Record origin: this slug came from an NFT (its mint). The SKILL.md itself can't say
+    // so — the registry is what lets a surface badge it as bought vs bundled vs local.
+    // Best-effort (recordNftSkill swallows its own errors) so it never blocks the install.
+    await recordNftSkill(slug, skillMint);
     return slug;
   }
 
@@ -66,8 +71,16 @@ export class SkillSync {
     return slugs.filter((s): s is string => !!s);
   }
 
-  /** Remove an installed skill from a runtime's skills dir (e.g. on un-equip). */
+  /** Remove an installed skill from a runtime's skills dir (e.g. on un-equip). The origin
+   *  record (per-device, not per-runtime) is dropped only once the slug is gone from BOTH
+   *  runtimes — otherwise a surviving copy in the other runtime would misread as "local". */
   async remove(cli: Cli, slug: string): Promise<void> {
     await rm(join(skillsDir(cli), slug), { recursive: true, force: true });
+    const stillInstalled = await Promise.all(
+      (["claude", "codex"] as Cli[]).map((c) =>
+        access(join(skillsDir(c), slug)).then(() => true).catch(() => false),
+      ),
+    );
+    if (!stillInstalled.some(Boolean)) await forgetNftSkill(slug);
   }
 }

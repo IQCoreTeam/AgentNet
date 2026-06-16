@@ -13,7 +13,7 @@ import { readdir } from "node:fs/promises";
 import type { Wallet } from "../../runtime/contract.js";
 import { searchSkills } from "../../search/index.js";
 import { dasSource, indexerSource, ownedSkillMints } from "../../core/skillSource.js";
-import { buySkill } from "../../nft/skill.js";
+import { buySkill, publishSkill as corePublishSkill } from "../../nft/skill.js";
 import { getSolBalance } from "../../notes/index.js";
 import { readSkillText } from "../../nft/token2022.js";
 import { claudeSkillsDir } from "../../core/paths.js";
@@ -50,6 +50,18 @@ const INDEXER_URL = process.env.AGENTNET_INDEXER_URL || "https://nft-index.iqlab
 function collectionIdFor(type?: "skill" | "workflow"): Promise<string | null> {
   const id = type === "workflow" ? getWorkflowsCollectionMint() : getSkillsCollectionMint();
   return Promise.resolve(id);
+}
+
+// Parse a human SOL string ("0.1", "2", "0") into integer lamports without float
+// rounding: split on the decimal point and pad the fraction to 9 places. Returns
+// null for anything not a non-negative decimal (so the caller can reject it).
+const LAMPORTS_PER_SOL = 1_000_000_000n;
+function solToLamports(sol: string): bigint | null {
+  const s = sol.trim();
+  if (!/^\d+(\.\d+)?$/.test(s)) return null;
+  const [whole, frac = ""] = s.split(".");
+  if (frac.length > 9) return null; // more precision than a lamport can hold
+  return BigInt(whole) * LAMPORTS_PER_SOL + BigInt(frac.padEnd(9, "0") || "0");
 }
 
 export async function marketplaceEnv(wallet: Wallet) {
@@ -118,6 +130,32 @@ export async function marketplaceEnv(wallet: Wallet) {
         });
         const slug = await skills.installBoughtAll(skillId); // equip: drop SKILL.md into skills dirs
         return { ok: true, slug: slug ?? undefined };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) };
+      }
+    },
+
+    // make-skill: publish a new skill the user authored in the UI. priceSol is the
+    // human SOL string from the form (default "0.1"); convert to lamports here so the
+    // contract layer only ever sees lamports. image is passed through as-is (its shape
+    // tells the viewer where it lives — skill-nft-json §3).
+    async publishSkill(input: {
+      name: string; description: string; text: string;
+      category?: string; hashtags?: string[]; priceSol: string; image?: string;
+    }): Promise<{ ok: boolean; mint?: string; error?: string }> {
+      try {
+        const lamports = solToLamports(input.priceSol);
+        if (lamports === null) return { ok: false, error: "Enter a valid price in SOL (e.g. 0.1)" };
+        const mint = await corePublishSkill(conn, wallet, {
+          name: input.name,
+          description: input.description,
+          text: input.text,
+          category: input.category,
+          hashtags: input.hashtags,
+          price: lamports,
+          image: input.image,
+        });
+        return { ok: true, mint };
       } catch (e) {
         return { ok: false, error: e instanceof Error ? e.message : String(e) };
       }

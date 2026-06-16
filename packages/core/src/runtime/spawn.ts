@@ -20,7 +20,13 @@ import { Codex } from "@openai/codex-sdk";
 import type { ChatMessage, ImageInput } from "./contract.js";
 import { mapClaudeMessage } from "./convert/claude.js";
 import { skillFromPath } from "./convert/codex.js";
-import type { ApprovalChannel, ApprovalRequest } from "./approval/channel.js";
+import type {
+  ApprovalChannel,
+  ApprovalDecision,
+  ApprovalQuestion,
+  ApprovalQuestionResponse,
+  ApprovalRequest,
+} from "./approval/channel.js";
 import { autoApprove } from "./approval/channel.js";
 
 // Loosely-typed view of AskUserQuestion's raw input (the SDK hands us `unknown`-ish data).
@@ -29,6 +35,15 @@ type ApprovalQuestionInput = {
   header?: unknown;
   multiSelect?: unknown;
   options?: { label?: unknown; description?: unknown }[];
+};
+
+type CodexRequestUserInputQuestion = {
+  id?: unknown;
+  header?: unknown;
+  question?: unknown;
+  isOther?: unknown;
+  isSecret?: unknown;
+  options?: { label?: unknown; description?: unknown }[] | null;
 };
 
 // The SDK bundles its own native CLI binary, but when we BUNDLE the extension the
@@ -267,14 +282,14 @@ function claudeEngine(opts: SpawnOpts): Engine {
       allowed.add(key); // remember for the rest of the session
       savePersistentWhitelist(allowed);
     }
-    // AskUserQuestion isn't a yes/no gate: the user's choice IS the tool result. The SDK
-    // takes it via updatedInput.answers (question text → chosen label). We allow with that
-    // input so claude continues with the answer, instead of trying to render its own
-    // (headless, no-TTY) picker and hanging.
-    if (toolName === "AskUserQuestion" && decision.answers) {
+    // AskUserQuestion isn't a yes/no gate: the user's answer IS the tool result. The SDK
+    // takes it via updatedInput.answers / response, so we allow with that payload and
+    // skip claude's own headless picker.
+    const questionInput = buildClaudeQuestionInput(input.questions, decision);
+    if (toolName === "AskUserQuestion" && questionInput) {
       return {
         behavior: "allow" as const,
-        updatedInput: { questions: input.questions, answers: decision.answers },
+        updatedInput: questionInput,
       };
     }
     return { behavior: "allow" as const, updatedInput: decision.updatedInput ?? input };
@@ -700,6 +715,31 @@ function codexEngine(opts: SpawnOpts): Engine {
             scope: decision.outcome === "always" ? "session" : "turn",
           });
         }
+      } else if (msg.method === "item/tool/requestUserInput") {
+        const questions = toCodexApprovalQuestions(
+          Array.isArray(params.questions) ? (params.questions as CodexRequestUserInputQuestion[]) : [],
+        );
+        const req: ApprovalRequest = {
+          id: randomId(),
+          cli: "codex",
+          sessionId,
+          tool: "request_user_input",
+          kind: "question",
+          title: questions[0]?.question || "Input needed",
+          questions,
+          input: { itemId: params.itemId, turnId: params.turnId },
+        };
+        const decision = await approval.request(req);
+        if (decision.outcome === "deny") {
+          sendError(msg.id, { code: 4001, message: decision.reason ?? "User declined input request" });
+          return;
+        }
+        const response = buildCodexQuestionResponse(questions, decision);
+        if (!response) {
+          sendError(msg.id, { code: 4000, message: "Question response was incomplete" });
+          return;
+        }
+        sendResponse(msg.id, response);
       } else {
         sendError(msg.id, { code: -32601, message: `Method '${msg.method}' not implemented` });
       }
@@ -804,14 +844,7 @@ function toApprovalRequest(
   const file = strOr(input.file_path);
   // AskUserQuestion: surface the questions + options so the UI can render a choice list.
   if (tool === "AskUserQuestion" && Array.isArray(input.questions)) {
-    const questions = (input.questions as ApprovalQuestionInput[]).map((q) => ({
-      question: strOr(q.question),
-      header: typeof q.header === "string" ? q.header : undefined,
-      multiSelect: q.multiSelect === true,
-      options: Array.isArray(q.options)
-        ? q.options.map((o) => ({ label: strOr(o.label), description: typeof o.description === "string" ? o.description : undefined }))
-        : [],
-    }));
+    const questions = toClaudeApprovalQuestions(input.questions as ApprovalQuestionInput[]);
     const title = questions[0]?.question || "A question for you";
     return { id, cli, sessionId, tool, kind: "question", title, questions, input };
   }
@@ -859,6 +892,124 @@ function pairDiff(oldStr: string, newStr: string): string {
   if (oldStr) for (const l of oldStr.split("\n")) out.push("-" + l);
   if (newStr) for (const l of newStr.split("\n")) out.push("+" + l);
   return out.join("\n");
+}
+
+function toClaudeApprovalQuestions(input: ApprovalQuestionInput[]): ApprovalQuestion[] {
+  return input.map((q) => ({
+    question: strOr(q.question),
+    header: typeof q.header === "string" ? q.header : undefined,
+    multiSelect: q.multiSelect === true,
+    allowCustomInput: true,
+    secret: false,
+    options: Array.isArray(q.options)
+      ? q.options.map((o) => ({
+          label: strOr(o.label),
+          description: typeof o.description === "string" ? o.description : undefined,
+        }))
+      : [],
+  }));
+}
+
+function toCodexApprovalQuestions(input: CodexRequestUserInputQuestion[]): ApprovalQuestion[] {
+  return input.map((q) => {
+    const options = Array.isArray(q.options)
+      ? q.options.map((o) => ({
+          label: strOr(o.label),
+          description: strOr(o.description) || undefined,
+        }))
+      : [];
+    return {
+      id: strOr(q.id) || undefined,
+      question: strOr(q.question),
+      header: strOr(q.header) || undefined,
+      multiSelect: false,
+      // free-text when codex offers "Other", OR whenever there are no options — a question
+      // with neither options nor a text field would be impossible to answer.
+      allowCustomInput: q.isOther === true || options.length === 0,
+      secret: q.isSecret === true,
+      options,
+    };
+  });
+}
+
+function normalizeQuestionResponses(
+  questions: ApprovalQuestion[],
+  decision: ApprovalDecision,
+): ApprovalQuestionResponse[] {
+  const byId = new Map<string, ApprovalQuestionResponse>();
+  const byQuestion = new Map<string, ApprovalQuestionResponse>();
+  for (const raw of decision.questionResponses ?? []) {
+    const normalized: ApprovalQuestionResponse = {
+      question: raw.question,
+      questionId: raw.questionId,
+      selected: Array.isArray(raw.selected) ? raw.selected.filter(Boolean) : [],
+      text: raw.text?.trim() || undefined,
+    };
+    if (normalized.questionId) byId.set(normalized.questionId, normalized);
+    byQuestion.set(normalized.question, normalized);
+  }
+
+  return questions.map((q) => {
+    const response = (q.id && byId.get(q.id)) || byQuestion.get(q.question);
+    if (response) {
+      return {
+        question: q.question,
+        questionId: q.id,
+        selected: response.text ? [] : response.selected,
+        text: response.text,
+      };
+    }
+    const legacy = decision.answers?.[q.question]?.trim();
+    return {
+      question: q.question,
+      questionId: q.id,
+      selected: legacy ? legacy.split(",").map((v) => v.trim()).filter(Boolean) : [],
+    };
+  });
+}
+
+function questionResponseValue(response: ApprovalQuestionResponse): string {
+  const typed = response.text?.trim();
+  return typed && typed.length ? typed : response.selected.join(", ");
+}
+
+function buildClaudeQuestionInput(
+  rawQuestions: unknown,
+  decision: ApprovalDecision,
+): Record<string, unknown> | null {
+  if (!Array.isArray(rawQuestions)) return null;
+  const questions = toClaudeApprovalQuestions(rawQuestions as ApprovalQuestionInput[]);
+  const questionResponses = normalizeQuestionResponses(questions, decision);
+  const answers = Object.fromEntries(
+    questionResponses
+      .map((response) => [response.question, questionResponseValue(response)] as const)
+      .filter(([, value]) => value.length > 0),
+  );
+  if (Object.keys(answers).length === 0) return null;
+  const typedResponses = questionResponses
+    .map((response) => response.text?.trim())
+    .filter((text): text is string => !!text);
+  return {
+    questions: rawQuestions,
+    answers,
+    ...(questions.length === 1 && typedResponses.length === 1 ? { response: typedResponses[0] } : {}),
+  };
+}
+
+function buildCodexQuestionResponse(
+  questions: ApprovalQuestion[],
+  decision: ApprovalDecision,
+): { answers: Record<string, { answers: string[] }> } | null {
+  const questionResponses = normalizeQuestionResponses(questions, decision);
+  const answers: Record<string, { answers: string[] }> = {};
+  for (const response of questionResponses) {
+    const key = response.questionId || response.question;
+    const typed = response.text?.trim();
+    const values = typed && typed.length ? [typed] : response.selected.filter(Boolean);
+    if (!values.length) return null;
+    answers[key] = { answers: values };
+  }
+  return Object.keys(answers).length ? { answers } : null;
 }
 
 // Heuristic flag for destructive/irreversible shell actions. Not a security boundary —

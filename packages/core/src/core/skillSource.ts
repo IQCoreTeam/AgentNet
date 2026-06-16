@@ -238,6 +238,7 @@ interface IndexerItem {
   description: string;
   creator: string | null;
   supply: number;
+  price: string | null; // lamports (decimal string) from the on-chain ItemConfig PDA
   attributes: { trait_type: string; value: string }[];
 }
 
@@ -272,7 +273,7 @@ export function indexerSource(baseUrl: string): SkillSource {
           category,
           hashtags,
           requiredSkills,
-          price: "0",
+          price: it.price ?? undefined, // on-chain price (lamports); absent if unpriced
           supply: it.supply, // live — already hydrated by the indexer
           uriTxid: "",
           createdAt: 0,
