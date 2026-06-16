@@ -34,11 +34,13 @@ const MODES: Record<Cli, { value: string; label: string; title: string }[]> = {
 };
 
 // Slash commands handled locally in this surface (not forwarded to the agent).
-const SLASH_CMDS: { name: string; desc: string }[] = [
+const SLASH_CMDS = [
   { name: "new",    desc: "start a fresh session" },
   { name: "clear",  desc: "clear on-screen log" },
+  { name: "copy",   desc: "copy last reply to clipboard" },
   { name: "engine", desc: "switch engine — claude|codex" },
   { name: "model",  desc: "change model" },
+  { name: "mode",   desc: "change permission mode" },
   { name: "effort", desc: "set reasoning effort" },
   { name: "help",   desc: "list commands" },
 ];
@@ -63,6 +65,103 @@ export function Composer() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const busy = state.typing;
   const frozen = state.approvals.length > 0;
+
+  const [slashIdx, setSlashIdx] = useState(0);
+  const [suppressSlash, setSuppressSlash] = useState(false);
+
+  // Derived state: active slash matches
+  let activeMatches: { name: string; desc: string; insert: string }[] = [];
+  let subCmd: string | null = null;
+  if (!suppressSlash) {
+    // 1. Engine options
+    let m = /^\/engine(?:\s+(\S*))?$/.exec(text);
+    if (m) {
+      subCmd = 'engine';
+      const prefix = (m[1] || '').toLowerCase();
+      const options = [
+        { name: 'claude', desc: 'switch to Claude engine', insert: '/engine claude' },
+        { name: 'codex',  desc: 'switch to Codex engine',  insert: '/engine codex' }
+      ];
+      activeMatches = options.filter(opt => opt.name.toLowerCase().startsWith(prefix));
+    }
+    // 2. Model options
+    if (!subCmd) {
+      m = /^\/model(?:\s+(\S*))?$/.exec(text);
+      if (m) {
+        subCmd = 'model';
+        const prefix = (m[1] || '').toLowerCase();
+        const list = MODELS[state.cli] || [];
+        const options = list.map(o => ({ name: o.value, desc: o.label, insert: '/model ' + o.value }));
+        activeMatches = options.filter(opt => opt.name.toLowerCase().startsWith(prefix));
+      }
+    }
+    // 3. Mode options
+    if (!subCmd) {
+      m = /^\/mode(?:\s+(\S*))?$/.exec(text);
+      if (m) {
+        subCmd = 'mode';
+        const prefix = (m[1] || '').toLowerCase();
+        const list = MODES[state.cli] || [];
+        const options = list.map(o => ({ name: o.value, desc: o.label + ' - ' + o.title, insert: '/mode ' + o.value }));
+        activeMatches = options.filter(opt => opt.name.toLowerCase().startsWith(prefix));
+      }
+    }
+    // 4. Effort options
+    if (!subCmd) {
+      m = /^\/effort(?:\s+(\S*))?$/.exec(text);
+      if (m) {
+        subCmd = 'effort';
+        const prefix = (m[1] || '').toLowerCase();
+        const options = EFFORTS.map(o => ({ name: o.value, desc: o.label, insert: '/effort ' + o.value }));
+        activeMatches = options.filter(opt => opt.name.toLowerCase().startsWith(prefix));
+      }
+    }
+    // 5. Main options
+    if (!subCmd) {
+      m = /^\/(\S*)$/.exec(text);
+      if (m) {
+        const prefix = m[1].toLowerCase();
+        const options = SLASH_CMDS.map(c => ({
+          name: c.name,
+          desc: c.desc,
+          insert: '/' + c.name + (['engine', 'model', 'mode', 'effort'].includes(c.name) ? ' ' : '')
+        }));
+        activeMatches = options.filter(opt => opt.name.toLowerCase().startsWith(prefix));
+      }
+    }
+  }
+
+  // If the user fully typed the sub-command argument, hide the menu
+  const isFullyTyped = !!(subCmd && activeMatches.length === 1 && activeMatches[0].name.toLowerCase() === (text.split(/\s+/)[1] || '').toLowerCase());
+  const showMenu = activeMatches.length > 0 && !isFullyTyped;
+
+  function completeSlash(c: { name: string; desc: string; insert: string }) {
+    setText(c.insert);
+    setSuppressSlash(false);
+    setSlashIdx(0);
+    if (taRef.current) {
+      taRef.current.focus();
+      // Auto-grow height immediately
+      setTimeout(() => {
+        if (taRef.current) {
+          taRef.current.style.height = "auto";
+          taRef.current.style.height = `${taRef.current.scrollHeight}px`;
+        }
+      }, 0);
+    }
+  }
+
+  // Outside click listener
+  useEffect(() => {
+    if (!showMenu) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (taRef.current && !taRef.current.parentElement?.contains(e.target as Node)) {
+        setSuppressSlash(true);
+      }
+    };
+    document.addEventListener("click", handleOutsideClick);
+    return () => document.removeEventListener("click", handleOutsideClick);
+  }, [showMenu]);
 
   function encodeFile(file: File): Promise<ImageInput & { dataUrl: string }> {
     return new Promise((resolve, reject) => {
@@ -123,7 +222,7 @@ export function Composer() {
           if (arg) { setEffort(arg); send({ type: "effort", effort: arg === "default" ? undefined : arg }); }
           setText(""); return;
         case "help": {
-          const lines = [...SLASH_CMDS, { name: "copy", desc: "copy last reply to clipboard" }, { name: "mode", desc: "set permission mode" }]
+          const lines = SLASH_CMDS
             .map((c) => `/${c.name} — ${c.desc}`).join("\n");
           setSlashNotice(lines);
           setText(""); return;
@@ -262,12 +361,41 @@ export function Composer() {
       )}
 
       <div
-        className={`flex items-end gap-2 rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 ${
+        className={`relative flex items-end gap-2 rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 ${
           frozen ? "opacity-60" : ""
         }`}
         onDragOver={(e) => { e.preventDefault(); }}
         onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files) void addFiles(e.dataTransfer.files); }}
       >
+        {showMenu && (
+          <div className="absolute bottom-[calc(100%+6px)] left-0 right-0 z-50 flex flex-col gap-0.5 rounded-lg border border-zinc-800 bg-zinc-950 p-1 shadow-2xl max-h-48 overflow-y-auto">
+            {activeMatches.map((cmd, idx) => {
+              const isSel = idx === slashIdx;
+              const label = subCmd ? cmd.name : '/' + cmd.name;
+              return (
+                <button
+                  key={cmd.name}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    completeSlash(cmd);
+                  }}
+                  className={`flex items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors ${
+                    isSel
+                      ? "bg-zinc-800 text-zinc-100"
+                      : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                  }`}
+                >
+                  <span className="font-semibold text-zinc-200">{label}</span>
+                  <span className="opacity-60 text-[10px] truncate">{cmd.desc}</span>
+                </button>
+              );
+            })}
+            <div className="border-t border-zinc-900 mt-1 px-2 pt-1.5 pb-0.5 text-[9px] text-zinc-600 select-none">
+              Use ↑↓ to navigate, Tab/Enter to select, Esc to close
+            </div>
+          </div>
+        )}
         {/* paperclip attach button */}
         <button
           type="button"
@@ -292,10 +420,42 @@ export function Composer() {
           rows={1}
           value={text}
           disabled={frozen}
-          onChange={(e) => { setText(e.target.value); autoGrow(e.target); }}
+          onChange={(e) => {
+            setText(e.target.value);
+            autoGrow(e.target);
+            setSuppressSlash(false);
+            setSlashIdx(0);
+          }}
           onPaste={onPaste}
           onKeyDown={(e) => {
             if (e.nativeEvent.isComposing) return;
+
+            if (showMenu) {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setSlashIdx((slashIdx + 1) % activeMatches.length);
+                return;
+              }
+              if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setSlashIdx((slashIdx - 1 + activeMatches.length) % activeMatches.length);
+                return;
+              }
+              if (e.key === "Tab" || e.key === "Enter") {
+                e.preventDefault();
+                if (activeMatches[slashIdx]) {
+                  completeSlash(activeMatches[slashIdx]);
+                }
+                return;
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                e.stopPropagation();
+                setSuppressSlash(true);
+                return;
+              }
+            }
+
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               submit();
