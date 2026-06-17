@@ -5,6 +5,7 @@ import { PickEngine } from "./onboarding/PickEngine";
 import { ConnectClaude } from "./onboarding/ConnectClaude";
 import { ConnectCodex } from "./onboarding/ConnectCodex";
 import { ChatScreen } from "./chat/ChatScreen";
+import { MarketScreen } from "./market/MarketScreen";
 import { Toast } from "./Toast";
 
 // Phase router:
@@ -25,7 +26,8 @@ export function App() {
       {state.phase === "engineSelect" && <PickEngine />}
       {state.phase === "claudeAuth" && <ConnectClaude />}
       {state.phase === "codexAuth" && <ConnectCodex />}
-      {state.phase === "chat" && <ChatScreen />}
+      {state.phase === "chat" && !state.marketOpen && <ChatScreen />}
+      {state.phase === "chat" && state.marketOpen && <MarketScreen />}
       <Toast />
     </>
   );

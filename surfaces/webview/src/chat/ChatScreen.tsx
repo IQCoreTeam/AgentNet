@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { MessageList } from "./MessageList";
 import { ApprovalDock } from "./ApprovalDock";
@@ -9,8 +9,17 @@ import { Sessions } from "./Sessions";
 // dock + composer pinned at the bottom. Uses --vvh (visual viewport height) so the layout
 // shrinks above the on-screen keyboard instead of being covered by it.
 export function ChatScreen() {
-  const { state } = useStore();
+  const { state, openMarket } = useStore();
   const [drawer, setDrawer] = useState(false);
+  // Clear the firing skill glow after the dwell time
+  const firingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (state.firingSkill) {
+      if (firingTimer.current) clearTimeout(firingTimer.current);
+      firingTimer.current = setTimeout(() => {}, 1400);
+    }
+    return () => { if (firingTimer.current) clearTimeout(firingTimer.current); };
+  }, [state.firingSkill]);
 
   // Track the visual viewport so the composer stays above the mobile keyboard. We set a
   // CSS var on the root and size the shell to it; on desktop this is just window height.
@@ -44,11 +53,24 @@ export function ChatScreen() {
           ☰
         </button>
         <span className="truncate text-sm font-medium">{activeTitle}</span>
-        {addr && (
-          <span className="ml-auto shrink-0 font-mono text-xs text-zinc-500">
-            {addr.slice(0, 4)}…{addr.slice(-4)}
-          </span>
-        )}
+        <div className="ml-auto flex items-center gap-2 shrink-0">
+          {state.firingSkill && (
+            <span className="text-xs text-green-400 animate-pulse skill-firing-badge">
+              ✨ {state.firingSkill}
+            </span>
+          )}
+          <button
+            onClick={openMarket}
+            className="text-xs text-zinc-400 border border-zinc-700 rounded-lg px-2 py-1 active:bg-zinc-800"
+          >
+            Markets
+          </button>
+          {addr && (
+            <span className="font-mono text-xs text-zinc-500">
+              {addr.slice(0, 4)}…{addr.slice(-4)}
+            </span>
+          )}
+        </div>
       </header>
 
       {state.loading && (

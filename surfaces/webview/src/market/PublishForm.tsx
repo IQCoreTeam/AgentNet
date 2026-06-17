@@ -1,0 +1,146 @@
+import { useState } from "react";
+import { useStore } from "../state/store";
+
+interface Props {
+  onBack: () => void;
+}
+
+export function PublishForm({ onBack }: Props) {
+  const { send, state, clearPublishResult } = useStore();
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [text, setText] = useState("");
+  const [category, setCategory] = useState("");
+  const [hashtags, setHashtags] = useState("");
+  const [priceSol, setPriceSol] = useState("0");
+  const [submitting, setSubmitting] = useState(false);
+
+  const result = state.publishResult;
+
+  function handleSubmit() {
+    if (!name.trim() || !text.trim()) return;
+    setSubmitting(true);
+    clearPublishResult();
+    send({
+      type: "publishSkill",
+      name: name.trim(),
+      description: description.trim(),
+      text: text.trim(),
+      category: category.trim() || undefined,
+      hashtags: hashtags.split(",").map((h) => h.trim()).filter(Boolean),
+      priceSol: priceSol || "0",
+    });
+    setTimeout(() => setSubmitting(false), 15000);
+  }
+
+  if (result) {
+    return (
+      <div className="flex flex-col h-full">
+        <header className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2 shrink-0">
+          <button onClick={() => { clearPublishResult(); onBack(); }} className="text-zinc-400 active:text-zinc-200 px-1 text-lg">←</button>
+          <span className="font-medium text-sm">Publish Skill</span>
+        </header>
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
+          {result.ok ? (
+            <>
+              <div className="text-4xl">✨</div>
+              <p className="text-green-400 font-semibold">Skill minted!</p>
+              {result.mint && <p className="font-mono text-xs text-zinc-500">{result.mint}</p>}
+              <button onClick={() => { clearPublishResult(); onBack(); }} className="mt-2 text-sm text-zinc-400 underline">Back to market</button>
+            </>
+          ) : (
+            <>
+              <div className="text-4xl">⚠️</div>
+              <p className="text-red-400 font-semibold">Publish failed</p>
+              <p className="text-xs text-zinc-500">{result.error}</p>
+              <button onClick={() => { clearPublishResult(); setSubmitting(false); }} className="mt-2 text-sm text-zinc-400 underline">Try again</button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      <header className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2 shrink-0">
+        <button onClick={onBack} className="text-zinc-400 active:text-zinc-200 px-1 text-lg">←</button>
+        <span className="font-medium text-sm">Publish Skill</span>
+      </header>
+
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        <Field label="Name *">
+          <input
+            className="input-field"
+            placeholder="My Skill"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </Field>
+        <Field label="Description">
+          <input
+            className="input-field"
+            placeholder="What does this skill do?"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </Field>
+        <Field label="SKILL.md content *">
+          <textarea
+            className="input-field font-mono text-xs"
+            rows={8}
+            placeholder="# My Skill&#10;&#10;## Description&#10;…"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+          />
+        </Field>
+        <Field label="Category">
+          <input
+            className="input-field"
+            placeholder="e.g. coding, writing"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          />
+        </Field>
+        <Field label="Hashtags (comma-separated)">
+          <input
+            className="input-field"
+            placeholder="ai, productivity"
+            value={hashtags}
+            onChange={(e) => setHashtags(e.target.value)}
+          />
+        </Field>
+        <Field label="Price (SOL)">
+          <input
+            className="input-field"
+            type="number"
+            min="0"
+            step="0.001"
+            placeholder="0"
+            value={priceSol}
+            onChange={(e) => setPriceSol(e.target.value)}
+          />
+        </Field>
+      </div>
+
+      <div className="shrink-0 border-t border-zinc-800 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <button
+          onClick={handleSubmit}
+          disabled={submitting || !name.trim() || !text.trim()}
+          className="w-full rounded-xl bg-green-600 py-3 text-sm font-semibold text-white active:bg-green-500 disabled:opacity-50"
+        >
+          {submitting ? "Minting NFT…" : "Mint & Publish"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <label className="text-[11px] text-zinc-500 uppercase tracking-wide">{label}</label>
+      {children}
+    </div>
+  );
+}

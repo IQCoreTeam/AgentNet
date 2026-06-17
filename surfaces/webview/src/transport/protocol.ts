@@ -4,6 +4,10 @@
 // webview already speaks — this surface is a second client of the SAME protocol, not a
 // new one. Keep these in sync with packages/core/src/chat/session.ts.
 
+// Market types are defined once in packages/core and re-exported here so every surface
+// that imports from this file gets compile-time checking on the market message contract.
+export type { SkillCard, SkillDetail, MarketRequest, MarketEvent, RpcStatus, AgentProfile } from "@iqlabs-official/agent-sdk";
+
 // ── shared payload shapes ──
 
 export type Cli = "claude" | "codex";
@@ -112,7 +116,31 @@ export type ClientMessage =
   | { type: "googleAuthCode"; code: string }
   | { type: "cancelGoogleLogin" }
   | { type: "setGoogleCredentials"; clientId: string; clientSecret: string }
-  | { type: "toast"; text: string };
+  | { type: "toast"; text: string }
+  // ── market (UI→server) ──
+  | { type: "searchSkills"; query: string; kind?: "skill" | "workflow" }
+  | { type: "getSkillDetail"; mint: string }
+  | { type: "buySkill"; skillId: string; creatorWallet?: string }
+  | { type: "ownedSkills" }
+  | { type: "getBalance" }
+  | { type: "getRpcStatus" }
+  | { type: "submitHeliusKey"; key: string }
+  | { type: "useDefaultRpc" }
+  | { type: "listAgents" }
+  | { type: "getAgentProfile"; wallet: string }
+  | { type: "buyAllSkills"; wallet: string }
+  | { type: "postNote"; skillId: string; skillType?: "skill" | "workflow"; text: string; gitLink?: string }
+  | { type: "postAgentNote"; agentWallet: string; text: string; gitLink?: string }
+  | {
+      type: "publishSkill";
+      name: string;
+      description: string;
+      text: string;
+      category?: string;
+      hashtags?: string[];
+      priceSol: string;
+      image?: string;
+    };
 
 // ── server → UI (SSE /events) ──
 
@@ -147,4 +175,20 @@ export type ServerMessage =
   // result of saving user-supplied Google OAuth client credentials (setGoogleCredentials).
   | { type: "googleCredsStatus"; status: "saved" | "error"; error?: string }
   | { type: "openUrl"; url: string }
-  | { type: "toast"; text: string };
+  | { type: "toast"; text: string }
+  // ── market (server→UI) ──
+  | { type: "searchResults"; results: import("@iqlabs-official/agent-sdk").SkillCard[] }
+  | { type: "searchError"; message: string }
+  | { type: "skillDetail"; detail: import("@iqlabs-official/agent-sdk").SkillDetail }
+  | { type: "buyResult"; skillId: string; ok: boolean; slug?: string; error?: string }
+  | { type: "ownedSkills"; names: string[]; mints?: Record<string, string> }
+  | { type: "balance"; lamports: number | null }
+  | { type: "skillActive"; name: string }
+  | { type: "rpcStatus"; status: import("@iqlabs-official/agent-sdk").RpcStatus }
+  | { type: "postNoteResult"; skillId: string; ok: boolean; error?: string }
+  | { type: "notes"; skillId: string; notes: unknown[] }
+  | { type: "agents"; agents: unknown[] }
+  | { type: "agentProfile"; profile: import("@iqlabs-official/agent-sdk").AgentProfile }
+  | { type: "buyAllResult"; wallet: string; ok: boolean; bought: number; failed: number; error?: string }
+  | { type: "agentNoteResult"; agentWallet: string; ok: boolean; error?: string }
+  | { type: "publishResult"; ok: boolean; mint?: string; error?: string };

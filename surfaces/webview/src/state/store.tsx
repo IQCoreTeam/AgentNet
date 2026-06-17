@@ -20,6 +20,9 @@ import type {
   ClientMessage,
   ServerMessage,
   SessionMeta,
+  SkillCard,
+  SkillDetail,
+  RpcStatus,
 } from "../transport/protocol";
 
 // A rendered log entry. We keep messages as-is and stream into the last assistant/
@@ -35,6 +38,19 @@ export interface State {
     | "claudeAuth"
     | "codexAuth"
     | "chat";
+  // market overlay (accessible from chat phase via "Markets" button)
+  marketOpen: boolean;
+  marketTab: "skill" | "workflow";
+  marketQuery: string;
+  marketResults: SkillCard[] | null;
+  marketSearching: boolean;
+  marketSearchError: string | null;
+  marketDetail: SkillDetail | null;
+  marketOwned: string[];
+  marketBalance: number | null;
+  rpcStatus: RpcStatus | null;
+  publishResult: { ok: boolean; mint?: string; error?: string } | null;
+  firingSkill: string | null; // currently casting skill name (god-mode glow)
   walletAddress: string | null;
   cli: Cli;
   googleLoginUrl: string | null;
@@ -88,6 +104,18 @@ const initialState: State = {
   hasMore: false,
   cursor: 0,
   toast: null,
+  marketOpen: false,
+  marketTab: "skill",
+  marketQuery: "",
+  marketResults: null,
+  marketSearching: false,
+  marketSearchError: null,
+  marketDetail: null,
+  marketOwned: [],
+  marketBalance: null,
+  rpcStatus: null,
+  publishResult: null,
+  firingSkill: null,
 };
 
 // Append a streamed message: if the incoming partial continues the same role/cli as the
@@ -117,7 +145,15 @@ type LocalAction =
   | { type: "__removeApproval"; id: string }
   | { type: "__clearToast" }
   | { type: "__selectEngine"; cli: Cli }
-  | { type: "__finishStorage" };
+  | { type: "__finishStorage" }
+  | { type: "__savePlan"; text: string }
+  | { type: "__openMarket" }
+  | { type: "__closeMarket" }
+  | { type: "__setMarketTab"; tab: "skill" | "workflow" }
+  | { type: "__setMarketQuery"; query: string }
+  | { type: "__marketSearching" }
+  | { type: "__clearMarketDetail" }
+  | { type: "__clearPublishResult" };
 type Action = ServerMessage | LocalAction;
 
 function reducer(state: State, ev: Action): State {
@@ -219,6 +255,50 @@ function reducer(state: State, ev: Action): State {
       return { ...state, approvals: [ev.req, ...state.approvals] };
     case "toast":
       return { ...state, toast: ev.text };
+    // ── market local actions ──
+    case "__savePlan":
+      return { ...state, log: [...state.log, { role: "summary" as const, text: `📋 Saved plan\n\n${ev.text}` }] };
+    case "__openMarket":
+      return { ...state, marketOpen: true };
+    case "__closeMarket":
+      return { ...state, marketOpen: false, marketDetail: null, publishResult: null };
+    case "__setMarketTab":
+      return { ...state, marketTab: ev.tab, marketResults: null, marketDetail: null };
+    case "__setMarketQuery":
+      return { ...state, marketQuery: ev.query };
+    case "__marketSearching":
+      return { ...state, marketSearching: true, marketSearchError: null };
+    case "__clearMarketDetail":
+      return { ...state, marketDetail: null };
+    case "__clearPublishResult":
+      return { ...state, publishResult: null };
+    // ── market server events ──
+    case "searchResults":
+      return { ...state, marketResults: ev.results, marketSearching: false, marketSearchError: null };
+    case "searchError":
+      return { ...state, marketSearching: false, marketSearchError: ev.message };
+    case "skillDetail":
+      return { ...state, marketDetail: ev.detail };
+    case "buyResult":
+      return { ...state, toast: ev.ok ? `Bought! Slug: ${ev.slug ?? ev.skillId}` : `Buy failed: ${ev.error ?? "unknown"}` };
+    case "ownedSkills":
+      return { ...state, marketOwned: ev.names };
+    case "balance":
+      return { ...state, marketBalance: ev.lamports };
+    case "rpcStatus":
+      return { ...state, rpcStatus: ev.status };
+    case "skillActive":
+      return { ...state, firingSkill: ev.name };
+    case "publishResult":
+      return { ...state, publishResult: ev };
+    case "postNoteResult":
+      return { ...state, toast: ev.ok ? "Comment posted." : `Comment failed: ${ev.error ?? "unknown"}` };
+    case "agents":
+    case "agentProfile":
+    case "buyAllResult":
+    case "agentNoteResult":
+    case "notes":
+      return state;
     default:
       return state;
   }
@@ -233,6 +313,14 @@ interface Store {
   clearToast: () => void;
   selectEngine: (cli: Cli) => void;
   finishStorage: () => void;
+  savePlan: (text: string) => void;
+  openMarket: () => void;
+  closeMarket: () => void;
+  setMarketTab: (tab: "skill" | "workflow") => void;
+  setMarketQuery: (q: string) => void;
+  marketSearching: () => void;
+  clearMarketDetail: () => void;
+  clearPublishResult: () => void;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -289,6 +377,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // Activate the chosen engine; routing (login gate / chat) is decided in the reducer.
       selectEngine: (cli) => raw({ type: "__selectEngine", cli }),
       finishStorage: () => raw({ type: "__finishStorage" }),
+      savePlan: (text) => raw({ type: "__savePlan", text }),
+      openMarket: () => raw({ type: "__openMarket" }),
+      closeMarket: () => raw({ type: "__closeMarket" }),
+      setMarketTab: (tab) => raw({ type: "__setMarketTab", tab }),
+      setMarketQuery: (query) => raw({ type: "__setMarketQuery", query }),
+      marketSearching: () => raw({ type: "__marketSearching" }),
+      clearMarketDetail: () => raw({ type: "__clearMarketDetail" }),
+      clearPublishResult: () => raw({ type: "__clearPublishResult" }),
     };
   }, [state]);
 
