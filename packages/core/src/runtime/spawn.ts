@@ -92,11 +92,11 @@ export interface SpawnOpts {
   mode?: string;
   approval?: ApprovalChannel; // how tool approvals get decided; default = auto-allow
   // Passive skill-shopping (issue #21). Claude-only for now (Codex MCP via TOML deferred).
-  // Built by the runtime per spawn when the toggle is ON: the marketplace SDK MCP server,
-  // the tool ids to allow, and the workflow prose appended to the system prompt.
+  // Built by the runtime per spawn when the toggle is ON: the marketplace SDK MCP server
+  // + the tool ids to allow. (Skill awareness is a managed memory section now, not a
+  // system-prompt append — so there's no appendSystemPrompt option anymore.)
   mcpServers?: Record<string, unknown>;
   allowedTools?: string[];
-  appendSystemPrompt?: string;
   stream?: boolean; // emit partial assistant deltas (claude includePartialMessages)
   apiKey?: string; // Stage 1 Codex API Key
   ephemeral?: boolean; // If true, disable tools / auto-deny approvals
@@ -305,26 +305,19 @@ function claudeEngine(opts: SpawnOpts): Engine {
       canUseTool,
       includePartialMessages: !!opts.stream,
       effort: opts.effort,
-      // keep claude's full coding system prompt, append an anti-laziness nudge: some
-      // models reply "already done / file exists" on simple asks without acting. This
-      // pushes them to verify-or-create with a tool instead of describing.
-      systemPrompt: {
-        type: "preset",
-        preset: "claude_code",
-        append:
-          "Never assume a file already exists or that a task is already done. " +
-          "Verify with a tool (Read/Bash) or create it. Do the work with tools; do not just describe it.",
-      },
+      // Vanilla claude: use the stock claude_code system prompt with NOTHING appended.
+      // We used to append an "anti-laziness" nudge here, but it made the agent feel
+      // slightly off vs real claude (over-verifying, stiffer). Skill awareness now
+      // lives in MEMORY (a managed "your skills" section), not in the system prompt —
+      // so the prompt stays exactly what claude code ships with.
+      systemPrompt: { type: "preset", preset: "claude_code" },
       // use the user's installed claude (logged in) so the bundled extension doesn't
       // need the SDK's own native binary on its (unresolvable) bundle-relative path.
       pathToClaudeCodeExecutable: resolveExecutable("claude"),
       stderr: (d: string) => { if (d.trim()) cb.emitErr(`[claude] ${d.trim()}`); },
-      // Passive skill-shopping wiring (issue #21). Only present when the toggle is ON;
-      // when ON, the runtime hands us the marketplace MCP server + its allowed tool ids,
-      // and appends the workflow prose so the agent shops for missing capabilities.
-      ...(opts.appendSystemPrompt
-        ? { systemPrompt: { type: "preset" as const, preset: "claude_code" as const, append: opts.appendSystemPrompt } }
-        : {}),
+      // Passive skill-shopping wiring (issue #21): the MCP marketplace server + its
+      // allowed tools, when the toggle is ON. The "which skills you have" directive is
+      // NOT injected here anymore — it's a managed memory section (skillsSection.ts).
       ...(opts.mcpServers ? { mcpServers: opts.mcpServers as never } : {}),
       ...(opts.allowedTools ? { allowedTools: opts.allowedTools } : {}),
       // NOTE: settingSources is deliberately omitted — the SDK then loads ALL sources

@@ -8,7 +8,7 @@ import { Connection } from "@solana/web3.js";
 import { spawnCli } from "./spawn.js";
 import { SessionStore } from "../account/store.js";
 import { prepareResume } from "./inject/index.js";
-import { MemorySync } from "../memory/index.js";
+import { MemorySync, updateSkillsSection } from "../memory/index.js";
 import { getSkillShopping } from "../account/login.js";
 import { setSkillShoppingActive } from "../skill-market/passive.js";
 import { createAgentSdkMcpServer, newVerifyGuard } from "../skill-market/index.js";
@@ -92,6 +92,10 @@ export function createRuntime(
       // effort — a memory/storage hiccup must not block starting the session.
       try {
         await memory.injectAtStart(opts.cli, opts.cwd);
+        // After memory is written, refresh the managed "your skills" line so the agent
+        // passively knows which skills are installed (no system-prompt nudge, no RPC).
+        // Must run AFTER injectAtStart, which regenerates MEMORY.md / AGENTS.md.
+        await updateSkillsSection(opts.cli, opts.cwd);
       } catch (e) {
         console.warn("[memory] inject failed:", e);
       }
