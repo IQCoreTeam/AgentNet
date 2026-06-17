@@ -16,10 +16,11 @@ import { searchSkills } from "../../search/index.js";
 import { dasSource, indexerSource, ownedSkillMints, ownedAssetIds } from "../../core/skillSource.js";
 import { buySkill, publishSkill as corePublishSkill } from "../../nft/skill.js";
 import { getSolBalance } from "../../notes/index.js";
-import { readSkillText } from "../../nft/token2022.js";
+import { readSkillText, readSkillMintMetadata } from "../../nft/token2022.js";
 import { claudeSkillsDir } from "../../core/paths.js";
 import { classifySkills } from "../registry.js";
 import { resolveRpcUrl } from "../../core/rpc.js";
+import { init as initChain } from "../../core/chain.js";
 import type { AgentProfile, SkillCard, SkillDetail } from "../../chat/marketMessages.js";
 import type { Skill } from "../../core/types.js";
 import { readNotes, postNote as corePostNote, readAgentNotes, postAgentNote as corePostAgentNote } from "../../notes/notes.js";
@@ -69,6 +70,11 @@ export function solToLamports(sol: string): bigint | null {
 
 export async function marketplaceEnv(wallet: Wallet) {
   const conn = new Connection(await resolveRpcUrl(), "confirmed");
+  // Wire the chain layer's module-level connection. Writes (publishSkill -> codeIn,
+  // ensureDbRoot, writeRow) go through core/chain.ts's singleton, which throws
+  // "chain layer not initialized" until init() runs. Reads take conn directly, so
+  // the market lists fine but a publish failed without this. Idempotent.
+  initChain(conn);
   const skills = new SkillSync(conn);
 
   // Run a search via the indexer (fast, has supply+traits); fall back to a direct DAS
@@ -94,9 +100,14 @@ export async function marketplaceEnv(wallet: Wallet) {
       // map; one search covers both kinds since they share the catalog).
       const all = await runSearch("");
       const card = all.find((s) => s.id === mint);
-      const [skillText, notes] = await Promise.all([
+      const [skillText, notes, meta] = await Promise.all([
         readSkillText(conn, mint).catch(() => null),
         collectionIdFor(card?.type).then((cid) => cid ? readNotes(cid, mint).catch(() => []) : Promise.resolve([])),
+        // A held skill can be ABSENT from the indexer catalog (DAS under-reports our
+        // Token-2022 group), so `card` is undefined here. Read the mint's own metadata
+        // so the detail shows a real name/description — not the bare mint — and treats
+        // it as a skill (its comments live in the skills collection).
+        card ? Promise.resolve(null) : readSkillMintMetadata(conn, mint).catch(() => null),
       ]);
       const reqIds = card?.requiredSkills ?? [];
       const requiredCards = reqIds
@@ -104,7 +115,9 @@ export async function marketplaceEnv(wallet: Wallet) {
         .filter((s): s is Skill => !!s)
         .map(toCard);
       return {
-        card: card ? toCard(card) : { id: mint, name: mint },
+        card: card
+          ? toCard(card)
+          : { id: mint, type: "skill", name: meta?.name || mint, description: meta?.description },
         skillText,
         requiredCards,
         notes,

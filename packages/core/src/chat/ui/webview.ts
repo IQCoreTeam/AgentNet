@@ -1343,7 +1343,8 @@ export function chatHtml(): string {
         <div class="pubHint">A direct image URL, or an on-chain address. Leave empty for the default art. (Uploading an image on-chain: see the IQLabs SDK at https://x.com/spacebuneth/status/2064477269871960574)</div>
 
         <label class="pubLabel">Skill text<span class="req">*</span></label>
-        <textarea id="pubText" rows="10" placeholder="# Skill name&#10;&#10;The full SKILL.md body: what the agent reads when this skill fires."></textarea>
+        <textarea id="pubText" rows="10" placeholder="# Skill name&#10;&#10;The SKILL.md body only — what the agent reads when this skill fires.&#10;No --- frontmatter: name & description come from the fields above."></textarea>
+        <div class="pubHint">Body only — don't add a <code>---</code> name/description block; it's built from the fields above.</div>
 
         <label class="pubLabel">Price (SOL)<span class="req">*</span></label>
         <input id="pubPrice" type="text" value="0.1" placeholder="0.1" />
@@ -3125,7 +3126,9 @@ export function chatHtml(): string {
       row.innerHTML = '<span class="wand">' + ${JSON.stringify(WAND_SVG)} + '</span>';
       const lbl = document.createElement('span'); lbl.textContent = name; lbl.title = name;
       row.appendChild(lbl); row.style.cursor = 'pointer';
-      row.addEventListener('click', () => { const mt = skillMints[name]; if (mt) openSkillModal(mt); else openSkillDoc(name); });
+      // NFT skills (have a mint) -> the market detail view, which has the comment box
+      // (the popup modal doesn't). Bundled skills (no mint) -> the local SKILL.md doc.
+      row.addEventListener('click', () => { const mt = skillMints[name]; if (mt) { showView('market'); openDetail(mt); } else openSkillDoc(name); });
       walletSkillList.appendChild(row);
     }
   }
@@ -3155,10 +3158,10 @@ export function chatHtml(): string {
       slot.innerHTML = '<span class="skWand">' + ${JSON.stringify(WAND_SVG)} + '</span>';
       const lbl = document.createElement('div'); lbl.className = 'skName'; lbl.textContent = name;
       slot.appendChild(lbl); slot.title = name; slot.style.cursor = 'pointer';
-      // Bought NFT skills have a mint -> reuse the market's on-chain detail modal
-      // (same source the market uses). Bundled skills (no mint) fall back to the
-      // local SKILL.md doc. Avoids the name!=slug mismatch that 404'd the disk read.
-      slot.addEventListener('click', () => { const mt = skillMints[name]; if (mt) openSkillModal(mt); else openSkillDoc(name); });
+      // Bought NFT skills have a mint -> open the market detail view (on-chain source,
+      // and it carries the comment box — the popup modal doesn't). Bundled skills (no
+      // mint) fall back to the local SKILL.md doc. Avoids the name!=slug 404 on disk.
+      slot.addEventListener('click', () => { const mt = skillMints[name]; if (mt) { showView('market'); openDetail(mt); } else openSkillDoc(name); });
       grid.appendChild(slot);
     }
     const fill = Math.max(0, 3 - n);
@@ -3433,7 +3436,8 @@ export function chatHtml(): string {
   }
   function renderDetail(detail) {
     const c = (detail && detail.card) || {};
-    const owned = ownedSkills.indexOf(c.name) >= 0;
+    // own-by-mint (server's gate) OR own-by-name (catalog skills, where name is real)
+    const owned = ownsMint(c.id) || ownedSkills.indexOf(c.name) >= 0;
     currentDetail = { id: c.id, type: c.type };
     mktDetailBody.innerHTML = '';
     // head: icon + name + kind
@@ -3530,6 +3534,16 @@ export function chatHtml(): string {
   function nameForId(id) {
     for (const r of lastMarketResults) if (r.id === id) return r.name || r.id;
     return null;
+  }
+  // Ownership for the comment gate is decided by MINT, not by display name — the
+  // server gates postNote on getBalance(mint), so the UI must use the same key.
+  // skillMints maps owned slug -> mint; a detail whose id is one of those values is
+  // held. (Name matching breaks for held skills the catalog omits, whose detail comes
+  // back with name === mint.)
+  function ownsMint(id) {
+    if (!id) return false;
+    for (const k in skillMints) if (skillMints[k] === id) return true;
+    return false;
   }
 
   // ---- skill-acquired celebration: pop the overlay, fire sparkles, auto-dismiss ----
@@ -3876,7 +3890,9 @@ export function chatHtml(): string {
     }
     // issue #34: refreshed comments pushed after a successful postNote
     else if (m.type === 'notes' && currentDetail && m.skillId === currentDetail.id) {
-      const owned = ownedSkills.indexOf(currentDetail.id) >= 0;
+      // currentDetail.id is a MINT — gate by mint (the old name-array lookup against a
+      // mint always missed, so the comment box vanished on every refresh after a buy).
+      const owned = ownsMint(currentDetail.id) || ownedSkills.indexOf(currentDetailName) >= 0;
       renderComments(currentDetail.id, currentDetail.type, m.notes, owned);
     }
     else if (m.type === 'ownedSkills') {

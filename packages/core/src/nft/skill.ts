@@ -52,7 +52,19 @@ export async function publishSkill(
   signer: SignerInput,
   input: PublishSkillInput,
 ): Promise<string> {
-  const format = checkFormat(input.text);
+  // Validate the skill the way it will actually exist: a SKILL.md whose frontmatter
+  // (name/description) comes from the separate form fields, with the body field used
+  // as the body. The body field holds the body ONLY — the publisher does NOT repeat
+  // name/description as `---` frontmatter inside it, so nothing is stored twice (the
+  // on-chain skillText below is body-only; toSkillMd re-synthesizes frontmatter from
+  // name/description at install). A legacy body that already carries its own
+  // frontmatter is validated verbatim for backward compatibility.
+  const hasOwnFrontmatter = /^﻿?---\s*\n[\s\S]*?\n---\s*(\n|$)/.test(input.text);
+  const descLine = input.description.replace(/\s*\n\s*/g, " ").trim();
+  const mdToCheck = hasOwnFrontmatter
+    ? input.text
+    : `---\nname: ${input.name}\ndescription: ${descLine}\n---\n\n${input.text}`;
+  const format = checkFormat(mdToCheck);
   if (!format.ok) {
     throw new FormatError(format.errors);
   }
