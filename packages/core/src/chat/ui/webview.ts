@@ -206,7 +206,7 @@ export function chatHtml(): string {
   /* right chat area */
   #main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
   #log { flex: 1; overflow-y: auto; padding: 0 0 24px; display: flex; flex-direction: column;
-         scroll-behavior: smooth; position: relative; z-index: 1; }
+         scroll-behavior: smooth; position: relative; z-index: 1; overflow-anchor: auto; }
 
   /* IQ watermark on an empty chat: centered, faint, theme-grey. The logo's fill is
      currentColor, so we just set color to a muted foreground that reads as grey in
@@ -417,6 +417,9 @@ export function chatHtml(): string {
      Approve/Deny — just answering and sending. */
   .qBlock { padding: 9px 12px; border-top: 1px solid var(--an-green-dim); }
   .qBlock:first-child { border-top: none; }
+  .qCount { padding: 7px 12px 0; font-size: 0.72em; font-weight: 600; letter-spacing: 0.04em;
+            color: var(--an-green); opacity: 0.8; }
+  .qCount + .qBlock { border-top: none; }
   .qHeader { display: inline-block; font-size: 0.7em; font-weight: 600; text-transform: uppercase;
              letter-spacing: 0.04em; color: var(--an-green); background: var(--an-green-dim);
              padding: 1px 6px; border-radius: 4px; margin-bottom: 5px; }
@@ -434,6 +437,13 @@ export function chatHtml(): string {
                  font: inherit; resize: vertical; box-sizing: border-box; }
   .qOtherInput:focus { outline: none; border-color: var(--an-green); }
   .apBtn.ok:disabled { opacity: 0.4; cursor: not-allowed; filter: none; }
+  /* minimal circular icon-only edit toggle (outline only, no fill) */
+  .apEdit { margin-left: auto; flex: none; width: 24px; height: 24px; padding: 0;
+            display: inline-flex; align-items: center; justify-content: center;
+            border-radius: 50%; background: transparent; border: 1px solid var(--an-green-line);
+            color: var(--an-green); opacity: 0.6; cursor: pointer; transition: opacity .12s, border-color .12s; }
+  .apEdit:hover { opacity: 1; border-color: var(--an-green); }
+  .apEdit:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--vscode-editor-background), 0 0 0 3px var(--an-green); }
   /* plan card body: wrap prose (not break-all like a path/command) */
   .apBody.planBody { word-break: normal; overflow-wrap: anywhere; }
   .cursor::after { content: "\\u258B"; opacity: 0.6; animation: blink 1s step-end infinite; }
@@ -933,6 +943,21 @@ export function chatHtml(): string {
                    opacity:0.55; cursor:pointer; font-size:13px; }
   .skModal-close:hover { opacity:1; background:var(--an-bg-1); border-color:var(--an-line); }
   #skillModalBody .dt-buy { width:100%; box-sizing:border-box; text-align:center; }
+  /* equipped-skill doc popup body (rendered markdown from local SKILL.md) */
+  #skillModalBody .skDoc-name { font-size:1.15em; font-weight:700; margin-bottom:10px; }
+  #skillModalBody .skDoc-empty { opacity:0.6; font-size:0.86em; padding:8px 0; }
+  #skillModalBody .skDoc-body { font-size:0.86em; line-height:1.55; max-height:62vh; overflow:auto; }
+  #skillModalBody .skDoc-body h1 { font-size:1.2em; margin:0.6em 0 0.3em; }
+  #skillModalBody .skDoc-body h2 { font-size:1.05em; margin:0.8em 0 0.3em; }
+  #skillModalBody .skDoc-body h3 { font-size:0.95em; margin:0.7em 0 0.3em; }
+  #skillModalBody .skDoc-body p { margin:0.45em 0; }
+  #skillModalBody .skDoc-body ul, #skillModalBody .skDoc-body ol { margin:0.45em 0; padding-left:1.4em; }
+  #skillModalBody .skDoc-body li { margin:0.15em 0; }
+  #skillModalBody .skDoc-body code { font-family:var(--vscode-editor-font-family,monospace); font-size:0.92em;
+      background:var(--an-bg); border:1px solid var(--an-line); border-radius:4px; padding:0 4px; }
+  #skillModalBody .skDoc-body pre { background:var(--an-bg); border:1px solid var(--an-line);
+      border-radius:var(--an-radius); padding:10px 12px; overflow:auto; }
+  #skillModalBody .skDoc-body pre code { border:0; padding:0; background:none; }
 
   /* ── make-skill: topbar/header/panel entry buttons + publish form ── */
   #makeSkillBtn { color: var(--an-green); }
@@ -2103,63 +2128,17 @@ export function chatHtml(): string {
     // user's answer becomes the tool result, so this card renders options as chips plus
     // an optional input field and sends structured questionResponses — no Approve/Deny.
     if (req.kind === 'question' && Array.isArray(req.questions) && req.questions.length) {
+      // Stepper: when several questions pile up, show ONE at a time with a "1 / N" counter.
+      // Answering advances to the next; the last one's button sends all accumulated answers.
       const sel = {}; // qIndex → array of chosen labels
       const free = {}; // qIndex → typed answer
-      const submit = document.createElement('button');
-      submit.className = 'apBtn ok'; submit.textContent = 'Send'; submit.disabled = true;
-      const refresh = () => {
-        submit.disabled = !req.questions.every((q, qi) => {
-          const typed = (free[qi] || '').trim();
-          return typed.length > 0 || (sel[qi] && sel[qi].length);
-        });
+      const total = req.questions.length;
+      let step = 0;
+      const hasAnswer = (qi) => {
+        const typed = (free[qi] || '').trim();
+        return typed.length > 0 || !!(sel[qi] && sel[qi].length);
       };
-      req.questions.forEach((q, qi) => {
-        const block = document.createElement('div'); block.className = 'qBlock';
-        if (q.header) { const h = document.createElement('span'); h.className = 'qHeader'; h.textContent = q.header; block.appendChild(h); }
-        const qt = document.createElement('div'); qt.className = 'qText'; qt.textContent = q.question; block.appendChild(qt);
-        const opts = document.createElement('div'); opts.className = 'qOpts';
-        (q.options || []).forEach((opt) => {
-          const b = document.createElement('button'); b.type = 'button'; b.className = 'qOpt';
-          const t = document.createElement('div'); t.className = 'qOptLabel'; t.textContent = opt.label; b.appendChild(t);
-          if (opt.description) { const d = document.createElement('div'); d.className = 'qOptDesc'; d.textContent = opt.description; b.appendChild(d); }
-          b.addEventListener('click', () => {
-            const cur = sel[qi] || [];
-            delete free[qi];
-            if (q.multiSelect) {
-              sel[qi] = cur.indexOf(opt.label) >= 0 ? cur.filter((l) => l !== opt.label) : cur.concat(opt.label);
-            } else {
-              sel[qi] = cur[0] === opt.label ? [] : [opt.label];
-            }
-            Array.from(opts.children).forEach((c, i) => c.classList.toggle('on', (sel[qi] || []).indexOf((q.options[i] || {}).label) >= 0));
-            if (otherInput) otherInput.value = '';
-            refresh();
-          });
-          opts.appendChild(b);
-        });
-        block.appendChild(opts);
-        let otherInput = null;
-        if (q.allowCustomInput) {
-          const label = document.createElement('div');
-          label.className = 'qOtherLabel';
-          label.textContent = q.options && q.options.length ? 'Or type your own answer' : 'Type your answer';
-          block.appendChild(label);
-          otherInput = q.secret ? document.createElement('input') : document.createElement('textarea');
-          otherInput.className = 'qOtherInput';
-          otherInput.placeholder = 'Type your answer…';
-          if (q.secret) otherInput.type = 'password';
-          else otherInput.rows = 3;
-          otherInput.addEventListener('input', () => {
-            free[qi] = otherInput.value;
-            sel[qi] = [];
-            Array.from(opts.children).forEach((c) => c.classList.remove('on'));
-            refresh();
-          });
-          block.appendChild(otherInput);
-        }
-        card.appendChild(block);
-      });
-      const actions = document.createElement('div'); actions.className = 'apActions';
-      submit.addEventListener('click', () => {
+      const sendAll = () => {
         const questionResponses = req.questions.map((q, qi) => {
           const typed = (free[qi] || '').trim();
           return {
@@ -2171,9 +2150,80 @@ export function chatHtml(): string {
         });
         vscode.postMessage({ type: 'approvalDecision', id: req.id, outcome: 'once', questionResponses });
         card.remove(); syncComposerLock();
-      });
-      actions.appendChild(submit);
-      card.appendChild(actions);
+      };
+      const renderStep = () => {
+        card.innerHTML = '';
+        const q = req.questions[step];
+        let updateNext = () => {};
+        let otherInput = null;
+        if (total > 1) {
+          const counter = document.createElement('div'); counter.className = 'qCount';
+          counter.textContent = (step + 1) + ' / ' + total;
+          card.appendChild(counter);
+        }
+        const block = document.createElement('div'); block.className = 'qBlock';
+        if (q.header) { const h = document.createElement('span'); h.className = 'qHeader'; h.textContent = q.header; block.appendChild(h); }
+        const qt = document.createElement('div'); qt.className = 'qText'; qt.textContent = q.question; block.appendChild(qt);
+        const opts = document.createElement('div'); opts.className = 'qOpts';
+        (q.options || []).forEach((opt) => {
+          const b = document.createElement('button'); b.type = 'button'; b.className = 'qOpt';
+          if ((sel[step] || []).indexOf(opt.label) >= 0) b.classList.add('on');
+          const t = document.createElement('div'); t.className = 'qOptLabel'; t.textContent = opt.label; b.appendChild(t);
+          if (opt.description) { const d = document.createElement('div'); d.className = 'qOptDesc'; d.textContent = opt.description; b.appendChild(d); }
+          b.addEventListener('click', () => {
+            const cur = sel[step] || [];
+            delete free[step];
+            if (q.multiSelect) {
+              sel[step] = cur.indexOf(opt.label) >= 0 ? cur.filter((l) => l !== opt.label) : cur.concat(opt.label);
+            } else {
+              sel[step] = cur[0] === opt.label ? [] : [opt.label];
+            }
+            Array.from(opts.children).forEach((c, i) => c.classList.toggle('on', (sel[step] || []).indexOf((q.options[i] || {}).label) >= 0));
+            if (otherInput) otherInput.value = '';
+            updateNext();
+          });
+          opts.appendChild(b);
+        });
+        block.appendChild(opts);
+        if (q.allowCustomInput) {
+          const label = document.createElement('div');
+          label.className = 'qOtherLabel';
+          label.textContent = q.options && q.options.length ? 'Or type your own answer' : 'Type your answer';
+          block.appendChild(label);
+          otherInput = q.secret ? document.createElement('input') : document.createElement('textarea');
+          otherInput.className = 'qOtherInput';
+          otherInput.placeholder = 'Type your answer…';
+          if (q.secret) otherInput.type = 'password';
+          else otherInput.rows = 3;
+          if (free[step]) otherInput.value = free[step];
+          otherInput.addEventListener('input', () => {
+            free[step] = otherInput.value;
+            sel[step] = [];
+            Array.from(opts.children).forEach((c) => c.classList.remove('on'));
+            updateNext();
+          });
+          block.appendChild(otherInput);
+        }
+        card.appendChild(block);
+        const actions = document.createElement('div'); actions.className = 'apActions';
+        if (step > 0) {
+          const back = document.createElement('button'); back.className = 'apBtn always'; back.textContent = 'Back';
+          back.addEventListener('click', () => { step -= 1; renderStep(); });
+          actions.appendChild(back);
+        }
+        const next = document.createElement('button'); next.className = 'apBtn ok';
+        const last = step === total - 1;
+        next.textContent = last ? 'Send' : 'Next';
+        next.addEventListener('click', () => {
+          if (!hasAnswer(step)) return;
+          if (last) sendAll(); else { step += 1; renderStep(); }
+        });
+        actions.appendChild(next);
+        card.appendChild(actions);
+        updateNext = () => { next.disabled = !hasAnswer(step); };
+        updateNext();
+      };
+      renderStep();
       approvalDock.insertBefore(card, approvalDock.firstChild);
       syncComposerLock();
       return;
@@ -2208,13 +2258,16 @@ export function chatHtml(): string {
         commandInput.style.cssText = 'display:none;width:100%;box-sizing:border-box;resize:vertical;font-family:monospace;font-size:0.85em;background:var(--an-bg-1);border:1px solid var(--eng);border-radius:4px;padding:6px;color:inherit';
         commandInput.value = req.command;
         card.appendChild(commandInput);
-        const editBtn = document.createElement('button'); editBtn.className = 'apBtn'; editBtn.textContent = 'Edit';
-        editBtn.style.cssText = 'margin-left:auto;font-size:0.78em;opacity:0.7';
+        const PENCIL_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+        const XMARK_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+        const editBtn = document.createElement('button'); editBtn.className = 'apEdit';
+        editBtn.innerHTML = PENCIL_SVG; editBtn.title = 'Edit'; editBtn.setAttribute('aria-label', 'Edit');
         editBtn.addEventListener('click', () => {
           const editing = commandInput.style.display !== 'none';
           pre.style.display = editing ? '' : 'none';
           commandInput.style.display = editing ? 'none' : '';
-          editBtn.textContent = editing ? 'Edit' : 'Cancel';
+          editBtn.innerHTML = editing ? PENCIL_SVG : XMARK_SVG;
+          editBtn.title = editing ? 'Edit' : 'Cancel';
         });
         head.appendChild(editBtn);
       }
@@ -3071,7 +3124,9 @@ export function chatHtml(): string {
       const row = document.createElement('div'); row.className = 'wskRow';
       row.innerHTML = '<span class="wand">' + ${JSON.stringify(WAND_SVG)} + '</span>';
       const lbl = document.createElement('span'); lbl.textContent = name; lbl.title = name;
-      row.appendChild(lbl); walletSkillList.appendChild(row);
+      row.appendChild(lbl); row.style.cursor = 'pointer';
+      row.addEventListener('click', () => { const mt = skillMints[name]; if (mt) openSkillModal(mt); else openSkillDoc(name); });
+      walletSkillList.appendChild(row);
     }
   }
   if (walletSkillsItem && walletSkillList) walletSkillsItem.addEventListener('click', (e) => {
@@ -3085,8 +3140,9 @@ export function chatHtml(): string {
   // The agent's OWNED skills (array of names) — everything owned is "active" (no
   // separate active state). Renders each as an item card in the panel; empty slots
   // fill the rest. No count badge (ownership is the whole point, not a number).
-  function setSkills(names) {
+  function setSkills(names, mints) {
     names = names || [];
+    if (mints) skillMints = mints;
     const grid = document.getElementById('skillGrid');
     const status = document.getElementById('skillStatus');
     const n = names.length;
@@ -3098,7 +3154,12 @@ export function chatHtml(): string {
       const slot = document.createElement('div'); slot.className = 'skSlot item';
       slot.innerHTML = '<span class="skWand">' + ${JSON.stringify(WAND_SVG)} + '</span>';
       const lbl = document.createElement('div'); lbl.className = 'skName'; lbl.textContent = name;
-      slot.appendChild(lbl); slot.title = name; grid.appendChild(slot);
+      slot.appendChild(lbl); slot.title = name; slot.style.cursor = 'pointer';
+      // Bought NFT skills have a mint -> reuse the market's on-chain detail modal
+      // (same source the market uses). Bundled skills (no mint) fall back to the
+      // local SKILL.md doc. Avoids the name!=slug mismatch that 404'd the disk read.
+      slot.addEventListener('click', () => { const mt = skillMints[name]; if (mt) openSkillModal(mt); else openSkillDoc(name); });
+      grid.appendChild(slot);
     }
     const fill = Math.max(0, 3 - n);
     for (let i = 0; i < fill; i++) { const s = document.createElement('div'); s.className = 'skSlot empty'; grid.appendChild(s); }
@@ -3111,6 +3172,7 @@ export function chatHtml(): string {
     if (wsl && wsl.style.display !== 'none') renderWalletSkillList();
   }
   let ownedSkills = [];
+  let skillMints = {}; // slug/name -> mint for bought NFT skills (reuse market detail)
   setSkills([]); // idle: grey coming-soon slots
 
   // ---- marketplace: search → buy → install (host does the chain work) ----
@@ -3213,7 +3275,7 @@ export function chatHtml(): string {
   // in the right place.
   const skillModalEl = document.getElementById('skillModal');
   const skillModalBody = document.getElementById('skillModalBody');
-  let skillModalOpen = false, skillModalBuyBtn = null, skillModalName = null;
+  let skillModalOpen = false, skillModalBuyBtn = null, skillModalName = null, skillDocOpen = false;
   function openSkillModal(mint) {
     skillModalOpen = true;
     skillModalBuyBtn = null; skillModalName = null;
@@ -3222,7 +3284,7 @@ export function chatHtml(): string {
     vscode.postMessage({ type: 'getSkillDetail', mint });
   }
   function closeSkillModal() {
-    skillModalOpen = false; skillModalBuyBtn = null; skillModalName = null;
+    skillModalOpen = false; skillDocOpen = false; skillModalBuyBtn = null; skillModalName = null;
     skillModalEl.style.display = 'none';
   }
   // flip the modal's Buy → Owned once an ownedSkills refresh shows we now hold it
@@ -3271,7 +3333,39 @@ export function chatHtml(): string {
   }
   document.getElementById('skillModalClose').addEventListener('click', closeSkillModal);
   skillModalEl.addEventListener('click', (e) => { if (e.target === skillModalEl) closeSkillModal(); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && skillModalOpen) closeSkillModal(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && (skillModalOpen || skillDocOpen)) closeSkillModal(); });
+
+  // ---- equipped-skill doc popup: click an installed skill -> show its local SKILL.md ----
+  // Equipped skills carry only a name (no mint), so this reads the on-disk SKILL.md by name
+  // (host getSkillDoc) and renders the body as markdown, reusing the #skillModal overlay.
+  function splitSkillDoc(text) {
+    text = text || '';
+    // strip a leading YAML frontmatter block so the name/description metadata doesn't
+    // dominate the popup; the real instructions live in the markdown body below it.
+    const m = text.match(/^---\\r?\\n[\\s\\S]*?\\r?\\n---\\r?\\n?/);
+    return (m ? text.slice(m[0].length) : text).trim();
+  }
+  function openSkillDoc(name) {
+    skillModalOpen = false; skillDocOpen = true;
+    skillModalName = null; skillModalBuyBtn = null;
+    skillModalBody.innerHTML = '<div class="skDoc-empty">Loading…</div>';
+    skillModalEl.style.display = 'flex';
+    vscode.postMessage({ type: 'getSkillDoc', name: name });
+  }
+  function renderSkillDoc(name, text) {
+    skillModalBody.innerHTML = '';
+    const nm = document.createElement('div'); nm.className = 'skDoc-name'; nm.textContent = name;
+    skillModalBody.appendChild(nm);
+    const body = splitSkillDoc(text);
+    if (!body) {
+      const e = document.createElement('div'); e.className = 'skDoc-empty';
+      e.textContent = 'No SKILL.md document found for this skill.';
+      skillModalBody.appendChild(e); return;
+    }
+    const bd = document.createElement('div'); bd.className = 'skDoc-body';
+    renderMd(bd, body);
+    skillModalBody.appendChild(bd);
+  }
   // Render the detail sub-view from a {card, skillText, requiredCards} payload. For a
   // workflow, each requiredCard is a clickable row that opens ITS detail (re-uses the
   // same view, so you can drill skill→workflow→skill without leaving the market).
@@ -3716,12 +3810,22 @@ export function chatHtml(): string {
       if (m.role === 'assistant' || m.role === 'thinking') addCopy(n, el);
       if (m.role === 'assistant') addFooter(n, m.durationMs, m.model);
     }
+    // Insert above the current content, then restore the viewport SYNCHRONOUSLY (before the
+    // browser paints) so the user's position never visibly jumps. Disable smooth-scroll for
+    // the correction — otherwise the scrollTop bump animates and reads as a jump. Late-loading
+    // images that grow the prepended block are handled natively by overflow-anchor on #log.
+    const prevBehavior = realLog.style.scrollBehavior;
+    realLog.style.scrollBehavior = 'auto';
     realLog.insertBefore(frag, realLog.firstChild);
+    void realLog.offsetHeight; // force layout so scrollHeight is accurate
     realLog.scrollTop += realLog.scrollHeight - before;
+    realLog.style.scrollBehavior = prevBehavior;
   }
 
   log.addEventListener('scroll', () => {
-    if (log.scrollTop <= 8 && hasMore && !loadingOlder && pageCursor !== null) {
+    // preemptive load: fetch the next older page BEFORE the user hits the very top, so there
+    // is always more scroll above and they never slam into the edge (which read as a jump).
+    if (log.scrollTop < 600 && hasMore && !loadingOlder && pageCursor !== null) {
       loadingOlder = true;
       vscode.postMessage({ type: 'loadMore', cursor: pageCursor });
     }
@@ -3764,6 +3868,7 @@ export function chatHtml(): string {
       }
     }
     else if (m.type === 'skillDetail') { if (skillModalOpen) renderSkillModal(m.detail); else renderDetail(m.detail); }
+    else if (m.type === 'skillDoc') { if (skillDocOpen) renderSkillDoc(m.name, m.text); }
     // issue #34: comment write result — re-enable the submit button; on failure show error
     else if (m.type === 'postNoteResult') {
       const submit = mktDetailBody.querySelector('.dt-note-submit');
@@ -3775,7 +3880,7 @@ export function chatHtml(): string {
       renderComments(currentDetail.id, currentDetail.type, m.notes, owned);
     }
     else if (m.type === 'ownedSkills') {
-      setSkills(m.names || []);                // updates ownedSkills used by both renders
+      setSkills(m.names || [], m.mints || {});  // updates ownedSkills used by both renders
       // flip Buy → Owned everywhere the item can appear: list cards, small panel, open detail
       if (panels.market.style.display !== 'none') renderMarketResults(lastMarketResults);
       renderSkillResults(lastMarketResults);   // small skills-panel shop badges

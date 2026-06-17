@@ -16,6 +16,17 @@
 import type { Skill } from "./types.js";
 import { resolveRpcUrl } from "./rpc.js";
 
+/** Minimal shape of a DAS JSON-RPC response. `fetch(...).json()` is `unknown`
+ *  under @types/node's fetch typings (no DOM lib) — only `any` when a DOM lib is
+ *  present. core's own tsconfig happens to pull in DOM (no explicit `lib`), but
+ *  surfaces that compile core under a Node-only lib (e.g. surfaces/localhost)
+ *  would otherwise see TS18046 on every `json.error`/`json.result` access. This
+ *  narrows the result so skillSource stays type-safe regardless of surface lib. */
+type DasRpcResponse = {
+  error?: unknown;
+  result?: { items?: any[] };
+};
+
 export interface SkillSource {
   /** Enumerate all known skills/workflows (id set + cached metadata snapshot). */
   listSkills(limit?: number): Promise<Skill[]>;
@@ -89,7 +100,7 @@ export const dasSource: SkillSource = {
         }),
       });
 
-      const json = await response.json();
+      const json = (await response.json()) as DasRpcResponse;
       if (json.error) {
         throw new Error(`DAS getAssetsByGroup failed for ${group}: ${JSON.stringify(json.error)}`);
       }
@@ -168,7 +179,7 @@ export async function ownedAssetIds(owner: string): Promise<Set<string>> {
         params: { ownerAddress: owner, page, limit: 1000 },
       }),
     });
-    const json = await res.json();
+    const json = (await res.json()) as DasRpcResponse;
     if (json.error) throw new Error(`DAS getAssetsByOwner failed: ${JSON.stringify(json.error)}`);
     const items = json.result?.items ?? [];
     for (const it of items) {

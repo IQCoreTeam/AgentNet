@@ -159,6 +159,34 @@ export async function sendTx(
     raw = (await s.signTransaction(tx)).serialize();
   }
   const sig = await conn.sendRawTransaction(raw);
-  await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
+  const confirmation = await conn.confirmTransaction(
+    { signature: sig, blockhash, lastValidBlockHeight },
+    "confirmed",
+  );
+  // confirmTransaction resolves once the tx LANDS — even when it reverted. A
+  // confirmed tx can still carry an execution error (value.err); ignoring it meant a
+  // reverted buy_item/publish_item returned a signature and the caller reported
+  // "Successfully purchased" while nothing was minted — surfacing later as
+  // "Must own ≥1 skill token to post note (balance: 0)" because the soulbound token
+  // was never created. Surface the real on-chain failure (with logs) instead.
+  // (?. — the unit-test conn mock resolves {}, no .value: treated as success.)
+  if (confirmation?.value?.err) {
+    throw new Error(`Transaction ${sig} failed on-chain: ${await txErrorDetail(conn, sig)}`);
+  }
   return sig;
+}
+
+/** Fetch a confirmed tx's program logs for a human-readable revert reason. Best-effort. */
+async function txErrorDetail(conn: Connection, sig: string): Promise<string> {
+  try {
+    const tx = await conn.getTransaction(sig, {
+      maxSupportedTransactionVersion: 0,
+      commitment: "confirmed",
+    });
+    const err = JSON.stringify(tx?.meta?.err);
+    const logs = tx?.meta?.logMessages?.slice(-8).join("\n");
+    return logs ? `${err}\n${logs}` : err;
+  } catch {
+    return "unknown (could not fetch tx logs)";
+  }
 }

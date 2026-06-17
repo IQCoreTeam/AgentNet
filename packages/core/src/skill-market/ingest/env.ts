@@ -9,7 +9,8 @@
 // this is the wiring that makes a purchase actually equip the skill.
 
 import { Connection } from "@solana/web3.js";
-import { readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { Wallet } from "../../runtime/contract.js";
 import { searchSkills } from "../../search/index.js";
 import { dasSource, indexerSource, ownedSkillMints, ownedAssetIds } from "../../core/skillSource.js";
@@ -186,6 +187,17 @@ export async function marketplaceEnv(wallet: Wallet) {
       }
     },
 
+    // Read one installed skill's local SKILL.md by slug name (for the equipped-skill doc
+    // popup). The name is one we listed from claudeSkillsDir(), not free input, so there is
+    // no path-traversal surface. Returns null if the file is missing/unreadable.
+    async getSkillDoc(name: string): Promise<string | null> {
+      try {
+        return await readFile(join(claudeSkillsDir(), name, "SKILL.md"), "utf8");
+      } catch {
+        return null;
+      }
+    },
+
     // installed skill names = the dir names under the Claude skills dir (each is a slug).
     async ownedSkills() {
       try {
@@ -212,6 +224,22 @@ export async function marketplaceEnv(wallet: Wallet) {
         return classified.filter((c) => c.origin !== "bundled").map((c) => c.slug);
       } catch {
         return [];
+      }
+    },
+
+    // slug -> mint for the wallet's installed NFT skills (from the origin manifest).
+    // Lets the panel reuse the market's on-chain getSkillDetail(mint) path to show a
+    // bought skill's body, instead of reading the local SKILL.md by (mismatched) name.
+    async ownedSkillMints() {
+      try {
+        const entries = await readdir(claudeSkillsDir(), { withFileTypes: true });
+        const slugs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+        const classified = await classifySkills(slugs);
+        const out: Record<string, string> = {};
+        for (const c of classified) if (c.mint) out[c.slug] = c.mint;
+        return out;
+      } catch {
+        return {};
       }
     },
 

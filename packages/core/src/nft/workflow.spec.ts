@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { Keypair, PublicKey } from "@solana/web3.js";
-import { publishWorkflow, unlockWorkflow } from "./workflow.js";
+import { Keypair, PublicKey, TransactionInstruction } from "@solana/web3.js";
+import { publishWorkflow, unlockWorkflow, sendTx } from "./workflow.js";
 import { FormatError } from "./checkFormat.js";
 import * as chain from "../core/chain.js";
 import * as token2022 from "./token2022.js";
@@ -109,5 +109,20 @@ Workflow body here, long enough to pass the body length check easily.`;
 
     expect(sig).toBe("mockTxSig");
     expect(mockConn.sendRawTransaction).toHaveBeenCalled();
+  });
+
+  // Regression: a tx that LANDS but reverts is "confirmed" with a non-null
+  // value.err. sendTx must throw on it — otherwise a reverted buy_item returns a
+  // signature, the surface reports "Successfully purchased", and the soulbound
+  // token is never minted (→ later "balance: 0" on the comment gate).
+  it("sendTx throws (with logs) when a confirmed tx carries an execution error", async () => {
+    mockConn.confirmTransaction.mockResolvedValueOnce({ value: { err: { InstructionError: [0, "Custom"] } } });
+    mockConn.getTransaction = vi.fn().mockResolvedValue({
+      meta: { err: { InstructionError: [0, "Custom"] }, logMessages: ["Program log: buy_item", "Program failed: insufficient funds"] },
+    });
+
+    const dummyIx = new TransactionInstruction({ programId: PublicKey.default, keys: [], data: Buffer.from([]) });
+    await expect(sendTx(mockConn as any, signer, [dummyIx])).rejects.toThrow(/failed on-chain/);
+    expect(mockConn.getTransaction).toHaveBeenCalled();
   });
 });

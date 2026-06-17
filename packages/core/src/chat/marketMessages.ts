@@ -69,6 +69,7 @@ export interface RpcStatus {
 export type MarketRequest =
   | { type: "searchSkills"; query: string; kind?: "skill" | "workflow" } // kind = the active tab
   | { type: "getSkillDetail"; mint: string } // open the detail view for one item
+  | { type: "getSkillDoc"; name: string } // read an installed skill's local SKILL.md by name
   | { type: "buySkill"; skillId: string; creatorWallet?: string }
   | { type: "ownedSkills" } // ask the host to (re)send the owned list
   | { type: "getBalance" } // ask the host for the wallet's native SOL balance
@@ -101,8 +102,9 @@ export type MarketEvent =
   | { type: "searchResults"; results: SkillCard[] }
   | { type: "searchError"; message: string } // search threw (RPC/DAS failure) — show why, don't hang
   | { type: "skillDetail"; detail: SkillDetail } // full detail for the opened item (includes notes)
+  | { type: "skillDoc"; name: string; text: string | null } // installed skill's SKILL.md (null = not found)
   | { type: "buyResult"; skillId: string; ok: boolean; slug?: string; error?: string }
-  | { type: "ownedSkills"; names: string[] } // installed skill names (panel fill)
+  | { type: "ownedSkills"; names: string[]; mints?: Record<string, string> } // installed skill names (panel fill) + slug->mint for bought NFTs (reuse market detail)
   | { type: "balance"; lamports: number | null } // wallet SOL balance (null = read failed)
   | { type: "skillActive"; name: string } // a skill fired -> "Casting <name>" cue
   | { type: "rpcStatus"; status: RpcStatus } // DAS-ready? which source? (issue #23)

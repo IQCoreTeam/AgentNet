@@ -47,6 +47,7 @@ export interface ChatEnv {
   // of the buy (the host calls SkillSync.installBought), returning the installed slug.
   searchSkills?(query: string, kind?: "skill" | "workflow"): Promise<SkillCard[]>;
   getSkillDetail?(mint: string): Promise<import("./marketMessages.js").SkillDetail>;
+  getSkillDoc?(name: string): Promise<string | null>;
   buySkill?(skillId: string, creatorWallet?: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
   // issue #34: post a comment on a skill (holder-gated), returns refreshed notes on success
   postNote?(skillId: string, skillType: "skill" | "workflow" | undefined, text: string, gitLink?: string): Promise<{ ok: boolean; notes?: import("./marketMessages.js").Note[]; error?: string }>;
@@ -55,6 +56,8 @@ export interface ChatEnv {
   // what the "Equipped skills" panel shows: skills you OWN on-chain, not local dirs.
   // Preferred over ownedSkills() for the panel; falls back to it when not provided.
   ownedNftSkills?(): Promise<string[]>;
+  // slug -> mint for installed NFT skills; lets the panel reuse getSkillDetail(mint).
+  ownedSkillMints?(): Promise<Record<string, string>>;
   // issue #35: agent directory + profile
   listAgents?(): Promise<import("./marketMessages.js").Reputation[]>;
   getAgentProfile?(wallet: string): Promise<import("./marketMessages.js").AgentProfile>;
@@ -99,6 +102,14 @@ async function ownedNames(env: ChatEnv): Promise<string[]> {
   if (env.ownedNftSkills) return env.ownedNftSkills();
   if (env.ownedSkills) return env.ownedSkills();
   return [];
+}
+
+// Full "ownedSkills" message: names for the panel + slug->mint so a bought skill's
+// card can reuse the market's on-chain getSkillDetail(mint) instead of a local file.
+async function ownedSkillsMsg(env: ChatEnv): Promise<{ type: "ownedSkills"; names: string[]; mints?: Record<string, string> }> {
+  const names = await ownedNames(env);
+  const mints = env.ownedSkillMints ? await env.ownedSkillMints().catch(() => ({})) : {};
+  return { type: "ownedSkills", names, mints };
 }
 
 // Wire one chat UI to the runtime. Returns a stop() that tears down both engine
@@ -237,7 +248,7 @@ export function createChatSession(
         // refresh the panel once it lands.
         void (async () => {
           await env.loadOwnedSkills?.();
-          sendMarket({ type: "ownedSkills", names: await ownedNames(env) });
+          sendMarket(await ownedSkillsMsg(env));
         })().catch(() => {});
         break;
       case "new":   await open(); await pushSessions(); break;
@@ -357,18 +368,28 @@ export function createChatSession(
         }
         break;
       }
+      case "getSkillDoc": {
+        const req = m as Extract<MarketRequest, { type: "getSkillDoc" }>;
+        try {
+          const text = env.getSkillDoc ? await env.getSkillDoc(req.name) : null;
+          sendMarket({ type: "skillDoc", name: req.name, text });
+        } catch {
+          sendMarket({ type: "skillDoc", name: req.name, text: null });
+        }
+        break;
+      }
       case "buySkill": {
         const req = m as Extract<MarketRequest, { type: "buySkill" }>;
         const res = env.buySkill ? await env.buySkill(req.skillId, req.creatorWallet) : { ok: false, error: "buy unavailable" };
         sendMarket({ type: "buyResult", skillId: req.skillId, ...res });
         if (res.ok) {
           await env.loadOwnedSkills?.(); // re-sync the whole owned set after the buy
-          sendMarket({ type: "ownedSkills", names: await ownedNames(env) });
+          sendMarket(await ownedSkillsMsg(env));
         }
         break;
       }
       case "ownedSkills":
-        sendMarket({ type: "ownedSkills", names: await ownedNames(env) });
+        sendMarket(await ownedSkillsMsg(env));
         break;
       case "getBalance":
         sendMarket({ type: "balance", lamports: env.solBalance ? await env.solBalance() : null });
@@ -429,7 +450,7 @@ export function createChatSession(
         sendMarket({ type: "buyAllResult", wallet: req.wallet, ...res });
         if (res.ok && res.bought > 0) {
           await env.loadOwnedSkills?.();
-          sendMarket({ type: "ownedSkills", names: await ownedNames(env) });
+          sendMarket(await ownedSkillsMsg(env));
         }
         break;
       }
@@ -457,7 +478,7 @@ export function createChatSession(
         if (res.ok) {
           // a fresh skill is owned by its creator — refresh owned + the market list
           await env.loadOwnedSkills?.();
-          if (env.ownedSkills || env.ownedNftSkills) sendMarket({ type: "ownedSkills", names: await ownedNames(env) });
+          if (env.ownedSkills || env.ownedNftSkills) sendMarket(await ownedSkillsMsg(env));
         }
         break;
       }
