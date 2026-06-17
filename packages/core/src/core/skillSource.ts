@@ -145,14 +145,19 @@ export const dasSource: SkillSource = {
  * *indexer* projection that, for our Token-2022 TokenGroup mints, surfaces a
  * synthetic group id instead of the real group mint and so never matches our seed.
  */
-async function onChainGroup(
-  conn: import("@solana/web3.js").Connection,
-  PublicKey: typeof import("@solana/web3.js").PublicKey,
-  mint: string,
-): Promise<string | null> {
-  const acct = await conn.getParsedAccountInfo(new PublicKey(mint));
-  const data = acct.value?.data as { parsed?: { info?: { extensions?: unknown[] } } } | undefined;
-  const exts = data?.parsed?.info?.extensions ?? [];
+async function onChainGroup(rpcUrl: string, mint: string): Promise<string | null> {
+  const res = await fetch(rpcUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0", id: "1", method: "getAccountInfo",
+      params: [mint, { encoding: "jsonParsed" }],
+    }),
+  });
+  const json = (await res.json()) as {
+    result?: { value?: { data?: { parsed?: { info?: { extensions?: unknown[] } } } } };
+  };
+  const exts = json.result?.value?.data?.parsed?.info?.extensions ?? [];
   for (const ext of exts as { extension?: string; state?: { group?: string } }[]) {
     if (ext.extension === "tokenGroupMember" && ext.state?.group) return ext.state.group;
   }
@@ -195,19 +200,22 @@ export async function ownedAssetIds(owner: string): Promise<Set<string>> {
  * The skill/workflow NFT mints a wallet OWNS (issue #17 — auto-load owned skills at
  * session start; agent-profile owned list).
  *
- * Fast path (default): a mint that is BOTH in the catalog (the indexer-enumerated set
- * of our collections' members) AND held by the wallet IS an owned skill — a set
- * intersection of two lists we can get cheaply. The caller may pass a catalog it has
- * already fetched (e.g. getAgentProfile's search results) to avoid a second indexer
- * round-trip. This replaces the old per-asset TokenGroupMember resolution, which fired
- * one getParsedAccountInfo per held asset (an unbounded concurrent RPC fan-out that
- * rate-limited / 429'd the agent-directory view).
+ * Fast path: a mint that is BOTH in the catalog (the indexer-enumerated set of our
+ * collections' members) AND held by the wallet IS an owned skill — a set intersection
+ * of two lists we can get cheaply (no per-asset on-chain read). The caller may pass a
+ * catalog it has already fetched (e.g. getAgentProfile's search results) to avoid a
+ * second indexer round-trip. This avoids the old per-asset getParsedAccountInfo
+ * fan-out across ALL holdings (an unbounded concurrent RPC fan-out that 429'd the
+ * agent-directory view).
  *
- * Fallback (only when the catalog can't be reached — indexer down): decide membership
- * on-chain per held asset. We deliberately do NOT trust DAS `grouping.group_value` —
- * for our Token-2022 TokenGroup mints it's a synthetic id that never equals the seed
- * mint (verified on devnet), so the real group is read from each mint's
- * TokenGroupMember extension. This is the expensive path, kept only as a safety net.
+ * Gap rescue: the catalog is the indexer's projection, and for our Token-2022
+ * TokenGroup mints DAS under-reports group membership, so the indexer can OMIT
+ * current-collection skills the wallet genuinely holds. Any held mint the catalog
+ * doesn't cover is verified on-chain via its TokenGroupMember `group` — the ground
+ * truth (we deliberately do NOT trust DAS `grouping.group_value`, a synthetic id that
+ * never equals the seed mint, verified on devnet) — and kept only if that group is one
+ * of our CURRENT collections. Bounded by the catalog gap: zero extra RPC when the
+ * catalog is complete, a few reads when it isn't.
  *
  * Returns [] if collections aren't configured (best-effort caller).
  */
@@ -219,27 +227,36 @@ export async function ownedSkillMints(owner: string, catalog?: Skill[]): Promise
   const ownedIds = await ownedAssetIds(owner);
   if (ownedIds.size === 0) return [];
 
-  // Fast path: intersect the wallet's holdings with the catalog (collection members).
+  // Fast path: a held mint that the catalog (collection members per the indexer)
+  // also lists IS one of our skills — cheap, no per-asset on-chain read.
   let cat = catalog;
   if (!cat) {
     try { cat = await indexerSource(getIndexerUrl()).listSkills(); } catch { cat = undefined; }
   }
+  const owned = new Set<string>();
   if (cat && cat.length > 0) {
-    return cat.filter((s) => ownedIds.has(s.id)).map((s) => s.id);
+    for (const s of cat) if (ownedIds.has(s.id)) owned.add(s.id);
   }
 
-  // Fallback: catalog unavailable → resolve each held asset's real group on-chain.
-  const { Connection, PublicKey } = await import("@solana/web3.js");
-  const rpcUrl = await resolveRpcUrl();
-  const conn = new Connection(rpcUrl, "confirmed");
-  const candidates = [...ownedIds];
-  const groups = await Promise.all(
-    candidates.map((id) => onChainGroup(conn, PublicKey, id).catch(() => null)),
-  );
-  return candidates.filter((_, i) => {
-    const g = groups[i];
-    return !!g && ours.has(g);
-  });
+  // The catalog is the indexer's projection of our collections, and for our
+  // Token-2022 TokenGroup mints DAS under-reports group membership, so the indexer
+  // can MISS current-collection skills the wallet genuinely holds (issue: bought a
+  // current-collection skill → it's absent from the catalog → dropped from "owned"
+  // → its on-chain balance is real but the UI never offers that mint, so the
+  // comment gate sees balance 0). Rescue them: any held mint NOT already matched is
+  // verified on-chain against the CURRENT collections via its TokenGroupMember
+  // group — the ground truth. Bounded by the catalog gap (0 RPC when the catalog is
+  // complete), so the fast path's no-fan-out guarantee holds in the common case.
+  const gap = [...ownedIds].filter((id) => !owned.has(id));
+  if (gap.length > 0) {
+    const rpcUrl = await resolveRpcUrl();
+    const groups = await Promise.all(
+      gap.map((id) => onChainGroup(rpcUrl, id).catch(() => null)),
+    );
+    gap.forEach((id, i) => { if (groups[i] && ours.has(groups[i]!)) owned.add(id); });
+  }
+
+  return [...owned];
 }
 
 /**
