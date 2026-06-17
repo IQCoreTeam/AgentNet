@@ -81,6 +81,7 @@ export interface State {
   hasMore: boolean;
   cursor: number;
   toast: string | null;
+  buyCelebrate: boolean;
   contextTokens?: number;
   currentModel?: string;
   queuePending: number;
@@ -114,6 +115,7 @@ const initialState: State = {
   hasMore: false,
   cursor: 0,
   toast: null,
+  buyCelebrate: false,
   marketOpen: false,
   marketTab: "skill",
   marketQuery: "",
@@ -198,7 +200,8 @@ type LocalAction =
   | { type: "__loadingAgents" }
   | { type: "__clearAgentProfile" }
   | { type: "__changeMode"; mode: string }
-  | { type: "__clearFiringSkill" };
+  | { type: "__clearFiringSkill" }
+  | { type: "__clearCelebrate" };
 type Action = ServerMessage | LocalAction;
 
 function reducer(state: State, ev: Action): State {
@@ -339,7 +342,12 @@ function reducer(state: State, ev: Action): State {
     case "skillDetail":
       return { ...state, marketDetail: ev.detail };
     case "buyResult":
-      return { ...state, toast: ev.ok ? `Bought! Slug: ${ev.slug ?? ev.skillId}` : `Buy failed: ${ev.error ?? "unknown"}` };
+      return {
+        ...state,
+        toast: ev.ok ? `Bought! Slug: ${ev.slug ?? ev.skillId}` : `Buy failed: ${ev.error ?? "unknown"}`,
+        marketOwned: ev.ok ? [...state.marketOwned, ev.slug ?? ev.skillId] : state.marketOwned,
+        buyCelebrate: ev.ok ? true : state.buyCelebrate,
+      };
     case "ownedSkills":
       return { ...state, marketOwned: ev.names };
     case "balance":
@@ -378,6 +386,8 @@ function reducer(state: State, ev: Action): State {
       };
     case "__clearFiringSkill":
       return { ...state, firingSkill: null };
+    case "__clearCelebrate":
+      return { ...state, buyCelebrate: false };
     default:
       return state;
   }
@@ -404,6 +414,7 @@ interface Store {
   loadingAgents: () => void;
   clearAgentProfile: () => void;
   clearFiringSkill: () => void;
+  clearCelebrate: () => void;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -501,6 +512,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       loadingAgents: () => raw({ type: "__loadingAgents" }),
       clearAgentProfile: () => raw({ type: "__clearAgentProfile" }),
       clearFiringSkill: () => raw({ type: "__clearFiringSkill" }),
+      clearCelebrate: () => raw({ type: "__clearCelebrate" }),
     };
   }, [state]);
 

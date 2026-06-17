@@ -128,3 +128,16 @@ body {
 .skill-firing-badge {
   text-shadow: 0 0 8px rgba(134, 239, 172, 0.8);
 }
+
+/* Buy celebration burst */
+@keyframes buy-particle {
+  0%   { transform: translate(0, 0) scale(1.2); opacity: 1; }
+  100% { transform: translate(calc(cos(var(--angle)) * 90px), calc(sin(var(--angle)) * -90px)) scale(0.2); opacity: 0; }
+}
+@keyframes buy-pop {
+  0%   { transform: scale(0); opacity: 0; }
+  55%  { transform: scale(1.4); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0; }
+}
+.buy-particle { animation: buy-particle 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.buy-pop      { animation: buy-pop 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards; }

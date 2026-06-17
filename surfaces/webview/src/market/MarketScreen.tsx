@@ -5,6 +5,7 @@ import { SkillDetailView } from "./SkillDetailView";
 import { PublishForm } from "./PublishForm";
 import { AgentDirectory } from "./AgentDirectory";
 import { AgentProfileView } from "./AgentProfileView";
+import { BuyCelebration } from "./BuyCelebration";
 import type { SkillCard } from "../transport/protocol";
 
 type MarketView = "browse" | "publish" | "helius" | "agents";
@@ -49,6 +50,7 @@ export function MarketScreen() {
           owned={state.marketOwned.includes(state.marketDetail.card.name)}
           onBack={() => { send({ type: "ownedSkills" }); clearMarketDetail(); }}
         />
+        {state.buyCelebrate && <BuyCelebration />}
       </div>
     );
   }
