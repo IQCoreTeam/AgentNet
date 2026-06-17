@@ -34,6 +34,14 @@ export function useChat(
   const [hasMore, setHasMore] = useState(false);
   const [cursor, setCursor] = useState<number | null>(null);
   const [epoch, setEpoch] = useState(0);
+  const [firingSkill, setFiringSkill] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (firingSkill) {
+      const t = setTimeout(() => setFiringSkill(null), 1400);
+      return () => clearTimeout(t);
+    }
+  }, [firingSkill]);
 
   const handle = useRef<SessionHandle | null>(null);
   // keep latest cli/model in refs so ensureHandle (created once) reads current values.
@@ -100,6 +108,7 @@ export function useChat(
         }),
       );
       h.onUsage((n) => setContextTokens(n));
+      h.onSkill((name) => setFiringSkill(name));
       h.onTurnEnd(() => {
         // a fresh session reveals its canonical id now — adopt it so resume/switch work.
         const id = pendingRef.current || h.sessionId;
@@ -273,5 +282,6 @@ export function useChat(
     newSession,
     deleteSession,
     refreshSessions,
+    firingSkill,
   };
 }

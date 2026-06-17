@@ -6,7 +6,7 @@
 
 // Market types are defined once in packages/core and re-exported here so every surface
 // that imports from this file gets compile-time checking on the market message contract.
-export type { SkillCard, SkillDetail, MarketRequest, MarketEvent, RpcStatus, AgentProfile } from "@iqlabs-official/agent-sdk";
+export type { SkillCard, SkillDetail, MarketRequest, MarketEvent, RpcStatus, AgentProfile, Reputation } from "@iqlabs-official/agent-sdk";
 
 // ── shared payload shapes ──
 
@@ -27,6 +27,7 @@ export interface ChatMessage {
     file?: string;
     diff?: string;
   };
+  _pending?: true; // local-only: queued user message shown optimistically, replaced on server echo
 }
 
 export interface SessionMeta {
@@ -140,7 +141,10 @@ export type ClientMessage =
       hashtags?: string[];
       priceSol: string;
       image?: string;
-    };
+    }
+  | { type: "submitGithubToken"; token: string }
+  | { type: "clearGithubToken" }
+  | { type: "getGithubStatus" };
 
 // ── server → UI (SSE /events) ──
 
@@ -191,4 +195,5 @@ export type ServerMessage =
   | { type: "agentProfile"; profile: import("@iqlabs-official/agent-sdk").AgentProfile }
   | { type: "buyAllResult"; wallet: string; ok: boolean; bought: number; failed: number; error?: string }
   | { type: "agentNoteResult"; agentWallet: string; ok: boolean; error?: string }
-  | { type: "publishResult"; ok: boolean; mint?: string; error?: string };
+  | { type: "publishResult"; ok: boolean; mint?: string; error?: string }
+  | { type: "githubStatus"; hasToken: boolean; masked?: string };

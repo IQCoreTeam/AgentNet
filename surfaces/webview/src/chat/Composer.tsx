@@ -47,16 +47,11 @@ const SLASH_CMDS = [
 
 // Input + engine tabs + model/effort pickers. FROZEN while an approval is pending.
 export function Composer() {
-  const { state, send } = useStore();
+  const { state, send, queueCount } = useStore();
   const [text, setText] = useState("");
   const [effort, setEffort] = useState("default");
-  const [modeByCli, setModeByCli] = useState<Record<string, string>>({
-    claude: "acceptEdits",
-    codex: "auto",
-  });
-  const mode = modeByCli[state.cli] ?? MODES[state.cli][0].value;
+  const mode = state.modeByCli[state.cli] ?? MODES[state.cli][0].value;
   function changeMode(v: string) {
-    setModeByCli((prev) => ({ ...prev, [state.cli]: v }));
     send({ type: "mode", mode: v });
   }
   const [attached, setAttached] = useState<(ImageInput & { dataUrl: string })[]>([]);
@@ -188,7 +183,7 @@ export function Composer() {
   }
 
   function submit() {
-    if (frozen || busy) return;
+    if (frozen) return;
     const t = text.trim();
     if (!t && !attached.length) return;
 
@@ -335,6 +330,11 @@ export function Composer() {
             ctx: {state.contextTokens >= 1000 ? Math.round(state.contextTokens / 1000) + "k" : state.contextTokens}
           </span>
         )}
+        {queueCount > 0 && (
+          <span className="ml-auto text-amber-400 animate-pulse text-[10px]">
+            ⏳ {queueCount} queued
+          </span>
+        )}
       </div>
 
       {/* attached image thumbnails */}
@@ -464,9 +464,11 @@ export function Composer() {
           placeholder={
             frozen
               ? "Answer the approval above to continue…"
-              : busy
-                ? `Message ${state.cli}… (Esc to stop)`
-                : `Message ${state.cli}… (Enter · paste image)`
+              : busy && queueCount > 0
+                ? `Queued (${queueCount}) — agent will pick up next…`
+                : busy
+                  ? `Message ${state.cli}… (queues while busy · Esc to stop)`
+                  : `Message ${state.cli}… (Enter · paste image)`
           }
           className="max-h-40 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-sm leading-relaxed outline-none [overflow-wrap:anywhere] disabled:cursor-not-allowed"
         />

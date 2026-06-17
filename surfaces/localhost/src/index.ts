@@ -59,6 +59,9 @@ import {
   maskedHeliusKey,
   hasDasRpc,
   getNetwork,
+  saveGithubToken,
+  loadGithubToken,
+  maskedGithubToken,
 } from "@iqlabs-official/agent-sdk";
 
 const PORT = Number(process.env.AGENTNET_PORT ?? 4317);
@@ -411,6 +414,28 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
         }
         return;
       }
+    }
+  });
+
+  // ── GitHub token handlers (outside market recv, no wallet required) ──
+  c.recvs.push(async (m: any) => {
+    if (m?.type === "submitGithubToken" && typeof m.token === "string" && m.token.trim()) {
+      await saveGithubToken(m.token.trim());
+      const masked = await maskedGithubToken();
+      const login = await loadGithubToken().then((t) => t?.token ? "configured" : undefined).catch(() => undefined);
+      c.send({ type: "githubStatus", hasToken: true, masked: masked ?? undefined });
+      c.send({ type: "toast", text: "GitHub token saved." });
+      return;
+    }
+    if (m?.type === "clearGithubToken") {
+      await saveGithubToken("");
+      c.send({ type: "githubStatus", hasToken: false });
+      return;
+    }
+    if (m?.type === "getGithubStatus") {
+      const masked = await maskedGithubToken();
+      c.send({ type: "githubStatus", hasToken: !!masked, masked: masked ?? undefined });
+      return;
     }
   });
 

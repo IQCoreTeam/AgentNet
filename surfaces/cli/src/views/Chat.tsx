@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Box, Text, Static, useApp, useInput } from "ink";
-import type { AgentRuntime, Wallet } from "@iqlabs-official/agent-sdk/runtime/contract";
+import type { AgentRuntime, Wallet, ChatMessage } from "@iqlabs-official/agent-sdk/runtime/contract";
 import type { CliReport } from "@iqlabs-official/agent-sdk";
 import type { ApprovalRequest } from "@iqlabs-official/agent-sdk/runtime/approval/channel";
 import type { AppOptions } from "../app.js";
@@ -73,6 +73,7 @@ export function Chat({
     approval: approval ?? undefined,
   });
   const [notice, setNotice] = useState("");
+  const [localLog, setLocalLog] = useState<ChatMessage[]>([]);
   // Welcome-panel data, fetched once on mount: cloud/storage (local-only → null), the
   // masked Helius key ("••••AB12" or null = default RPC), and the wallet's owned skills.
   const [cloud, setCloud] = useState<{ kind: string; account?: string } | null>(null);
@@ -391,9 +392,6 @@ export function Chat({
       setPanelFocused(false);
       return;
     }
-    // github
-    setNotice("github linking... coming soon");
-    setPanelFocused(false);
   }
 
   // commit a Helius key from the panel's key editor. "" clears it (back to default RPC).
@@ -461,6 +459,7 @@ export function Chat({
         }
         chat.changeModel(arg);
         setNotice(`model → ${arg}`);
+        setLocalLog((l) => [...l, { role: "summary", text: `─── model: ${arg} ───`, ts: Date.now() }]);
         return;
       case "models":
         setShowModels(true);
@@ -664,6 +663,7 @@ export function Chat({
         onPick={(v) => {
           chat.changeModel(v);
           setNotice(`model → ${v ?? "default"}`);
+          setLocalLog((l) => [...l, { role: "summary", text: `─── model: ${v ?? "default"} ───`, ts: Date.now() }]);
           setShowModels(false);
         }}
         onClose={() => setShowModels(false)}
@@ -761,7 +761,9 @@ export function Chat({
   // Static on wholesale changes (resume / new / scroll-back prepend).
   const lastMsg = chat.messages[chat.messages.length - 1];
   const streaming = chat.busy && lastMsg?.role === "assistant";
-  const committed = streaming ? chat.messages.slice(0, -1) : chat.messages;
+  const baseCommitted = streaming ? chat.messages.slice(0, -1) : chat.messages;
+  // Append local system messages (model-switch separators etc.) after committed chat history.
+  const committed = localLog.length ? [...baseCommitted, ...localLog] : baseCommitted;
   const liveMsg = streaming ? lastMsg : null;
 
   // the welcome control panel shows on an empty, idle session. Focus stays on the composer
@@ -802,6 +804,12 @@ export function Chat({
       {liveMsg ? <Message msg={liveMsg} live /> : null}
 
       {chat.busy && !pendingApproval ? <ThinkingLine /> : null}
+
+      {chat.firingSkill ? (
+        <Box paddingLeft={2} marginTop={1}>
+          <Text color={colors.ok}>{`⚡ Casting <${chat.firingSkill}>`}</Text>
+        </Box>
+      ) : null}
 
       {pendingApproval ? (
         <ApprovalCard

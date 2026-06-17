@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useStore } from "../state/store";
 
 interface Props {
@@ -13,7 +13,23 @@ export function PublishForm({ onBack }: Props) {
   const [category, setCategory] = useState("");
   const [hashtags, setHashtags] = useState("");
   const [priceSol, setPriceSol] = useState("0");
+  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [imageMime, setImageMime] = useState<string>("image/png");
   const [submitting, setSubmitting] = useState(false);
+  const imgInputRef = useRef<HTMLInputElement>(null);
+
+  function handleImageFile(file: File) {
+    setImageMime(file.type || "image/png");
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      setImageDataUrl(dataUrl);
+      const comma = dataUrl.indexOf(",");
+      if (comma >= 0) setImageBase64(dataUrl.slice(comma + 1));
+    };
+    reader.readAsDataURL(file);
+  }
 
   const result = state.publishResult;
 
@@ -29,6 +45,7 @@ export function PublishForm({ onBack }: Props) {
       category: category.trim() || undefined,
       hashtags: hashtags.split(",").map((h) => h.trim()).filter(Boolean),
       priceSol: priceSol || "0",
+      image: imageBase64 ? `data:${imageMime};base64,${imageBase64}` : undefined,
     });
     setTimeout(() => setSubmitting(false), 15000);
   }
@@ -120,6 +137,35 @@ export function PublishForm({ onBack }: Props) {
             value={priceSol}
             onChange={(e) => setPriceSol(e.target.value)}
           />
+        </Field>
+        <Field label="Cover Image (optional)">
+          <input
+            ref={imgInputRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(e) => { if (e.target.files?.[0]) handleImageFile(e.target.files[0]); e.target.value = ""; }}
+          />
+          {imageDataUrl ? (
+            <div className="flex items-center gap-2">
+              <img src={imageDataUrl} alt="preview" className="h-14 w-14 rounded-lg object-cover border border-zinc-700" />
+              <button
+                type="button"
+                onClick={() => { setImageDataUrl(null); setImageBase64(null); }}
+                className="text-xs text-zinc-500 underline"
+              >
+                Remove
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => imgInputRef.current?.click()}
+              className="flex items-center gap-2 rounded-lg border border-dashed border-zinc-700 px-3 py-3 text-xs text-zinc-500 active:bg-zinc-800 w-full"
+            >
+              📷 Choose image
+            </button>
+          )}
         </Field>
       </div>
 

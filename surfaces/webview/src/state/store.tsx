@@ -14,15 +14,18 @@ import {
 } from "react";
 import { Transport } from "../transport/client";
 import type {
+  AgentProfile,
   ApprovalRequest,
   ChatMessage,
   Cli,
   ClientMessage,
+  ImageInput,
   ServerMessage,
   SessionMeta,
   SkillCard,
   SkillDetail,
   RpcStatus,
+  Reputation,
 } from "../transport/protocol";
 
 // A rendered log entry. We keep messages as-is and stream into the last assistant/
@@ -79,6 +82,13 @@ export interface State {
   cursor: number;
   toast: string | null;
   contextTokens?: number;
+  currentModel?: string;
+  queuePending: number;
+  agents: Reputation[];
+  agentProfile: AgentProfile | null;
+  agentsLoading: boolean;
+  githubStatus: { hasToken: boolean; masked?: string } | null;
+  modeByCli: Record<Cli, string>;
 }
 
 const initialState: State = {
@@ -116,11 +126,23 @@ const initialState: State = {
   rpcStatus: null,
   publishResult: null,
   firingSkill: null,
+  currentModel: undefined,
+  queuePending: 0,
+  agents: [],
+  agentProfile: null,
+  agentsLoading: false,
+  githubStatus: null,
+  modeByCli: {
+    claude: "acceptEdits",
+    codex: "auto",
+  },
 };
 
 // Append a streamed message: if the incoming partial continues the same role/cli as the
 // tail bubble, merge text into it; otherwise start a new bubble. A non-partial message is
 // a complete bubble (or a tool/summary/user entry) pushed as-is.
+// When server echoes a user message that matches a pending (_pending=true) optimistic bubble,
+// replace the pending one instead of appending — avoids duplicate user bubbles on queue flush.
 function appendMessage(log: ChatMessage[], msg: ChatMessage): ChatMessage[] {
   const tail = log[log.length - 1];
   const streamingInto =
@@ -133,6 +155,22 @@ function appendMessage(log: ChatMessage[], msg: ChatMessage): ChatMessage[] {
   if (streamingInto) {
     const merged: ChatMessage = { ...tail, ...msg, text: tail.text + msg.text };
     return [...log.slice(0, -1), merged];
+  }
+  // Server echoes user message → find and replace the matching pending bubble.
+  if (msg.role === "user" && !msg.partial) {
+    let pendingIdx = -1;
+    for (let i = log.length - 1; i >= 0; i--) {
+      const m = log[i];
+      if (m._pending && m.role === "user" && m.text === msg.text) {
+        pendingIdx = i;
+        break;
+      }
+    }
+    if (pendingIdx !== -1) {
+      const next = [...log];
+      next[pendingIdx] = msg; // replace pending with confirmed
+      return next;
+    }
   }
   return [...log, msg];
 }
@@ -153,7 +191,14 @@ type LocalAction =
   | { type: "__setMarketQuery"; query: string }
   | { type: "__marketSearching" }
   | { type: "__clearMarketDetail" }
-  | { type: "__clearPublishResult" };
+  | { type: "__clearPublishResult" }
+  | { type: "__modelChange"; model: string }
+  | { type: "__queueMsg"; text: string }
+  | { type: "__dequeueMsg" }
+  | { type: "__loadingAgents" }
+  | { type: "__clearAgentProfile" }
+  | { type: "__changeMode"; mode: string }
+  | { type: "__clearFiringSkill" };
 type Action = ServerMessage | LocalAction;
 
 function reducer(state: State, ev: Action): State {
@@ -272,6 +317,20 @@ function reducer(state: State, ev: Action): State {
       return { ...state, marketDetail: null };
     case "__clearPublishResult":
       return { ...state, publishResult: null };
+    case "__modelChange":
+      return {
+        ...state,
+        currentModel: ev.model,
+        log: [...state.log, { role: "summary" as const, text: `─── model: ${ev.model} ───` }],
+      };
+    case "__queueMsg":
+      return {
+        ...state,
+        queuePending: state.queuePending + 1,
+        log: [...state.log, { role: "user" as const, text: ev.text, _pending: true }],
+      };
+    case "__dequeueMsg":
+      return { ...state, queuePending: Math.max(0, state.queuePending - 1) };
     // ── market server events ──
     case "searchResults":
       return { ...state, marketResults: ev.results, marketSearching: false, marketSearchError: null };
@@ -294,11 +353,31 @@ function reducer(state: State, ev: Action): State {
     case "postNoteResult":
       return { ...state, toast: ev.ok ? "Comment posted." : `Comment failed: ${ev.error ?? "unknown"}` };
     case "agents":
+      return { ...state, agents: ev.agents as Reputation[], agentsLoading: false };
     case "agentProfile":
+      return { ...state, agentProfile: ev.profile };
     case "buyAllResult":
+      return { ...state, toast: ev.ok ? `Bought ${ev.bought} skills from agent.` : `Buy-all failed: ${ev.error ?? "unknown"}` };
     case "agentNoteResult":
+      return { ...state, toast: ev.ok ? "Note posted." : `Note failed: ${ev.error ?? "unknown"}` };
     case "notes":
       return state;
+    case "githubStatus":
+      return { ...state, githubStatus: { hasToken: ev.hasToken, masked: ev.masked } };
+    case "__loadingAgents":
+      return { ...state, agentsLoading: true };
+    case "__clearAgentProfile":
+      return { ...state, agentProfile: null };
+    case "__changeMode":
+      return {
+        ...state,
+        modeByCli: {
+          ...state.modeByCli,
+          [state.cli]: ev.mode,
+        },
+      };
+    case "__clearFiringSkill":
+      return { ...state, firingSkill: null };
     default:
       return state;
   }
@@ -321,6 +400,10 @@ interface Store {
   marketSearching: () => void;
   clearMarketDetail: () => void;
   clearPublishResult: () => void;
+  queueCount: number;
+  loadingAgents: () => void;
+  clearAgentProfile: () => void;
+  clearFiringSkill: () => void;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -328,6 +411,8 @@ const StoreContext = createContext<Store | null>(null);
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, raw] = useReducer(reducer, initialState);
   const transportRef = useRef<Transport | null>(null);
+  const msgQueue = useRef<{ text: string; images?: ImageInput[] }[]>([]);
+  const busyRef = useRef(false);
 
   useEffect(() => {
     const t = new Transport();
@@ -340,6 +425,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       t.close();
     };
   }, []);
+
+  // Keep busyRef in sync so send() (stable closure) can read current busy state.
+  useEffect(() => { busyRef.current = state.typing; }, [state.typing]);
+
+  // Flush queued messages when agent becomes free.
+  useEffect(() => {
+    if (!state.typing && msgQueue.current.length > 0) {
+      const next = msgQueue.current.shift()!;
+      raw({ type: "__dequeueMsg" });
+      raw({ type: "__typing" });
+      void transportRef.current?.post({ type: "send", text: next.text, images: next.images });
+    }
+  }, [state.typing]);
 
   // When onboarding completes (phase enters "chat"), the first SSE stream is still bound
   // to the server's ONBOARDING handler — which ignores chat messages. Reopen the stream so
@@ -363,8 +461,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const store = useMemo<Store>(() => {
     const send = (msg: ClientMessage) => {
-      // Optimistically show typing dots on send; core's turnEnd clears them.
-      if (msg.type === "send") raw({ type: "__typing" });
+      if (msg.type === "send") {
+        if (busyRef.current) {
+          // Agent busy — show pending bubble immediately, flush when turn ends.
+          msgQueue.current.push({ text: msg.text, images: msg.images });
+          raw({ type: "__queueMsg", text: msg.text });
+          return;
+        }
+        raw({ type: "__typing" });
+      }
+      // Inject inline model-switch separator into chat log.
+      if (msg.type === "model" && msg.model) {
+        raw({ type: "__modelChange", model: msg.model });
+      }
+      if (msg.type === "mode" && typeof msg.mode === "string") {
+        raw({ type: "__changeMode", mode: msg.mode });
+      }
       void transportRef.current?.post(msg);
     };
     return {
@@ -385,6 +497,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       marketSearching: () => raw({ type: "__marketSearching" }),
       clearMarketDetail: () => raw({ type: "__clearMarketDetail" }),
       clearPublishResult: () => raw({ type: "__clearPublishResult" }),
+      queueCount: state.queuePending,
+      loadingAgents: () => raw({ type: "__loadingAgents" }),
+      clearAgentProfile: () => raw({ type: "__clearAgentProfile" }),
+      clearFiringSkill: () => raw({ type: "__clearFiringSkill" }),
     };
   }, [state]);
 

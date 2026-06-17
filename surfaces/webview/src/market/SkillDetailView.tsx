@@ -12,6 +12,7 @@ export function SkillDetailView({ detail, owned, onBack }: Props) {
   const { send } = useStore();
   const [buying, setBuying] = useState(false);
   const [noteText, setNoteText] = useState("");
+  const [noteGitLink, setNoteGitLink] = useState("");
   const { card, skillText, notes } = detail;
   const priceSol = card.price ? (Number(card.price) / 1_000_000_000).toFixed(3) : null;
 
@@ -23,8 +24,9 @@ export function SkillDetailView({ detail, owned, onBack }: Props) {
 
   function handleNote() {
     if (!noteText.trim()) return;
-    send({ type: "postNote", skillId: card.id, skillType: card.type, text: noteText.trim() });
+    send({ type: "postNote", skillId: card.id, skillType: card.type, text: noteText.trim(), gitLink: noteGitLink.trim() || undefined });
     setNoteText("");
+    setNoteGitLink("");
   }
 
   return (
@@ -86,6 +88,12 @@ export function SkillDetailView({ detail, owned, onBack }: Props) {
               placeholder="Share your experience…"
               value={noteText}
               onChange={(e) => setNoteText(e.target.value)}
+            />
+            <input
+              className="w-full rounded-lg bg-zinc-900 border border-zinc-800 px-2 py-1.5 text-xs text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-blue-500/50"
+              placeholder="GitHub link (optional)"
+              value={noteGitLink}
+              onChange={(e) => setNoteGitLink(e.target.value)}
             />
             <button
               onClick={handleNote}

@@ -101,6 +101,7 @@ export interface SessionHandle {
   // stop(), which tears the whole handle down.
   interrupt(): void;
   stop(): void;
+  updateMode?(mode: string): void;
 }
 
 // ── the engine the UI calls ─────────────────────────────

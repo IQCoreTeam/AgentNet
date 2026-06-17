@@ -3,12 +3,14 @@ import { useStore } from "../state/store";
 import { SkillCardTile } from "./SkillCardTile";
 import { SkillDetailView } from "./SkillDetailView";
 import { PublishForm } from "./PublishForm";
+import { AgentDirectory } from "./AgentDirectory";
+import { AgentProfileView } from "./AgentProfileView";
 import type { SkillCard } from "../transport/protocol";
 
-type MarketView = "browse" | "publish" | "helius";
+type MarketView = "browse" | "publish" | "helius" | "agents";
 
 export function MarketScreen() {
-  const { state, send, closeMarket, setMarketTab, setMarketQuery, marketSearching, clearMarketDetail } = useStore();
+  const { state, send, closeMarket, setMarketTab, setMarketQuery, marketSearching, clearMarketDetail, clearAgentProfile } = useStore();
   const [view, setView] = useState<MarketView>("browse");
 
   // On first open: load owned skills, RPC status, and initial search
@@ -18,6 +20,11 @@ export function MarketScreen() {
     send({ type: "getBalance" });
     send({ type: "searchSkills", query: "", kind: state.marketTab });
   }, []);
+
+  // When agent profile loads, switch to agents view to show it
+  useEffect(() => {
+    if (state.agentProfile) setView("agents");
+  }, [state.agentProfile]);
 
   function runSearch(q: string, tab?: "skill" | "workflow") {
     marketSearching();
@@ -51,6 +58,19 @@ export function MarketScreen() {
     return (
       <div className="flex flex-col h-full bg-zinc-950">
         <PublishForm onBack={() => setView("browse")} />
+      </div>
+    );
+  }
+
+  // Agent profile
+  if (view === "agents" && state.agentProfile) {
+    return (
+      <div className="flex flex-col h-full bg-zinc-950">
+        <AgentProfileView
+          profile={state.agentProfile}
+          onBack={() => clearAgentProfile()}
+          onOpenSkill={(card) => send({ type: "getSkillDetail", mint: card.id })}
+        />
       </div>
     );
   }
@@ -106,10 +126,10 @@ export function MarketScreen() {
         {(["skill", "workflow"] as const).map((tab) => (
           <button
             key={tab}
-            onClick={() => handleTabChange(tab)}
+            onClick={() => { setView("browse"); handleTabChange(tab); }}
             className={[
               "px-4 py-2 text-sm capitalize border-b-2 transition-colors",
-              state.marketTab === tab
+              view === "browse" && state.marketTab === tab
                 ? "border-green-500 text-green-400"
                 : "border-transparent text-zinc-500 active:text-zinc-300",
             ].join(" ")}
@@ -117,6 +137,17 @@ export function MarketScreen() {
             {tab}s
           </button>
         ))}
+        <button
+          onClick={() => setView("agents")}
+          className={[
+            "px-4 py-2 text-sm border-b-2 transition-colors",
+            view === "agents"
+              ? "border-green-500 text-green-400"
+              : "border-transparent text-zinc-500 active:text-zinc-300",
+          ].join(" ")}
+        >
+          Agents
+        </button>
       </div>
 
       {/* Search */}
@@ -140,30 +171,36 @@ export function MarketScreen() {
         </form>
       </div>
 
-      {/* Results */}
+      {/* Results / Agent directory */}
       <div className="flex-1 overflow-y-auto px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        {state.marketSearching && (
-          <div className="py-8 text-center text-sm text-zinc-600">Searching…</div>
+        {view === "agents" ? (
+          <AgentDirectory />
+        ) : (
+          <>
+            {state.marketSearching && (
+              <div className="py-8 text-center text-sm text-zinc-600">Searching…</div>
+            )}
+            {state.marketSearchError && (
+              <div className="py-6 text-center text-sm text-red-400">{state.marketSearchError}</div>
+            )}
+            {!state.marketSearching && state.marketResults?.length === 0 && (
+              <div className="py-8 text-center text-sm text-zinc-600">
+                No {state.marketTab}s found.{!state.rpcStatus?.hasKey && " Add a Helius key for better results."}
+              </div>
+            )}
+            <div className="space-y-2 pt-1">
+              {state.marketResults?.map((card) => (
+                <SkillCardTile
+                  key={card.id}
+                  card={card}
+                  owned={state.marketOwned.includes(card.name)}
+                  firing={state.firingSkill === card.name}
+                  onOpen={handleOpenCard}
+                />
+              ))}
+            </div>
+          </>
         )}
-        {state.marketSearchError && (
-          <div className="py-6 text-center text-sm text-red-400">{state.marketSearchError}</div>
-        )}
-        {!state.marketSearching && state.marketResults?.length === 0 && (
-          <div className="py-8 text-center text-sm text-zinc-600">
-            No {state.marketTab}s found.{!state.rpcStatus?.hasKey && " Add a Helius key for better results."}
-          </div>
-        )}
-        <div className="space-y-2 pt-1">
-          {state.marketResults?.map((card) => (
-            <SkillCardTile
-              key={card.id}
-              card={card}
-              owned={state.marketOwned.includes(card.name)}
-              firing={state.firingSkill === card.name}
-              onOpen={handleOpenCard}
-            />
-          ))}
-        </div>
       </div>
     </div>
   );

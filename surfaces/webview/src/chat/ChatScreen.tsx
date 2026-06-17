@@ -4,22 +4,26 @@ import { MessageList } from "./MessageList";
 import { ApprovalDock } from "./ApprovalDock";
 import { Composer } from "./Composer";
 import { Sessions } from "./Sessions";
+import { ConnectGithub } from "../onboarding/ConnectGithub";
 
 // Chat shell: header (sessions toggle + wallet) over the scrolling log, with the approval
 // dock + composer pinned at the bottom. Uses --vvh (visual viewport height) so the layout
 // shrinks above the on-screen keyboard instead of being covered by it.
 export function ChatScreen() {
-  const { state, openMarket } = useStore();
+  const { state, openMarket, send, clearFiringSkill } = useStore();
   const [drawer, setDrawer] = useState(false);
+  const [githubOpen, setGithubOpen] = useState(false);
   // Clear the firing skill glow after the dwell time
   const firingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (state.firingSkill) {
       if (firingTimer.current) clearTimeout(firingTimer.current);
-      firingTimer.current = setTimeout(() => {}, 1400);
+      firingTimer.current = setTimeout(() => {
+        clearFiringSkill();
+      }, 1400);
     }
     return () => { if (firingTimer.current) clearTimeout(firingTimer.current); };
-  }, [state.firingSkill]);
+  }, [state.firingSkill, clearFiringSkill]);
 
   // Track the visual viewport so the composer stays above the mobile keyboard. We set a
   // CSS var on the root and size the shell to it; on desktop this is just window height.
@@ -60,6 +64,13 @@ export function ChatScreen() {
             </span>
           )}
           <button
+            onClick={() => { send({ type: "getGithubStatus" }); setGithubOpen(true); }}
+            className={`text-xs border rounded-lg px-2 py-1 active:bg-zinc-800 ${state.githubStatus?.hasToken ? "text-green-400 border-green-700/50" : "text-zinc-400 border-zinc-700"}`}
+            title="GitHub token"
+          >
+            {state.githubStatus?.hasToken ? "⎇" : "⎇?"}
+          </button>
+          <button
             onClick={openMarket}
             className="text-xs text-zinc-400 border border-zinc-700 rounded-lg px-2 py-1 active:bg-zinc-800"
           >
@@ -84,6 +95,11 @@ export function ChatScreen() {
       <Composer />
 
       {drawer && <Sessions onClose={() => setDrawer(false)} />}
+      {githubOpen && (
+        <div className="absolute inset-0 z-50 bg-zinc-950">
+          <ConnectGithub onDone={() => setGithubOpen(false)} />
+        </div>
+      )}
     </div>
   );
 }

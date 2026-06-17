@@ -23,6 +23,9 @@ export function ApprovalDock() {
   ) {
     resolveApproval(req.id);
     send({ type: "approvalDecision", id: req.id, outcome, ...extra });
+    if (req.kind === "plan" && outcome === "once") {
+      send({ type: "mode", mode: "acceptEdits" });
+    }
   }
 
   return (

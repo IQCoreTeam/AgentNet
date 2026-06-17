@@ -1,31 +1,39 @@
 import React, { useEffect, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import type { SkillCard, SkillDetail } from "@iqlabs-official/agent-sdk";
+import type { Reputation, AgentProfile } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../theme.js";
 
-// The market actions, injected by Chat (which owns the marketplaceEnv built from the
-// wallet). Same functions the VSCode market uses — we just drive them from a TUI.
 export interface MarketApi {
   searchSkills(query: string, kind?: "skill" | "workflow"): Promise<SkillCard[]>;
   getSkillDetail(mint: string): Promise<SkillDetail>;
   buySkill(skillId: string, creatorWallet?: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
   solBalance(): Promise<number | null>;
+  postNote(skillId: string, skillType: "skill" | "workflow" | undefined, text: string, gitLink?: string): Promise<{ ok: boolean; error?: string }>;
+  publishSkill(input: { name: string; description: string; text: string; category?: string; hashtags?: string[]; priceSol: string }): Promise<{ ok: boolean; mint?: string; error?: string }>;
+  listAgents(): Promise<Reputation[]>;
+  getAgentProfile(wallet: string): Promise<AgentProfile>;
+  buyAllSkills(agentWallet: string): Promise<{ ok: boolean; bought: number; failed: number; error?: string }>;
 }
 
-// "page"-like states so it reads as navigating into a screen and back (zo's ask):
-//  list   → search box + result cards
-//  detail → one skill's body + required skills + buy
-//  confirm→ cost check before spending SOL (buy is irreversible)
-type Stage = "list" | "detail" | "confirm";
+type Stage =
+  | "list"
+  | "detail"
+  | "confirm"
+  | "comment"
+  | "publish"
+  | "agents"
+  | "agentProfile";
+
+// Publish form fields in order — tab/arrow cycles through them.
+type PublishField = "name" | "desc" | "text" | "category" | "hashtags" | "price";
+const PUBLISH_FIELDS: PublishField[] = ["name", "desc", "text", "category", "hashtags", "price"];
 
 const SOL = 1_000_000_000;
 function sol(lamports: number | null): string {
   return lamports == null ? "—" : `${(lamports / SOL).toFixed(3)} SOL`;
 }
 
-// A self-contained skill market: search, list, detail, buy. ↑/↓ move, ↵ open/confirm,
-// b buy, tab switch skills/workflows, / focus search, esc back-a-level (or close at list).
-// Mirrors the VSCode market over the same marketplaceEnv functions.
 export function SkillMarket({
   api,
   walletAddr,
@@ -35,8 +43,6 @@ export function SkillMarket({
 }: {
   api: MarketApi;
   walletAddr: string;
-  // installed skill slugs (so a card can show an "owned" badge). May be stale by a buy;
-  // onBought lets Chat refresh it after a successful purchase.
   ownedNames: string[];
   onBought: () => void;
   onClose: () => void;
@@ -44,21 +50,41 @@ export function SkillMarket({
   const [stage, setStage] = useState<Stage>("list");
   const [kind, setKind] = useState<"skill" | "workflow">("skill");
   const [query, setQuery] = useState("");
-  const [typing, setTyping] = useState(true); // search box has the cursor (list stage)
+  const [typing, setTyping] = useState(true);
   const [results, setResults] = useState<SkillCard[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [idx, setIdx] = useState(0);
   const [detail, setDetail] = useState<SkillDetail | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
-  const [busy, setBusy] = useState(false); // a buy is in flight
-  const [flash, setFlash] = useState<string | null>(null); // last buy outcome
+  const [busy, setBusy] = useState(false);
+  const [flash, setFlash] = useState<string | null>(null);
+
+  // comment stage
+  const [commentText, setCommentText] = useState("");
+  const [commentGitLink, setCommentGitLink] = useState("");
+  const [commentField, setCommentField] = useState<"text" | "gitLink">("text");
+
+  // publish stage
+  const [pubField, setPubField] = useState<PublishField>("name");
+  const [pubName, setPubName] = useState("");
+  const [pubDesc, setPubDesc] = useState("");
+  const [pubText, setPubText] = useState("");
+  const [pubCategory, setPubCategory] = useState("");
+  const [pubHashtags, setPubHashtags] = useState("");
+  const [pubPrice, setPubPrice] = useState("0.1");
+  const [pubResult, setPubResult] = useState<string | null>(null);
+
+  // agents stage
+  const [agents, setAgents] = useState<Reputation[]>([]);
+  const [agentIdx, setAgentIdx] = useState(0);
+  const [agentProfile, setAgentProfile] = useState<AgentProfile | null>(null);
+  const [agentBuyResult, setAgentBuyResult] = useState<string | null>(null);
 
   const owned = new Set(ownedNames);
   const clamped = Math.min(idx, Math.max(0, results.length - 1));
   const selected = results[clamped];
 
-  // run a search (debounced by Enter / tab, not per-keystroke — keeps it cheap).
   async function search(q: string, k: "skill" | "workflow") {
     setLoading(true);
     setError(null);
@@ -73,7 +99,6 @@ export function SkillMarket({
     }
   }
 
-  // initial load + balance.
   useEffect(() => {
     void search("", kind);
     void api.solBalance().then(setBalance).catch(() => setBalance(null));
@@ -109,9 +134,155 @@ export function SkillMarket({
     }
   }
 
-  useInput((input, key) => {
-    if (busy) return; // ignore input while a buy is settling
+  async function doComment() {
+    if (!detail || !commentText.trim()) return;
+    setBusy(true);
+    const res = await api.postNote(
+      detail.card.id,
+      detail.card.type,
+      commentText.trim(),
+      commentGitLink.trim() || undefined,
+    );
+    setBusy(false);
+    if (res.ok) {
+      setFlash("comment posted");
+      setCommentText("");
+      setCommentGitLink("");
+      setStage("detail");
+    } else {
+      setFlash(`comment failed: ${res.error ?? "unknown"}`);
+    }
+  }
 
+  async function doPublish() {
+    if (!pubName.trim() || !pubDesc.trim() || !pubText.trim()) return;
+    setBusy(true);
+    const res = await api.publishSkill({
+      name: pubName.trim(),
+      description: pubDesc.trim(),
+      text: pubText.trim(),
+      category: pubCategory.trim() || undefined,
+      hashtags: pubHashtags.trim() ? pubHashtags.split(",").map((h) => h.trim()).filter(Boolean) : undefined,
+      priceSol: pubPrice.trim() || "0.1",
+    });
+    setBusy(false);
+    if (res.ok) {
+      setPubResult(`published! mint: ${res.mint ?? "?"}`);
+    } else {
+      setPubResult(`failed: ${res.error ?? "unknown"}`);
+    }
+  }
+
+  async function loadAgents() {
+    setLoading(true);
+    try {
+      setAgents(await api.listAgents());
+      setAgentIdx(0);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function openAgentProfile(wallet: string) {
+    setLoading(true);
+    try {
+      setAgentProfile(await api.getAgentProfile(wallet));
+      setStage("agentProfile");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function doBuyAll(wallet: string) {
+    setBusy(true);
+    setAgentBuyResult(null);
+    const res = await api.buyAllSkills(wallet);
+    setBusy(false);
+    if (res.ok) {
+      setAgentBuyResult(`bought ${res.bought} skill${res.bought !== 1 ? "s" : ""}${res.failed ? `, ${res.failed} failed` : ""}`);
+      onBought();
+    } else {
+      setAgentBuyResult(`failed: ${res.error ?? "unknown"}`);
+    }
+  }
+
+  // get/set helpers for publish form fields
+  function pubGet(f: PublishField) {
+    return { name: pubName, desc: pubDesc, text: pubText, category: pubCategory, hashtags: pubHashtags, price: pubPrice }[f];
+  }
+  function pubSet(f: PublishField, v: string) {
+    ({ name: setPubName, desc: setPubDesc, text: setPubText, category: setPubCategory, hashtags: setPubHashtags, price: setPubPrice }[f])(v);
+  }
+
+  useInput((input, key) => {
+    if (busy) return;
+
+    // ── agent profile ──────────────────────────────────────────────────────
+    if (stage === "agentProfile") {
+      if (key.escape) { setStage("agents"); setAgentProfile(null); setAgentBuyResult(null); }
+      if (input === "b" && agentProfile) void doBuyAll(agentProfile.reputation.wallet);
+      return;
+    }
+
+    // ── agents list ────────────────────────────────────────────────────────
+    if (stage === "agents") {
+      if (key.escape) { setStage("list"); setAgents([]); setError(null); return; }
+      if (key.upArrow) return setAgentIdx((i) => Math.max(0, i - 1));
+      if (key.downArrow) return setAgentIdx((i) => Math.min(agents.length - 1, i + 1));
+      if (key.return && agents[agentIdx]) void openAgentProfile(agents[agentIdx].wallet);
+      return;
+    }
+
+    // ── publish ────────────────────────────────────────────────────────────
+    if (stage === "publish") {
+      if (pubResult) {
+        if (key.escape || key.return) { setPubResult(null); setStage("list"); }
+        return;
+      }
+      if (key.escape) { setStage("list"); return; }
+      const fi = PUBLISH_FIELDS.indexOf(pubField);
+      if (key.tab || key.downArrow) {
+        setPubField(PUBLISH_FIELDS[(fi + 1) % PUBLISH_FIELDS.length]);
+        return;
+      }
+      if (key.upArrow) {
+        setPubField(PUBLISH_FIELDS[(fi + PUBLISH_FIELDS.length - 1) % PUBLISH_FIELDS.length]);
+        return;
+      }
+      if (key.return) {
+        if (fi < PUBLISH_FIELDS.length - 1) {
+          setPubField(PUBLISH_FIELDS[fi + 1]);
+        } else {
+          void doPublish();
+        }
+        return;
+      }
+      if (key.backspace || key.delete) { pubSet(pubField, pubGet(pubField).slice(0, -1)); return; }
+      if (input && !key.ctrl && !key.meta) { pubSet(pubField, pubGet(pubField) + input); return; }
+      return;
+    }
+
+    // ── comment ────────────────────────────────────────────────────────────
+    if (stage === "comment") {
+      if (key.escape) { setStage("detail"); return; }
+      if (key.tab || key.downArrow) {
+        setCommentField((f) => f === "text" ? "gitLink" : "text");
+        return;
+      }
+      if (key.return && commentField === "gitLink") { void doComment(); return; }
+      if (key.return) { setCommentField("gitLink"); return; }
+      const setter = commentField === "text" ? setCommentText : setCommentGitLink;
+      const cur = commentField === "text" ? commentText : commentGitLink;
+      if (key.backspace || key.delete) { setter(cur.slice(0, -1)); return; }
+      if (input && !key.ctrl && !key.meta) { setter(cur + input); return; }
+      return;
+    }
+
+    // ── confirm ────────────────────────────────────────────────────────────
     if (stage === "confirm") {
       const card = detail?.card ?? selected;
       if (key.escape || input === "n") return setStage(detail ? "detail" : "list");
@@ -121,57 +292,189 @@ export function SkillMarket({
       return;
     }
 
+    // ── detail ─────────────────────────────────────────────────────────────
     if (stage === "detail") {
-      if (key.escape) {
-        setStage("list");
-        setDetail(null);
+      if (key.escape) { setStage("list"); setDetail(null); return; }
+      if (input === "b" && detail && !owned.has(detail.card.name)) { setStage("confirm"); return; }
+      if (input === "c" && detail) {
+        setCommentText(""); setCommentGitLink(""); setCommentField("text");
+        setStage("comment");
         return;
       }
-      if (input === "b" && detail && !owned.has(detail.card.name)) setStage("confirm");
       return;
     }
 
-    // list stage
+    // ── list ───────────────────────────────────────────────────────────────
     if (key.escape) return onClose();
-    // the search box owns text while typing; tab/↑/↓/↵ still navigate.
     if (typing) {
-      if (key.return) {
-        setTyping(false);
-        void search(query, kind);
-        return;
-      }
+      if (key.return) { setTyping(false); void search(query, kind); return; }
       if (key.tab) {
         const next = kind === "skill" ? "workflow" : "skill";
-        setKind(next);
-        void search(query, next);
-        return;
+        setKind(next); void search(query, next); return;
       }
       if (key.backspace || key.delete) return setQuery((q) => q.slice(0, -1));
       if (key.downArrow) return setTyping(false);
       if (input && !key.ctrl && !key.meta) return setQuery((q) => q + input);
       return;
     }
-    // results navigation
     if (input === "/") return setTyping(true);
+    if (input === "a") { setStage("agents"); void loadAgents(); return; }
+    if (input === "p") { setPubResult(null); setPubField("name"); setStage("publish"); return; }
     if (key.tab) {
       const next = kind === "skill" ? "workflow" : "skill";
-      setKind(next);
-      void search(query, next);
-      return;
+      setKind(next); void search(query, next); return;
     }
-    if (key.upArrow) {
-      if (clamped === 0) return setTyping(true);
-      return setIdx((i) => Math.max(0, i - 1));
-    }
+    if (key.upArrow) { if (clamped === 0) return setTyping(true); return setIdx((i) => Math.max(0, i - 1)); }
     if (key.downArrow) return setIdx((i) => Math.min(results.length - 1, i + 1));
     if (key.return && selected) return void openDetail(selected.id);
-    if (input === "b" && selected && !owned.has(selected.name)) {
-      setDetail(null);
-      setStage("confirm");
-    }
+    if (input === "b" && selected && !owned.has(selected.name)) { setDetail(null); setStage("confirm"); }
   });
 
-  // ── confirm (cost check before spending SOL) ──────────────────────────────
+  // ── agent profile ─────────────────────────────────────────────────────────
+  if (stage === "agentProfile" && agentProfile) {
+    const r = agentProfile.reputation;
+    const short = (w: string) => `${w.slice(0, 4)}…${w.slice(-4)}`;
+    return (
+      <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
+        <Box>
+          <Text bold color={colors.iqCyan}>{short(r.wallet)}</Text>
+          <Text dimColor>   {r.skillsPublished} skills · ×{r.totalSupply} total supply · {r.notesReceived} notes</Text>
+        </Box>
+        {agentProfile.createdSkills && agentProfile.createdSkills.length ? (
+          <Box flexDirection="column" marginTop={1}>
+            <Text dimColor>skills:</Text>
+            {agentProfile.createdSkills.slice(0, 8).map((s: any) => (
+              <Box key={s.id}>
+                <Text>  · </Text>
+                <Text color={owned.has(s.name) ? colors.ok : undefined}>{s.name}</Text>
+                {owned.has(s.name) ? <Text color={colors.ok}> owned</Text> : null}
+              </Box>
+            ))}
+          </Box>
+        ) : null}
+        {agentProfile.notes.length ? (
+          <Box flexDirection="column" marginTop={1}>
+            <Text dimColor>notes:</Text>
+            {agentProfile.notes.slice(0, 4).map((n, i) => (
+              <Text key={i} dimColor>  "{n.text.slice(0, 60)}"</Text>
+            ))}
+          </Box>
+        ) : null}
+        {agentBuyResult ? (
+          <Box marginTop={1}><Text color={colors.ok}>{glyph.sparkle} {agentBuyResult}</Text></Box>
+        ) : null}
+        <Box marginTop={1}>
+          <Text dimColor>[b] buy all skills · [esc] back</Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  // ── agents list ────────────────────────────────────────────────────────────
+  if (stage === "agents") {
+    const short = (w: string) => `${w.slice(0, 6)}…${w.slice(-4)}`;
+    return (
+      <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
+        <Text bold color={colors.iqMagenta}>❖ agent directory</Text>
+        <Box flexDirection="column" marginTop={1}>
+          {loading ? (
+            <Text dimColor>loading agents…</Text>
+          ) : error ? (
+            <Text color={colors.err}>{error}</Text>
+          ) : agents.length === 0 ? (
+            <Text dimColor>no agents found</Text>
+          ) : (
+            agents.slice(0, 12).map((a, i) => {
+              const on = i === agentIdx;
+              return (
+                <Box key={a.wallet}>
+                  <Text color={on ? colors.iqCyan : undefined}>{on ? "› " : "  "}</Text>
+                  <Box width={14}><Text dimColor>{short(a.wallet)}</Text></Box>
+                  <Text dimColor>  ×{a.totalSupply} supply · {a.skillsPublished} skills</Text>
+                </Box>
+              );
+            })
+          )}
+        </Box>
+        <Box marginTop={1}><Text dimColor>↑/↓ move · ↵ profile · esc back</Text></Box>
+      </Box>
+    );
+  }
+
+  // ── publish form ──────────────────────────────────────────────────────────
+  if (stage === "publish") {
+    if (pubResult) {
+      return (
+        <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={pubResult.startsWith("published") ? colors.ok : colors.err}>
+          <Text bold color={pubResult.startsWith("published") ? colors.ok : colors.err}>{pubResult}</Text>
+          <Box marginTop={1}><Text dimColor>[esc] / [↵] close</Text></Box>
+        </Box>
+      );
+    }
+    const fieldLabels: Record<PublishField, string> = {
+      name: "name      ", desc: "desc      ", text: "skill text",
+      category: "category  ", hashtags: "hashtags  ", price: "price (SOL)",
+    };
+    const fieldValues: Record<PublishField, string> = {
+      name: pubName, desc: pubDesc, text: pubText.slice(0, 60) + (pubText.length > 60 ? "…" : ""),
+      category: pubCategory, hashtags: pubHashtags, price: pubPrice,
+    };
+    return (
+      <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
+        <Text bold color={colors.iqMagenta}>❖ publish skill</Text>
+        <Box flexDirection="column" marginTop={1}>
+          {PUBLISH_FIELDS.map((f) => {
+            const on = f === pubField;
+            return (
+              <Box key={f}>
+                <Text color={on ? colors.iqCyan : colors.dim}>{on ? "▸ " : "  "}</Text>
+                <Box width={12}><Text color={on ? colors.iqCyan : colors.dim} bold={on}>{fieldLabels[f]}</Text></Box>
+                <Text color={on ? undefined : colors.dim}>{fieldValues[f]}</Text>
+                {on ? <Text inverse> </Text> : null}
+              </Box>
+            );
+          })}
+        </Box>
+        {busy ? (
+          <Box marginTop={1}>
+            <Text dimColor>publishing…</Text>
+          </Box>
+        ) : null}
+        <Box marginTop={1}>
+          <Text dimColor>↑/↓/[tab] field · ↵ next / submit on price · esc cancel</Text>
+        </Box>
+        <Box><Text dimColor>hashtags = comma-separated · skill text = raw SKILL.md body</Text></Box>
+      </Box>
+    );
+  }
+
+  // ── comment ────────────────────────────────────────────────────────────────
+  if (stage === "comment") {
+    return (
+      <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
+        <Text bold color={colors.iqMagenta}>❖ post comment</Text>
+        <Box marginTop={1} flexDirection="column">
+          <Box>
+            <Text color={commentField === "text" ? colors.iqCyan : colors.dim}>{commentField === "text" ? "▸ " : "  "}</Text>
+            <Box width={10}><Text color={commentField === "text" ? colors.iqCyan : colors.dim}>comment</Text></Box>
+            <Text>{commentText}</Text>
+            {commentField === "text" ? <Text inverse> </Text> : null}
+          </Box>
+          <Box>
+            <Text color={commentField === "gitLink" ? colors.iqCyan : colors.dim}>{commentField === "gitLink" ? "▸ " : "  "}</Text>
+            <Box width={10}><Text color={commentField === "gitLink" ? colors.iqCyan : colors.dim}>gitLink</Text></Box>
+            <Text dimColor={!commentGitLink}>{commentGitLink || "(optional)"}</Text>
+            {commentField === "gitLink" ? <Text inverse> </Text> : null}
+          </Box>
+        </Box>
+        {flash ? <Box marginTop={1}><Text color={colors.ok}>{flash}</Text></Box> : null}
+        {busy ? <Text dimColor>posting…</Text> : null}
+        <Box marginTop={1}><Text dimColor>[tab] next field · ↵ post on gitLink field · esc cancel</Text></Box>
+      </Box>
+    );
+  }
+
+  // ── confirm ────────────────────────────────────────────────────────────────
   if (stage === "confirm") {
     const card = detail?.card ?? selected;
     return (
@@ -187,14 +490,14 @@ export function SkillMarket({
           <Text dimColor>this signs an on-chain transaction and can't be undone</Text>
         </Box>
         <Box marginTop={1}>
-          <Text color={colors.warn}>buy “{card?.name}”?  </Text>
+          <Text color={colors.warn}>buy "{card?.name}"?  </Text>
           <Text dimColor>[y] yes · [n] no</Text>
         </Box>
       </Box>
     );
   }
 
-  // ── detail ────────────────────────────────────────────────────────────────
+  // ── detail ─────────────────────────────────────────────────────────────────
   if (stage === "detail" && detail) {
     const c = detail.card;
     const isOwned = owned.has(c.name);
@@ -227,16 +530,28 @@ export function SkillMarket({
             <Text>{detail.skillText.slice(0, 1200)}</Text>
           </Box>
         ) : null}
+        {detail.notes && detail.notes.length ? (
+          <Box flexDirection="column" marginTop={1}>
+            <Text dimColor>── comments ({detail.notes.length}) ──</Text>
+            {detail.notes.slice(0, 4).map((n, i) => (
+              <Box key={i} flexDirection="column">
+                <Text dimColor>  "{n.text.slice(0, 80)}"</Text>
+                {n.gitLink ? <Text dimColor>    {glyph.sparkle} {n.gitLink}</Text> : null}
+              </Box>
+            ))}
+          </Box>
+        ) : null}
+        {flash ? <Box marginTop={1}><Text color={colors.ok}>{glyph.sparkle} {flash}</Text></Box> : null}
         <Box marginTop={1}>
           <Text dimColor>
-            {isOwned ? "owned · " : "[b] buy · "}[esc] back
+            {isOwned ? "owned · " : "[b] buy · "}[c] comment · [esc] back
           </Text>
         </Box>
       </Box>
     );
   }
 
-  // ── list ──────────────────────────────────────────────────────────────────
+  // ── list ───────────────────────────────────────────────────────────────────
   return (
     <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
       <Box>
@@ -248,6 +563,8 @@ export function SkillMarket({
         <Text color={kind === "skill" ? colors.iqCyan : colors.dim} bold={kind === "skill"}>skills</Text>
         <Text dimColor>  ·  </Text>
         <Text color={kind === "workflow" ? colors.iqCyan : colors.dim} bold={kind === "workflow"}>workflows</Text>
+        <Text dimColor>  ·  </Text>
+        <Text color={colors.dim}>[a] agents  [p] publish</Text>
       </Box>
       {/* search box */}
       <Box marginTop={1}>
@@ -291,7 +608,7 @@ export function SkillMarket({
         <Text dimColor>
           {typing
             ? "type to search · ↵ run · [tab] skills/workflows · ↓ results · esc close"
-            : "↑/↓ move · ↵ open · [b] buy · [tab] switch · [/] search · esc close"}
+            : "↑/↓ move · ↵ open · [b] buy · [tab] switch · [/] search · [a] agents · [p] publish · esc close"}
         </Text>
       </Box>
     </Box>
