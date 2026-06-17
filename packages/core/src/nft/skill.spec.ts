@@ -14,7 +14,9 @@ vi.mock("../core/chain.js", () => ({
 }));
 
 vi.mock("../core/seed.js", () => ({
-  getSkillsCollectionMint: vi.fn().mockReturnValue(null),
+  // A collection is required now: the mint reserves member space and publish_item
+  // enrolls it on-chain (PDA-signed), so this must be a real pubkey.
+  getSkillsCollectionMint: vi.fn().mockReturnValue("5TPKvxXTpPVFrj9MUnFUr6XiGFEdtetsTvwRh6bKQ9Qg"),
   getWorkflowGateProgramId: vi.fn().mockReturnValue("3ptXj4yuaQG51WTA3SZZ37jGvYFgMhgXnSKWJLASJNkt"),
   getFeeTreasury: vi.fn().mockReturnValue("EWNSTD8tikwqHMcRNuuNbZrnYJUiJdKq9UXLXSEU4wZ1"),
 }));

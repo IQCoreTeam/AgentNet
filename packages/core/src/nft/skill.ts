@@ -92,8 +92,11 @@ export async function publishSkill(
   const skillMint = skillMintKp.publicKey;
   const mintAuthority = itemMintAuthorityPda(skillMint);
 
+  // The skills collection is required: the mint reserves member space for it and
+  // publish_item enrolls the mint into it on-chain (PDA-signed).
   const collectionStr = getSkillsCollectionMint();
-  const collectionMint = collectionStr ? new PublicKey(collectionStr) : undefined;
+  if (!collectionStr) throw new Error("Skills collection mint is not configured");
+  const collectionMint = new PublicKey(collectionStr);
 
   await createSkillMint(conn, signer, {
     name: input.name,
@@ -115,6 +118,7 @@ export async function publishSkill(
     itemMint: skillMint,
     requiredSkills: [],
     price: input.price ?? DEFAULT_SKILL_PRICE_LAMPORTS,
+    group: collectionMint, // skills collection — publish_item enrolls the mint
   });
   await sendTx(conn, signer, [ataIx, ix]);
 

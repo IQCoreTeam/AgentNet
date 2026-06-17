@@ -141,9 +141,10 @@ export async function createSkillMint(
     additionalMetadata: [],
   };
 
-  // If enrolling into a collection, we need the GroupMemberPointer and TokenGroupMember extensions.
-  // The member enrollment must be signed by the group's update authority (the protocol minter).
-  const minter = config.collectionMint ? resolveMinter() : null;
+  // Enrolling into a collection needs the GroupMemberPointer + TokenGroupMember
+  // extensions. We allocate the member space and init the pointer here, but the
+  // actual TokenGroupMember stamp is done ON-CHAIN by publish_item (the gate
+  // program's collection-authority PDA signs it) — no off-chain minter key needed.
   const minterPk = config.minterAuthority ?? tryMinterPubkey();
 
   const extensions = [ExtensionType.NonTransferable, ExtensionType.MetadataPointer];
@@ -202,19 +203,11 @@ export async function createSkillMint(
     ),
   );
 
-  if (config.collectionMint && minter) {
-    const { createInitializeMemberInstruction } = await import("@solana/spl-token-group");
-    tx.add(
-      createInitializeMemberInstruction({
-        programId: TOKEN_2022_PROGRAM_ID,
-        member: mint,
-        memberMint: mint,
-        memberMintAuthority: creatorPk,
-        group: config.collectionMint,
-        groupUpdateAuthority: minter.publicKey,
-      })
-    );
-  }
+  // NOTE: the TokenGroupMember stamp is intentionally NOT initialized here. The
+  // gate program's publish_item enrolls the mint into the official collection
+  // on-chain (its collection-authority PDA signs InitializeMember), so the mint
+  // leaves this tx with the member SPACE reserved + GroupMemberPointer set, and
+  // becomes a real member at publish. This removes the off-chain minter key.
 
   tx.add(
     // 5. TokenMetadata: name/symbol/uri (uri = code-in txid)
@@ -251,10 +244,6 @@ export async function createSkillMint(
   const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash();
   tx.recentBlockhash = blockhash;
   tx.feePayer = creatorPk;
-
-  if (minter) {
-    tx.partialSign(minter);
-  }
 
   if ("secretKey" in signerFull) {
     // Keypair-like

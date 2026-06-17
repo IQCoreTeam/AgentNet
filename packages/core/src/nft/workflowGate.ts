@@ -22,9 +22,17 @@ const DISC_BUY = Buffer.from([80, 82, 193, 201, 216, 27, 70, 184]); // buy_item
 
 const ITEM_SEED = Buffer.from("item");
 const MINT_AUTH_SEED = Buffer.from("mint-auth");
+const COLLECTION_AUTH_SEED = Buffer.from("collection-auth");
 
 function programId(): PublicKey {
   return new PublicKey(getWorkflowGateProgramId());
+}
+
+/** The program's global collection-authority PDA: ["collection-auth"]. It owns
+ *  both official TokenGroups' update authority, so publish_item signs member
+ *  enrollment on-chain (no off-chain minter key). */
+export function collectionAuthorityPda(): PublicKey {
+  return PublicKey.findProgramAddressSync([COLLECTION_AUTH_SEED], programId())[0];
 }
 
 /** Config PDA holding an item's required_skills: ["item", itemMint]. */
@@ -52,6 +60,9 @@ export function publishItemIx(args: {
   itemMint: PublicKey;
   requiredSkills: PublicKey[];
   price: bigint;
+  /** The official TokenGroup the item joins (skills OR workflows collection mint).
+   *  publish_item enrolls the mint into this group, PDA-signed. */
+  group: PublicKey;
 }): TransactionInstruction {
   // data: disc(8) + vec<pubkey>(4 len + 32*n) + u64 price(8 LE)
   const n = args.requiredSkills.length;
@@ -71,6 +82,8 @@ export function publishItemIx(args: {
     { pubkey: itemConfigPda(args.itemMint), isSigner: false, isWritable: true },
     { pubkey: itemMintAuthorityPda(args.itemMint), isSigner: false, isWritable: false },
     { pubkey: creatorItemAta, isSigner: false, isWritable: true }, // receives the 1 self-copy
+    { pubkey: args.group, isSigner: false, isWritable: true }, // collection mint — InitializeMember bumps its member count
+    { pubkey: collectionAuthorityPda(), isSigner: false, isWritable: false }, // group update authority (program signs via PDA)
     { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     // remaining: the skill mints, one per required_skill (none for a skill).

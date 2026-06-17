@@ -71,8 +71,11 @@ export async function publishWorkflow(
   const workflowMint = workflowMintKp.publicKey;
   const mintAuthority = itemMintAuthorityPda(workflowMint);
 
+  // The workflows collection is required: the mint reserves member space for it
+  // and publish_item enrolls the mint into it on-chain (PDA-signed).
   const collectionStr = getWorkflowsCollectionMint();
-  const collectionMint = collectionStr ? new PublicKey(collectionStr) : undefined;
+  if (!collectionStr) throw new Error("Workflows collection mint is not configured");
+  const collectionMint = new PublicKey(collectionStr);
 
   await createSkillMint(conn, signer, {
     name: input.name,
@@ -94,6 +97,7 @@ export async function publishWorkflow(
     itemMint: workflowMint,
     requiredSkills: input.requiredSkills.map((s) => new PublicKey(s)),
     price: input.price ?? 0n,
+    group: collectionMint, // workflows collection — publish_item enrolls the mint
   });
   await sendTx(conn, signer, [ataIx, ix]);
 
