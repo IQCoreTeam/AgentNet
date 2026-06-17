@@ -26,7 +26,7 @@ export function ApprovalDock() {
   }
 
   return (
-    <div className="flex flex-col gap-2 px-3 pt-2">
+    <div className="flex max-h-52 flex-col gap-2 overflow-y-auto px-3 pt-2">
       {state.approvals.map((req) =>
         req.kind === "question" && req.questions?.length ? (
           <QuestionCard key={req.id} req={req} onAnswer={(a) => decide(req, "once", { questionResponses: a })} />
