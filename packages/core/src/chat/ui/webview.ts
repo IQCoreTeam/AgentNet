@@ -3836,13 +3836,25 @@ export function chatHtml(): string {
     realLog.style.scrollBehavior = prevBehavior;
   }
 
-  log.addEventListener('scroll', () => {
-    // preemptive load: fetch the next older page BEFORE the user hits the very top, so there
-    // is always more scroll above and they never slam into the edge (which read as a jump).
-    if (log.scrollTop < 600 && hasMore && !loadingOlder && pageCursor !== null) {
+  function requestOlder() {
+    if (hasMore && !loadingOlder && pageCursor !== null) {
       loadingOlder = true;
       vscode.postMessage({ type: 'loadMore', cursor: pageCursor });
     }
+  }
+
+  // When the loaded content doesn't overflow the viewport there is no scrollbar, so the
+  // 'scroll' listener can never fire to fetch older pages — older history would be
+  // unreachable. Proactively pull the next older chunk whenever there's nothing to scroll;
+  // this chains (each 'older' re-checks) until the log overflows or no pages remain.
+  function maybeFillOlder() {
+    if (log.scrollHeight <= log.clientHeight) requestOlder();
+  }
+
+  log.addEventListener('scroll', () => {
+    // preemptive load: fetch the next older page BEFORE the user hits the very top, so there
+    // is always more scroll above and they never slam into the edge (which read as a jump).
+    if (log.scrollTop < 600) requestOlder();
   });
 
   window.addEventListener('message', (event) => {
@@ -3961,10 +3973,11 @@ export function chatHtml(): string {
     else if (m.type === 'storage') { renderStorage(m.info, m.options); renderWalletStorage(); }
     else if (m.type === 'cloudSync') renderCloudSync(m.status);
     else if (m.type === 'wallet') setWallet(m.address);
-    else if (m.type === 'page') { hasMore = m.hasMore; pageCursor = m.cursor; }
+    else if (m.type === 'page') { hasMore = m.hasMore; pageCursor = m.cursor; maybeFillOlder(); }
     else if (m.type === 'older') {
       prependOlder(m.messages || []);
       hasMore = m.hasMore; pageCursor = m.cursor; loadingOlder = false;
+      maybeFillOlder();
     }
     else if (m.type === 'approval') renderApproval(m.req);
   });
