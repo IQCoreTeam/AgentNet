@@ -117,7 +117,7 @@ export function createChatSession(
   // q.interrupt / codex child.kill). Instead we re-spawn lazily on the next send,
   // carrying the live session over, so the running turn finishes untouched and the new
   // setting applies from the next message.
-  type Slot = { handle: SessionHandle | null; pendingId?: string; model?: string; mode?: string; restage?: boolean };
+  type Slot = { handle: SessionHandle | null; pendingId?: string; model?: string; mode?: string; effort?: "low" | "medium" | "high" | "xhigh" | "max"; restage?: boolean };
   const slots: Record<"claude" | "codex", Slot> = {
     claude: { handle: null, mode: "acceptEdits" },
     codex: { handle: null, mode: "auto" },
@@ -139,6 +139,8 @@ export function createChatSession(
     // a skill firing → the green "Casting <skill>" marquee (issue #17). Transient, not
     // persisted; only painted for the active tab.
     h.onSkill((name) => { if (cli === forCli) sendMarket({ type: "skillActive", name }); });
+    // token usage: forward to the active surface so it can render a context meter.
+    h.onUsage((contextTokens) => { if (cli === forCli) transport.send({ type: "usage", contextTokens }); });
     h.onTurnEnd(async () => {
       if (cli === forCli) transport.send({ type: "turnEnd" }); // stop the typing dots
       await pushSessions();
@@ -186,7 +188,7 @@ export function createChatSession(
       s.restage = false;
     }
     const spawnCli = cli; // capture: cli must not change across the await
-    s.handle = await rt.startSession({ cli: spawnCli, model: s.model, mode: s.mode, cwd: env.cwd(), sessionId: s.pendingId, approval: env.approval });
+    s.handle = await rt.startSession({ cli: spawnCli, model: s.model, mode: s.mode, effort: s.effort, cwd: env.cwd(), sessionId: s.pendingId, approval: env.approval });
     wire(spawnCli, s.handle);
     return s.handle;
   }
@@ -280,6 +282,15 @@ export function createChatSession(
           if (slot().handle) slot().restage = true;
         }
         break;
+      case "effort": {
+        // reasoning effort is per-slot. Same lazy-restage rule as model/mode: never kill
+        // a live turn — the new effort takes effect from the next spawned handle.
+        const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+        const e = EFFORTS.find((v) => v === m.effort);
+        slot().effort = e;
+        if (slot().handle) slot().restage = true;
+        break;
+      }
       case "send": {
         // images are optional; an image-only turn (empty text) is allowed. Each is
         // { mime, dataBase64, name? } — the engine layer renders/attaches per its CLI.

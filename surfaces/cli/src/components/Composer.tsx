@@ -3,6 +3,7 @@ import { Box, Text, useInput } from "ink";
 import { colors } from "../theme.js";
 import { SLASH_COMMANDS } from "../commands.js";
 import { indexFiles, filterFiles } from "../fileIndex.js";
+import { readImageFromClipboard, readImageFile, type ImageInput } from "../clipboardImage.js";
 
 // The input box — far past a single line. Supports:
 //   • multi-line editing (←/→ within the buffer, paste with newlines, \ + ↵ = newline)
@@ -16,12 +17,13 @@ export function Composer({
   history = [],
 }: {
   cwd: string;
-  onSubmit: (text: string) => void;
+  onSubmit: (text: string, images?: ImageInput[]) => void;
   disabled?: boolean;
   history?: string[]; // prior user messages, newest last — recalled with ↑/↓
 }) {
   const [value, setValue] = useState("");
   const [cursor, setCursor] = useState(0);
+  const [attached, setAttached] = useState<ImageInput[]>([]);
   const [files, setFiles] = useState<string[]>([]);
   const [menuIdx, setMenuIdx] = useState(0);
   const [suppress, setSuppress] = useState(false); // esc hides the menu until input changes
@@ -106,13 +108,23 @@ export function Composer({
     setMenuIdx(0);
   }
 
-  function submit() {
-    const text = value;
+  async function submit() {
+    const text = value.trim();
+    const imgs = [...attached];
     setValue("");
     setCursor(0);
     setMenuIdx(0);
     setHistPos(-1);
-    onSubmit(text);
+    setAttached([]);
+    // if the buffer is exactly an image file path, attach it instead of sending as text
+    if (!imgs.length && text && !/\s/.test(text)) {
+      const fromPath = await readImageFile(text);
+      if (fromPath) {
+        onSubmit("", [fromPath]);
+        return;
+      }
+    }
+    onSubmit(text, imgs.length ? imgs : undefined);
   }
 
   useInput(
@@ -173,10 +185,19 @@ export function Composer({
         setHistPos(-1);
         return;
       }
+      // Ctrl+V → try to grab an image off the OS clipboard; fall through to text paste if none
+      if (key.ctrl && input === "v") {
+        void readImageFromClipboard().then((img) => {
+          if (img) setAttached((a) => [...a, img]);
+          // if no image, Ctrl+V in a terminal usually inserts ^V — intentionally do nothing;
+          // regular text pasting flows through the terminal emulator as normal stdin input.
+        });
+        return;
+      }
       if (key.return) {
         if (menu && sel) {
           // if the full command is already typed, RUN it; otherwise complete the menu.
-          if (menu.kind === "slash" && sel.insert.trim() === value.trim()) return submit();
+          if (menu.kind === "slash" && sel.insert.trim() === value.trim()) { void submit(); return; }
           return complete();
         }
         if (value[cursor - 1] === "\\") {
@@ -184,9 +205,15 @@ export function Composer({
           setValue((v) => v.slice(0, cursor - 1) + "\n" + v.slice(cursor));
           return;
         }
-        return submit();
+        void submit();
+        return;
       }
       if (key.backspace || key.delete) {
+        // if buffer is empty and there are attached images, remove the last one
+        if (value.length === 0 && attached.length > 0) {
+          setAttached((a) => a.slice(0, -1));
+          return;
+        }
         if (cursor > 0) {
           setValue((v) => v.slice(0, cursor - 1) + v.slice(cursor));
           setCursor((c) => c - 1);
@@ -209,10 +236,18 @@ export function Composer({
 
   return (
     <Box flexDirection="column">
+      {attached.length > 0 && (
+        <Box marginBottom={0}>
+          {attached.map((img, i) => (
+            <Text key={i} color={colors.iqCyan}>[{img.name ?? "image"}] </Text>
+          ))}
+          <Text dimColor>(↵ sends · ⌫ removes last)</Text>
+        </Box>
+      )}
       <Box>
         <Text color={colors.iqCyan}>❯ </Text>
-        {empty ? (
-          <Text dimColor>message · / for commands · @ for files</Text>
+        {empty && !attached.length ? (
+          <Text dimColor>message · / for commands · @ for files · Ctrl+V image</Text>
         ) : (
           <Text>
             {head}

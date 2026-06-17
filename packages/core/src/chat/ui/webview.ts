@@ -680,7 +680,8 @@ export function chatHtml(): string {
   .etab.active .ed { opacity: 1; }
 
   #inputWrap { border: 1.5px solid var(--engLine); border-radius: var(--an-radius-sm);
-               background: var(--an-bg-2); overflow: hidden; transition: border-color 0.12s; }
+               background: var(--an-bg-2); overflow: visible; transition: border-color 0.12s;
+               position: relative; }
   #input { width: 100%; box-sizing: border-box; padding: 11px 12px 8px; background: transparent;
            color: var(--vscode-input-foreground); border: none; resize: none; font-family: inherit;
            font-size: 0.95em; display: block; line-height: 1.5;
@@ -734,6 +735,73 @@ export function chatHtml(): string {
                background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
                border: 1px solid var(--an-line); border-radius: var(--an-radius);
                box-shadow: 0 8px 28px rgba(0,0,0,0.4); }
+  /* effort chip: same chip+popover language as the model chip. Neutral-tinted (un-tinted)
+     so it's visible but doesn't compete with the mode chip's engine accent. */
+  #effortWrap { position: relative; display: inline-flex; }
+  #effortBtn { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+               background: var(--an-bg-1); color: var(--vscode-foreground); font-weight: 600;
+               border: 1px solid var(--an-line); border-radius: 999px; padding: 3px 10px;
+               font-size: 0.92em; font-family: inherit; }
+  #effortBtn:hover { border-color: var(--eng); }
+  #effortBtn .mglyph { opacity: 0.5; font-size: 0.82em; font-weight: 700; }
+  #effortBtn .mcaret { opacity: 0.5; font-size: 0.8em; }
+  #effortMenu { position: fixed; z-index: 60; min-width: 176px; padding: 5px;
+                background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+                border: 1px solid var(--an-line); border-radius: var(--an-radius);
+                box-shadow: 0 8px 28px rgba(0,0,0,0.4); }
+  /* usage context meter: small text chip near the composer chips */
+  #ctxMeter { font-size: 0.82em; opacity: 0.55; display: inline-flex; align-items: center; }
+  /* slash command dropdown menu */
+  .slashMenu {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    z-index: 50;
+    background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+    border: 1px solid var(--an-line);
+    border-radius: var(--an-radius-sm, 6px);
+    box-shadow: 0 -8px 28px rgba(0,0,0,0.4);
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 4px;
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .slashOpt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85em;
+    user-select: none;
+    color: var(--vscode-foreground);
+    text-align: left;
+  }
+  .slashOpt.sel {
+    background: var(--vscode-list-activeSelectionBackground, var(--eng));
+    color: var(--vscode-list-activeSelectionForeground, #fff);
+  }
+  .slashOpt .cmd {
+    font-weight: 600;
+  }
+  .slashOpt .desc {
+    opacity: 0.7;
+    font-size: 0.9em;
+  }
+  .slashHint {
+    font-size: 0.76em;
+    opacity: 0.5;
+    padding: 6px 10px;
+    border-top: 1px solid var(--an-line);
+    margin-top: 4px;
+    user-select: none;
+    color: var(--vscode-foreground);
+    text-align: left;
+  }
   /* send/stop: a single small, flat, round icon button (Claude/Codex style) —
      no text, no gradient, no lift. Engine accent when ready, neutral when empty. */
   #send { margin-left: auto; display: inline-flex; align-items: center; justify-content: center;
@@ -1142,6 +1210,7 @@ export function chatHtml(): string {
           </div>
         </div>
         <div id="inputWrap">
+          <div id="slashMenu" class="slashMenu" style="display:none"></div>
           <!-- attached-image thumbnails (hidden until you add one). Each has an × to remove. -->
           <div id="attachStrip" style="display:none"></div>
           <textarea id="input" rows="1" placeholder="Message claude... (Enter to send)"></textarea>
@@ -1160,6 +1229,13 @@ export function chatHtml(): string {
               </button>
               <div id="modeMenu" style="display:none"></div>
             </span>
+            <span id="effortWrap">
+              <button id="effortBtn" title="Reasoning effort: how deeply the model thinks before replying">
+                <span class="mglyph">⚡</span><span id="effortLabel">effort</span><span class="mcaret">▾</span>
+              </button>
+              <div id="effortMenu" style="display:none"></div>
+            </span>
+            <span id="ctxMeter" style="display:none"></span>
             <button id="send" title="Send" aria-label="Send"><svg class="ic-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg><svg class="ic-stop" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="1.5"/></svg><span class="lbl">Send</span></button>
           </div>
         </div>
@@ -1366,7 +1442,12 @@ export function chatHtml(): string {
   const modeBtn = document.getElementById('modeBtn');
   const modeMenu = document.getElementById('modeMenu');
   const modeLabel = document.getElementById('modeLabel');
+  const effortBtn = document.getElementById('effortBtn');
+  const effortMenu = document.getElementById('effortMenu');
+  const effortLabel = document.getElementById('effortLabel');
+  const ctxMeter = document.getElementById('ctxMeter');
   const approvalDock = document.getElementById('approvalDock');
+  const slashMenu = document.getElementById('slashMenu');
   const tabs = Array.from(document.querySelectorAll('.etab'));
 
   let streaming = null;     // bubble currently being streamed into
@@ -1374,6 +1455,153 @@ export function chatHtml(): string {
   let activeId = null;
   let expanded = false;     // "모두 보기" toggled?
   const COLLAPSED = 5;      // sessions shown before "모두 보기(N)"
+
+  // ---- slash command autocomplete ----
+  const SLASH_CMDS = [
+    { name: 'new', desc: 'start fresh session', insert: '/new' },
+    { name: 'clear', desc: 'clear on-screen log', insert: '/clear' },
+    { name: 'copy', desc: 'copy last reply', insert: '/copy' },
+    { name: 'engine', desc: 'switch engine (claude|codex)', insert: '/engine ' },
+    { name: 'model', desc: 'change model', insert: '/model ' },
+    { name: 'mode', desc: 'change permission mode', insert: '/mode ' },
+    { name: 'effort', desc: 'set reasoning effort', insert: '/effort ' },
+    { name: 'help', desc: 'show help text', insert: '/help' },
+  ];
+  let slashIdx = 0;
+  let suppressSlash = false;
+  let activeSlashMatches = [];
+
+  function renderSlashMenu() {
+    if (suppressSlash) {
+      slashMenu.style.display = 'none';
+      activeSlashMatches = [];
+      return;
+    }
+    const val = input.value;
+    
+    // Check if it matches a sub-command argument first
+    let subCmd = null;
+    let prefix = '';
+    let options = [];
+
+    // 1. Engine options
+    let m = /^\\/engine(?:\\s+(\\S*))?$/.exec(val);
+    if (m) {
+      subCmd = 'engine';
+      prefix = (m[1] || '').toLowerCase();
+      options = [
+        { name: 'claude', desc: 'switch to Claude engine', insert: '/engine claude' },
+        { name: 'codex',  desc: 'switch to Codex engine',  insert: '/engine codex' }
+      ];
+    }
+    // 2. Model options
+    if (!subCmd) {
+      m = /^\\/model(?:\\s+(\\S*))?$/.exec(val);
+      if (m) {
+        subCmd = 'model';
+        prefix = (m[1] || '').toLowerCase();
+        const list = MODELS[cli] || [];
+        options = list.map(function(o) {
+          return { name: o.value, desc: o.label, insert: '/model ' + o.value };
+        });
+      }
+    }
+    // 3. Mode options
+    if (!subCmd) {
+      m = /^\\/mode(?:\\s+(\\S*))?$/.exec(val);
+      if (m) {
+        subCmd = 'mode';
+        prefix = (m[1] || '').toLowerCase();
+        const list = MODES[cli] || [];
+        options = list.map(function(o) {
+          return { name: o.value, desc: o.label + ' - ' + o.title, insert: '/mode ' + o.value };
+        });
+      }
+    }
+    // 4. Effort options
+    if (!subCmd) {
+      m = /^\\/effort(?:\\s+(\\S*))?$/.exec(val);
+      if (m) {
+        subCmd = 'effort';
+        prefix = (m[1] || '').toLowerCase();
+        options = EFFORTS.map(function(o) {
+          return { name: o.value, desc: o.label + ' - ' + o.title, insert: '/effort ' + o.value };
+        });
+      }
+    }
+
+    if (subCmd) {
+      activeSlashMatches = options.filter(function(opt) {
+        return opt.name.toLowerCase().startsWith(prefix);
+      });
+      // If the user fully typed the sub-command argument, hide the menu
+      if (activeSlashMatches.length === 1 && prefix === activeSlashMatches[0].name.toLowerCase()) {
+        slashMenu.style.display = 'none';
+        activeSlashMatches = [];
+        return;
+      }
+    } else {
+      // Otherwise match the main slash commands
+      const mainMatch = /^\\/(\\S*)$/.exec(val);
+      if (!mainMatch) {
+        slashMenu.style.display = 'none';
+        activeSlashMatches = [];
+        return;
+      }
+      prefix = mainMatch[1].toLowerCase();
+      activeSlashMatches = SLASH_CMDS.filter(function(cmd) {
+        return cmd.name.toLowerCase().startsWith(prefix);
+      });
+    }
+
+    if (activeSlashMatches.length === 0) {
+      slashMenu.style.display = 'none';
+      return;
+    }
+
+    if (slashIdx >= activeSlashMatches.length) {
+      slashIdx = activeSlashMatches.length - 1;
+    }
+    if (slashIdx < 0) {
+      slashIdx = 0;
+    }
+
+    let html = '';
+    activeSlashMatches.forEach(function(cmd, idx) {
+      const isSel = idx === slashIdx;
+      const label = subCmd ? cmd.name : '/' + cmd.name;
+      html += '<div class="slashOpt' + (isSel ? ' sel' : '') + '" data-idx="' + idx + '">' +
+                '<span class="cmd">' + label + '</span>' +
+                '<span class="desc">' + cmd.desc + '</span>' +
+              '</div>';
+    });
+    html += '<div class="slashHint">Use ↑↓ to navigate, Tab/Enter to select, Esc to close</div>';
+    slashMenu.innerHTML = html;
+    slashMenu.style.display = 'flex';
+  }
+
+  function completeSlash(c) {
+    input.value = c.insert;
+    autoGrowInput();
+    suppressSlash = false;
+    slashMenu.style.display = 'none';
+    activeSlashMatches = [];
+    input.focus();
+    if (c.insert.endsWith(' ')) {
+      renderSlashMenu();
+    }
+  }
+
+  slashMenu.addEventListener('click', function(e) {
+    const opt = e.target.closest('.slashOpt');
+    if (opt) {
+      e.stopPropagation();
+      const idx = parseInt(opt.getAttribute('data-idx') || '0', 10);
+      if (activeSlashMatches[idx]) {
+        completeSlash(activeSlashMatches[idx]);
+      }
+    }
+  });
 
   // Platform = which CLI. Model = the actual model inside it.
   // value 'default' = pass no --model (CLI's own default); label shows WHICH model
@@ -1409,9 +1637,19 @@ export function chatHtml(): string {
       { value: 'full',     label: 'Full access', title: 'Full disk + network access, never ask (use with care)' },
     ],
   };
-  // remember the chosen mode + model per engine so switching tabs restores them
+  // reasoning effort levels (applies to both engines; labels mirror CLI EffortPicker)
+  const EFFORTS = [
+    { value: 'default', label: 'default',  title: 'Engine default (usually medium)' },
+    { value: 'low',     label: 'low',      title: 'Minimal thinking, fastest' },
+    { value: 'medium',  label: 'medium',   title: 'Moderate reasoning' },
+    { value: 'high',    label: 'high',     title: 'Deeper thinking' },
+    { value: 'xhigh',  label: 'x-high',   title: 'Extended reasoning' },
+    { value: 'max',     label: 'max',      title: 'Maximum effort (select models)' },
+  ];
+  // remember the chosen mode + model + effort per engine so switching tabs restores them
   const modeByCli = { claude: 'acceptEdits', codex: 'auto' };
   const modelByCli = { claude: 'default', codex: 'default' };
+  const effortByCli = { claude: 'default', codex: 'default' };
   let cli = 'claude';
 
   // ---- platform tabs + model picker (chip + popover, mirroring the mode picker) ----
@@ -1494,6 +1732,37 @@ export function chatHtml(): string {
     modeMenu.style.left = r.left + 'px';
     modeMenu.style.bottom = (window.innerHeight - r.top + 6) + 'px';
   }
+  function currentEffort() { return effortByCli[cli] || 'default'; }
+  function fillEfforts() {
+    const cur = currentEffort();
+    const curOpt = EFFORTS.find(o => o.value === cur) || EFFORTS[0];
+    effortLabel.textContent = curOpt ? curOpt.label : 'effort';
+    while (effortMenu.firstChild) effortMenu.removeChild(effortMenu.firstChild);
+    for (const e of EFFORTS) {
+      const row = document.createElement('div');
+      row.className = 'modeOpt' + (e.value === cur ? ' sel' : '');
+      const txt = document.createElement('div'); txt.className = 'mtext';
+      const lab = document.createElement('div'); lab.className = 'mlabel'; lab.textContent = e.label;
+      txt.appendChild(lab);
+      if (e.title) { const d = document.createElement('div'); d.className = 'mdesc'; d.textContent = e.title; txt.appendChild(d); }
+      const chk = document.createElement('span'); chk.className = 'mcheck'; chk.textContent = '✓';
+      row.appendChild(txt); row.appendChild(chk);
+      row.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        effortByCli[cli] = e.value;
+        effortMenu.style.display = 'none';
+        fillEfforts();
+        vscode.postMessage({ type: 'effort', effort: e.value === 'default' ? undefined : e.value });
+      });
+      effortMenu.appendChild(row);
+    }
+  }
+  function openEffortMenu() {
+    const r = effortBtn.getBoundingClientRect();
+    effortMenu.style.display = 'block';
+    effortMenu.style.left = r.left + 'px';
+    effortMenu.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+  }
   function setTab(next) {
     if (next !== 'claude' && next !== 'codex') return;
     cli = next;
@@ -1502,6 +1771,7 @@ export function chatHtml(): string {
     input.placeholder = 'Message ' + cli + '... (Enter to send)';
     fillModels();
     fillModes();
+    fillEfforts();
   }
   function selectTab(next) {
     if (next === cli) return;
@@ -1509,26 +1779,35 @@ export function chatHtml(): string {
     vscode.postMessage({ type: 'platform', cli });
     vscode.postMessage({ type: 'model', model: currentModel() });
     vscode.postMessage({ type: 'mode', mode: currentMode() });
+    vscode.postMessage({ type: 'effort', effort: currentEffort() === 'default' ? undefined : currentEffort() });
   }
   tabs.forEach(t => t.addEventListener('click', () => selectTab(t.dataset.cli)));
   // each chip toggles its own popover; clicking it again (while open) closes it
   modelBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     if (modelMenu.style.display === 'block') { modelMenu.style.display = 'none'; return; }
-    modeMenu.style.display = 'none'; closeMenus();
+    modeMenu.style.display = 'none'; effortMenu.style.display = 'none'; closeMenus();
     openModelMenu();
   });
   modelMenu.addEventListener('click', (e) => e.stopPropagation());
   modeBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     if (modeMenu.style.display === 'block') { modeMenu.style.display = 'none'; return; }
-    modelMenu.style.display = 'none'; closeMenus(); // also close the hist/wallet menus (hoisted, defined below)
+    modelMenu.style.display = 'none'; effortMenu.style.display = 'none'; closeMenus();
     openModeMenu();
   });
   modeMenu.addEventListener('click', (e) => e.stopPropagation());
-  document.addEventListener('click', () => { modeMenu.style.display = 'none'; modelMenu.style.display = 'none'; });
+  effortBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (effortMenu.style.display === 'block') { effortMenu.style.display = 'none'; return; }
+    modelMenu.style.display = 'none'; modeMenu.style.display = 'none'; closeMenus();
+    openEffortMenu();
+  });
+  effortMenu.addEventListener('click', (e) => e.stopPropagation());
+  document.addEventListener('click', () => { modeMenu.style.display = 'none'; modelMenu.style.display = 'none'; effortMenu.style.display = 'none'; });
   fillModels();
   fillModes();
+  fillEfforts();
 
   // ---- relative time ("3개월", "1일", "방금") ----
   function rel(ts) {
@@ -1902,18 +2181,43 @@ export function chatHtml(): string {
 
     // ── plan / bash / edit / read / write: a yes-or-no permission card ──
     const isPlan = req.kind === 'plan';
-    const head = document.createElement('div'); head.className = 'apHead';
-    head.innerHTML = '<span class="apk">' + (req.kind === 'bash' ? '$' : req.kind === 'read' ? '📖' : isPlan ? '✦' : '✎') + '</span>';
+    const isDanger = req.risk === 'danger';
+    const head = document.createElement('div'); head.className = 'apHead' + (isDanger ? ' apDanger' : '');
+    const glyphEl = document.createElement('span'); glyphEl.className = 'apk';
+    glyphEl.textContent = req.kind === 'bash' ? '$' : req.kind === 'read' ? '📖' : isPlan ? '✦' : '✎';
+    head.appendChild(glyphEl);
+    if (isDanger) {
+      const warn = document.createElement('span'); warn.style.cssText = 'color:var(--vscode-errorForeground,#f44);font-weight:700;margin-right:4px';
+      warn.textContent = '⚠ DANGER ·'; head.appendChild(warn);
+    }
     const ttl = document.createElement('span'); ttl.className = 'apTitle'; ttl.textContent = req.title || req.tool;
     head.appendChild(ttl);
     const tag = document.createElement('span'); tag.className = 'apTag'; tag.textContent = req.cli;
     head.appendChild(tag);
     card.appendChild(head);
 
-    // detail: command for bash, plan text for plan, diff for edit, file for read/write
+    // detail: command for bash (editable), plan text for plan, diff for edit, file for read/write
+    let commandInput = null; // textarea for bash edit mode
     if (req.command) {
       const pre = document.createElement('pre'); pre.className = 'apBody'; pre.textContent = req.command;
       card.appendChild(pre);
+      // bash: allow editing the command before approving
+      if (req.kind === 'bash') {
+        commandInput = document.createElement('textarea');
+        commandInput.className = 'apBody';
+        commandInput.style.cssText = 'display:none;width:100%;box-sizing:border-box;resize:vertical;font-family:monospace;font-size:0.85em;background:var(--an-bg-1);border:1px solid var(--eng);border-radius:4px;padding:6px;color:inherit';
+        commandInput.value = req.command;
+        card.appendChild(commandInput);
+        const editBtn = document.createElement('button'); editBtn.className = 'apBtn'; editBtn.textContent = 'Edit';
+        editBtn.style.cssText = 'margin-left:auto;font-size:0.78em;opacity:0.7';
+        editBtn.addEventListener('click', () => {
+          const editing = commandInput.style.display !== 'none';
+          pre.style.display = editing ? '' : 'none';
+          commandInput.style.display = editing ? 'none' : '';
+          editBtn.textContent = editing ? 'Edit' : 'Cancel';
+        });
+        head.appendChild(editBtn);
+      }
     } else if (req.plan) {
       const pre = document.createElement('pre'); pre.className = 'apBody planBody'; pre.textContent = req.plan;
       card.appendChild(pre);
@@ -1931,8 +2235,8 @@ export function chatHtml(): string {
     }
 
     const actions = document.createElement('div'); actions.className = 'apActions';
-    const decide = (outcome) => {
-      vscode.postMessage({ type: 'approvalDecision', id: req.id, outcome });
+    const decide = (outcome, extra) => {
+      vscode.postMessage({ type: 'approvalDecision', id: req.id, outcome, ...extra });
       card.remove(); // answered → clear it from the dock
       syncComposerLock(); // unfreeze once the last pending approval is answered
     };
@@ -1940,19 +2244,67 @@ export function chatHtml(): string {
       const b = document.createElement('button'); b.className = 'apBtn ' + cls; b.textContent = label;
       b.addEventListener('click', () => decide(outcome)); return b;
     };
-    // plan has no "Always" (you approve THIS plan or send it back to revise)
-    const btns = isPlan
-      ? [mk('Approve plan', 'once', 'ok'), mk('Keep planning', 'deny', 'no')]
-      : [mk('Approve', 'once', 'ok'), mk('Always', 'always', 'always'), mk('Deny', 'deny', 'no')];
-    for (const b of btns) actions.appendChild(b);
-    card.appendChild(actions);
 
-    // keyboard: ← → move focus between buttons, Enter/Space activates the focused one
-    // (a native button does that for Enter/Space). Default focus = Approve, like claude.
+    if (isPlan) {
+      // plan has no "Always" and no edit/deny-reason
+      actions.appendChild(mk('Approve plan', 'once', 'ok'));
+      actions.appendChild(mk('Keep planning', 'deny', 'no'));
+    } else {
+      actions.appendChild(mk('Approve', 'once', 'ok'));
+      actions.appendChild(mk('Always', 'always', 'always'));
+
+      // bash: "Approve edited" (visible only when edit mode is active)
+      let approveEdited = null;
+      if (req.kind === 'bash' && commandInput) {
+        approveEdited = document.createElement('button');
+        approveEdited.className = 'apBtn ok'; approveEdited.textContent = 'Approve edited';
+        approveEdited.style.display = 'none';
+        approveEdited.addEventListener('click', () => {
+          decide('once', { updatedInput: { ...(req.input ?? {}), command: commandInput.value } });
+        });
+        actions.appendChild(approveEdited);
+        // sync visibility with the edit toggle button in the header
+        const editToggle = head.querySelector('button');
+        if (editToggle) {
+          editToggle.addEventListener('click', () => {
+            const isEditing = commandInput.style.display !== 'none';
+            if (approveEdited) approveEdited.style.display = isEditing ? '' : 'none';
+          });
+        }
+      }
+
+      // deny-with-reason: clicking Deny reveals a reason input; the reason row's Deny sends
+      const reasonRow = document.createElement('div');
+      reasonRow.style.cssText = 'display:none;gap:6px;margin-top:4px;align-items:center;flex-wrap:wrap';
+      const reasonInput = document.createElement('input'); reasonInput.type = 'text';
+      reasonInput.placeholder = 'Reason for denying (optional)';
+      reasonInput.style.cssText = 'flex:1;min-width:120px;background:var(--an-bg-1);border:1px solid var(--an-line);border-radius:4px;padding:4px 8px;font-size:0.82em;color:inherit;outline:none';
+      const confirmDeny = document.createElement('button'); confirmDeny.className = 'apBtn no'; confirmDeny.textContent = 'Deny';
+      confirmDeny.addEventListener('click', () => decide('deny', { reason: reasonInput.value.trim() || undefined }));
+      const cancelDeny = document.createElement('button'); cancelDeny.className = 'apBtn'; cancelDeny.textContent = '↩';
+      cancelDeny.style.cssText = 'opacity:0.6'; cancelDeny.addEventListener('click', () => { reasonRow.style.display = 'none'; });
+      reasonRow.appendChild(reasonInput); reasonRow.appendChild(confirmDeny); reasonRow.appendChild(cancelDeny);
+
+      // Deny button: first click reveals reason row; doesn't call decide() directly
+      const denyBtn = document.createElement('button'); denyBtn.className = 'apBtn no'; denyBtn.textContent = 'Deny';
+      denyBtn.addEventListener('click', () => {
+        reasonRow.style.display = 'flex';
+        reasonInput.focus();
+      });
+      actions.appendChild(denyBtn);
+      card.appendChild(actions);
+      card.appendChild(reasonRow);
+    }
+
+    if (isPlan) card.appendChild(actions);
+
+    // keyboard: ← → move focus between action buttons, Enter/Space activates focused button.
     card.addEventListener('keydown', (e) => {
-      const i = btns.indexOf(document.activeElement);
-      if (e.key === 'ArrowRight') { e.preventDefault(); btns[(Math.max(0, i) + 1) % btns.length].focus(); }
-      else if (e.key === 'ArrowLeft') { e.preventDefault(); btns[(Math.max(0, i) + btns.length - 1) % btns.length].focus(); }
+      const btnsAll = Array.from(actions.querySelectorAll('button'));
+      const i = btnsAll.indexOf(document.activeElement);
+      if (i < 0) return;
+      if (e.key === 'ArrowRight') { e.preventDefault(); btnsAll[(i + 1) % btnsAll.length].focus(); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); btnsAll[(i + btnsAll.length - 1) % btnsAll.length].focus(); }
     });
 
     // dock it just above the composer (newest on top), not inside the scrolling log
@@ -1963,7 +2315,7 @@ export function chatHtml(): string {
     // approval popping in a BACKGROUND session would otherwise yank focus out of the
     // panel the user is typing in. document.hasFocus() is false for that background
     // webview, so we skip the auto-focus there and leave the active panel alone.
-    if (document.hasFocus()) btns[0].focus();
+    if (document.hasFocus()) { const first = actions.querySelector('button'); if (first) first.focus(); }
   }
 
   function onMessage(msg) {
@@ -2203,6 +2555,57 @@ export function chatHtml(): string {
       input.value = '';
       return;
     }
+    // ── real slash-command registry (local UI commands, not forwarded to the agent) ──
+    if (text.startsWith('/')) {
+      const [cmd, ...rest] = text.slice(1).split(' ');
+      const arg = rest.join(' ').trim();
+      switch (cmd) {
+        case 'new':
+          vscode.postMessage({ type: 'new' });
+          input.value = ''; return;
+        case 'clear':
+          while (log.firstChild) log.removeChild(log.firstChild);
+          syncWatermark();
+          input.value = ''; return;
+        case 'copy': {
+          const last = Array.from(log.querySelectorAll('.bubble.assistant')).pop();
+          if (last && navigator.clipboard) navigator.clipboard.writeText(last.textContent || '').catch(() => {});
+          input.value = ''; return;
+        }
+        case 'engine':
+          if (arg === 'claude' || arg === 'codex') selectTab(arg);
+          input.value = ''; return;
+        case 'model':
+          if (arg) { modelByCli[cli] = arg; fillModels(); vscode.postMessage({ type: 'model', model: arg }); }
+          input.value = ''; return;
+        case 'mode':
+          if (arg) { modeByCli[cli] = arg; fillModes(); vscode.postMessage({ type: 'mode', mode: arg }); }
+          input.value = ''; return;
+        case 'effort':
+          if (arg) { effortByCli[cli] = arg; fillEfforts(); vscode.postMessage({ type: 'effort', effort: arg === 'default' ? undefined : arg }); }
+          input.value = ''; return;
+        case 'help': {
+          const helpText = [
+            '/new — start fresh session', '/clear — clear on-screen log',
+            '/copy — copy last reply', '/engine claude|codex — switch engine',
+            '/model <model> — change model', '/mode <mode> — change permission mode',
+            '/effort low|medium|high|xhigh|max — set reasoning effort',
+          ].join('\\n');
+          const pre = document.createElement('pre');
+          pre.style.cssText = 'margin:8px 0;padding:8px 12px;background:var(--an-bg-1);border-radius:6px;font-size:0.82em;opacity:0.8';
+          pre.textContent = helpText;
+          log.appendChild(pre); syncWatermark();
+          input.value = ''; return;
+        }
+        default: {
+          const notice = document.createElement('div');
+          notice.style.cssText = 'padding:4px 12px;font-size:0.82em;opacity:0.55';
+          notice.textContent = 'Unknown command: /' + cmd + ' — type /help for the list';
+          log.appendChild(notice); syncWatermark();
+          input.value = ''; return;
+        }
+      }
+    }
     const images = attached.map((a) => ({ mime: a.mime, dataBase64: a.dataBase64, name: a.name }));
     pendingSentImages = attached.map((a) => a.dataUrl); // painted onto the echoed bubble
     vscode.postMessage({ type: 'send', text, images });
@@ -2219,6 +2622,36 @@ export function chatHtml(): string {
     // e.isComposing = IME (Korean/Japanese/Chinese) mid-composition; don't send
     // a half-formed syllable. keyCode 229 is the legacy IME-in-progress signal.
     if (e.isComposing || e.keyCode === 229) return;
+
+    if (activeSlashMatches.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        slashIdx = (slashIdx + 1) % activeSlashMatches.length;
+        renderSlashMenu();
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        slashIdx = (slashIdx - 1 + activeSlashMatches.length) % activeSlashMatches.length;
+        renderSlashMenu();
+        return;
+      }
+      if (e.key === 'Tab' || e.key === 'Enter') {
+        e.preventDefault();
+        if (activeSlashMatches[slashIdx]) {
+          completeSlash(activeSlashMatches[slashIdx]);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        suppressSlash = true;
+        renderSlashMenu();
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     if (e.key === 'Escape' && busy) { e.preventDefault(); interruptTurn(); } // Esc stops the turn
   });
@@ -2231,7 +2664,12 @@ export function chatHtml(): string {
     input.style.height = 'auto';
     input.style.height = Math.min(input.scrollHeight, 220) + 'px';
   }
-  input.addEventListener('input', autoGrowInput);
+  input.addEventListener('input', () => {
+    autoGrowInput();
+    suppressSlash = false;
+    slashIdx = 0;
+    renderSlashMenu();
+  });
 
   // ---- storage pill (Local always on; Cloud optional mirror) ----
   const cloudState = document.getElementById('cloudState');
@@ -2591,7 +3029,13 @@ export function chatHtml(): string {
   });
   document.getElementById('openWalletPage').addEventListener('click', () => { closeMenus(); if (myWalletAddress) showProfile(myWalletAddress); else showView('wallet'); });
   // click outside closes any open menu
-  document.addEventListener('click', () => closeMenus());
+  document.addEventListener('click', (e) => {
+    closeMenus();
+    if (inputWrap && !inputWrap.contains(e.target)) {
+      slashMenu.style.display = 'none';
+      activeSlashMatches = [];
+    }
+  });
   histMenu.addEventListener('click', (e) => e.stopPropagation());
   walletMenu.addEventListener('click', (e) => e.stopPropagation());
 
@@ -3288,8 +3732,17 @@ export function chatHtml(): string {
     if (m.type === 'message') onMessage(m.msg);
     else if (m.type === 'sessions') { allSessions = m.list || []; activeId = m.activeId; renderSessions(); }
     else if (m.type === 'loading') showLoading();
-    else if (m.type === 'clear') { log.innerHTML = ''; approvalDock.innerHTML = ''; syncComposerLock(); streaming = null; openBash = null; tailTurn = null; headTurn = null; hideTyping(); hideActivity(); resetPaging(); syncWatermark(); hideLoading(); }
+    else if (m.type === 'clear') { log.innerHTML = ''; approvalDock.innerHTML = ''; ctxMeter.style.display = 'none'; syncComposerLock(); streaming = null; openBash = null; tailTurn = null; headTurn = null; hideTyping(); hideActivity(); resetPaging(); syncWatermark(); hideLoading(); }
     else if (m.type === 'turnEnd') { hideTyping(); hideActivity(); }
+    else if (m.type === 'usage') {
+      // update the context token meter near the composer chips
+      const n = m.contextTokens;
+      if (typeof n === 'number') {
+        const label = n >= 1000 ? Math.round(n / 1000) + 'k' : String(n);
+        ctxMeter.textContent = 'ctx: ' + label;
+        ctxMeter.style.display = 'inline-flex';
+      }
+    }
     else if (m.type === 'skillActive') flashSkill(m.name); // a real skill fired (was /mockskill)
     else if (m.type === 'rpcStatus') renderRpcStatus(m.status);
     else if (m.type === 'skillShopping') setShopToggle(m.on);

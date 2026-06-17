@@ -16,18 +16,22 @@ export function ApprovalDock() {
   const { state, send, resolveApproval } = useStore();
   if (state.approvals.length === 0) return null;
 
-  function decide(req: ApprovalRequest, outcome: ApprovalOutcome, questionResponses?: ApprovalQuestionResponse[]) {
+  function decide(
+    req: ApprovalRequest,
+    outcome: ApprovalOutcome,
+    extra?: { reason?: string; updatedInput?: Record<string, unknown>; questionResponses?: ApprovalQuestionResponse[] },
+  ) {
     resolveApproval(req.id);
-    send({ type: "approvalDecision", id: req.id, outcome, questionResponses });
+    send({ type: "approvalDecision", id: req.id, outcome, ...extra });
   }
 
   return (
     <div className="flex flex-col gap-2 px-3 pt-2">
       {state.approvals.map((req) =>
         req.kind === "question" && req.questions?.length ? (
-          <QuestionCard key={req.id} req={req} onAnswer={(a) => decide(req, "once", a)} />
+          <QuestionCard key={req.id} req={req} onAnswer={(a) => decide(req, "once", { questionResponses: a })} />
         ) : (
-          <ApprovalCard key={req.id} req={req} onDecide={(o) => decide(req, o)} />
+          <ApprovalCard key={req.id} req={req} onDecide={(o, extra) => decide(req, o, extra)} />
         ),
       )}
     </div>
@@ -44,7 +48,6 @@ function QuestionCard({
   onAnswer: (questionResponses: ApprovalQuestionResponse[]) => void;
 }) {
   const questions = req.questions ?? [];
-  // selections[qIndex] = set of chosen labels for that question
   const [selections, setSelections] = useState<Record<number, string[]>>({});
   const [customInput, setCustomInput] = useState<Record<number, string>>({});
 
@@ -164,23 +167,54 @@ function ApprovalCard({
   onDecide,
 }: {
   req: ApprovalRequest;
-  onDecide: (o: ApprovalOutcome) => void;
+  onDecide: (o: ApprovalOutcome, extra?: { reason?: string; updatedInput?: Record<string, unknown> }) => void;
 }) {
   const isPlan = req.kind === "plan";
+  const isDanger = req.risk === "danger";
+  const [editMode, setEditMode] = useState(false);
+  const [editedCmd, setEditedCmd] = useState(req.command ?? "");
+  const [showReason, setShowReason] = useState(false);
+  const [reason, setReason] = useState("");
+
+  const borderColor = isDanger ? "border-red-700/60" : "border-emerald-700/50";
+  const bgColor = isDanger ? "bg-red-950/20" : "bg-emerald-950/30";
+
   return (
-    <div className="overflow-hidden rounded-lg border border-emerald-700/50 bg-emerald-950/30 text-sm">
+    <div className={`overflow-hidden rounded-lg border ${borderColor} ${bgColor} text-sm`}>
+      {/* header */}
       <div className="flex items-center gap-2 px-3 py-1.5">
+        {isDanger && (
+          <span className="font-bold text-red-400">⚠ DANGER</span>
+        )}
         <span className="font-mono text-emerald-400">
           {req.kind === "bash" ? "$" : req.kind === "read" ? "□" : isPlan ? "✦" : "✎"}
         </span>
         <span className="truncate font-medium">{req.title || req.tool}</span>
         <span className="ml-auto text-xs text-zinc-500">{req.cli}</span>
+        {/* bash: edit toggle */}
+        {req.kind === "bash" && req.command && (
+          <button
+            onClick={() => setEditMode((e) => !e)}
+            className="text-xs text-zinc-500 hover:text-zinc-300"
+          >
+            {editMode ? "cancel" : "edit"}
+          </button>
+        )}
       </div>
 
-      {req.command && (
+      {/* detail */}
+      {req.command && !editMode && (
         <pre className="overflow-x-auto px-3 pb-2 font-mono text-xs text-zinc-200">
           {req.command}
         </pre>
+      )}
+      {req.kind === "bash" && editMode && (
+        <textarea
+          value={editedCmd}
+          onChange={(e) => setEditedCmd(e.target.value)}
+          rows={3}
+          className="w-full resize-y bg-zinc-950 px-3 py-2 font-mono text-xs text-zinc-100 outline-none border-t border-zinc-700"
+        />
       )}
       {req.plan && (
         <div className="max-h-64 overflow-y-auto whitespace-pre-wrap px-3 pb-2 text-xs leading-relaxed text-zinc-300 [overflow-wrap:anywhere]">
@@ -209,28 +243,76 @@ function ApprovalCard({
         </pre>
       )}
 
-      <div className="flex gap-2 border-t border-emerald-700/40 px-3 py-2">
-        <button
-          autoFocus
-          onClick={() => onDecide("once")}
-          className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white"
-        >
-          {isPlan ? "Approve plan" : "Approve"}
-        </button>
-        {!isPlan && (
+      {/* deny-with-reason input */}
+      {showReason && (
+        <div className="flex items-center gap-2 border-t border-zinc-700 px-3 py-2">
+          <input
+            type="text"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Reason (optional)"
+            autoFocus
+            className="flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-zinc-500 placeholder:text-zinc-600"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onDecide("deny", { reason: reason.trim() || undefined });
+              if (e.key === "Escape") { setShowReason(false); setReason(""); }
+            }}
+          />
           <button
-            onClick={() => onDecide("always")}
-            className="rounded bg-emerald-800 px-3 py-1 text-xs text-emerald-100"
+            onClick={() => onDecide("deny", { reason: reason.trim() || undefined })}
+            className="rounded bg-red-900/60 px-2 py-1 text-xs text-red-200"
           >
-            Always
+            Deny
           </button>
+          <button
+            onClick={() => { setShowReason(false); setReason(""); }}
+            className="text-xs text-zinc-500 hover:text-zinc-300"
+          >
+            ↩
+          </button>
+        </div>
+      )}
+
+      {/* action buttons */}
+      <div className="flex flex-wrap gap-2 border-t border-emerald-700/40 px-3 py-2">
+        {isPlan ? (
+          <>
+            <button autoFocus onClick={() => onDecide("once")} className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white">
+              Approve plan
+            </button>
+            <button onClick={() => onDecide("deny")} className="rounded bg-red-900/60 px-3 py-1 text-xs text-red-200">
+              Keep planning
+            </button>
+          </>
+        ) : editMode ? (
+          <>
+            <button
+              autoFocus
+              onClick={() => onDecide("once", { updatedInput: { ...(req.input ?? {}), command: editedCmd } })}
+              className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white"
+            >
+              Approve edited
+            </button>
+            <button onClick={() => setEditMode(false)} className="rounded bg-zinc-700 px-3 py-1 text-xs text-zinc-200">
+              Cancel
+            </button>
+          </>
+        ) : (
+          <>
+            <button autoFocus onClick={() => onDecide("once")} className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white">
+              Approve
+            </button>
+            <button onClick={() => onDecide("always")} className="rounded bg-emerald-800 px-3 py-1 text-xs text-emerald-100">
+              Always
+            </button>
+            <button
+              onClick={() => { setShowReason((s) => !s); }}
+              className="rounded bg-red-900/60 px-3 py-1 text-xs text-red-200"
+            >
+              Deny…
+            </button>
+          </>
         )}
-        <button
-          onClick={() => onDecide("deny")}
-          className="rounded bg-red-900/60 px-3 py-1 text-xs text-red-200"
-        >
-          {isPlan ? "Keep planning" : "Deny"}
-        </button>
       </div>
     </div>
   );

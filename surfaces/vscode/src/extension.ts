@@ -196,12 +196,24 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
 
   // marketplace search/buy/install — needs the wallet + a chain connection. The RPC is
   // resolved inside (registered Helius key wins; else env; else public-devnet default).
-  const market = await marketplaceEnv(wallet!);
+  const marketPromise = marketplaceEnv(wallet!);
   const chat = createChatSession(runtime!, transport, {
     cwd: getCwd,
     approval,
     claimSession,
-    ...market,
+    searchSkills: async (query, kind) => (await marketPromise).searchSkills(query, kind),
+    getSkillDetail: async (mint) => (await marketPromise).getSkillDetail(mint),
+    buySkill: async (skillId, creatorWallet) => (await marketPromise).buySkill(skillId, creatorWallet),
+    postNote: async (skillId, skillType, text, gitLink) => (await marketPromise).postNote(skillId, skillType, text, gitLink),
+    ownedSkills: async () => (await marketPromise).ownedSkills(),
+    ownedNftSkills: async () => (await marketPromise).ownedNftSkills(),
+    listAgents: async () => (await marketPromise).listAgents(),
+    getAgentProfile: async (w) => (await marketPromise).getAgentProfile(w),
+    buyAllSkills: async (w) => (await marketPromise).buyAllSkills(w),
+    postAgentNote: async (w, t, l) => (await marketPromise).postAgentNote(w, t, l),
+    solBalance: async () => (await marketPromise).solBalance(),
+    publishSkill: async (input) => (await marketPromise).publishSkill(input),
+    loadOwnedSkills: async () => (await marketPromise).loadOwnedSkills(),
     // RPC config (issue #23): capture the Helius key via a native secret input — it
     // never passes through the webview as plain text — then save it like an OAuth token.
     setHeliusKey: async () => {

@@ -62,6 +62,7 @@ export interface State {
   hasMore: boolean;
   cursor: number;
   toast: string | null;
+  contextTokens?: number;
 }
 
 const initialState: State = {
@@ -181,8 +182,10 @@ function reducer(state: State, ev: Action): State {
       return ev.status === "done"
         ? { ...state, phase: "chat", codexLoginUrl: null, codexLoginCode: null, codexLoginError: null }
         : { ...state, codexLoginUrl: null, codexLoginCode: null, codexLoginError: ev.error ?? "Login failed." };
+    case "usage":
+      return { ...state, contextTokens: ev.contextTokens };
     case "clear":
-      return { ...state, log: [], approvals: [], typing: false, loading: false };
+      return { ...state, log: [], approvals: [], typing: false, loading: false, contextTokens: undefined };
     case "message":
       return { ...state, log: appendMessage(state.log, ev.msg) };
     case "turnEnd":

@@ -64,11 +64,18 @@ export interface ApprovalRequest {
   questions?: ApprovalQuestion[]; // kind === "question"
   plan?: string;                  // kind === "plan"
   input?: Record<string, unknown>;
+  risk?: "danger";                // flagged destructive/irreversible action — surface should alarm
 }
 
 export type ApprovalOutcome = "once" | "always" | "deny";
 
 // ── UI → server (POST /rpc) ──
+
+export interface ImageInput {
+  mime: string;
+  dataBase64: string;
+  name?: string;
+}
 
 export type ClientMessage =
   | { type: "ready" }
@@ -77,7 +84,9 @@ export type ClientMessage =
   | { type: "open"; sessionId: string }
   | { type: "platform"; cli: Cli }
   | { type: "model"; model?: string }
-  | { type: "send"; text: string }
+  | { type: "mode"; mode?: string }
+  | { type: "effort"; effort?: string }
+  | { type: "send"; text: string; images?: ImageInput[] }
   | { type: "interrupt" }
   | { type: "loadMore"; cursor: number }
   | { type: "delete"; sessionId: string }
@@ -90,7 +99,7 @@ export type ClientMessage =
   // passive skill-shopping toggle (issue #21)
   | { type: "getSkillShopping" }
   | { type: "setSkillShopping"; on: boolean }
-  | { type: "approvalDecision"; id: string; outcome: ApprovalOutcome; reason?: string; questionResponses?: ApprovalQuestionResponse[] }
+  | { type: "approvalDecision"; id: string; outcome: ApprovalOutcome; reason?: string; updatedInput?: Record<string, unknown>; questionResponses?: ApprovalQuestionResponse[] }
   // onboarding-only:
   | { type: "connectWallet"; address: string; signature: number[] }
   | { type: "startClaudeLogin" }
@@ -109,6 +118,7 @@ export type ClientMessage =
 
 export type ServerMessage =
   | { type: "clear" }
+  | { type: "usage"; contextTokens: number }
   | { type: "message"; msg: ChatMessage }
   | { type: "turnEnd" }
   | { type: "page"; hasMore: boolean; cursor: number }

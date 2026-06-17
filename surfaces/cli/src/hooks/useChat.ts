@@ -130,10 +130,10 @@ export function useChat(
   }, [runtime, opts.cwd, opts.approval, wire]);
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, images?: import("@iqlabs-official/agent-sdk/runtime/contract").ImageInput[]) => {
       setBusy(true);
       const h = await ensureHandle();
-      h.send(text);
+      h.send(text, images && images.length ? images : undefined);
     },
     [ensureHandle],
   );
