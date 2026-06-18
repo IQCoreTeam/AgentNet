@@ -32,12 +32,14 @@ import type {
 // wires no tools (fully quiet, no marketplace surface). All best-effort: a failure here
 // must not block the session, just leave skill-shopping inert this run.
 //
-// Codex gets the SKILL.md but no MCP tools (codex-sdk exposes no mcpServers option yet —
-// deferred); the skill's prose still guides it to the (unavailable) tools, harmlessly.
+// Codex gets MCP via a CHILD PROCESS (codex app-server loads servers from config, not an
+// in-process object): Phase 1 wires a READ-ONLY stdio server (search/verify only) when the
+// surface has bundled the standalone entry and points AGENTNET_MCP_STDIO at it. Trading
+// (buy/publish) stays Claude-only until Codex's MCP-tool approval is routed to the card.
 async function buildPassiveSpawn(
   cli: "claude" | "codex",
   wallet: Wallet,
-): Promise<{ mcpServers?: Record<string, unknown>; allowedTools?: string[] }> {
+): Promise<{ mcpServers?: Record<string, unknown>; allowedTools?: string[]; codexMcp?: { name: string; command: string; args: string[] } }> {
   const on = await getSkillShopping().catch(() => true);
 
   // Move the bundled skill into / out of the scanned skills dirs (both engines).
@@ -47,8 +49,18 @@ async function buildPassiveSpawn(
     console.warn("[skill-shopping] toggle install failed:", e);
   }
 
-  // OFF, or codex (no MCP option yet): the SKILL.md placement above is all we do.
-  if (!on || cli === "codex") return {};
+  if (!on) return {};
+
+  // Codex (Phase 1): a separate `node <entry>` stdio MCP server, read-only. Needs the
+  // surface to have bundled the entry (AGENTNET_MCP_STDIO) AND a readable catalog (DAS).
+  if (cli === "codex") {
+    const entry = process.env.AGENTNET_MCP_STDIO;
+    if (!entry || !(await hasDasRpc())) return {};
+    // command = "node" (PATH-resolved by codex when it spawns the server), NOT
+    // process.execPath: in the VSCode extension host that's the Electron binary, which
+    // won't run a script as plain node. "node" is the universal MCP-server convention.
+    return { codexMcp: { name: AGENTNET_MCP_SERVER, command: "node", args: [entry] } };
+  }
 
   // Claude + ON: wire the marketplace MCP tools (search → verify → buy) with a per-spawn
   // verify guard. Use the SAME RPC resolution as the rest of the app (resolveRpcUrl: a

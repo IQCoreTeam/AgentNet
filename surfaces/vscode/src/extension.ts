@@ -4,6 +4,7 @@
 //   handle.onMessage -> webview "message" (CLI output -> panel)
 
 import * as vscode from "vscode";
+import * as path from "node:path";
 import type { AgentRuntime, Wallet } from "@iqlabs-official/agent-sdk/runtime/contract";
 import {
   connect,
@@ -47,6 +48,10 @@ function cloudStatusCb(s: { ok: boolean; error?: string }) {
 }
 
 export function activate(context: vscode.ExtensionContext) {
+  // Point the runtime at our bundled stdio MCP server (dist/mcp-stdio.js, beside this
+  // file) so Codex can load the read-only marketplace tools as a child process. Core
+  // reads this path in buildPassiveSpawn; absent → Codex MCP simply stays off.
+  process.env.AGENTNET_MCP_STDIO = path.join(__dirname, "mcp-stdio.js");
   context.subscriptions.push(
     vscode.commands.registerCommand("agentnet.openChat", () => boot(context)),
     // open ANOTHER chat panel (a new tab). VSCode handles the tab/split/drag; each

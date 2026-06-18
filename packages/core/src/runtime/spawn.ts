@@ -1,9 +1,13 @@
 // Spawn an agent ENGINE and expose its output as ChatMessage events + send/stop.
-// We now drive both CLIs through their official SDKs (claude → @anthropic-ai/
-// claude-agent-sdk, codex → @openai/codex-sdk) instead of hand-spawning the binary
-// and parsing stdout. The SDKs still spawn the same CLI under the hood and use the
-// same on-disk session jsonl, so our cross-CLI inject (inject/*) is unchanged — but
-// we now get a real permission gate: claude's canUseTool, routed to an ApprovalChannel.
+// The two engines are driven differently, on purpose:
+//   - claude → @anthropic-ai/claude-agent-sdk's query(), whose canUseTool callback
+//     is routed to an ApprovalChannel for a real interactive permission gate.
+//   - codex  → `codex app-server --stdio` JSON-RPC directly (NOT @openai/codex-sdk).
+//     The SDK only exposes a coarse approvalPolicy with no inline approval callback;
+//     app-server's protocol carries per-call approval requests (ExecCommandApproval,
+//     ApplyPatchApproval, …) that we answer interactively — the same gate as claude.
+// Both paths spawn the same codex/claude CLI under the hood and share the on-disk
+// session jsonl + ~/.codex auth, so cross-CLI inject (inject/*) and login are unchanged.
 //
 // Each engine implements ONE interface (Engine) so the runtime treats both uniformly
 // and never imports an SDK type. Output is delivered as already-mapped ChatMessages
@@ -16,7 +20,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { configFile, rootDir } from "../core/paths.js";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { Codex } from "@openai/codex-sdk";
 import type { ChatMessage, ImageInput } from "./contract.js";
 import { mapClaudeMessage } from "./convert/claude.js";
 import { skillFromPath } from "./convert/codex.js";
@@ -98,6 +101,11 @@ export interface SpawnOpts {
   // system-prompt append — so there's no appendSystemPrompt option anymore.)
   mcpServers?: Record<string, unknown>;
   allowedTools?: string[];
+  // Codex MCP (Phase 1): codex app-server loads MCP servers from config, not an
+  // in-process object — so it's spawned as a child process. We inject it via `-c
+  // mcp_servers.<name>...` overrides on the app-server command (process-scoped; the
+  // user's global ~/.codex/config.toml is untouched).
+  codexMcp?: { name: string; command: string; args: string[] };
   stream?: boolean; // emit partial assistant deltas (claude includePartialMessages)
   apiKey?: string; // Stage 1 Codex API Key
   ephemeral?: boolean; // If true, disable tools / auto-deny approvals
@@ -398,6 +406,16 @@ function claudeEngine(opts: SpawnOpts): Engine {
   };
 }
 
+// Build `-c mcp_servers.<name>...` overrides for `codex app-server`. Values are TOML,
+// so command/args are JSON-encoded (a JSON string is a valid TOML basic string; a JSON
+// string array is a valid TOML array). Process-scoped — never touches ~/.codex/config.toml.
+export function codexMcpFlags(m: { name: string; command: string; args: string[] }): string[] {
+  return [
+    "-c", `mcp_servers.${m.name}.command=${JSON.stringify(m.command)}`,
+    "-c", `mcp_servers.${m.name}.args=${JSON.stringify(m.args)}`,
+  ];
+}
+
 // ── codex: app-server JSON-RPC over stdio. Spawns `codex app-server --stdio`
 // and processes requests and notifications, routing approvals to the ApprovalChannel.
 function codexEngine(opts: SpawnOpts): Engine {
@@ -409,7 +427,8 @@ function codexEngine(opts: SpawnOpts): Engine {
   if (opts.apiKey) {
     childEnv.OPENAI_API_KEY = opts.apiKey;
   }
-  const child = spawn(codexPath, ["app-server", "--stdio"], {
+  const mcpFlags = opts.codexMcp ? codexMcpFlags(opts.codexMcp) : [];
+  const child = spawn(codexPath, ["app-server", "--stdio", ...mcpFlags], {
     env: childEnv,
     stdio: ["pipe", "pipe", "pipe"],
   });

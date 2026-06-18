@@ -2,7 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getAgentNetTools, handleToolCall, newVerifyGuard, createAgentSdkMcpServer, agentNetAllowedTools } from "./index.js";
+import { getAgentNetTools, handleToolCall, newVerifyGuard, createAgentSdkMcpServer, createAgentMcpServer, agentNetAllowedTools } from "./index.js";
+import { codexMcpFlags } from "../runtime/spawn.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { readSkillManifest } from "./registry.js";
 import { searchSkills } from "../search/search.js";
 import { buySkill, publishSkill } from "../nft/skill.js";
@@ -270,5 +273,44 @@ describe("skill-market", () => {
     const result = await handleToolCall(mockConn, signer, "defaultCreator", "verify_skill", { skillId: "skill1" }, guard);
     expect(result.isError).toBe(true);
     expect(guard.isVerified("skill1")).toBe(false);
+  });
+});
+
+describe("createAgentMcpServer readOnly (Codex Phase 1)", () => {
+  // Connect a real MCP Client over an in-memory transport pair, so the readOnly filter is
+  // exercised through the actual ListTools / CallTool round-trip — not via internals.
+  async function connect(opts: { readOnly?: boolean }) {
+    const server = createAgentMcpServer({} as any, Keypair.generate(), "creator", opts);
+    const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "test", version: "0" });
+    await Promise.all([server.connect(serverT), client.connect(clientT)]);
+    return client;
+  }
+
+  it("readOnly exposes ONLY search_skills + verify_skill", async () => {
+    const client = await connect({ readOnly: true });
+    const names = (await client.listTools()).tools.map((t) => t.name).sort();
+    expect(names).toEqual(["search_skills", "verify_skill"]);
+  });
+
+  it("default (no readOnly) exposes the full tool set", async () => {
+    const client = await connect({});
+    const names = (await client.listTools()).tools.map((t) => t.name).sort();
+    expect(names).toEqual(getAgentNetTools().map((t) => t.name).sort());
+  });
+
+  it("readOnly refuses to CALL a write tool (not just hide it)", async () => {
+    const client = await connect({ readOnly: true });
+    await expect(client.callTool({ name: "buy_skill", arguments: { skillId: "x" } })).rejects.toThrow(/not available/);
+  });
+});
+
+describe("codexMcpFlags", () => {
+  it("emits TOML -c overrides with JSON-encoded command + args (no global config touched)", () => {
+    const flags = codexMcpFlags({ name: "agentnet-marketplace", command: "/usr/bin/node", args: ["/abs/mcp.cjs"] });
+    expect(flags).toEqual([
+      "-c", 'mcp_servers.agentnet-marketplace.command="/usr/bin/node"',
+      "-c", 'mcp_servers.agentnet-marketplace.args=["/abs/mcp.cjs"]',
+    ]);
   });
 });

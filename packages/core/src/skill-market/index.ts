@@ -114,6 +114,13 @@ export const AGENTNET_MCP_SERVER = "agentnet-marketplace";
  *  stay auto-allowed. */
 const PROMPT_BEFORE_USE = new Set<string>(["publish_skill", "buy_skill"]);
 
+/** Read-only marketplace tools: they touch no wallet state and mint/spend nothing, so
+ *  they're safe to expose without an interactive approval channel. The stdio server's
+ *  `readOnly` mode (used for the Codex MCP bridge, Phase 1) exposes ONLY these — the
+ *  write/spend tools (buy/publish/comment/unequip) are simply not registered, so there
+ *  is nothing to bypass. */
+const READ_ONLY_TOOLS = new Set<string>(["search_skills", "verify_skill"]);
+
 /** Fully-qualified tool ids auto-allowed for the Claude spawn (no permission prompt),
  *  DERIVED from the tool defs minus the prompt-first tools — so the list can neither
  *  miss a tool the server exposes nor silently auto-run one that should ask first. */
@@ -352,11 +359,18 @@ export function createAgentMcpServer(
   conn: Connection,
   signer: SignerInput,
   defaultCreatorWallet: string,
+  opts: { readOnly?: boolean } = {},
 ): Server {
+  // readOnly (Codex MCP bridge, Phase 1): expose ONLY the read tools. The write/spend
+  // tools aren't registered at all, so a missing approval channel can't be bypassed.
+  const allow = (name: string) => !opts.readOnly || READ_ONLY_TOOLS.has(name);
   const server = new Server({ name: AGENTNET_MCP_SERVER, version: "0.0.1" }, { capabilities: { tools: {} } });
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: getAgentNetTools() }));
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: getAgentNetTools().filter((t) => allow(t.name)),
+  }));
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
+    if (!allow(name)) throw new Error(`Tool not available: ${name}`);
     return await handleToolCall(conn, signer, defaultCreatorWallet, name, args);
   });
   return server;

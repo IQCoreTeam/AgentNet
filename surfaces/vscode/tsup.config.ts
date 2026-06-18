@@ -6,7 +6,9 @@ import { defineConfig } from "tsup";
 // URL" on activation. We shim it in a banner so the bundled SDK code resolves paths
 // against THIS file instead. (`require`/__filename exist in the CJS extension host.)
 export default defineConfig({
-  entry: ["src/extension.ts"],
+  // extension.ts → the VSCode extension; mcp-stdio.ts → a standalone stdio MCP server
+  // Codex spawns as a child process (dist/mcp-stdio.js). Both CJS, core inlined.
+  entry: ["src/extension.ts", "src/mcp-stdio.ts"],
   format: ["cjs"],
   outDir: "dist",
   external: ["vscode"],
