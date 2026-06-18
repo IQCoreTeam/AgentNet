@@ -152,8 +152,8 @@ export class SkillSync {
   }
 
   /**
-   * Dispose (un-equip) a skill the wallet owns but no longer wants — the inverse of
-   * buyAndEquip, shared by the dispose_skill MCP tool and the UI. Soulbound tokens can't be
+   * Un-equip a skill the wallet owns but no longer wants — the inverse of
+   * buyAndEquip, shared by the unequip_skill MCP tool and the UI. Soulbound tokens can't be
    * sold or burned, so this is a local "un-pin", NOT a delete: MOVE the SKILL.md out of both
    * runtimes' scanned dirs into the holding dir (so the CLI stops loading it) and record the
    * mint as disposed (so the session-start owned-sync doesn't re-add it, and the UI greys it

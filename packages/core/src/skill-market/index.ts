@@ -155,10 +155,10 @@ const SKILL_TOOLS: { name: string; description: string; schema: z.ZodRawShape }[
     },
   },
   {
-    name: "dispose_skill",
+    name: "unequip_skill",
     description:
-      "Dispose (un-equip) an installed skill you no longer want — e.g. it's low quality, redundant, or wasn't useful. Removes its SKILL.md from your runtime so it stops loading, and remembers the choice so it doesn't re-install next session. Note: skills are soulbound, so you keep the NFT on-chain (no refund) — this only un-equips it locally.",
-    schema: { skillId: z.string().describe("The base58 mint address of the skill to dispose.") },
+      "Un-equip a skill from your local runtime — removes its SKILL.md so it stops loading, and remembers the choice so it won't re-install next session. This is LOCAL-ONLY: the soulbound NFT stays in your wallet (no refund, no burn), and if you are the skill's CREATOR, your published skill remains listed on the marketplace — this does NOT unpublish, delist, or destroy it. Re-equip it anytime from the marketplace (no re-buy).",
+    schema: { skillId: z.string().describe("The base58 mint address of the skill to un-equip.") },
   },
   {
     name: "post_skill_comment",
@@ -267,17 +267,17 @@ export async function handleToolCall(
     }
   }
 
-  if (name === "dispose_skill") {
+  if (name === "unequip_skill") {
     const skillId = args?.skillId as string;
     if (!skillId) throw new Error("Missing required argument: skillId");
-    // No verify guard here: dispose only removes local files + records the choice — it
+    // No verify guard here: un-equip only removes local files + records the choice — it
     // touches nothing on-chain (the soulbound token stays owned), so there's nothing to gate.
     try {
       const slug = await new SkillSync(conn).dispose(skillId);
       const what = slug ? `"${slug}" (${skillId})` : skillId;
-      return { content: [{ type: "text", text: `Disposed skill ${what}. It's un-equipped locally and won't re-install; you still own the NFT on-chain (soulbound, no refund). Re-equip it from the marketplace if you change your mind.` }] };
+      return { content: [{ type: "text", text: `Un-equipped skill ${what} locally — it won't re-install next session. You still own the NFT on-chain (soulbound, no refund), and if you published it, it stays listed on the marketplace. Re-equip it anytime if you change your mind.` }] };
     } catch (err: any) {
-      return { isError: true, content: [{ type: "text", text: `Failed to dispose skill: ${err.message}` }] };
+      return { isError: true, content: [{ type: "text", text: `Failed to un-equip skill: ${err.message}` }] };
     }
   }
 

@@ -172,8 +172,8 @@ export async function marketplaceEnv(wallet: Wallet) {
       }
     },
 
-    // Dispose (un-equip) an owned skill — the inverse of buySkill, shared with the
-    // dispose_skill MCP tool. Local + sticky (soulbound: the NFT stays owned, no refund).
+    // Un-equip an owned skill — the inverse of buySkill, shared with the
+    // unequip_skill MCP tool. Local + sticky (soulbound: the NFT stays owned, no refund).
     async disposeSkill(skillId: string) {
       try {
         const slug = await skills.dispose(skillId);

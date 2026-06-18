@@ -37,14 +37,14 @@ describe("skill-market", () => {
     vi.clearAllMocks();
   });
 
-  it("exposes the marketplace tool set (incl. dispose_skill)", () => {
+  it("exposes the marketplace tool set (incl. unequip_skill)", () => {
     const tools = getAgentNetTools();
     expect(tools).toHaveLength(7);
     expect(tools.map((t) => t.name)).toEqual([
       "search_skills",
       "verify_skill",
       "buy_skill",
-      "dispose_skill",
+      "unequip_skill",
       "post_skill_comment",
       "post_agent_comment",
       "publish_skill",
@@ -196,18 +196,18 @@ describe("skill-market", () => {
     expect(result.content[0].text).toContain("Must hold");
   });
 
-  it("dispose_skill un-equips locally + records the mint as disposed (no on-chain call)", async () => {
+  it("unequip_skill un-equips locally + records the mint as disposed (no on-chain call)", async () => {
     // isolate the manifest to a temp home so the test doesn't touch the real ~/.agentnet
-    const home = await mkdtemp(join(tmpdir(), "agentnet-dispose-"));
+    const home = await mkdtemp(join(tmpdir(), "agentnet-unequip-"));
     const prev = process.env.AGENTNET_HOME;
     process.env.AGENTNET_HOME = home;
     try {
-      // no metadata -> dispose can't resolve a slug, but still records the mint (sticky)
+      // no metadata -> un-equip can't resolve a slug, but still records the mint (sticky)
       vi.mocked(readSkillMintMetadata).mockResolvedValue(null as any);
-      const result = await handleToolCall(mockConn, signer, "defaultCreator", "dispose_skill", { skillId: "skillX" });
+      const result = await handleToolCall(mockConn, signer, "defaultCreator", "unequip_skill", { skillId: "skillX" });
       expect(result.isError).toBeUndefined();
-      expect(result.content[0].text).toContain("Disposed skill");
-      // dispose is local-only: it must NOT buy/sell/transfer on-chain
+      expect(result.content[0].text).toContain("Un-equipped skill");
+      // un-equip is local-only: it must NOT buy/sell/transfer on-chain
       expect(buySkill).not.toHaveBeenCalled();
       const m = await readSkillManifest();
       expect(m.disposed).toContain("skillX");
@@ -217,8 +217,8 @@ describe("skill-market", () => {
     }
   });
 
-  it("dispose_skill requires a skillId", async () => {
-    await expect(handleToolCall(mockConn, signer, "defaultCreator", "dispose_skill", {})).rejects.toThrow("skillId");
+  it("unequip_skill requires a skillId", async () => {
+    await expect(handleToolCall(mockConn, signer, "defaultCreator", "unequip_skill", {})).rejects.toThrow("skillId");
   });
 
   it("should throw on unknown tool", async () => {

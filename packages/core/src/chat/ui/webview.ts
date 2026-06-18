@@ -53,6 +53,10 @@ export function chatHtml(): string {
     --an-green-line: rgba(58,192,122,0.38);
     --an-green-dim:  rgba(58,192,122,0.08);
     --an-amber:      #e0a23a;          /* compaction / context boundary */
+    --an-violet:      #a98bff;         /* skill-forge (publish) accent */
+    --an-violet-soft: rgba(169,139,255,0.16);
+    --an-violet-line: rgba(169,139,255,0.42);
+    --an-violet-dim:  rgba(169,139,255,0.10);
     /* surface ramp — subtle, sits on top of the editor bg */
     --an-bg-1: color-mix(in srgb, var(--vscode-foreground) 4%, transparent);
     --an-bg-2: color-mix(in srgb, var(--vscode-foreground) 7%, transparent);
@@ -386,47 +390,43 @@ export function chatHtml(): string {
   .approvalCard { border: 1px solid var(--an-green-line); border-radius: var(--an-radius-sm);
                   background: var(--an-green-dim); overflow: hidden;
                   box-shadow: 0 4px 16px rgba(0,0,0,0.25); }
-  /* ── skill-forge: the magical glow ONLY on the publish_skill approval card ── */
+  /* ── skill-forge: a restrained violet treatment ONLY on the publish_skill card.
+     Same shape as the plain approval card (opaque dark interior, hairline border,
+     soft shadow) — just tinted violet with a faint top wash + a few slow twinkles.
+     Opaque interior is the point: the old version filled with a translucent bg over a
+     rainbow border, so the gradient bled through and washed out the text. ── */
   .approvalCard.skillForge {
-    position: relative; border-color: transparent;
+    position: relative;
+    border: 1px solid var(--an-violet-line);
     background:
-      linear-gradient(var(--an-bg-2,#15161c), var(--an-bg-2,#15161c)) padding-box,
-      linear-gradient(125deg,#b388ff,#7c4dff,#4dd0e1,#b388ff) border-box;
-    border: 1.5px solid transparent;
-    animation: forgeGlow 3.2s ease-in-out infinite;
+      linear-gradient(180deg, var(--an-violet-dim), transparent 64%),
+      var(--vscode-editor-background, #15161c);
+    box-shadow: 0 4px 18px rgba(0,0,0,0.30);
+    animation: forgeGlow 4.5s ease-in-out infinite;
   }
   @keyframes forgeGlow {
-    0%,100% { box-shadow: 0 0 18px -6px rgba(124,77,255,0.5), 0 0 0 1px rgba(124,77,255,0.22); }
-    50%     { box-shadow: 0 0 32px -2px rgba(77,208,225,0.6), 0 0 0 1px rgba(179,136,255,0.45); }
+    0%,100% { box-shadow: 0 4px 18px rgba(0,0,0,0.30), 0 0 0 1px var(--an-violet-soft); }
+    50%     { box-shadow: 0 4px 22px rgba(0,0,0,0.30), 0 0 14px -4px var(--an-violet-line); }
   }
-  /* slow-rotating aura behind the content */
-  .approvalCard.skillForge::before {
-    content:''; position:absolute; inset:-45%; z-index:0; pointer-events:none;
-    background: conic-gradient(from 0deg, transparent 0 18%, rgba(124,77,255,0.20) 33%,
-                transparent 52%, rgba(77,208,225,0.16) 72%, transparent 100%);
-    animation: forgeSpin 9s linear infinite;
-  }
-  @keyframes forgeSpin { to { transform: rotate(360deg); } }
-  /* keep all card content above the aura + stars */
+  /* keep card content above the twinkle layer */
   .approvalCard.skillForge > .apHead,
   .approvalCard.skillForge > .apBody,
   .approvalCard.skillForge > .apActions { position: relative; z-index: 2; }
-  .approvalCard.skillForge .apk { color:#cdb4ff; text-shadow:0 0 8px rgba(179,136,255,0.9); }
+  .approvalCard.skillForge .apk { color: var(--an-violet); }
   .approvalCard.skillForge .forgeBody { color: var(--vscode-foreground); }
-  /* drifting twinkle stars */
+  .approvalCard.skillForge .apBody,
+  .approvalCard.skillForge .apActions { border-top-color: var(--an-violet-dim); }
+  /* a few slow, low-key twinkles — a hint of sparkle, not a fountain */
   .forgeStars { position:absolute; inset:0; z-index:1; pointer-events:none; overflow:hidden; }
-  .forgeStars .st { position:absolute; bottom:-12px; color:#d9c6ff; opacity:0;
-                    animation-name: forgeRise; animation-timing-function: linear;
-                    animation-iteration-count: infinite;
-                    text-shadow: 0 0 6px rgba(179,136,255,0.95); }
-  @keyframes forgeRise {
-    0%   { transform: translateY(0) scale(0.5) rotate(0deg); opacity:0; }
-    15%  { opacity:0.95; }
-    85%  { opacity:0.95; }
-    100% { transform: translateY(-140px) scale(1.1) rotate(170deg); opacity:0; }
+  .forgeStars .st { position:absolute; color: var(--an-violet); opacity:0;
+                    animation-name: forgeTwinkle; animation-timing-function: ease-in-out;
+                    animation-iteration-count: infinite; }
+  @keyframes forgeTwinkle {
+    0%,100% { transform: scale(0.6); opacity:0; }
+    50%     { transform: scale(1);   opacity:0.55; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .approvalCard.skillForge, .approvalCard.skillForge::before, .forgeStars .st { animation: none; }
+    .approvalCard.skillForge { animation: none; }
     .forgeStars { display:none; }
   }
   .apHead { display: flex; align-items: center; gap: 8px; padding: 8px 12px;
@@ -2202,18 +2202,19 @@ export function chatHtml(): string {
   function renderApproval(req) {
     const card = document.createElement('div');
     card.className = 'approvalCard';
-    // ONLY the skill-publish approval gets the magical "forge" treatment — a glowing
-    // aura + drifting twinkle stars. Every other approval stays the plain green card.
+    // ONLY the skill-publish approval gets the "forge" treatment — a violet-tinted card
+    // with a soft glow + a few slow twinkles. Every other approval stays the green card.
     const isPublish = /publish_skill/.test(req.tool || '') || /publish_skill/.test(req.title || '');
     if (isPublish) {
       card.classList.add('skillForge');
       const stars = document.createElement('div'); stars.className = 'forgeStars';
-      for (let i = 0; i < 14; i++) {
-        const s = document.createElement('span'); s.className = 'st'; s.textContent = i % 3 === 0 ? '✦' : '✧';
-        s.style.left = (4 + Math.random() * 92) + '%';
-        s.style.animationDuration = (2.6 + Math.random() * 2.6) + 's';
-        s.style.animationDelay = (Math.random() * 3.2) + 's';
-        s.style.fontSize = (8 + Math.random() * 9) + 'px';
+      for (let i = 0; i < 6; i++) {
+        const s = document.createElement('span'); s.className = 'st'; s.textContent = i % 2 === 0 ? '✦' : '✧';
+        s.style.left = (8 + Math.random() * 84) + '%';
+        s.style.top = (12 + Math.random() * 70) + '%';
+        s.style.animationDuration = (3.2 + Math.random() * 2.4) + 's';
+        s.style.animationDelay = (Math.random() * 3) + 's';
+        s.style.fontSize = (7 + Math.random() * 5) + 'px';
         stars.appendChild(s);
       }
       card.appendChild(stars);
