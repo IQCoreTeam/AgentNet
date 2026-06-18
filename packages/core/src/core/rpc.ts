@@ -11,16 +11,9 @@
 
 import { readFile, writeFile } from "node:fs/promises";
 import { tokenFile, tokensDir, ensureDir } from "./paths.js";
-import { getNetwork, type Network } from "./seed.js";
+import { getNetwork, getPublicRpcUrl, type Network } from "./seed.js";
 
 const PROVIDER = "helius";
-
-// Public RPC per network: fine for tx sends, but NO DAS (getAssetsByGroup) — the
-// marketplace returns empty on it. A Helius key (free tier) gives DAS.
-const PUBLIC_RPC: Record<Network, string> = {
-  devnet: "https://api.devnet.solana.com",
-  mainnet: "https://api.mainnet-beta.solana.com",
-};
 
 interface StoredKey {
   api_key: string;
@@ -107,7 +100,7 @@ async function heliusKeyWorks(url: string): Promise<boolean> {
  * DAS-tier enumeration degrades, and the NFT indexer is the primary catalog path anyway.
  */
 export async function resolveRpcUrl(): Promise<string> {
-  const fallback = process.env.DAS_RPC_URL || process.env.SOLANA_RPC_URL || PUBLIC_RPC[getNetwork()];
+  const fallback = process.env.DAS_RPC_URL || process.env.SOLANA_RPC_URL || getPublicRpcUrl();
   const helius = await loadHeliusKey();
   if (!helius) return fallback;
   const url = heliusUrl(helius.api_key);

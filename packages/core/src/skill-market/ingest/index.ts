@@ -17,6 +17,7 @@ import { readSkillMintMetadata } from "../../nft/token2022.js";
 import { ownedSkillMints } from "../../core/skillSource.js";
 import { buySkill } from "../../nft/skill.js";
 import { signerAddress } from "../../core/chain.js";
+import { invalidateHeldMints } from "../../notes/holdings.js";
 import { recordNftSkill, forgetNftSkill } from "../registry.js";
 import { toSkillMd, skillSlug } from "./convert.js";
 
@@ -73,6 +74,9 @@ export class SkillSync {
   ): Promise<{ txSig: string; slug: string | null }> {
     const buyerWallet = await signerAddress(signer);
     const txSig = await buySkill(this.conn, signer, { skillId, buyerWallet, creatorWallet });
+    // The buyer now holds a new skill token — drop the cached holdings so the comment
+    // gate (heldSkillMints) sees it immediately instead of after the TTL.
+    invalidateHeldMints(buyerWallet);
     // Equip is best-effort: the purchase already landed on-chain (irreversible), so a
     // content/fs hiccup during install must NOT surface as a failed buy — that could
     // prompt a costly re-buy. slug=null just means "owned, equips on the next owned-sync".

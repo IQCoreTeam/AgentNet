@@ -34,21 +34,37 @@ describe("notes/balance", () => {
     expect(balance).toBe(10n);
   });
 
-  it("should return 0n if account is not found", async () => {
-    vi.mocked(splToken.getAccount).mockRejectedValueOnce(new TokenAccountNotFoundError());
-    
+  it("should return 0n when the account is consistently not found", async () => {
+    vi.mocked(splToken.getAccount).mockRejectedValue(new TokenAccountNotFoundError());
+
     const balance = await getBalance(
       mockConn,
       new PublicKey("11111111111111111111111111111111"),
       new PublicKey("11111111111111111111111111111111")
     );
-    
+
     expect(balance).toBe(0n);
   });
 
-  it("should throw for other errors", async () => {
-    vi.mocked(splToken.getAccount).mockRejectedValueOnce(new Error("RPC Error"));
-    
+  it("should recover when a flaky not-found read is followed by a hit", async () => {
+    // A lagging public-RPC node reports a held ATA as missing; the retry sees it.
+    vi.mocked(splToken.getAccount)
+      .mockRejectedValueOnce(new TokenAccountNotFoundError())
+      .mockResolvedValueOnce({ amount: 1n } as any);
+
+    const balance = await getBalance(
+      mockConn,
+      new PublicKey("11111111111111111111111111111111"),
+      new PublicKey("11111111111111111111111111111111")
+    );
+
+    expect(balance).toBe(1n);
+    expect(splToken.getAccount).toHaveBeenCalledTimes(2);
+  });
+
+  it("should throw for other errors after exhausting retries", async () => {
+    vi.mocked(splToken.getAccount).mockRejectedValue(new Error("RPC Error"));
+
     await expect(
       getBalance(
         mockConn,

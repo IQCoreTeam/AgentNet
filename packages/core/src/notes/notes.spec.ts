@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Connection, Keypair } from "@solana/web3.js";
 import { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes } from "./notes.js";
 import * as chain from "../core/chain.js";
-import * as balance from "./balance.js";
+import * as holdings from "./holdings.js";
 
 const AUTHOR = "11111111111111111111111111111111";
 
@@ -13,8 +13,8 @@ vi.mock("../core/chain.js", () => ({
   signerAddress: vi.fn().mockResolvedValue("11111111111111111111111111111111"),
 }));
 
-vi.mock("./balance.js", () => ({
-  getBalance: vi.fn(),
+vi.mock("./holdings.js", () => ({
+  heldSkillMints: vi.fn(),
 }));
 
 describe("notes/notes", () => {
@@ -27,8 +27,8 @@ describe("notes/notes", () => {
     vi.clearAllMocks();
   });
 
-  it("should post a note if balance is >= 1", async () => {
-    vi.mocked(balance.getBalance).mockResolvedValue(1n);
+  it("should post a note if the author holds the skill mint", async () => {
+    vi.mocked(holdings.heldSkillMints).mockResolvedValue(new Set(["11111111111111111111111111111111"]));
 
     const noteId = await postNote(mockConn as any, signer, {
       collectionId: "SkillsCollection",
@@ -41,7 +41,7 @@ describe("notes/notes", () => {
   });
 
   it("writes a trimmed row: no subject/isSelfNote, optional meta included", async () => {
-    vi.mocked(balance.getBalance).mockResolvedValue(1n);
+    vi.mocked(holdings.heldSkillMints).mockResolvedValue(new Set(["11111111111111111111111111111111"]));
 
     await postNote(mockConn as any, signer, {
       collectionId: "SkillsCollection",
@@ -58,8 +58,8 @@ describe("notes/notes", () => {
     expect(row).toHaveProperty("text", "hi");
   });
 
-  it("should throw if balance is < 1", async () => {
-    vi.mocked(balance.getBalance).mockResolvedValue(0n);
+  it("should throw if the author does not hold the skill mint", async () => {
+    vi.mocked(holdings.heldSkillMints).mockResolvedValue(new Set<string>());
 
     await expect(
       postNote(mockConn as any, signer, {
@@ -98,11 +98,11 @@ describe("notes/notes", () => {
 
     expect(noteId).toContain(`note:${AUTHOR}:`);
     expect(chain.writeRow).toHaveBeenCalled();
-    expect(balance.getBalance).not.toHaveBeenCalled(); // owner skips the gate
+    expect(holdings.heldSkillMints).not.toHaveBeenCalled(); // owner skips the gate
   });
 
   it("comment on agent: allowed when author holds one of the agent's skills", async () => {
-    vi.mocked(balance.getBalance).mockResolvedValue(1n);
+    vi.mocked(holdings.heldSkillMints).mockResolvedValue(new Set([AUTHOR]));
     const source = {
       listSkills: vi.fn().mockResolvedValue([
         { id: AUTHOR, creator: "agentWalletX" },
@@ -120,7 +120,7 @@ describe("notes/notes", () => {
   });
 
   it("comment on agent: rejected when author holds none of the agent's skills", async () => {
-    vi.mocked(balance.getBalance).mockResolvedValue(0n);
+    vi.mocked(holdings.heldSkillMints).mockResolvedValue(new Set<string>());
     const source = {
       listSkills: vi.fn().mockResolvedValue([
         { id: AUTHOR, creator: "agentWalletX" },

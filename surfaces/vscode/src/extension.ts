@@ -203,10 +203,17 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
     claimSession,
     searchSkills: async (query, kind) => (await marketPromise).searchSkills(query, kind),
     getSkillDetail: async (mint) => (await marketPromise).getSkillDetail(mint),
+    // local SKILL.md body for the equipped-skill popup (mint-less skills); without this
+    // the host returns null and the popup shows "No SKILL.md document found".
+    getSkillDoc: async (name) => (await marketPromise).getSkillDoc(name),
     buySkill: async (skillId, creatorWallet) => (await marketPromise).buySkill(skillId, creatorWallet),
     postNote: async (skillId, skillType, text, gitLink) => (await marketPromise).postNote(skillId, skillType, text, gitLink),
     ownedSkills: async () => (await marketPromise).ownedSkills(),
     ownedNftSkills: async () => (await marketPromise).ownedNftSkills(),
+    // slug -> mint for installed NFT skills; lets the panel route bought skills to the
+    // on-chain market detail (with comment box). Empty => every click falls to the local
+    // doc popup, which is why minted skills couldn't open their on-chain body.
+    ownedSkillMints: async () => (await marketPromise).ownedSkillMints(),
     listAgents: async () => (await marketPromise).listAgents(),
     getAgentProfile: async (w) => (await marketPromise).getAgentProfile(w),
     buyAllSkills: async (w) => (await marketPromise).buyAllSkills(w),

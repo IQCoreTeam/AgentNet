@@ -18,7 +18,7 @@ import { buySkill, publishSkill as corePublishSkill } from "../../nft/skill.js";
 import { getSolBalance } from "../../notes/index.js";
 import { readSkillText, readSkillMintMetadata } from "../../nft/token2022.js";
 import { claudeSkillsDir } from "../../core/paths.js";
-import { classifySkills } from "../registry.js";
+import { classifySkills, readSkillManifest } from "../registry.js";
 import { resolveRpcUrl } from "../../core/rpc.js";
 import { init as initChain } from "../../core/chain.js";
 import type { AgentProfile, SkillCard, SkillDetail } from "../../chat/marketMessages.js";
@@ -53,6 +53,24 @@ const INDEXER_URL = getIndexerUrl();
 function collectionIdFor(type?: "skill" | "workflow"): Promise<string | null> {
   const id = type === "workflow" ? getWorkflowsCollectionMint() : getSkillsCollectionMint();
   return Promise.resolve(id);
+}
+
+// An owned skill's body is also on disk — its SKILL.md is what the agent actually loads —
+// so when the on-chain read comes back empty (RPC throttled, gateway/network mismatch, a
+// revoked Helius key) we fall back to the local file instead of showing a bodyless detail.
+// This is the pre-on-chain behavior the equipped popup used to have, kept as a safety net.
+// mint -> slug via the origin manifest; strip frontmatter to match the body-only on-chain
+// shape. Returns null when the mint isn't an installed skill or the file is unreadable.
+async function localSkillBody(mint: string): Promise<string | null> {
+  try {
+    const manifest = await readSkillManifest();
+    const slug = Object.keys(manifest.nft).find((s) => manifest.nft[s].mint === mint);
+    if (!slug) return null;
+    const raw = await readFile(join(claudeSkillsDir(), slug, "SKILL.md"), "utf8");
+    return raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").trim() || null;
+  } catch {
+    return null;
+  }
 }
 
 // Parse a human SOL string ("0.1", "2", "0") into integer lamports without float
@@ -100,7 +118,7 @@ export async function marketplaceEnv(wallet: Wallet) {
       // map; one search covers both kinds since they share the catalog).
       const all = await runSearch("");
       const card = all.find((s) => s.id === mint);
-      const [skillText, notes, meta] = await Promise.all([
+      const [onChainText, notes, meta] = await Promise.all([
         readSkillText(conn, mint).catch(() => null),
         collectionIdFor(card?.type).then((cid) => cid ? readNotes(cid, mint).catch(() => []) : Promise.resolve([])),
         // A held skill can be ABSENT from the indexer catalog (DAS under-reports our
@@ -109,6 +127,9 @@ export async function marketplaceEnv(wallet: Wallet) {
         // it as a skill (its comments live in the skills collection).
         card ? Promise.resolve(null) : readSkillMintMetadata(conn, mint).catch(() => null),
       ]);
+      // On-chain body is the source of truth; if it's empty (RPC/gateway hiccup) but we
+      // own this skill, show the local SKILL.md so the detail never renders bodyless.
+      const skillText = onChainText ?? (await localSkillBody(mint));
       const reqIds = card?.requiredSkills ?? [];
       const requiredCards = reqIds
         .map((id) => all.find((s) => s.id === id))

@@ -35,6 +35,7 @@ describe("core/chain", () => {
 
   beforeEach(() => {
     mockConn = {
+      rpcEndpoint: "https://api.devnet.solana.com",
       getAccountInfo: vi.fn().mockResolvedValue(null),
       getLatestBlockhash: vi.fn().mockResolvedValue({ blockhash: "11111111111111111111111111111111", lastValidBlockHeight: 1 }),
       sendRawTransaction: vi.fn().mockResolvedValue("mockSig"),

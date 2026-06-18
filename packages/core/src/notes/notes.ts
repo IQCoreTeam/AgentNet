@@ -11,7 +11,7 @@
 // the long note in postNote), and "holds any of an agent's skills" is a multi-
 // mint OR the single-mint gate can't express anyway.
 
-import { PublicKey, type Connection } from "@solana/web3.js";
+import { type Connection } from "@solana/web3.js";
 import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
 import {
   readRows,
@@ -22,7 +22,7 @@ import {
 import { reviewsHint, reviewsAgentHint, REVIEW_COLUMNS } from "../core/seed.js";
 import { dasSource, type SkillSource } from "../core/skillSource.js";
 import type { Note, Row } from "../core/types.js";
-import { getBalance } from "./balance.js";
+import { heldSkillMints } from "./holdings.js";
 
 /** The stored row shape — derived fields (subject/isSelfNote) are NOT included. */
 interface StoredNote {
@@ -79,8 +79,14 @@ export async function postNote(
 ): Promise<string> {
   const author = await signerAddress(signer);
 
-  // Write gate: caller must hold ≥1 of the skill's Token-2022 soulbound token
+  // Write gate: caller must hold the skill's Token-2022 soulbound token
   // (notes.md §2 — "wallets that hold that skill's token").
+  //
+  // Resolved via the per-owner cached holdings set (heldSkillMints) — ONE
+  // getTokenAccountsByOwner read covers every skill and is reused across comments,
+  // instead of a per-mint getAccount that re-hits the (flaky) RPC for each gate. It
+  // is the SAME source as the owned-skills list, so "UI shows it owned" and "gate
+  // accepts it" can never disagree.
   //
   // ⚠️ Enforced CLIENT-SIDE only. coding-info §B3 assumed the IQ contract's
   // native `gate_opt` would enforce this on-chain for free, but that path is
@@ -92,13 +98,9 @@ export async function postNote(
   // SDK/contract resolves a Token-2022 ATA (or gates by collection metadata),
   // the table is open and this check is the guard. An attacker calling writeRow
   // directly bypasses it — real enforcement needs SDK Token-2022 support.
-  const balance = await getBalance(
-    conn,
-    new PublicKey(input.skillId),
-    new PublicKey(author),
-  );
-  if (balance < 1n) {
-    throw new Error(`Must own ≥1 skill token to post note (balance: ${balance})`);
+  const held = await heldSkillMints(author);
+  if (!held.has(input.skillId)) {
+    throw new Error(`Must own ≥1 skill token to post note`);
   }
 
   const hint = reviewsHint(input.collectionId, input.skillId);
@@ -165,11 +167,9 @@ export async function postAgentNote(
     const agentSkills = (await source.listSkills()).filter(
       (s) => s.creator === input.agentWallet,
     );
-    const authorPk = new PublicKey(author);
-    const balances = await Promise.all(
-      agentSkills.map((s) => getBalance(conn, new PublicKey(s.id), authorPk)),
-    );
-    const holdsAny = balances.some((b) => b >= 1n);
+    // One cached holdings read, then a local membership test — not one RPC per skill.
+    const held = await heldSkillMints(author);
+    const holdsAny = agentSkills.some((s) => held.has(s.id));
     if (!holdsAny) {
       throw new Error(
         `Must hold ≥1 of ${input.agentWallet}'s skills to comment on this agent`,

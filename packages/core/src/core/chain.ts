@@ -31,7 +31,7 @@ import {
   writeRow as sdkWriteRow,
   codeIn as sdkCodeIn,
 } from "@iqlabs-official/solana-sdk/writer";
-import { AGENTNET_ROOT_ID, getGatewayUrl } from "./seed.js";
+import { AGENTNET_ROOT_ID, getGatewayUrl, networkFromRpcUrl } from "./seed.js";
 import type { Row, ReadOptions, SignerInput as DomainSignerInput } from "./types.js";
 
 /** DbRoot PDA for the `agentnet-root` namespace — derived once, reused everywhere. */
@@ -45,6 +45,13 @@ function conn(): Connection {
     throw new Error("chain layer not initialized — call init({ connection })");
   }
   return connection;
+}
+
+// The code-in gateway must match the network of the RPC we're actually connected to —
+// a custom/env RPC can target a different network than the static switch. Derive it from
+// the live endpoint so readCodeIn / readTableRows always hit the matching gateway.
+function gatewayUrl(): string {
+  return getGatewayUrl(networkFromRpcUrl(conn().rpcEndpoint));
 }
 
 function asSolana(signer: DomainSignerInput): SignerInput {
@@ -189,7 +196,7 @@ export async function writeRow(
 // fall back to the on-chain SDK read and always resolve the same Row[] shape.
 async function readRowsViaGateway(pda: PublicKey, options?: ReadOptions): Promise<Row[]> {
   const want = options?.limit ?? 100;
-  const base = `${getGatewayUrl()}/table/${pda.toBase58()}/rows`;
+  const base = `${gatewayUrl()}/table/${pda.toBase58()}/rows`;
   const out: Row[] = [];
   let before = options?.before;
   while (out.length < want) {
@@ -246,7 +253,7 @@ export async function codeIn(
 // the skill body blank instead of reading it straight from chain.
 export async function readCodeIn(txSig: string): Promise<{ data: string | null; metadata: string }> {
   try {
-    const res = await fetch(`${getGatewayUrl()}/data/${txSig}`);
+    const res = await fetch(`${gatewayUrl()}/data/${txSig}`);
     if (res.ok) {
       const json = (await res.json()) as { data?: string | null; metadata?: string };
       if (json.data) return { data: json.data, metadata: json.metadata ?? "" };

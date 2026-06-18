@@ -64,27 +64,71 @@ export function getNetwork(): Network {
 }
 
 /**
- * The IQLabs gateway that resolves a code-in inscription (a tx signature) into its
- * content. It MUST match the network: the mainnet gateway can't resolve a devnet
- * tx, and vice versa — a mismatch returns empty data (the skill body goes blank).
- * Derived from getNetwork() so flipping the one switch retargets it; env override
- * (AGENTNET_GATEWAY_URL) still wins for a custom/self-hosted gateway.
+ * Best-effort network of a Solana RPC endpoint, inferred from its host. A registered or
+ * custom RPC (a Helius key, an env override, a self-hosted node) can target a different
+ * network than the static NETWORK switch — and when it does, the gateway has to follow
+ * the RPC, or code-in reads hit the wrong network and come back blank. Callers that hold
+ * the live connection pass conn.rpcEndpoint here so the gateway auto-matches it. An
+ * unrecognized host falls back to the static switch.
  */
-export function getGatewayUrl(): string {
-  if (process.env.AGENTNET_GATEWAY_URL) return process.env.AGENTNET_GATEWAY_URL;
-  return getNetwork() === "mainnet"
-    ? "https://gateway.iqlabs.dev"
-    : "https://dev-gateway.iqlabs.dev";
+export function networkFromRpcUrl(url: string | null | undefined): Network {
+  const u = (url ?? "").toLowerCase();
+  if (u.includes("mainnet")) return "mainnet";
+  if (u.includes("devnet")) return "devnet";
+  return getNetwork();
+}
+
+/**
+ * Off-chain service endpoints, grouped per network — the ONE place to swap a URL.
+ * Everything network-shaped (gateway, NFT indexer, public RPC) lives here, so flipping
+ * NETWORK above (or a per-service env var) retargets the whole app. Mirrors the on-chain
+ * ids block below: a single source means no hardcoded URL drifts out of sync.
+ *
+ * The gateway in particular MUST match the network — a mainnet gateway returns empty
+ * data for a devnet tx, so a devnet skill body silently goes blank. Keeping the dev/main
+ * split visible in one table is what stops that class of bug from reappearing.
+ * (The indexer currently serves both networks from one host; split it here if that changes.)
+ */
+export const ENDPOINTS: Record<Network, { gateway: string; indexer: string; publicRpc: string }> = {
+  devnet: {
+    gateway: "https://dev-gateway.iqlabs.dev",
+    indexer: "https://nft-index.iqlabs.dev",
+    publicRpc: "https://api.devnet.solana.com",
+  },
+  mainnet: {
+    gateway: "https://gateway.iqlabs.dev",
+    indexer: "https://nft-index.iqlabs.dev",
+    publicRpc: "https://api.mainnet-beta.solana.com",
+  },
+};
+
+/**
+ * The IQLabs gateway that resolves a code-in inscription (a tx signature) into its
+ * content, matched to a network (see ENDPOINTS). Pass the network of the RPC actually in
+ * use — derive it with networkFromRpcUrl(conn.rpcEndpoint) — so the gateway follows the
+ * live connection rather than the static switch; defaults to the static network when no
+ * connection context is available. Env override (AGENTNET_GATEWAY_URL) always wins.
+ */
+export function getGatewayUrl(network: Network = getNetwork()): string {
+  return process.env.AGENTNET_GATEWAY_URL || ENDPOINTS[network].gateway;
 }
 
 /**
  * The NFT indexer (agentnet-nft-indexer) base URL — the primary read path for the
  * skill/workflow catalog (it serves /items with supply + traits already filled).
- * Single source so every caller (marketplace search, owned-skill resolution) agrees;
- * env override (AGENTNET_INDEXER_URL) wins for a self-hosted indexer.
+ * Env override (AGENTNET_INDEXER_URL) wins for a self-hosted indexer.
  */
 export function getIndexerUrl(): string {
-  return process.env.AGENTNET_INDEXER_URL || "https://nft-index.iqlabs.dev";
+  return process.env.AGENTNET_INDEXER_URL || ENDPOINTS[getNetwork()].indexer;
+}
+
+/**
+ * Public Solana RPC for the active network (standard JSON-RPC, NO DAS). rpc.ts uses this
+ * as the fallback when no Helius key is set — or when a stored key is dead — so chain
+ * reads keep working off the public endpoint.
+ */
+export function getPublicRpcUrl(): string {
+  return ENDPOINTS[getNetwork()].publicRpc;
 }
 
 /** Devnet test ids — the single source. Swap here (or via env) to retarget. */
