@@ -225,6 +225,32 @@ export function chatHtml(): string {
   body.vscode-high-contrast #watermark { opacity: 0.12; }
   #main.hasMsgs #watermark { opacity: 0; }
 
+  /* wraps the scroller so the jump-to-latest button anchors to the log's bottom-right
+     (above the composer), not to the whole right pane. */
+  #logWrap { position: relative; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  /* round "jump to latest" button — hidden until the user scrolls up away from the newest
+     message (see the stick-to-bottom logic in the script). */
+  #jumpBtn { position: absolute; right: 14px; bottom: 14px; z-index: 6; padding: 0;
+             width: 32px; height: 32px; border-radius: 999px; display: none;
+             align-items: center; justify-content: center; cursor: pointer;
+             color: #fff; background: #000;
+             border: 1px solid rgba(255,255,255,0.9);
+             box-shadow: 0 2px 10px rgba(0,0,0,0.42); opacity: 0.92;
+             transition: opacity 0.12s, transform 0.12s; }
+  /* light theme: invert — white fill, dark outline */
+  body.vscode-light #jumpBtn { color: #000; background: #fff;
+             border-color: rgba(0,0,0,0.85); box-shadow: 0 2px 10px rgba(0,0,0,0.22); }
+  /* engine accent for the unread state — keyed off data-cli, same source the send button uses */
+  #jumpBtn[data-cli="claude"] { --eng: var(--claude); }
+  #jumpBtn[data-cli="codex"]  { --eng: var(--an-green); }
+  /* when there's a NEW message while scrolled up: outline + icon glow in the engine accent
+     (claude=orange / codex=green), background stays black/white per theme. */
+  #jumpBtn.hasNew { color: var(--eng); border-color: var(--eng); opacity: 1;
+                    box-shadow: 0 2px 12px color-mix(in srgb, var(--eng) 45%, transparent); }
+  #jumpBtn svg { width: 16px; height: 16px; }
+  #jumpBtn:hover { opacity: 1; transform: translateY(-1px); }
+  #jumpBtn.show { display: flex; }
+
   /* loading veil while a session is carried to the other engine */
   #loading { position: absolute; inset: 0; z-index: 8; display: flex; gap: 12px;
              align-items: center; justify-content: center; flex-direction: column;
@@ -1258,7 +1284,10 @@ export function chatHtml(): string {
       <div id="watermark">${IQ_LOGO_SVG}</div>
       <!-- loading veil shown while a session is being carried to the other engine -->
       <div id="loading" style="display:none"><div class="spin"></div><span>Resuming…</span></div>
-      <div id="log"></div>
+      <div id="logWrap">
+        <div id="log"></div>
+        <button id="jumpBtn" type="button" data-cli="claude" title="Jump to latest" aria-label="Jump to latest"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5 8 10.5l4-4"/></svg></button>
+      </div>
       <!-- pending tool approvals dock just above the composer (Claude-Code style:
            "the thing you must answer" sits right where you'd reply) -->
       <div id="approvalDock"></div>
@@ -1532,6 +1561,40 @@ export function chatHtml(): string {
   const loadingEl = document.getElementById('loading');
   // hide the IQ watermark once the chat has any content; show it on an empty log
   function syncWatermark() { mainEl.classList.toggle('hasMsgs', log.childElementCount > 0); }
+
+  // ---- stick-to-bottom + jump-to-latest (normal chat-app feel) ----
+  // Follow the newest message ONLY while the user is already near the bottom (a generous
+  // threshold, so light scrolling doesn't unpin). Once they scroll up we stop following the
+  // stream and reveal a round "down" button (bottom-right of the log) to jump back. The
+  // button is visible whenever scrolled up, so a new reply arriving up there is reachable in
+  // one click. Programmatic scrolls are forced INSTANT so the 'scroll' listener can't mistake
+  // a smooth animation's midpoint for "scrolled away".
+  const jumpBtn = document.getElementById('jumpBtn');
+  let stick = true;
+  let hasNew = false; // new content arrived while scrolled up → light the button in the engine accent
+  function nearBottom() {
+    const d = log.scrollHeight - log.scrollTop - log.clientHeight;
+    return d <= Math.max(180, log.clientHeight * 0.25); // generous "close enough to bottom"
+  }
+  function toBottomInstant() {
+    const prev = log.style.scrollBehavior;
+    log.style.scrollBehavior = 'auto'; // bypass CSS smooth so we land exactly at the bottom
+    log.scrollTop = log.scrollHeight;
+    log.style.scrollBehavior = prev;
+  }
+  function updateJump() {
+    if (!jumpBtn) return;
+    if (stick) hasNew = false;           // back at the bottom → nothing new to catch up on
+    jumpBtn.classList.toggle('show', !stick);
+    jumpBtn.classList.toggle('hasNew', hasNew); // engine-tinted (claude=orange / codex=green) when unread
+  }
+  function stickToBottom() {              // auto-scroll only if pinned; otherwise flag unread
+    if (stick) toBottomInstant(); else hasNew = true;
+    updateJump();
+  }
+  function scrollToLatest() { stick = true; hasNew = false; toBottomInstant(); updateJump(); } // force (new command / button)
+  if (jumpBtn) jumpBtn.addEventListener('click', scrollToLatest);
+
   // loading veil while a session is carried to the other engine (cross-CLI switch)
   function showLoading() { loadingEl.style.display = 'flex'; }
   function hideLoading() { loadingEl.style.display = 'none'; }
@@ -1555,6 +1618,18 @@ export function chatHtml(): string {
   const tabs = Array.from(document.querySelectorAll('.etab'));
 
   let streaming = null;     // bubble currently being streamed into
+  let streamRaf = 0;        // rAF handle: coalesces live-markdown renders to one paint/frame
+  // Reuse renderMd so the assistant's reply renders AS MARKDOWN while it streams, instead of
+  // raw source that only formats once the turn completes. Throttled via rAF so a fast token
+  // stream stays smooth (thinking text stays plain).
+  function flushStreamRender() {
+    streamRaf = 0;
+    if (!streaming) return;
+    const raw = streaming.dataset.acc || '';
+    if (streaming.dataset.role === 'assistant') renderMd(streaming, raw);
+    else { streaming.textContent = raw; streaming.dataset.md = raw; }
+  }
+  function scheduleStreamRender() { if (!streamRaf) streamRaf = requestAnimationFrame(flushStreamRender); }
   let allSessions = [];     // last sessions payload from extension
   let activeId = null;
   let expanded = false;     // "모두 보기" toggled?
@@ -1872,6 +1947,7 @@ export function chatHtml(): string {
     cli = next;
     tabs.forEach(t => t.classList.toggle('active', t.dataset.cli === cli));
     composer.dataset.cli = cli;                       // tints the input (claude=orange/codex=green)
+    if (jumpBtn) jumpBtn.dataset.cli = cli;           // jump button shares the send button's engine accent
     input.placeholder = 'Message ' + cli + '... (Enter to send)';
     fillModels();
     fillModes();
@@ -1965,7 +2041,7 @@ export function chatHtml(): string {
     turn.appendChild(head); turn.appendChild(body);
     log.appendChild(turn);
     turn._body = body; tailTurn = turn;
-    log.scrollTop = log.scrollHeight;
+    scrollToLatest(); // a new user command — always jump to it
     syncWatermark();
     return body;
   }
@@ -2002,7 +2078,7 @@ export function chatHtml(): string {
       ? (headTurn && headTurn._body) || startTurnTop('', undefined)
       : tailBody();
     body.appendChild(el);
-    if (dir !== 'head') log.scrollTop = log.scrollHeight;
+    if (dir !== 'head') stickToBottom();
   }
 
   // ---- reply bubble (an assistant/thinking text node on the current turn) ----
@@ -2192,7 +2268,7 @@ export function chatHtml(): string {
     const row = toolRow(prepend);
     const awaiting = renderToolInto(row, msg);
     if (awaiting) openBash = awaiting; // bash card waiting for its result message
-    if (!prepend) { if (typingEl) tailBody().appendChild(typingEl); log.scrollTop = log.scrollHeight; }
+    if (!prepend) { if (typingEl) tailBody().appendChild(typingEl); stickToBottom(); }
   }
 
   // ---- tool-approval card ----
@@ -2519,12 +2595,13 @@ export function chatHtml(): string {
       // then compounded every later snapshot into quadratic repeated text (the
       // runaway streaming-duplication bug).
       streaming.dataset.acc = msg.text;
-      streaming.textContent = msg.text; // raw during stream
+      scheduleStreamRender(); // live markdown while streaming (throttled to one paint/frame)
     } else {
       if (streaming && streaming.dataset.role === msg.role) {
         const prev = streaming.dataset.acc || '';
         const raw = msg.text.startsWith(prev) ? msg.text : prev + msg.text;
         streaming.classList.remove('cursor');
+        if (streamRaf) { cancelAnimationFrame(streamRaf); streamRaf = 0; } // drop any pending live render
         asMd(streaming, raw);
         streaming = null;
       } else {
@@ -2534,7 +2611,7 @@ export function chatHtml(): string {
       }
     }
     if (typingEl) tailBody().appendChild(typingEl); // keep the indicator at the thread's tail
-    log.scrollTop = log.scrollHeight;
+    stickToBottom();
   }
 
   // ---- session list (title + relative time + 모두 보기) ----
@@ -2585,7 +2662,7 @@ export function chatHtml(): string {
     node.innerHTML = '<div class="typing"><span class="who">' + cli
       + '</span><span class="dots"><i></i><i></i><i></i></span></div>';
     tailBody().appendChild(node);
-    log.scrollTop = log.scrollHeight;
+    stickToBottom();
     typingEl = node;
   }
   function hideTyping() { setBusy(false); if (typingEl) { typingEl.remove(); typingEl = null; } }
@@ -4140,6 +4217,9 @@ export function chatHtml(): string {
     // preemptive load: fetch the next older page BEFORE the user hits the very top, so there
     // is always more scroll above and they never slam into the edge (which read as a jump).
     if (log.scrollTop < 600) requestOlder();
+    // track pin state: stay pinned (auto-scroll) only while near the bottom, else show the
+    // jump button. User scrolling is direct (not smooth), so this reads the true position.
+    stick = nearBottom(); updateJump();
   });
 
   window.addEventListener('message', (event) => {
