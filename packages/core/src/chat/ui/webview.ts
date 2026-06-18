@@ -880,10 +880,28 @@ export function chatHtml(): string {
   .agRank { font-size:0.8em; color:var(--an-muted,#888); flex-shrink:0; }
   .pr-sec { font-size:0.78em; font-weight:600; text-transform:uppercase;
             letter-spacing:.04em; color:var(--an-muted,#888); margin:14px 0 6px; }
-  .pr-blog { margin:10px 0; padding:10px; background:var(--an-bg-2); border-radius:6px; }
+  /* Blog = horizontal snap-scroll carousel: newest card leftmost, scroll right for older.
+     Also click-and-drag to scroll (enableDragScroll) — cursor:grab signals it. */
+  .pr-blog { display:flex; gap:10px; overflow-x:auto; scroll-snap-type:x proximity;
+             margin:10px 0; padding:2px 2px 10px; scroll-padding-left:2px;
+             -webkit-overflow-scrolling:touch; cursor:grab; }
+  .pr-blog.dragging { cursor:grabbing; scroll-snap-type:none; }
+  .pr-blog.dragging * { user-select:none; cursor:grabbing; }
+  .pr-blog::-webkit-scrollbar { height:8px; }
+  .pr-blog::-webkit-scrollbar-thumb { background:var(--an-line); border-radius:4px; }
+  .pr-blog .pr-note { flex:0 0 240px; box-sizing:border-box; margin-bottom:0;
+                      padding:11px 13px; background:var(--an-bg-2); border:1px solid var(--an-line);
+                      border-radius:9px; scroll-snap-align:start; display:flex; flex-direction:column; }
   .pr-note { margin-bottom:8px; }
   .pr-note-author { font-size:0.78em; color:var(--an-muted,#888); margin-bottom:2px; }
+  .pr-note-body { flex:1; word-break:break-word; }
   .pr-note-git { font-size:0.78em; margin-top:3px; }
+  .pr-note-foot { display:flex; align-items:center; justify-content:space-between; gap:8px;
+                  margin-top:8px; padding-top:6px; border-top:1px solid var(--an-line);
+                  font-size:0.72em; color:var(--an-muted,#888); }
+  .pr-note-date { white-space:nowrap; }
+  .pr-note-tx { white-space:nowrap; text-decoration:none; color:var(--an-green); opacity:.85; }
+  .pr-note-tx:hover { opacity:1; text-decoration:underline; }
   .pr-compose { margin-top:10px; }
   .pr-compose textarea { width:100%; box-sizing:border-box; min-height:60px; padding:8px;
                          background:var(--an-bg-2); color:var(--vscode-foreground);
@@ -894,6 +912,7 @@ export function chatHtml(): string {
                                   border:1px solid var(--an-line); border-radius:6px; font-size:0.88em; }
   .pr-compose button { margin-top:6px; padding:5px 14px; }
   .pr-compose .pr-err { color:#e05252; font-size:0.82em; margin-top:4px; display:none; }
+  .pr-compose .pr-err.ok { color:var(--an-green,#3fb950); }
   .pr-compose .pr-hint { opacity:0.55; font-size:0.8em; margin-bottom:6px; }
   .pr-compose textarea:disabled, .pr-compose input:disabled { opacity:0.5; cursor:not-allowed; }
   /* buy-all: minimal outline pill (matches the market's .mc-buy tone, not a heavy fill) */
@@ -2890,7 +2909,66 @@ export function chatHtml(): string {
       el.appendChild(row);
     });
   }
+  // Optimistic blog/comment posts. On-chain note reads lag a few seconds, so the
+  // profile the host re-pushes right after posting won't include the new note yet —
+  // without this the post would silently vanish ("I wrote it but nothing happened").
+  // We hold the just-posted note here and merge it in on every render until the real
+  // read catches up (deduped by author+text), pruning anything older than 60s.
+  let recentlyPosted = []; // [{ wallet, note, ts }]
+  let pendingPost = null;  // { wallet, text, gitLink, self } — stashed at submit for agentNoteResult
+  let postFeedback = null; // { wallet, text, ok, ts } — survives the immediate profile re-render
+  // Active profile tab — persisted across renders so the post-and-re-push (which rebuilds
+  // the whole pane) doesn't yank the user from Notes back to Skills ("bounce to top").
+  let profileTab = 'skills';
+  function mergeOptimistic(profile) {
+    const now = Date.now();
+    recentlyPosted = recentlyPosted.filter((p) => now - p.ts < 60000);
+    const real = new Set((profile.notes || []).map((n) => (n.author || '') + ' ' + (n.text || '')));
+    // drop optimistic notes the real read now includes (self-heal)
+    recentlyPosted = recentlyPosted.filter((p) => !(p.wallet === profile.wallet && real.has((p.note.author || '') + ' ' + (p.note.text || ''))));
+    const pending = recentlyPosted.filter((p) => p.wallet === profile.wallet).map((p) => p.note);
+    return pending.length ? { ...profile, notes: [...pending, ...(profile.notes || [])] } : profile;
+  }
+  function feedbackFor(wallet) {
+    if (!postFeedback) return null;
+    if (postFeedback.wallet !== wallet) return null;
+    if (Date.now() - postFeedback.ts > 8000) {
+      postFeedback = null;
+      return null;
+    }
+    return postFeedback;
+  }
+  // Click-and-drag horizontal scrolling for the blog carousel. Mouse only — touch
+  // already scrolls natively. Pointer capture keeps the drag alive past the element's
+  // edge without leaking window listeners (handlers are scoped to el, GC'd on re-render).
+  // A drag past 3px swallows the trailing click so card tx/git links don't fire mid-drag.
+  function enableDragScroll(el) {
+    let startX = 0, startLeft = 0, dragging = false, moved = false;
+    el.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'mouse' || e.button !== 0) return;
+      dragging = true; moved = false; startX = e.clientX; startLeft = el.scrollLeft;
+      try { el.setPointerCapture(e.pointerId); } catch {}
+      el.classList.add('dragging');
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - startX;
+      if (Math.abs(dx) > 3) moved = true;
+      el.scrollLeft = startLeft - dx;
+    });
+    const end = (e) => {
+      if (!dragging) return;
+      dragging = false; el.classList.remove('dragging');
+      try { el.releasePointerCapture(e.pointerId); } catch {}
+    };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+    el.addEventListener('click', (e) => {
+      if (moved) { e.preventDefault(); e.stopPropagation(); moved = false; }
+    }, true);
+  }
   function renderProfile(profile) {
+    profile = mergeOptimistic(profile);
     const self = profile.self;
     const wallet = profile.wallet;
     // identity (header, left)
@@ -2931,6 +3009,7 @@ export function chatHtml(): string {
     body.appendChild(paneSkills); body.appendChild(paneNotes);
     function selectTab(which) {
       const onSkills = which === 'skills';
+      profileTab = onSkills ? 'skills' : 'notes'; // remember across re-renders
       tabSkills.classList.toggle('on', onSkills); tabNotes.classList.toggle('on', !onSkills);
       paneSkills.style.display = onSkills ? '' : 'none'; paneNotes.style.display = onSkills ? 'none' : '';
     }
@@ -2990,7 +3069,20 @@ export function chatHtml(): string {
       const e = document.createElement('div'); e.className = 'pr-empty'; e.textContent = 'No skills yet.'; paneSkills.appendChild(e);
     }
 
-    // ── helper: a note/comment card ──
+    // ── helper: a note/comment card (date + on-chain tx link in the footer) ──
+    // __txSignature / __blockTime are attached per-row by the gateway and flow through
+    // hydrateNotes' spread, so historical cards link to their exact write tx. A freshly
+    // posted (optimistic) card has only a timestamp until the on-chain read catches up.
+    function fmtNoteDate(n) {
+      const ms = n.__blockTime ? n.__blockTime * 1000 : (n.timestamp || 0);
+      if (!ms) return '';
+      try { return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
+      catch { return ''; }
+    }
+    function explorerTxUrl(sig) {
+      const u = 'https://explorer.solana.com/tx/' + encodeURIComponent(sig);
+      return rpcNetwork === 'mainnet' ? u : u + '?cluster=' + encodeURIComponent(rpcNetwork);
+    }
     function noteCard(n, withAuthor) {
       const el = document.createElement('div'); el.className = 'pr-note';
       if (withAuthor) {
@@ -2998,7 +3090,7 @@ export function chatHtml(): string {
         auth.textContent = n.author ? (n.author.slice(0, 6) + '…' + n.author.slice(-4)) : '?';
         el.appendChild(auth);
       }
-      const bodyEl = document.createElement('div'); renderMd(bodyEl, n.text || ''); el.appendChild(bodyEl);
+      const bodyEl = document.createElement('div'); bodyEl.className = 'pr-note-body'; renderMd(bodyEl, n.text || ''); el.appendChild(bodyEl);
       if (n.gitLink) {
         let safeLink = null;
         try { const u = new URL(n.gitLink); if (/^https?:|^git:/.test(u.protocol)) safeLink = u.href; } catch {}
@@ -3007,6 +3099,20 @@ export function chatHtml(): string {
           const a = document.createElement('a'); a.href = safeLink; a.textContent = safeLink;
           a.target = '_blank'; a.rel = 'noopener noreferrer'; gl.appendChild(a); el.appendChild(gl);
         }
+      }
+      const date = fmtNoteDate(n);
+      const sig = typeof n.__txSignature === 'string' ? n.__txSignature : null;
+      if (date || sig) {
+        const foot = document.createElement('div'); foot.className = 'pr-note-foot';
+        const d = document.createElement('span'); d.className = 'pr-note-date'; d.textContent = date;
+        foot.appendChild(d);
+        if (sig) {
+          const a = document.createElement('a'); a.className = 'pr-note-tx';
+          a.href = explorerTxUrl(sig); a.target = '_blank'; a.rel = 'noopener noreferrer';
+          a.textContent = 'tx ↗'; a.title = sig;
+          foot.appendChild(a);
+        }
+        el.appendChild(foot);
       }
       return el;
     }
@@ -3018,6 +3124,7 @@ export function chatHtml(): string {
       paneNotes.appendChild(sec);
       const blog = document.createElement('div'); blog.className = 'pr-blog';
       selfNotes.forEach(n => blog.appendChild(noteCard(n, false)));
+      enableDragScroll(blog);
       paneNotes.appendChild(blog);
     }
     // Compose box — ALWAYS shown so the action is discoverable. Self → post to blog;
@@ -3026,6 +3133,7 @@ export function chatHtml(): string {
     // can't, the box is disabled with a hint rather than hidden.
     {
       const canPost = self || !!profile.canComment;
+      const feedback = feedbackFor(wallet);
       const sec = document.createElement('div'); sec.className = 'pr-sec';
       sec.textContent = self ? 'Post to blog' : 'Write a comment';
       paneNotes.appendChild(sec);
@@ -3034,6 +3142,11 @@ export function chatHtml(): string {
       ta.placeholder = self ? 'Write a blog post or update…' : 'Share your experience with this agent…';
       const gitInput = document.createElement('input'); gitInput.type = 'text'; gitInput.placeholder = 'GitHub / git URL (optional)';
       const errEl = document.createElement('div'); errEl.className = 'pr-err';
+      if (feedback) {
+        errEl.textContent = feedback.text;
+        errEl.style.display = '';
+        if (feedback.ok) errEl.classList.add('ok');
+      }
       const btn = document.createElement('button'); btn.textContent = self ? 'Post' : 'Comment';
       if (!canPost) {
         ta.disabled = true; gitInput.disabled = true; btn.disabled = true;
@@ -3044,13 +3157,16 @@ export function chatHtml(): string {
       btn.addEventListener('click', () => {
         const text = ta.value.trim(); if (!text) return;
         const gitLink = gitInput.value.trim() || undefined;
-        btn.disabled = true; btn.textContent = self ? 'Posting…' : 'Commenting…'; errEl.style.display = 'none';
+        postFeedback = null;
+        btn.disabled = true; btn.textContent = self ? 'Posting…' : 'Commenting…'; errEl.style.display = 'none'; errEl.classList.remove('ok');
+        pendingPost = { wallet, text, gitLink, self };
         vscode.postMessage({ type: 'postAgentNote', agentWallet: wallet, text, gitLink });
       });
       compose.appendChild(ta); compose.appendChild(gitInput); compose.appendChild(errEl); compose.appendChild(btn);
       paneNotes.appendChild(compose);
-      // stash submit button reference for the agentNoteResult handler
+      // stash refs for the agentNoteResult handler (success clears them + confirms)
       body._postBtn = btn; body._postErr = errEl; body._postLabel = self ? 'Post' : 'Comment';
+      body._postTa = ta; body._postGit = gitInput;
     }
     const comments = profile.notes.filter(n => !n.isSelfNote);
     if (comments.length) {
@@ -3062,6 +3178,11 @@ export function chatHtml(): string {
       e.textContent = self ? 'No comments yet.' : 'No comments yet — be the first.';
       paneNotes.appendChild(e);
     }
+
+    // Restore the tab the user was on (default Skills). After posting, the host re-pushes
+    // a fresh profile and we rebuild this whole pane — without this the user is yanked
+    // from Notes (where they just posted) back to Skills.
+    selectTab(profileTab);
   }
 
   function showBuyAllConfirm(profile) {
@@ -3630,7 +3751,15 @@ export function chatHtml(): string {
   const celebrateEl = document.getElementById('celebrate');
   let celebTimer = null;
   function celebrateSkill(name) {
-    const safe = escapeHtml(name || 'New skill');
+    celebrate('Skill acquired', name || 'New skill', 'Equipped \\u2014 ready to cast');
+  }
+  // Blog/comment success — same confetti overlay, different copy. Stays on the profile
+  // (no navigation): you just posted to your blog, so the new card is right there.
+  function celebrateBlog(isSelf) {
+    celebrate(isSelf ? 'Posted' : 'Comment posted', isSelf ? 'Your post is live' : 'Thanks for sharing', 'Saved on-chain');
+  }
+  function celebrate(kicker, name, sub) {
+    const safe = escapeHtml(name || 'Done');
     // confetti: colorful pieces raining from the top, each with its own column, speed,
     // delay, start-rotation and spin so the burst looks organic (green + gold + white).
     const COLORS = ['var(--an-green)', '#e9c46a', '#ffffff', '#7ad6a0', 'var(--an-green)'];
@@ -3664,9 +3793,9 @@ export function chatHtml(): string {
       + '<div class="celebBadge"><span class="celebHalo"></span>'
       + '<span class="celebRing"></span><span class="celebRing r2"></span>'
       + '<span class="celebWand">' + ${JSON.stringify(IQ_LOGO_SVG)} + '</span></div>'
-      + '<div class="celebKicker">Skill acquired</div>'
+      + '<div class="celebKicker">' + escapeHtml(kicker || '') + '</div>'
       + '<div class="celebName">' + safe + '</div>'
-      + '<div class="celebSub">Equipped \\u2014 ready to cast</div>'
+      + '<div class="celebSub">' + escapeHtml(sub || '') + '</div>'
       + '</div>';
     celebrateEl.classList.remove('out');
     celebrateEl.classList.add('show');
@@ -3738,6 +3867,7 @@ export function chatHtml(): string {
 
   // ---- RPC status (issue #23): show whether a DAS-capable RPC (Helius) is set ----
   let dasReady = false;
+  let rpcNetwork = 'devnet'; // drives explorer-link cluster (set from rpcStatus)
   const rpcState = document.getElementById('rpcState');
   const rpcHint = document.getElementById('rpcHint');
   const rpcSetBtn = document.getElementById('rpcSetBtn');
@@ -3752,6 +3882,7 @@ export function chatHtml(): string {
   function renderRpcStatus(s) {
     s = s || { dasReady: false, hasKey: false, masked: null, network: 'devnet' };
     dasReady = !!s.dasReady;
+    rpcNetwork = s.network || 'devnet';
     if (s.hasKey && s.masked) {
       // green box: masked key (last chars only) + the network badge
       rpcState.innerHTML = '<span class="rpcKeyBox">\\u2713 ' + escapeHtml(s.masked) + '</span> ' + netBadge(s.network);
@@ -4044,14 +4175,40 @@ export function chatHtml(): string {
       }
     }
     else if (m.type === 'agentNoteResult') {
-      // profile is re-pushed by host on success (session.ts); just reset the compose box on failure
       const body = document.getElementById('profileBody');
       const label = (body && body._postLabel) || 'Post';
-      if (!m.ok && body && body._postBtn) {
-        body._postBtn.disabled = false; body._postBtn.textContent = label;
-        if (body._postErr) { body._postErr.textContent = m.error || 'Post failed'; body._postErr.style.display = ''; }
-      } else if (m.ok && body && body._postBtn) {
-        body._postBtn.disabled = false; body._postBtn.textContent = label;
+      if (!m.ok) {
+        pendingPost = null;
+        postFeedback = { wallet: m.agentWallet, text: m.error || 'Post failed', ok: false, ts: Date.now() };
+        if (body && body._postBtn) {
+          body._postBtn.disabled = false; body._postBtn.textContent = label;
+          if (body._postErr) { body._postErr.textContent = m.error || 'Post failed'; body._postErr.style.display = ''; body._postErr.classList.remove('ok'); }
+        }
+      } else {
+        // Success: stash an optimistic note so it shows immediately (the host re-pushes a
+        // profile whose on-chain note read lags and won't include it yet), clear the box,
+        // and confirm. renderProfile (triggered by the re-push) merges the optimistic note.
+        if (pendingPost) {
+          recentlyPosted.push({
+            wallet: pendingPost.wallet,
+            ts: Date.now(),
+            note: { author: pendingPost.wallet, text: pendingPost.text, gitLink: pendingPost.gitLink, isSelfNote: pendingPost.self, timestamp: Date.now() },
+          });
+          pendingPost = null;
+        }
+        postFeedback = {
+          wallet: m.agentWallet,
+          text: label === 'Post' ? 'Posted to blog.' : 'Comment posted.',
+          ok: true,
+          ts: Date.now(),
+        };
+        celebrateBlog(label === 'Post'); // confetti overlay — clear success, stays on the profile
+        if (body && body._postBtn) {
+          body._postBtn.disabled = false; body._postBtn.textContent = label;
+          if (body._postTa) body._postTa.value = '';
+          if (body._postGit) body._postGit.value = '';
+          if (body._postErr) { body._postErr.textContent = label === 'Post' ? 'Posted to blog.' : 'Comment posted.'; body._postErr.style.display = ''; body._postErr.classList.add('ok'); }
+        }
       }
     }
     else if (m.type === 'balance') { solLamports = m.lamports; renderBalance(); }
