@@ -63,15 +63,55 @@ export async function loadHeliusKey(): Promise<StoredKey | null> {
   }
 }
 
+// One network probe per distinct Helius URL (a key is expired/revoked/typo'd surprisingly
+// often). Cached so resolveRpcUrl stays cheap on repeat calls; a NEW key = a new URL = a
+// fresh probe, so re-entering a good key takes effect with no restart.
+const heliusProbe = new Map<string, boolean>();
+
+// A stored key can answer getHealth (NOT auth-gated) yet return -32401 Unauthorized on
+// every real read — which silently bricks ALL chain reads (owned skills, skill text,
+// comments) with no visible cause. Probe one real, cheap method (getVersion) to tell a
+// live key from a dead one. Any error/timeout = treat as dead and fall back.
+async function heliusKeyWorks(url: string): Promise<boolean> {
+  const cached = heliusProbe.get(url);
+  if (cached !== undefined) return cached;
+  let ok = false;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: "probe", method: "getVersion" }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    const json = (await res.json()) as { error?: unknown; result?: unknown };
+    ok = !json.error && !!json.result;
+  } catch {
+    ok = false;
+  }
+  heliusProbe.set(url, ok);
+  return ok;
+}
+
 /**
  * The RPC URL the whole app should use: stored Helius key (templated on the central
  * network) -> env override -> public default. Every chain read/write site calls this
  * instead of reading process.env directly, so the UI-chosen key takes effect app-wide.
+ *
+ * A stored Helius key is VALIDATED once (heliusKeyWorks): an expired/revoked key would
+ * otherwise be trusted blindly and brick every read with a bare "Unauthorized". When it
+ * fails we fall back to the env/public RPC — standard reads (owned skills via
+ * getTokenAccountsByOwner, skill text via the gateway, comments) all work there; only
+ * DAS-tier enumeration degrades, and the NFT indexer is the primary catalog path anyway.
  */
 export async function resolveRpcUrl(): Promise<string> {
+  const fallback = process.env.DAS_RPC_URL || process.env.SOLANA_RPC_URL || PUBLIC_RPC[getNetwork()];
   const helius = await loadHeliusKey();
-  if (helius) return heliusUrl(helius.api_key);
-  return process.env.DAS_RPC_URL || process.env.SOLANA_RPC_URL || PUBLIC_RPC[getNetwork()];
+  if (!helius) return fallback;
+  const url = heliusUrl(helius.api_key);
+  return (await heliusKeyWorks(url)) ? url : fallback;
 }
 
 /** Whether a DAS-capable RPC is configured (a Helius key, or an explicit env RPC the

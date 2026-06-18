@@ -13,7 +13,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Wallet } from "../../runtime/contract.js";
 import { searchSkills } from "../../search/index.js";
-import { dasSource, indexerSource, ownedSkillMints, ownedAssetIds } from "../../core/skillSource.js";
+import { dasSource, indexerSource, ownedSkillMints } from "../../core/skillSource.js";
 import { buySkill, publishSkill as corePublishSkill } from "../../nft/skill.js";
 import { getSolBalance } from "../../notes/index.js";
 import { readSkillText, readSkillMintMetadata } from "../../nft/token2022.js";
@@ -274,19 +274,35 @@ export async function marketplaceEnv(wallet: Wallet) {
       // catalog, then decide owned-skills by intersecting in memory — no per-asset
       // on-chain group read. The owned list was already filtered against `all` before,
       // so this is the same result minus the getParsedAccountInfo fan-out that 429'd.
-      const [reputation, all, ownedIds, notes] = await Promise.all([
+      const [reputation, all, notes] = await Promise.all([
         getReputation(conn, agentWallet, source).catch(() => ({
           wallet: agentWallet, skillsPublished: 0, totalSupply: 0, notesReceived: 0, updatedAt: Date.now(),
         })),
         // catch here too: a catalog fetch failure must NOT reject the whole profile
         // (otherwise the UI hangs on "Loading…"); degrade to empty created/owned lists.
         runSearch("").catch(() => [] as Skill[]),
-        ownedAssetIds(agentWallet).catch(() => new Set<string>()),
         readAgentNotes(agentWallet).catch(() => []),
       ]);
 
       const createdSkills = all.filter((s) => s.creator === agentWallet).map(toCard);
-      const ownedSkillCards = all.filter((s) => ownedIds.has(s.id)).map(toCard);
+
+      // Owned skills, resolved DAS-FREE: ownedSkillMints reads holdings via standard-RPC
+      // getTokenAccountsByOwner, intersects the catalog, and rescues held mints the indexer
+      // misses via their on-chain TokenGroupMember group (our Token-2022 group is under-
+      // reported by DAS, and a non-DAS Helius key can't run DAS at all). A held mint absent
+      // from the catalog has no card here, so hydrate its name/description from the mint's
+      // own metadata (gateway code-in) — else a genuinely-owned skill would show as a bare
+      // mint and its comment gate would read balance 0.
+      const ownedMints = await ownedSkillMints(agentWallet, all).catch(() => [] as string[]);
+      const byId = new Map(all.map((s) => [s.id, s]));
+      const ownedSkillCards = await Promise.all(
+        ownedMints.map(async (mint): Promise<SkillCard> => {
+          const inCatalog = byId.get(mint);
+          if (inCatalog) return toCard(inCatalog);
+          const md = await readSkillMintMetadata(conn, mint).catch(() => null);
+          return { id: mint, type: "skill", name: md?.name || mint, description: md?.description };
+        }),
+      );
 
       return {
         wallet: agentWallet,

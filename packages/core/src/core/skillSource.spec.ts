@@ -143,11 +143,12 @@ describe("core/skillSource — indexerSource", () => {
   });
 });
 
-// ownedSkillMints decides "which of our skills does this wallet hold". Holdings that
-// the catalog already lists are matched cheaply (one getAssetsByOwner, no per-asset
-// read — the fast path that avoids the old 429 fan-out). Holdings the catalog MISSES
-// (the indexer under-reports our Token-2022 group) fall through to an on-chain
-// TokenGroupMember check against the current collections, bounded by that gap.
+// ownedSkillMints decides "which of our skills does this wallet hold". Holdings come from
+// a STANDARD-RPC getTokenAccountsByOwner over the Token-2022 program (works on any node —
+// no DAS tier needed). Holdings the catalog already lists are matched cheaply (no per-asset
+// read — the fast path that avoids the old 429 fan-out); holdings the catalog MISSES (the
+// indexer under-reports our Token-2022 group) fall through to an on-chain TokenGroupMember
+// check against the current collections, bounded by that gap.
 describe("core/skillSource — ownedAssetIds / ownedSkillMints", () => {
   const origEnv = { ...process.env };
   beforeEach(() => {
@@ -159,12 +160,18 @@ describe("core/skillSource — ownedAssetIds / ownedSkillMints", () => {
   });
   afterEach(() => { process.env = { ...origEnv }; });
 
-  it("ownedAssetIds returns only held assets that carry a collection grouping", async () => {
+  // A parsed Token-2022 token-account entry as getTokenAccountsByOwner returns it.
+  const tokenAcct = (mint: string, decimals: number, uiAmount: number) => ({
+    account: { data: { parsed: { info: { mint, tokenAmount: { decimals, uiAmount } } } } },
+  });
+
+  it("ownedAssetIds returns held Token-2022 NFT mints (0-decimal, held≥1), skipping fungibles/empties", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-      json: async () => ({ result: { items: [
-        { id: "m1", grouping: [{ group_key: "collection", group_value: "syntheticX" }] },
-        { id: "m2", grouping: [{ group_key: "collection", group_value: "syntheticY" }] },
-        { id: "plain", grouping: [] }, // no collection grouping → excluded
+      json: async () => ({ result: { value: [
+        tokenAcct("m1", 0, 1),
+        tokenAcct("m2", 0, 1),
+        tokenAcct("fungible", 6, 100), // decimals > 0 → not an NFT → excluded
+        tokenAcct("burned", 0, 0),     // none held → excluded
       ] } }),
     }));
     const ids = await ownedAssetIds("wallet");
@@ -173,15 +180,13 @@ describe("core/skillSource — ownedAssetIds / ownedSkillMints", () => {
 
   it("fast path: holdings fully covered by the catalog need no on-chain per-asset read", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
-      json: async () => ({ result: { items: [
-        { id: "m1", grouping: [{ group_key: "collection", group_value: "x" }] },
-      ] } }),
+      json: async () => ({ result: { value: [ tokenAcct("m1", 0, 1) ] } }),
     });
     vi.stubGlobal("fetch", fetchMock);
     const catalog = [{ id: "m1" }, { id: "m2" }] as Skill[]; // m2 not held
     const owned = await ownedSkillMints("wallet", catalog);
     expect(owned).toEqual(["m1"]); // held ∩ catalog
-    expect(fetchMock).toHaveBeenCalledTimes(1); // owner query only — no gap, no getParsedAccountInfo
+    expect(fetchMock).toHaveBeenCalledTimes(1); // holdings query only — no gap, no group read
   });
 
   it("rescues a held mint the catalog misses when on-chain it belongs to a current collection", async () => {
@@ -189,14 +194,12 @@ describe("core/skillSource — ownedAssetIds / ownedSkillMints", () => {
     // current-collection skill the indexer under-reported. It must still count as owned.
     const fetchMock = vi.fn().mockImplementation(async (_url: string, opts?: any) => {
       const method = opts?.body ? JSON.parse(opts.body).method : "";
-      if (method === "getAssetsByOwner") {
-        return { json: async () => ({ result: { items: [
-          { id: "m1", grouping: [{ group_key: "collection", group_value: "synthetic" }] },
-          { id: "gapMint", grouping: [{ group_key: "collection", group_value: "synthetic" }] },
-          { id: "alienMint", grouping: [{ group_key: "collection", group_value: "synthetic" }] },
+      if (method === "getTokenAccountsByOwner") {
+        return { json: async () => ({ result: { value: [
+          tokenAcct("m1", 0, 1), tokenAcct("gapMint", 0, 1), tokenAcct("alienMint", 0, 1),
         ] } }) };
       }
-      // getParsedAccountInfo → TokenGroupMember.state.group is the on-chain ground truth.
+      // getAccountInfo → TokenGroupMember.state.group is the on-chain ground truth.
       const mint = JSON.parse(opts.body).params[0];
       const group = mint === "gapMint" ? "SkillsCollection" : "SomeOtherCollection";
       return { json: async () => ({ result: { value: { data: { parsed: { info: { extensions: [
@@ -212,10 +215,10 @@ describe("core/skillSource — ownedAssetIds / ownedSkillMints", () => {
   it("self-fetches the catalog from the indexer when none is passed", async () => {
     const fetchMock = vi.fn().mockImplementation(async (url: string, opts?: any) => {
       const method = opts?.body ? JSON.parse(opts.body).method : "";
-      if (method === "getAssetsByOwner") {
-        return { json: async () => ({ result: { items: [
-          { id: "m1", grouping: [{ group_key: "collection", group_value: "x" }] },
-          { id: "held-but-not-a-skill", grouping: [{ group_key: "collection", group_value: "x" }] },
+      if (method === "getTokenAccountsByOwner") {
+        return { json: async () => ({ result: { value: [
+          tokenAcct("m1", 0, 1),
+          tokenAcct("held-but-not-a-skill", 0, 1),
         ] } }) };
       }
       if (method === "getAccountInfo") {

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,6 +17,7 @@ describe("core/rpc — resolveRpcUrl priority", () => {
   });
   afterEach(() => {
     process.env = { ...origEnv };
+    vi.unstubAllGlobals();
     rmSync(home, { recursive: true, force: true });
   });
 
@@ -31,13 +32,24 @@ describe("core/rpc — resolveRpcUrl priority", () => {
     expect(await resolveRpcUrl()).toBe("https://my.rpc/abc");
   });
 
-  it("a registered Helius key wins over env and templates the central-network URL", async () => {
+  it("a registered, WORKING Helius key wins over env and templates the central-network URL", async () => {
     process.env.SOLANA_RPC_URL = "https://my.rpc/abc";
+    // resolveRpcUrl now probes the key (getVersion) before trusting it — stub a live reply.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ json: async () => ({ result: { "solana-core": "2.0.0" } }) }));
     const { saveHeliusKey, resolveRpcUrl } = await import("./rpc.js");
     await saveHeliusKey("KEY123");
     const url = await resolveRpcUrl();
     // central NETWORK is devnet by default → devnet.helius endpoint
     expect(url).toBe("https://devnet.helius-rpc.com/?api-key=KEY123");
+  });
+
+  it("falls back to env/public when a stored Helius key is dead (Unauthorized)", async () => {
+    process.env.SOLANA_RPC_URL = "https://my.rpc/abc";
+    // A key that answers getHealth but returns -32401 on real reads must NOT brick reads.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ json: async () => ({ error: { code: -32401, message: "Unauthorized" } }) }));
+    const { saveHeliusKey, resolveRpcUrl } = await import("./rpc.js");
+    await saveHeliusKey("DEADKEY");
+    expect(await resolveRpcUrl()).toBe("https://my.rpc/abc");
   });
 
   it("hasDasRpc is false on the bare default, true with a Helius key", async () => {

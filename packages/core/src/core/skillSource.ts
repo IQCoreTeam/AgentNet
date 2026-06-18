@@ -16,6 +16,11 @@
 import type { Skill } from "./types.js";
 import { resolveRpcUrl } from "./rpc.js";
 
+/** Token-2022 program id — our skill/workflow mints all live under it (NonTransferable +
+ *  TokenGroup). Used to enumerate a wallet's skill holdings via the STANDARD RPC
+ *  getTokenAccountsByOwner, which works on any node (no DAS tier needed). */
+const TOKEN_2022_PROGRAM_ID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+
 /** Minimal shape of a DAS JSON-RPC response. `fetch(...).json()` is `unknown`
  *  under @types/node's fetch typings (no DOM lib) — only `any` when a DOM lib is
  *  present. core's own tsconfig happens to pull in DOM (no explicit `lib`), but
@@ -165,33 +170,45 @@ async function onChainGroup(rpcUrl: string, mint: string): Promise<string | null
 }
 
 /**
- * Every asset id a wallet HOLDS that carries a "collection" grouping — the cheap DAS
- * owner query (getAssetsByOwner, paged at 1000). This is an *owner* query (one call
- * per 1000 assets), unaffected by how DAS represents our TokenGroup, so it's the only
- * DAS hit needed to find owned skills. Membership ("is this one of OUR skills") is then
- * decided by intersecting with the catalog (see ownedSkillMints) — NOT by re-reading
- * each held asset on-chain. Throws on an RPC error so callers can fall back/catch.
+ * Every Token-2022 NFT mint a wallet HOLDS — via the STANDARD RPC getTokenAccountsByOwner
+ * over the Token-2022 program, NOT DAS getAssetsByOwner.
+ *
+ * Why not DAS: DAS (getAssetsByGroup/getAssetsByOwner) needs a DAS-tier provider. A
+ * non-DAS Helius key answers standard RPC fine but returns "Unauthorized" on DAS, which
+ * silently emptied the owned list (the agent-profile owned section, comment gate, and
+ * session-start skill injection all went blank). getTokenAccountsByOwner is a plain RPC
+ * call every node serves, so owned-skill resolution no longer depends on a DAS tier — it
+ * only needs the gateway (code-in body) + optional indexer (catalog). It also sidesteps
+ * the long-standing problem that DAS under-reports our Token-2022 TokenGroup membership.
+ *
+ * Returns the held mints; this is NOT "which are OUR skills" — that's decided downstream
+ * (ownedSkillMints) by catalog intersection + the on-chain TokenGroupMember group. We keep
+ * only NFT-like holdings (0 decimals, ≥1 unit) so fungible balances don't enlarge the
+ * downstream gap-rescue. Throws on an RPC error so callers can fall back/catch.
  */
 export async function ownedAssetIds(owner: string): Promise<Set<string>> {
   const rpcUrl = await resolveRpcUrl(); // Helius key > env > default (issue #23)
   const ids = new Set<string>();
-  for (let page = 1; ; page++) {
-    const res = await fetch(rpcUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0", id: "1", method: "getAssetsByOwner",
-        params: { ownerAddress: owner, page, limit: 1000 },
-      }),
-    });
-    const json = (await res.json()) as DasRpcResponse;
-    if (json.error) throw new Error(`DAS getAssetsByOwner failed: ${JSON.stringify(json.error)}`);
-    const items = json.result?.items ?? [];
-    for (const it of items) {
-      const groups = (it.grouping ?? []) as { group_key?: string; group_value?: string }[];
-      if (groups.some((g) => g.group_key === "collection" && g.group_value)) ids.add(it.id);
+  const res = await fetch(rpcUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0", id: "1", method: "getTokenAccountsByOwner",
+      params: [owner, { programId: TOKEN_2022_PROGRAM_ID }, { encoding: "jsonParsed" }],
+    }),
+  });
+  const json = (await res.json()) as {
+    error?: unknown;
+    result?: { value?: { account?: { data?: { parsed?: { info?: any } } } }[] };
+  };
+  if (json.error) throw new Error(`getTokenAccountsByOwner failed: ${JSON.stringify(json.error)}`);
+  for (const acct of json.result?.value ?? []) {
+    const info = acct.account?.data?.parsed?.info;
+    const amt = info?.tokenAmount;
+    // NFT-like: exactly 0 decimals and at least one unit held (our soulbound skills are 1).
+    if (info?.mint && amt && amt.decimals === 0 && Number(amt.uiAmount ?? amt.uiAmountString ?? 0) >= 1) {
+      ids.add(info.mint);
     }
-    if (items.length < 1000) break; // last page
   }
   return ids;
 }
