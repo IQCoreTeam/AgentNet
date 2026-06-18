@@ -68,6 +68,21 @@ describe("reputation/reputation", () => {
     expect(rep).not.toHaveProperty("score");
   });
 
+  it("reuses a passed-in catalog instead of refetching listSkills", async () => {
+    const listSpy = vi.mocked(dasSource.listSkills).mockResolvedValue([]);
+    vi.mocked(chain.readRows).mockResolvedValue([] as any);
+    const catalog = [
+      { id: "skill1", type: "skill", creator: "walletA", supply: 5 },
+      { id: "skill2", type: "skill", creator: "walletA", supply: 2 },
+    ] as any;
+
+    const rep = await getReputation(mockConn, "walletA", dasSource, catalog);
+
+    expect(listSpy).not.toHaveBeenCalled();   // no second indexer round-trip
+    expect(rep.skillsPublished).toBe(2);
+    expect(rep.totalSupply).toBe(7);          // live supply taken from the catalog
+  });
+
   it("generates a leaderboard ranked by totalSupply", async () => {
     vi.mocked(dasSource.listSkills).mockResolvedValue([
       { id: "skill1", type: "skill", creator: "walletA", supply: 5 } as any,

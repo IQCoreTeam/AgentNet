@@ -10,7 +10,7 @@
 // retry the one call, and if it keeps failing we reuse the last good set rather than
 // locking the user out of commenting on a skill they own.
 
-import { ownedAssetIds } from "../core/skillSource.js";
+import { ownedAssetIds, readHeldSkillCreators } from "../core/skillSource.js";
 
 const TTL_MS = 60_000; // a buy invalidates explicitly; otherwise re-read after a minute
 const ATTEMPTS = 3;
@@ -18,6 +18,7 @@ const RETRY_MS = 300;
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 const cache = new Map<string, { mints: Set<string>; at: number }>();
+const creatorCache = new Map<string, { byMint: Map<string, string>; at: number }>();
 
 /**
  * The Token-2022 skill/NFT mints `owner` currently holds, cached per owner. Pass
@@ -49,8 +50,38 @@ export async function heldSkillMints(
   throw lastErr ?? new Error("could not resolve holdings");
 }
 
+/**
+ * The skills `owner` holds (in our collections) mapped to each skill's on-chain
+ * creator. Cached per owner like heldSkillMints. Powers the agent-comment gate
+ * ("do I hold ≥1 skill created by agent X") and a profile's created-skills list —
+ * both indexer-independent, since the indexer catalog under-reports our skills.
+ */
+export async function heldSkillCreators(
+  owner: string,
+  opts?: { force?: boolean },
+): Promise<Map<string, string>> {
+  const hit = creatorCache.get(owner);
+  if (!opts?.force && hit && Date.now() - hit.at < TTL_MS) return hit.byMint;
+
+  let lastErr: unknown;
+  for (let i = 0; i < ATTEMPTS; i++) {
+    if (i > 0) await delay(RETRY_MS * i);
+    try {
+      const byMint = await readHeldSkillCreators(owner);
+      // Same flaky-empty guard as heldSkillMints: don't trust a sudden empty read.
+      if (byMint.size === 0 && hit && hit.byMint.size > 0 && i < ATTEMPTS - 1) continue;
+      creatorCache.set(owner, { byMint, at: Date.now() });
+      return byMint;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  if (hit) return hit.byMint;
+  throw lastErr ?? new Error("could not resolve held-skill creators");
+}
+
 /** Drop cached holdings (call after a buy so a freshly-acquired skill gates immediately). */
 export function invalidateHeldMints(owner?: string): void {
-  if (owner) cache.delete(owner);
-  else cache.clear();
+  if (owner) { cache.delete(owner); creatorCache.delete(owner); }
+  else { cache.clear(); creatorCache.clear(); }
 }

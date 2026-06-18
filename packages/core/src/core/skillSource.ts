@@ -150,23 +150,86 @@ export const dasSource: SkillSource = {
  * *indexer* projection that, for our Token-2022 TokenGroup mints, surfaces a
  * synthetic group id instead of the real group mint and so never matches our seed.
  */
-async function onChainGroup(rpcUrl: string, mint: string): Promise<string | null> {
-  const res = await fetch(rpcUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0", id: "1", method: "getAccountInfo",
-      params: [mint, { encoding: "jsonParsed" }],
-    }),
-  });
-  const json = (await res.json()) as {
-    result?: { value?: { data?: { parsed?: { info?: { extensions?: unknown[] } } } } };
-  };
-  const exts = json.result?.value?.data?.parsed?.info?.extensions ?? [];
-  for (const ext of exts as { extension?: string; state?: { group?: string } }[]) {
-    if (ext.extension === "tokenGroupMember" && ext.state?.group) return ext.state.group;
+interface ParsedMintInfo {
+  extensions?: { extension?: string; state?: { group?: string; updateAuthority?: string; name?: string } }[];
+}
+
+/**
+ * Read the parsed Token-2022 mint accounts for many mints, aligned to the input
+ * order. getMultipleAccounts takes up to 100 pubkeys per call, so this costs
+ * ceil(N/100) round-trips instead of N. A per-mint getAccountInfo fan-out (the old
+ * shape) blew past public-RPC rate limits — for a wallet holding 100+ NFTs it fired
+ * ~90 concurrent calls, ~half of which 429'd and returned null, silently dropping
+ * genuinely-held skills. One batched call is far faster and lossless.
+ */
+async function batchMintInfo(rpcUrl: string, mints: string[]): Promise<(ParsedMintInfo | null)[]> {
+  const out: (ParsedMintInfo | null)[] = [];
+  for (let i = 0; i < mints.length; i += 100) {
+    const chunk = mints.slice(i, i + 100);
+    const res = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0", id: "1", method: "getMultipleAccounts",
+        params: [chunk, { encoding: "jsonParsed" }],
+      }),
+    });
+    const json = (await res.json()) as {
+      result?: { value?: ({ data?: { parsed?: { info?: ParsedMintInfo } } } | null)[] };
+    };
+    const vals = json.result?.value ?? [];
+    for (let k = 0; k < chunk.length; k++) out.push(vals[k]?.data?.parsed?.info ?? null);
   }
-  return null;
+  return out;
+}
+
+/**
+ * On-chain truth for collection membership: each mint's Token-2022 TokenGroupMember
+ * `group` (the collection mint it was enrolled in). Ground truth — unlike DAS's
+ * `grouping.group_value`, a synthetic id that never matches our seed.
+ */
+async function onChainGroups(rpcUrl: string, mints: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const infos = await batchMintInfo(rpcUrl, mints);
+  infos.forEach((info, j) => {
+    const group = (info?.extensions ?? []).find((e) => e.extension === "tokenGroupMember")?.state?.group;
+    if (group) out.set(mints[j], group);
+  });
+  return out;
+}
+
+/**
+ * For the skills a wallet HOLDS (in our collections), each skill's on-chain creator
+ * — the TokenMetadata `updateAuthority`, i.e. the publisher who minted it.
+ *
+ * This is the ground truth for "did this wallet buy/receive a skill that agent X
+ * created", which the agent-comment gate and a profile's created-skills list both
+ * need. The indexer catalog UNDER-REPORTS our Token-2022 members (it lists only a
+ * subset of a creator's skills), so enumerating "agent X's skills" via
+ * listSkills()∩creator misses skills X made that the holder genuinely owns — which
+ * wrongly blocked legit commenters and hid self-published skills from a profile.
+ * Reading the holder's OWN mints (always complete) + their on-chain creator avoids
+ * the indexer entirely. One getTokenAccountsByOwner + one batched getMultipleAccounts.
+ *
+ * Returns mint → creatorWallet, restricted to our skill/workflow collections.
+ */
+export async function readHeldSkillCreators(owner: string): Promise<Map<string, string>> {
+  const { getSkillsCollectionMint, getWorkflowsCollectionMint } = await import("./seed.js");
+  const ours = new Set([getSkillsCollectionMint(), getWorkflowsCollectionMint()].filter(Boolean) as string[]);
+  const out = new Map<string, string>();
+  if (ours.size === 0) return out;
+  const ids = [...(await ownedAssetIds(owner))];
+  if (ids.length === 0) return out;
+  const rpcUrl = await resolveRpcUrl();
+  const infos = await batchMintInfo(rpcUrl, ids);
+  infos.forEach((info, j) => {
+    const exts = info?.extensions ?? [];
+    const group = exts.find((e) => e.extension === "tokenGroupMember")?.state?.group;
+    if (!group || !ours.has(group)) return; // only our skills
+    const creator = exts.find((e) => e.extension === "tokenMetadata")?.state?.updateAuthority;
+    if (creator) out.set(ids[j], creator);
+  });
+  return out;
 }
 
 /**
@@ -267,10 +330,8 @@ export async function ownedSkillMints(owner: string, catalog?: Skill[]): Promise
   const gap = [...ownedIds].filter((id) => !owned.has(id));
   if (gap.length > 0) {
     const rpcUrl = await resolveRpcUrl();
-    const groups = await Promise.all(
-      gap.map((id) => onChainGroup(rpcUrl, id).catch(() => null)),
-    );
-    gap.forEach((id, i) => { if (groups[i] && ours.has(groups[i]!)) owned.add(id); });
+    const groups = await onChainGroups(rpcUrl, gap).catch(() => new Map<string, string>());
+    for (const id of gap) { const g = groups.get(id); if (g && ours.has(g)) owned.add(id); }
   }
 
   return [...owned];

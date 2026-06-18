@@ -199,17 +199,21 @@ describe("core/skillSource — ownedAssetIds / ownedSkillMints", () => {
           tokenAcct("m1", 0, 1), tokenAcct("gapMint", 0, 1), tokenAcct("alienMint", 0, 1),
         ] } }) };
       }
-      // getAccountInfo → TokenGroupMember.state.group is the on-chain ground truth.
-      const mint = JSON.parse(opts.body).params[0];
-      const group = mint === "gapMint" ? "SkillsCollection" : "SomeOtherCollection";
-      return { json: async () => ({ result: { value: { data: { parsed: { info: { extensions: [
-        { extension: "tokenGroupMember", state: { group } },
-      ] } } } } } }) };
+      // getMultipleAccounts → one batched call; value[] is aligned to the requested
+      // mints. TokenGroupMember.state.group is the on-chain ground truth.
+      const mints: string[] = JSON.parse(opts.body).params[0];
+      const value = mints.map((mint) => ({ data: { parsed: { info: { extensions: [
+        { extension: "tokenGroupMember", state: { group: mint === "gapMint" ? "SkillsCollection" : "SomeOtherCollection" } },
+      ] } } } }));
+      return { json: async () => ({ result: { value } }) };
     });
     vi.stubGlobal("fetch", fetchMock);
     const catalog = [{ id: "m1" }] as Skill[];
     const owned = (await ownedSkillMints("wallet", catalog)).sort();
     expect(owned).toEqual(["gapMint", "m1"]); // m1 via catalog; gapMint rescued; alienMint excluded (wrong group)
+    // gap rescue is ONE batched getMultipleAccounts, not a per-mint fan-out.
+    const gmaCalls = fetchMock.mock.calls.filter((c: any) => JSON.parse(c[1].body).method === "getMultipleAccounts");
+    expect(gmaCalls).toHaveLength(1);
   });
 
   it("self-fetches the catalog from the indexer when none is passed", async () => {
@@ -221,11 +225,13 @@ describe("core/skillSource — ownedAssetIds / ownedSkillMints", () => {
           tokenAcct("held-but-not-a-skill", 0, 1),
         ] } }) };
       }
-      if (method === "getAccountInfo") {
+      if (method === "getMultipleAccounts") {
         // held-but-not-a-skill resolves to a foreign group → excluded.
-        return { json: async () => ({ result: { value: { data: { parsed: { info: { extensions: [
+        const mints: string[] = JSON.parse(opts.body).params[0];
+        const value = mints.map(() => ({ data: { parsed: { info: { extensions: [
           { extension: "tokenGroupMember", state: { group: "SomeOtherCollection" } },
-        ] } } } } } }) };
+        ] } } } }));
+        return { json: async () => ({ result: { value } }) };
       }
       // indexer /items
       expect(url).toContain("/items");

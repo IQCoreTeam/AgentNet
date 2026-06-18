@@ -894,6 +894,8 @@ export function chatHtml(): string {
                                   border:1px solid var(--an-line); border-radius:6px; font-size:0.88em; }
   .pr-compose button { margin-top:6px; padding:5px 14px; }
   .pr-compose .pr-err { color:#e05252; font-size:0.82em; margin-top:4px; display:none; }
+  .pr-compose .pr-hint { opacity:0.55; font-size:0.8em; margin-bottom:6px; }
+  .pr-compose textarea:disabled, .pr-compose input:disabled { opacity:0.5; cursor:not-allowed; }
   /* buy-all: minimal outline pill (matches the market's .mc-buy tone, not a heavy fill) */
   .pr-buyall { display:inline-flex; align-items:center; gap:6px; margin:2px 0 10px; padding:6px 14px;
                background:var(--an-green-dim); border:1px solid var(--an-green-line); color:var(--an-green);
@@ -1299,7 +1301,7 @@ export function chatHtml(): string {
           </div>
         </div>
         <div class="pr-rep card">
-          <div class="pr-rep-title">Reputation</div>
+          <div class="pr-rep-title">Impact</div>
           <div id="profileRep" class="pr-rep-stats"></div>
         </div>
       </div>
@@ -3018,33 +3020,47 @@ export function chatHtml(): string {
       selfNotes.forEach(n => blog.appendChild(noteCard(n, false)));
       paneNotes.appendChild(blog);
     }
-    if (self) {
-      const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Post to blog';
+    // Compose box — ALWAYS shown so the action is discoverable. Self → post to blog;
+    // otherwise → write a comment, enabled only when the connected wallet holds ≥1 of
+    // this agent's skills (profile.canComment, same on-chain gate as the host). When it
+    // can't, the box is disabled with a hint rather than hidden.
+    {
+      const canPost = self || !!profile.canComment;
+      const sec = document.createElement('div'); sec.className = 'pr-sec';
+      sec.textContent = self ? 'Post to blog' : 'Write a comment';
       paneNotes.appendChild(sec);
       const compose = document.createElement('div'); compose.className = 'pr-compose';
-      const ta = document.createElement('textarea'); ta.placeholder = 'Write a blog post or update…';
+      const ta = document.createElement('textarea');
+      ta.placeholder = self ? 'Write a blog post or update…' : 'Share your experience with this agent…';
       const gitInput = document.createElement('input'); gitInput.type = 'text'; gitInput.placeholder = 'GitHub / git URL (optional)';
       const errEl = document.createElement('div'); errEl.className = 'pr-err';
-      const btn = document.createElement('button'); btn.textContent = 'Post';
+      const btn = document.createElement('button'); btn.textContent = self ? 'Post' : 'Comment';
+      if (!canPost) {
+        ta.disabled = true; gitInput.disabled = true; btn.disabled = true;
+        const hint = document.createElement('div'); hint.className = 'pr-hint';
+        hint.textContent = 'Own ≥1 of this agent’s skills to comment.';
+        compose.appendChild(hint);
+      }
       btn.addEventListener('click', () => {
         const text = ta.value.trim(); if (!text) return;
         const gitLink = gitInput.value.trim() || undefined;
-        btn.disabled = true; btn.textContent = 'Posting…'; errEl.style.display = 'none';
+        btn.disabled = true; btn.textContent = self ? 'Posting…' : 'Commenting…'; errEl.style.display = 'none';
         vscode.postMessage({ type: 'postAgentNote', agentWallet: wallet, text, gitLink });
       });
       compose.appendChild(ta); compose.appendChild(gitInput); compose.appendChild(errEl); compose.appendChild(btn);
       paneNotes.appendChild(compose);
-      // stash submit button reference for agentNoteResult handler
-      body._postBtn = btn; body._postErr = errEl;
+      // stash submit button reference for the agentNoteResult handler
+      body._postBtn = btn; body._postErr = errEl; body._postLabel = self ? 'Post' : 'Comment';
     }
     const comments = profile.notes.filter(n => !n.isSelfNote);
     if (comments.length) {
       const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Comments (' + comments.length + ')';
       paneNotes.appendChild(sec);
       comments.forEach(n => paneNotes.appendChild(noteCard(n, true)));
-    }
-    if (!selfNotes.length && !self && !comments.length) {
-      const e = document.createElement('div'); e.className = 'pr-empty'; e.textContent = 'No notes yet.'; paneNotes.appendChild(e);
+    } else {
+      const e = document.createElement('div'); e.className = 'pr-empty';
+      e.textContent = self ? 'No comments yet.' : 'No comments yet — be the first.';
+      paneNotes.appendChild(e);
     }
   }
 
@@ -4030,11 +4046,12 @@ export function chatHtml(): string {
     else if (m.type === 'agentNoteResult') {
       // profile is re-pushed by host on success (session.ts); just reset the compose box on failure
       const body = document.getElementById('profileBody');
+      const label = (body && body._postLabel) || 'Post';
       if (!m.ok && body && body._postBtn) {
-        body._postBtn.disabled = false; body._postBtn.textContent = 'Post';
+        body._postBtn.disabled = false; body._postBtn.textContent = label;
         if (body._postErr) { body._postErr.textContent = m.error || 'Post failed'; body._postErr.style.display = ''; }
       } else if (m.ok && body && body._postBtn) {
-        body._postBtn.disabled = false; body._postBtn.textContent = 'Post';
+        body._postBtn.disabled = false; body._postBtn.textContent = label;
       }
     }
     else if (m.type === 'balance') { solLamports = m.lamports; renderBalance(); }

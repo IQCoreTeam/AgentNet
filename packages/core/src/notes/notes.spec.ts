@@ -15,6 +15,7 @@ vi.mock("../core/chain.js", () => ({
 
 vi.mock("./holdings.js", () => ({
   heldSkillMints: vi.fn(),
+  heldSkillCreators: vi.fn(),
 }));
 
 describe("notes/notes", () => {
@@ -98,40 +99,35 @@ describe("notes/notes", () => {
 
     expect(noteId).toContain(`note:${AUTHOR}:`);
     expect(chain.writeRow).toHaveBeenCalled();
-    expect(holdings.heldSkillMints).not.toHaveBeenCalled(); // owner skips the gate
+    expect(holdings.heldSkillCreators).not.toHaveBeenCalled(); // owner skips the gate
   });
 
-  it("comment on agent: allowed when author holds one of the agent's skills", async () => {
-    vi.mocked(holdings.heldSkillMints).mockResolvedValue(new Set([AUTHOR]));
-    const source = {
-      listSkills: vi.fn().mockResolvedValue([
-        { id: AUTHOR, creator: "agentWalletX" },
-      ]),
-    };
+  it("comment on agent: allowed when the author holds a skill CREATED BY that agent", async () => {
+    // On-chain ground truth: a held skill mint whose creator is the agent. (Not the
+    // indexer's listSkills — that catalog under-reports and falsely blocked holders.)
+    vi.mocked(holdings.heldSkillCreators).mockResolvedValue(
+      new Map([["someSkillMint", "agentWalletX"]]),
+    );
 
     const noteId = await postAgentNote(mockConn as any, signer, {
       agentWallet: "agentWalletX",
       text: "great agent",
-      source,
     });
 
     expect(noteId).toContain(`note:${AUTHOR}:`);
     expect(chain.writeRow).toHaveBeenCalled();
   });
 
-  it("comment on agent: rejected when author holds none of the agent's skills", async () => {
-    vi.mocked(holdings.heldSkillMints).mockResolvedValue(new Set<string>());
-    const source = {
-      listSkills: vi.fn().mockResolvedValue([
-        { id: AUTHOR, creator: "agentWalletX" },
-      ]),
-    };
+  it("comment on agent: rejected when the author holds no skill created by that agent", async () => {
+    // The author holds skills, but all created by someone else → gate rejects.
+    vi.mocked(holdings.heldSkillCreators).mockResolvedValue(
+      new Map([["otherSkillMint", "someoneElse"]]),
+    );
 
     await expect(
       postAgentNote(mockConn as any, signer, {
         agentWallet: "agentWalletX",
         text: "spam",
-        source,
       }),
     ).rejects.toThrow(/Must hold ≥1 of agentWalletX's skills/);
   });

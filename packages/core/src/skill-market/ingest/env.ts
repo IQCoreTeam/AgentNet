@@ -17,6 +17,7 @@ import { dasSource, indexerSource, ownedSkillMints } from "../../core/skillSourc
 import { buySkill, publishSkill as corePublishSkill } from "../../nft/skill.js";
 import { getSolBalance } from "../../notes/index.js";
 import { readSkillText, readSkillMintMetadata } from "../../nft/token2022.js";
+import { heldSkillCreators } from "../../notes/holdings.js";
 import { claudeSkillsDir } from "../../core/paths.js";
 import { classifySkills, readSkillManifest } from "../registry.js";
 import { resolveRpcUrl } from "../../core/rpc.js";
@@ -315,7 +316,10 @@ export async function marketplaceEnv(wallet: Wallet) {
       }
     },
 
-    // issue #35: agent directory ranked by totalSupply (indexer source; das fallback).
+    // issue #35: agent directory ranked by totalSupply. The indexer now enumerates
+    // items via the gate program (authority-independent), so its creator ranking is
+    // complete — no client-side augmentation needed. das is the fallback when the
+    // indexer is down.
     async listAgents() {
       try {
         return await getLeaderboard(conn, 20, indexerSource(INDEXER_URL));
@@ -329,47 +333,66 @@ export async function marketplaceEnv(wallet: Wallet) {
       let source;
       try { source = indexerSource(INDEXER_URL); } catch { source = dasSource; }
 
-      // Fetch the agent's holdings (one cheap DAS owner query) IN PARALLEL with the
-      // catalog, then decide owned-skills by intersecting in memory — no per-asset
-      // on-chain group read. The owned list was already filtered against `all` before,
-      // so this is the same result minus the getParsedAccountInfo fan-out that 429'd.
-      const [reputation, all, notes] = await Promise.all([
-        getReputation(conn, agentWallet, source).catch(() => ({
+      // Fetch the catalog ONCE, then derive reputation, owned mints, and notes from it
+      // concurrently. The old shape refetched the catalog inside getReputation (a second
+      // indexer round-trip) and then serialized ownedSkillMints (+ its on-chain gap
+      // rescue) AND the per-mint card hydration AFTER the parallel block — so a whale
+      // wallet's profile ran catalog → rescue → hydrate back to back. Now the rescue
+      // overlaps reputation/notes, and reputation reuses `all` instead of refetching.
+      // catch on the catalog: a fetch failure must NOT reject the whole profile
+      // (otherwise the UI hangs on "Loading…"); degrade to empty created/owned lists.
+      const all = await runSearch("").catch(() => [] as Skill[]);
+      const [reputation, notes, holdings] = await Promise.all([
+        getReputation(conn, agentWallet, source, all).catch(() => ({
           wallet: agentWallet, skillsPublished: 0, totalSupply: 0, notesReceived: 0, updatedAt: Date.now(),
         })),
-        // catch here too: a catalog fetch failure must NOT reject the whole profile
-        // (otherwise the UI hangs on "Loading…"); degrade to empty created/owned lists.
-        runSearch("").catch(() => [] as Skill[]),
         readAgentNotes(agentWallet).catch(() => []),
+        // The agent's held skills mapped to their on-chain creator — DAS-FREE and
+        // INDEXER-INDEPENDENT (getTokenAccountsByOwner + one batched getMultipleAccounts).
+        // Gives both the owned-mints (keys) and, for created-skills, the on-chain creator
+        // that the catalog under-reports (see below).
+        heldSkillCreators(agentWallet).catch(() => new Map<string, string>()),
       ]);
 
-      const createdSkills = all.filter((s) => s.creator === agentWallet).map(toCard);
-
-      // Owned skills, resolved DAS-FREE: ownedSkillMints reads holdings via standard-RPC
-      // getTokenAccountsByOwner, intersects the catalog, and rescues held mints the indexer
-      // misses via their on-chain TokenGroupMember group (our Token-2022 group is under-
-      // reported by DAS, and a non-DAS Helius key can't run DAS at all). A held mint absent
-      // from the catalog has no card here, so hydrate its name/description from the mint's
-      // own metadata (gateway code-in) — else a genuinely-owned skill would show as a bare
-      // mint and its comment gate would read balance 0.
-      const ownedMints = await ownedSkillMints(agentWallet, all).catch(() => [] as string[]);
       const byId = new Map(all.map((s) => [s.id, s]));
-      const ownedSkillCards = await Promise.all(
-        ownedMints.map(async (mint): Promise<SkillCard> => {
-          const inCatalog = byId.get(mint);
-          if (inCatalog) return toCard(inCatalog);
-          const md = await readSkillMintMetadata(conn, mint).catch(() => null);
-          return { id: mint, type: "skill", name: md?.name || mint, description: md?.description };
-        }),
-      );
+      // Hydrate a mint to a card from the catalog, else from its own on-chain metadata
+      // (gateway code-in) — so a skill the indexer never cataloged still shows a name.
+      const cardFor = async (mint: string): Promise<SkillCard> => {
+        const inCatalog = byId.get(mint);
+        if (inCatalog) return toCard(inCatalog);
+        const md = await readSkillMintMetadata(conn, mint).catch(() => null);
+        return { id: mint, type: "skill", name: md?.name || mint, description: md?.description };
+      };
+
+      // Created skills = catalog skills by this agent ∪ skills the agent HOLDS that they
+      // themselves minted. A publisher self-mints the first copy on publish, so their own
+      // creations sit in their holdings with creator == agentWallet — and the indexer
+      // catalog under-reports our Token-2022 members, so a freshly-published skill (e.g.
+      // one minted yesterday) is often absent from the catalog and would otherwise never
+      // appear on its creator's own profile. The on-chain creator rescues it.
+      const createdIds = new Set(all.filter((s) => s.creator === agentWallet).map((s) => s.id));
+      for (const [mint, creator] of holdings) if (creator === agentWallet) createdIds.add(mint);
+      const createdSkills = await Promise.all([...createdIds].map(cardFor));
+
+      // Owned skills = everything the agent holds in our collections (the holdings keys).
+      const ownedSkillCards = await Promise.all([...holdings.keys()].map(cardFor));
+
+      // May the connected wallet comment here? Same on-chain gate as postAgentNote:
+      // it holds ≥1 skill THIS agent created. For self, `holdings` already is the
+      // connected wallet's; otherwise read the viewer's holdings (cached).
+      const self = agentWallet === wallet.address;
+      let canComment = false;
+      const viewerHoldings = self ? holdings : await heldSkillCreators(wallet.address).catch(() => new Map<string, string>());
+      for (const creator of viewerHoldings.values()) if (creator === agentWallet) { canComment = true; break; }
 
       return {
         wallet: agentWallet,
-        self: agentWallet === wallet.address,
+        self,
         reputation,
         createdSkills,
         ownedSkills: ownedSkillCards,
         notes,
+        canComment,
       };
     },
 

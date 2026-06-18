@@ -20,9 +20,9 @@ import {
   signerAddress,
 } from "../core/chain.js";
 import { reviewsHint, reviewsAgentHint, REVIEW_COLUMNS } from "../core/seed.js";
-import { dasSource, type SkillSource } from "../core/skillSource.js";
+import { type SkillSource } from "../core/skillSource.js";
 import type { Note, Row } from "../core/types.js";
-import { heldSkillMints } from "./holdings.js";
+import { heldSkillMints, heldSkillCreators } from "./holdings.js";
 
 /** The stored row shape — derived fields (subject/isSelfNote) are NOT included. */
 interface StoredNote {
@@ -162,14 +162,16 @@ export async function postAgentNote(
   const isSelfNote = author === input.agentWallet;
 
   if (!isSelfNote) {
-    // Comment gate: must hold ≥1 of any skill this agent created.
-    const source = input.source ?? dasSource;
-    const agentSkills = (await source.listSkills()).filter(
-      (s) => s.creator === input.agentWallet,
-    );
-    // One cached holdings read, then a local membership test — not one RPC per skill.
-    const held = await heldSkillMints(author);
-    const holdsAny = agentSkills.some((s) => held.has(s.id));
+    // Comment gate: must hold ≥1 skill this agent created. Resolved from ON-CHAIN
+    // ground truth — the creator (TokenMetadata.updateAuthority) of the skills the
+    // author actually holds — NOT by enumerating the agent's skills via the indexer.
+    // The indexer catalog under-reports our Token-2022 members, so listSkills()∩creator
+    // missed skills the agent made that the commenter genuinely holds, wrongly blocking
+    // legit holders (verified on devnet: a wallet holding 6 of an agent's skills was
+    // rejected because none were in the agent's 24-item catalog projection).
+    const creators = await heldSkillCreators(author); // mint → creator, our-collection only
+    let holdsAny = false;
+    for (const creator of creators.values()) if (creator === input.agentWallet) { holdsAny = true; break; }
     if (!holdsAny) {
       throw new Error(
         `Must hold ≥1 of ${input.agentWallet}'s skills to comment on this agent`,

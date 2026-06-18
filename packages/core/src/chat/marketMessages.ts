@@ -38,6 +38,10 @@ export interface AgentProfile {
   createdSkills: SkillCard[];
   ownedSkills: SkillCard[];
   notes: Note[]; // self-notes (blog) + holder comments, newest-first
+  // Whether the CONNECTED wallet may comment on this agent: it holds ≥1 skill this
+  // agent created (same on-chain gate as postAgentNote). The UI shows the comment box
+  // either way (disabled with a hint when false) so the action is always discoverable.
+  canComment: boolean;
 }
 
 /** A full detail payload for one item: its card, the on-chain body (skillText, read

@@ -17,16 +17,19 @@ export async function getReputation(
   conn: Connection,
   wallet: string,
   source: SkillSource = dasSource,
+  catalog?: Skill[],
 ): Promise<Reputation> {
-  // Enumerate skills via the collection scan, filter by creator.
-  const mySkills = (await source.listSkills()).filter(
-    (s) => s.creator === wallet,
-  );
+  // Enumerate skills via the collection scan, filter by creator. A caller that has
+  // already fetched the catalog (e.g. getAgentProfile's search results, indexer-hydrated)
+  // can pass it to skip a duplicate listSkills round-trip.
+  const allSkills = catalog ?? (await source.listSkills());
+  const mySkills = allSkills.filter((s) => s.creator === wallet);
 
   const skillsPublished = mySkills.length;
-  // totalSupply = the documented "fame" metric. A hydrated source (indexer)
-  // already carries live supply; otherwise read it per-mint from the chain.
-  const supplies = source.hydrated
+  // totalSupply = the documented "fame" metric. A hydrated source (indexer) — or a
+  // passed-in catalog, which comes from the indexer — already carries live supply;
+  // otherwise read it per-mint from the chain.
+  const supplies = catalog || source.hydrated
     ? mySkills.map((s) => Number(s.supply))
     : await Promise.all(mySkills.map((s) => getMintSupply(conn, s.id)));
   const totalSupply = supplies.reduce((acc, n) => acc + n, 0);
