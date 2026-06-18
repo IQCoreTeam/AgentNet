@@ -310,7 +310,12 @@ function claudeEngine(opts: SpawnOpts): Engine {
       cwd: opts.cwd,
       permissionMode: claudePermissionMode(opts.mode),
       canUseTool,
-      includePartialMessages: !!opts.stream,
+      // Token-by-token streaming is ON by default (codex already streams unconditionally) so
+      // claude renders incrementally like the official VSCode extension instead of sitting on
+      // "…" until the whole turn lands. A surface can still disable it with stream:false.
+      // Partials arrive as text deltas → accumulated into a cumulative snapshot below and
+      // rendered with replace-semantics (no append), so there's no duplication.
+      includePartialMessages: opts.stream !== false,
       effort: opts.effort,
       // Vanilla claude: use the stock claude_code system prompt with NOTHING appended.
       // We used to append an "anti-laziness" nudge here, but it made the agent feel

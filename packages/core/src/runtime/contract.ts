@@ -117,10 +117,10 @@ export interface AgentRuntime {
     // plan | bypassPermissions); codex → a sandbox+approval preset key (readonly |
     // auto | full). Omit → the engine's safe default (claude "default", codex "auto").
     mode?: string;
-    // opt-in token streaming: when true, the engine emits partial assistant deltas
-    // (ChatMessage.partial:true) followed by a final partial:false message. Surfaces that
-    // don't set this (e.g. vscode) keep the whole-turn behavior unchanged. Partials are
-    // rendered but NOT persisted — only the final message is written to the log.
+    // token streaming. The engine emits partial assistant deltas (ChatMessage.partial:true)
+    // followed by a final partial:false message. Defaults ON: codex always streams, and claude
+    // streams unless this is explicitly false (set stream:false to restore whole-turn behavior).
+    // Partials are rendered live but NOT persisted — only the final message is written to the log.
     stream?: boolean;
     // who decides tool approvals for THIS session. Per-session (not per-runtime) so
     // multiple chat panels sharing one runtime each route approvals to their OWN
