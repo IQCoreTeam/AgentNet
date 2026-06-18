@@ -309,7 +309,7 @@ export function Chat({
       if (!k) return;
       konami.current = [...konami.current, k].slice(-4);
       if (konami.current.join("") === "UUDD") {
-        setNotice("⚡ turbo glow engaged... you found it ✦");
+        setNotice("turbo glow engaged... you found it ✦");
         konami.current = [];
       }
     },
@@ -726,7 +726,7 @@ export function Chat({
       <Box flexDirection="column" paddingX={1}>
         <Box borderStyle="round" borderColor="cyan" flexDirection="column" paddingX={1} paddingY={1}>
           <Box marginBottom={1}>
-            <Text bold color="cyan">⚡ /btw (side-channel query)</Text>
+            <Text bold color="cyan">/btw (side-channel query)</Text>
           </Box>
           <Box flexDirection="row" marginBottom={1}>
             <Text bold color="white">Q: </Text>
@@ -807,7 +807,7 @@ export function Chat({
 
       {chat.firingSkill ? (
         <Box paddingLeft={2} marginTop={1}>
-          <Text color={colors.ok}>{`⚡ Casting <${chat.firingSkill}>`}</Text>
+          <Text color={colors.ok}>{`Casting <${chat.firingSkill}>`}</Text>
         </Box>
       ) : null}
 

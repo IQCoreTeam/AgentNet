@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useStore } from "../state/store";
+import { AgentIcon } from "../icons";
 
 export function AgentDirectory() {
   const { state, send, loadingAgents } = useStore();
@@ -30,8 +31,8 @@ export function AgentDirectory() {
           className="w-full text-left rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 active:bg-zinc-800 transition-colors"
         >
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-full bg-zinc-700 flex items-center justify-center text-sm shrink-0">
-              🤖
+            <div className="h-8 w-8 rounded-full bg-zinc-700 flex items-center justify-center text-zinc-300 shrink-0">
+              <AgentIcon className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-mono text-zinc-200 truncate">

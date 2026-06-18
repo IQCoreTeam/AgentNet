@@ -1,4 +1,5 @@
 import type { SkillCard } from "../transport/protocol";
+import { SkillIcon } from "../icons";
 
 interface Props {
   card: SkillCard;
@@ -23,8 +24,8 @@ export function SkillCardTile({ card, owned, firing, onOpen }: Props) {
         {card.image ? (
           <img src={card.image} alt="" className="h-10 w-10 rounded-lg object-cover shrink-0" />
         ) : (
-          <div className="h-10 w-10 rounded-lg bg-zinc-800 shrink-0 flex items-center justify-center text-lg">
-            {firing ? "✨" : "🔮"}
+          <div className="h-10 w-10 rounded-lg bg-zinc-800 shrink-0 flex items-center justify-center text-zinc-400">
+            <SkillIcon className={firing ? "h-5 w-5 text-green-400" : "h-5 w-5"} />
           </div>
         )}
         <div className="min-w-0 flex-1">

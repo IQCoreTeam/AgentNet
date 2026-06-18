@@ -40,7 +40,7 @@ export const glyph = {
   thinking: "◔",
   summary: "❖",
   // tool kinds
-  bash: "⚡",
+  bash: "$",
   edit: "✎",
   write: "✚",
   read: "◎",
@@ -64,7 +64,7 @@ export const toolTint: Record<string, string> = {
 export const iggy: Record<string, string[]> = {
   idle: ["◕‿◕", "◠‿◠"],
   thinking: ["◔_◔", "◔ _◔", "◔__◔"],
-  tool: ["⚡◉_◉⚡", "⚡◉‿◉⚡"],
+  tool: ["◉_◉", "◉‿◉"],
   success: ["◕▿◕"],
   error: ["◑︵◑"],
   sleeping: ["-‿- z", "-‿- zz", "-‿- zzz"],

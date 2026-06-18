@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import type { Cli, ImageInput } from "../transport/protocol";
+import { AttachIcon } from "../icons";
 
 const MODELS: Record<Cli, { value: string; label: string }[]> = {
   claude: [
@@ -404,7 +405,7 @@ export function Composer() {
           className="shrink-0 self-end text-zinc-500 hover:text-zinc-300 disabled:opacity-40"
           title="Attach image"
         >
-          📎
+          <AttachIcon className="h-5 w-5" />
         </button>
         <input
           ref={fileInputRef}

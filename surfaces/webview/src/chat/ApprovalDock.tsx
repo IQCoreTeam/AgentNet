@@ -5,6 +5,7 @@ import type {
   ApprovalRequest,
 } from "../transport/protocol";
 import { useStore } from "../state/store";
+import { SkillIcon } from "../icons";
 
 // Pending tool approvals, docked just above the composer (newest first). Most are a
 // yes/no permission (bash/edit/…). Two are different:
@@ -208,8 +209,16 @@ function ApprovalCard({
         {isDanger && (
           <span className="font-bold text-red-400">⚠ DANGER</span>
         )}
-        <span className="font-mono text-emerald-400">
-          {req.kind === "bash" ? "$" : req.kind === "read" ? "□" : isPlan ? "✦" : "✎"}
+        <span className="inline-flex items-center font-mono text-emerald-400">
+          {isPlan ? (
+            <SkillIcon className="h-4 w-4" />
+          ) : req.kind === "bash" ? (
+            "$"
+          ) : req.kind === "read" ? (
+            "□"
+          ) : (
+            "✎"
+          )}
         </span>
         <span className="truncate font-medium">{req.title || req.tool}</span>
         <span className="ml-auto text-xs text-zinc-500">{req.cli}</span>

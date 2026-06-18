@@ -305,7 +305,7 @@ function reducer(state: State, ev: Action): State {
       return { ...state, toast: ev.text };
     // ── market local actions ──
     case "__savePlan":
-      return { ...state, log: [...state.log, { role: "summary" as const, text: `📋 Saved plan\n\n${ev.text}` }] };
+      return { ...state, log: [...state.log, { role: "summary" as const, text: `Saved plan\n\n${ev.text}` }] };
     case "__openMarket":
       return { ...state, marketOpen: true };
     case "__closeMarket":

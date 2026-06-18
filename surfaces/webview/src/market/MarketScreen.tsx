@@ -110,7 +110,6 @@ export function MarketScreen() {
           onClick={() => setView("helius")}
           className="mx-3 mt-2 shrink-0 flex items-center gap-2 rounded-lg border border-amber-700/40 bg-amber-900/20 px-3 py-2 text-xs text-amber-400 active:bg-amber-900/40"
         >
-          <span>⚡</span>
           <span className="flex-1 text-left">Add Helius key for faster results</span>
           <span>›</span>
         </button>

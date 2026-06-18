@@ -5,6 +5,7 @@ import { ApprovalDock } from "./ApprovalDock";
 import { Composer } from "./Composer";
 import { Sessions } from "./Sessions";
 import { ConnectGithub } from "../onboarding/ConnectGithub";
+import { SkillIcon } from "../icons";
 
 // Chat shell: header (sessions toggle + wallet) over the scrolling log, with the approval
 // dock + composer pinned at the bottom. Uses --vvh (visual viewport height) so the layout
@@ -59,8 +60,8 @@ export function ChatScreen() {
         <span className="truncate text-sm font-medium">{activeTitle}</span>
         <div className="ml-auto flex items-center gap-2 shrink-0">
           {state.firingSkill && (
-            <span className="text-xs text-green-400 animate-pulse skill-firing-badge">
-              ✨ {state.firingSkill}
+            <span className="inline-flex items-center gap-1 text-xs text-green-400 animate-pulse skill-firing-badge">
+              <SkillIcon className="h-3.5 w-3.5" /> {state.firingSkill}
             </span>
           )}
           <button

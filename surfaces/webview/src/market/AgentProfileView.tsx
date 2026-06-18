@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useStore } from "../state/store";
 import type { AgentProfile, SkillCard } from "../transport/protocol";
+import { AgentIcon } from "../icons";
 
 interface Props {
   profile: AgentProfile;
@@ -79,7 +80,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                   {card.image ? (
                     <img src={card.image} alt="" className="h-8 w-8 rounded-lg object-cover mb-1.5" />
                   ) : (
-                    <div className="h-8 w-8 rounded-lg bg-zinc-800 flex items-center justify-center text-base mb-1.5">🔮</div>
+                    <div className="h-8 w-8 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-400 mb-1.5"><AgentIcon className="h-4 w-4" /></div>
                   )}
                   <p className="text-xs font-medium text-zinc-200 truncate">{card.name}</p>
                   <p className="text-[10px] text-zinc-500">{card.price ? `${(Number(card.price) / 1e9).toFixed(3)} SOL` : "free"}</p>

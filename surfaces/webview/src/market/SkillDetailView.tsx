@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useStore } from "../state/store";
 import type { SkillDetail } from "../transport/protocol";
+import { SkillIcon } from "../icons";
 
 interface Props {
   detail: SkillDetail;
@@ -46,7 +47,7 @@ export function SkillDetailView({ detail, owned, onBack }: Props) {
           {card.image ? (
             <img src={card.image} alt="" className="h-14 w-14 rounded-xl object-cover shrink-0" />
           ) : (
-            <div className="h-14 w-14 rounded-xl bg-zinc-800 shrink-0 flex items-center justify-center text-2xl">🔮</div>
+            <div className="h-14 w-14 rounded-xl bg-zinc-800 shrink-0 flex items-center justify-center text-zinc-400"><SkillIcon className="h-7 w-7" /></div>
           )}
           <div className="min-w-0">
             <p className="text-sm text-zinc-300">{card.description}</p>
@@ -107,11 +108,11 @@ export function SkillDetailView({ detail, owned, onBack }: Props) {
       </div>
 
       {!owned && (
-        <div className="shrink-0 border-t border-zinc-800 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="shrink-0 border-t border-amber-700/40 bg-gradient-to-t from-amber-900/30 to-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button
             onClick={handleBuy}
             disabled={buying}
-            className="w-full rounded-xl bg-green-600 py-3 text-sm font-semibold text-white active:bg-green-500 disabled:opacity-50"
+            className="w-full rounded-xl bg-amber-400 py-3 text-sm font-semibold text-zinc-900 active:bg-amber-300 disabled:opacity-50"
           >
             {buying ? "Buying…" : priceSol ? `Buy for ${priceSol} SOL` : "Buy (free)"}
           </button>
