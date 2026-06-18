@@ -231,24 +231,30 @@ export function chatHtml(): string {
   /* round "jump to latest" button — hidden until the user scrolls up away from the newest
      message (see the stick-to-bottom logic in the script). */
   #jumpBtn { position: absolute; right: 14px; bottom: 14px; z-index: 6; padding: 0;
-             width: 32px; height: 32px; border-radius: 999px; display: none;
+             width: 30px; height: 30px; border-radius: 999px; display: none;
              align-items: center; justify-content: center; cursor: pointer;
-             color: #fff; background: #000;
-             border: 1px solid rgba(255,255,255,0.9);
-             box-shadow: 0 2px 10px rgba(0,0,0,0.42); opacity: 0.92;
-             transition: opacity 0.12s, transform 0.12s; }
+             color: color-mix(in srgb, var(--vscode-foreground) 72%, transparent);
+             background: color-mix(in srgb, var(--an-bg-2) 82%, #000 18%);
+             border: 1px solid rgba(255,255,255,0.14);
+             box-shadow: 0 4px 12px rgba(0,0,0,0.18); opacity: 0.78;
+             backdrop-filter: blur(8px);
+             transition: opacity 0.12s, transform 0.12s, border-color 0.12s, color 0.12s,
+                         background 0.12s, box-shadow 0.12s; }
   /* light theme: invert — white fill, dark outline */
-  body.vscode-light #jumpBtn { color: #000; background: #fff;
-             border-color: rgba(0,0,0,0.85); box-shadow: 0 2px 10px rgba(0,0,0,0.22); }
+  body.vscode-light #jumpBtn { color: color-mix(in srgb, var(--vscode-foreground) 70%, transparent);
+             background: color-mix(in srgb, var(--an-bg-2) 88%, #fff 12%);
+             border-color: rgba(0,0,0,0.12); box-shadow: 0 4px 12px rgba(0,0,0,0.10); }
   /* engine accent for the unread state — keyed off data-cli, same source the send button uses */
   #jumpBtn[data-cli="claude"] { --eng: var(--claude); }
   #jumpBtn[data-cli="codex"]  { --eng: var(--an-green); }
   /* when there's a NEW message while scrolled up: outline + icon glow in the engine accent
      (claude=orange / codex=green), background stays black/white per theme. */
-  #jumpBtn.hasNew { color: var(--eng); border-color: var(--eng); opacity: 1;
-                    box-shadow: 0 2px 12px color-mix(in srgb, var(--eng) 45%, transparent); }
-  #jumpBtn svg { width: 16px; height: 16px; }
-  #jumpBtn:hover { opacity: 1; transform: translateY(-1px); }
+  #jumpBtn.hasNew { color: var(--eng); border-color: color-mix(in srgb, var(--eng) 88%, transparent);
+                    background: color-mix(in srgb, var(--an-bg-2) 72%, transparent); opacity: 1;
+                    box-shadow: 0 2px 12px color-mix(in srgb, var(--eng) 42%, transparent); }
+  #jumpBtn svg { width: 14px; height: 14px; }
+  #jumpBtn:hover { opacity: 0.96; transform: translateY(-1px);
+                   border-color: color-mix(in srgb, currentColor 28%, transparent); }
   #jumpBtn.show { display: flex; }
 
   /* loading veil while a session is carried to the other engine */
