@@ -11,7 +11,7 @@ import { prepareResume } from "./inject/index.js";
 import { MemorySync, updateSkillsSection } from "../memory/index.js";
 import { getSkillShopping } from "../account/login.js";
 import { setSkillShoppingActive } from "../skill-market/passive.js";
-import { createAgentSdkMcpServer, newVerifyGuard } from "../skill-market/index.js";
+import { createAgentSdkMcpServer, newVerifyGuard, agentNetAllowedTools, AGENTNET_MCP_SERVER } from "../skill-market/index.js";
 import { resolveRpcUrl, hasDasRpc } from "../core/rpc.js";
 import { getCodexApiKey } from "../account/codexAuth.js";
 import type { ApprovalChannel } from "./approval/channel.js";
@@ -24,12 +24,6 @@ import type {
   Wallet,
 } from "./contract.js";
 
-const MARKET_TOOLS = [
-  "mcp__agentnet-marketplace__search_skills",
-  "mcp__agentnet-marketplace__verify_skill",
-  "mcp__agentnet-marketplace__buy_skill",
-  "mcp__agentnet-marketplace__dispose_skill",
-];
 
 // Skill-shopping wiring (plans/skill-shopping.md), built fresh per session from the
 // persisted toggle. ON installs the bundled skill-shopping SKILL.md into both runtimes'
@@ -65,7 +59,7 @@ async function buildPassiveSpawn(
   if (!(await hasDasRpc())) return {};
   const conn = new Connection(await resolveRpcUrl(), "confirmed");
   const server = createAgentSdkMcpServer(conn, wallet, wallet.address, newVerifyGuard());
-  return { mcpServers: { "agentnet-marketplace": server }, allowedTools: MARKET_TOOLS };
+  return { mcpServers: { [AGENTNET_MCP_SERVER]: server }, allowedTools: agentNetAllowedTools() };
 }
 
 // `approval` is the swappable decision source (webview buttons / auto / push). The

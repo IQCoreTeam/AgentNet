@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getAgentNetTools, handleToolCall, newVerifyGuard } from "./index.js";
+import { getAgentNetTools, handleToolCall, newVerifyGuard, createAgentSdkMcpServer } from "./index.js";
 import { readSkillManifest } from "./registry.js";
 import { searchSkills } from "../search/search.js";
 import { buySkill, publishSkill } from "../nft/skill.js";
@@ -49,6 +49,28 @@ describe("skill-market", () => {
       "post_agent_comment",
       "publish_skill",
     ]);
+  });
+
+  it("both transports derive from the one SKILL_TOOLS source — identical names, no drift", () => {
+    // The bug this guards: publish_skill + the comment tools existed in the stdio defs
+    // and in handleToolCall but were never added to the SDK bridge / allowlist, so Claude
+    // agents literally couldn't call them. Now both transports map the same SKILL_TOOLS,
+    // so they expose an identical set by construction.
+    const server: any = createAgentSdkMcpServer(mockConn, signer, "defaultCreator");
+    const sdkNames = Object.keys(server.instance._registeredTools).sort();
+    const stdioNames = getAgentNetTools().map((t) => t.name).sort();
+    expect(sdkNames).toEqual(stdioNames);
+  });
+
+  it("stdio JSON Schema is generated from the Zod source (correct shape + required fields)", () => {
+    const byName = Object.fromEntries(getAgentNetTools().map((t) => [t.name, t.inputSchema as any]));
+    // publish_skill: object, required = the three non-optional Zod fields, optionals excluded.
+    expect(byName.publish_skill.type).toBe("object");
+    expect(byName.publish_skill.required.sort()).toEqual(["description", "name", "text"]);
+    expect(byName.publish_skill.properties.priceSol).toBeDefined();
+    expect(byName.publish_skill.required).not.toContain("priceSol");
+    // search_skills: every field optional → no required array.
+    expect(byName.search_skills.required).toBeUndefined();
   });
 
   it("publish_skill mints via core publishSkill (priceSol → lamports, default 0.1)", async () => {

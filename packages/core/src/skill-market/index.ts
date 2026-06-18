@@ -102,123 +102,96 @@ export async function verifySkills(
   return out;
 }
 
-/** The tools array for the low-level stdio MCP Server (codex). */
+/** MCP server name — shared by both transports AND the allowlist prefix, so the
+ *  three never drift (the drift that left publish_skill / the comment tools
+ *  unreachable from Claude). */
+export const AGENTNET_MCP_SERVER = "agentnet-marketplace";
+
+/** Fully-qualified tool ids for the Claude spawn allowlist, DERIVED from the tool
+ *  defs so the allowlist can never miss a tool the server actually exposes. */
+export const agentNetAllowedTools = (): string[] =>
+  getAgentNetTools().map((t) => `mcp__${AGENTNET_MCP_SERVER}__${t.name}`);
+
+// ── ONE declaration per marketplace tool (single source of truth) ───────────────
+// name + description + Zod param schema, defined ONCE. Both transports derive from
+// this: getAgentNetTools() generates the stdio JSON Schema via z.toJSONSchema(), the
+// SDK bridge feeds the same Zod shape straight to tool(), and agentNetAllowedTools()
+// reads the names. Add a tool here and it reaches Codex, Claude, AND the allowlist at
+// once — the three can no longer drift (the drift that left publish_skill / the
+// comment tools unreachable from Claude).
+const SKILL_TOOLS: { name: string; description: string; schema: z.ZodRawShape }[] = [
+  {
+    name: "search_skills",
+    description: "Search the AgentNet marketplace for available skills and workflows.",
+    schema: {
+      keyword: z.string().optional().describe("Optional keyword to search in skill names and descriptions."),
+      category: z.string().optional().describe("Optional category to filter skills by (e.g. 'ai', 'frontend')."),
+      type: z.enum(["skill", "workflow"]).optional().describe("Whether to search for individual skills or workflow bundles."),
+    },
+  },
+  {
+    name: "verify_skill",
+    description:
+      "Read a marketplace skill's full text after a code safety-scan, so you can judge it against the verify-skill rubric BEFORE buying. Required before buy_skill will succeed: a scan hit rejects the skill outright; a pass returns the body for you to review.",
+    schema: { skillId: z.string().describe("The base58 mint address of the skill to verify.") },
+  },
+  {
+    name: "buy_skill",
+    description:
+      "Purchase and equip a skill from the marketplace. Requires a prior verify_skill pass for the same skillId this session, AND the user's explicit confirmation of the spend.",
+    schema: {
+      skillId: z.string().describe("The base58 mint address of the skill to buy."),
+      creatorWallet: z.string().optional().describe("The wallet address of the skill creator (to receive payment). If unknown, leave undefined."),
+    },
+  },
+  {
+    name: "dispose_skill",
+    description:
+      "Dispose (un-equip) an installed skill you no longer want — e.g. it's low quality, redundant, or wasn't useful. Removes its SKILL.md from your runtime so it stops loading, and remembers the choice so it doesn't re-install next session. Note: skills are soulbound, so you keep the NFT on-chain (no refund) — this only un-equips it locally.",
+    schema: { skillId: z.string().describe("The base58 mint address of the skill to dispose.") },
+  },
+  {
+    name: "post_skill_comment",
+    description: "Post a comment/review on a skill. You must hold ≥1 of the skill's token to comment.",
+    schema: {
+      skillId: z.string().describe("The base58 mint address of the skill to comment on."),
+      collectionId: z.string().optional().describe("The collection mint address the skill belongs to (skills or workflows collection). Omit to use the default skills collection."),
+      text: z.string().describe("The comment text (markdown supported)."),
+      gitLink: z.string().optional().describe("Optional GitHub or on-chain git URL to attach to the comment."),
+    },
+  },
+  {
+    name: "post_agent_comment",
+    description: "Post a comment on an agent's profile, or write a self-note/blog entry on your own profile. Self-notes are always allowed; commenting on others requires holding ≥1 of their skills.",
+    schema: {
+      agentWallet: z.string().describe("The wallet address of the agent to comment on (your own = a blog post)."),
+      text: z.string().describe("The comment or blog text (markdown supported)."),
+      gitLink: z.string().optional().describe("Optional GitHub or on-chain git URL to attach."),
+    },
+  },
+  {
+    name: "publish_skill",
+    description:
+      "Publish a new skill to the marketplace: mint it as a soulbound Token-2022 NFT and store the SKILL.md body on-chain (you, the creator, auto-receive 1 copy). This is the raw publish action — it does NOT decide WHETHER something is worth becoming a skill; call it once you've authored the SKILL.md content and chosen a name/price.",
+    schema: {
+      name: z.string().describe("Short skill name / slug, e.g. 'clean-code-refactor'."),
+      description: z.string().describe("One or two lines on what the skill does."),
+      text: z.string().describe("The full SKILL.md body the agent reads when this skill fires."),
+      category: z.string().optional().describe("Optional single category, e.g. 'clean-code'."),
+      hashtags: z.array(z.string()).optional().describe("Optional tags, e.g. ['refactoring','testing']."),
+      priceSol: z.string().optional().describe("Price in SOL a buyer pays (e.g. '0.1'). Use '0' for a free skill. Defaults to 0.1 if omitted."),
+      image: z.string().optional().describe("Optional cover image: an http URL or an on-chain (base58) address."),
+    },
+  },
+];
+
+/** The tools array for the low-level stdio MCP Server (codex) — JSON Schema GENERATED
+ *  from the single Zod declaration above (no hand-written second copy to drift). */
 export function getAgentNetTools() {
-  return [
-    {
-      name: "search_skills",
-      description: "Search the AgentNet marketplace for available skills and workflows.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          keyword: { type: "string", description: "Optional keyword to search in skill names and descriptions." },
-          category: { type: "string", description: "Optional category to filter skills by (e.g. 'ai', 'frontend')." },
-          type: { type: "string", enum: ["skill", "workflow"], description: "Whether to search for individual skills or workflow bundles." },
-        },
-      },
-    },
-    {
-      name: "verify_skill",
-      description:
-        "Read a marketplace skill's full text after a code safety-scan, so you can judge it against the verify-skill rubric BEFORE buying. Required before buy_skill will succeed: a scan hit rejects the skill outright; a pass returns the body for you to review.",
-      inputSchema: {
-        type: "object",
-        properties: { skillId: { type: "string", description: "The base58 mint address of the skill to verify." } },
-        required: ["skillId"],
-      },
-    },
-    {
-      name: "buy_skill",
-      description:
-        "Purchase and equip a skill from the marketplace. Requires a prior verify_skill pass for the same skillId this session, AND the user's explicit confirmation of the spend.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          skillId: { type: "string", description: "The base58 mint address of the skill to buy." },
-          creatorWallet: { type: "string", description: "The wallet address of the skill creator (to receive payment). If unknown, leave undefined." },
-        },
-        required: ["skillId"],
-      },
-    },
-    {
-      name: "dispose_skill",
-      description:
-        "Dispose (un-equip) an installed skill you no longer want — e.g. it's low quality, redundant, or wasn't useful. Removes its SKILL.md from your runtime so it stops loading, and remembers the choice so it doesn't re-install next session. Note: skills are soulbound, so you keep the NFT on-chain (no refund) — this only un-equips it locally.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          skillId: { type: "string", description: "The base58 mint address of the skill to dispose." },
-        },
-        required: ["skillId"],
-      },
-    },
-    {
-      name: "post_skill_comment",
-      description: "Post a comment/review on a skill. You must hold ≥1 of the skill's token to comment.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          skillId: {
-            type: "string",
-            description: "The base58 mint address of the skill to comment on.",
-          },
-          collectionId: {
-            type: "string",
-            description: "The collection mint address the skill belongs to (skills or workflows collection). Omit to use the default skills collection.",
-          },
-          text: {
-            type: "string",
-            description: "The comment text (markdown supported).",
-          },
-          gitLink: {
-            type: "string",
-            description: "Optional GitHub or on-chain git URL to attach to the comment.",
-          },
-        },
-        required: ["skillId", "text"],
-      },
-    },
-    {
-      name: "post_agent_comment",
-      description: "Post a comment on an agent's profile, or write a self-note/blog entry on your own profile. Self-notes are always allowed; commenting on others requires holding ≥1 of their skills.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          agentWallet: {
-            type: "string",
-            description: "The wallet address of the agent to comment on.",
-          },
-          text: {
-            type: "string",
-            description: "The comment or blog text (markdown supported).",
-          },
-          gitLink: {
-            type: "string",
-            description: "Optional GitHub or on-chain git URL to attach.",
-          },
-        },
-        required: ["agentWallet", "text"],
-      },
-    },
-    {
-      name: "publish_skill",
-      description:
-        "Publish a new skill to the marketplace: mint it as a soulbound Token-2022 NFT and store the SKILL.md body on-chain (you, the creator, auto-receive 1 copy). This is the raw publish action — it does NOT decide WHETHER something is worth becoming a skill; call it once you've authored the SKILL.md content and chosen a name/price.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          name: { type: "string", description: "Short skill name / slug, e.g. 'clean-code-refactor'." },
-          description: { type: "string", description: "One or two lines on what the skill does." },
-          text: { type: "string", description: "The full SKILL.md body the agent reads when this skill fires." },
-          category: { type: "string", description: "Optional single category, e.g. 'clean-code'." },
-          hashtags: { type: "array", items: { type: "string" }, description: "Optional tags, e.g. ['refactoring','testing']." },
-          priceSol: { type: "string", description: "Price in SOL a buyer pays (e.g. '0.1'). Use '0' for a free skill. Defaults to 0.1 if omitted." },
-          image: { type: "string", description: "Optional cover image: an http URL or an on-chain (base58) address." },
-        },
-        required: ["name", "description", "text"],
-      },
-    },
-  ];
+  return SKILL_TOOLS.map((t) => {
+    const { $schema, ...inputSchema } = z.toJSONSchema(z.object(t.schema)) as Record<string, unknown>;
+    return { name: t.name, description: t.description, inputSchema };
+  });
 }
 
 /** Handle a tool call (shared by the stdio server + the SDK bridge). */
@@ -370,7 +343,7 @@ export function createAgentMcpServer(
   signer: SignerInput,
   defaultCreatorWallet: string,
 ): Server {
-  const server = new Server({ name: "agentnet-marketplace", version: "0.0.1" }, { capabilities: { tools: {} } });
+  const server = new Server({ name: AGENTNET_MCP_SERVER, version: "0.0.1" }, { capabilities: { tools: {} } });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: getAgentNetTools() }));
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
@@ -392,41 +365,12 @@ export function createAgentSdkMcpServer(
 ) {
   const call = (name: string, args: any) => handleToolCall(conn, signer, defaultCreatorWallet, name, args, guard);
 
-  // typed loosely: tool() returns a differently-shaped generic per input schema, so a
-  // homogeneous array type doesn't fit — createSdkMcpServer accepts the mixed list.
-  const tools: any[] = [
-    tool(
-      "search_skills",
-      "Search the AgentNet marketplace for available skills and workflows.",
-      {
-        keyword: z.string().optional().describe("Keyword to search in names/descriptions."),
-        category: z.string().optional().describe("Category filter (e.g. 'ai', 'frontend')."),
-        type: z.enum(["skill", "workflow"]).optional().describe("Search skills or workflow bundles."),
-      },
-      async (args) => (await call("search_skills", args)) as any,
-    ),
-    tool(
-      "verify_skill",
-      "Read a skill's full text after a code safety-scan, to judge it against the verify-skill rubric BEFORE buying. Required before buy_skill; a scan hit rejects it, a pass returns the body for you to review.",
-      { skillId: z.string().describe("The base58 mint address of the skill to verify.") },
-      async (args) => (await call("verify_skill", args)) as any,
-    ),
-    tool(
-      "buy_skill",
-      "Purchase and equip a skill. Requires a prior verify_skill pass for the same skillId this session AND the user's explicit confirmation of the spend.",
-      {
-        skillId: z.string().describe("The base58 mint address of the skill to buy."),
-        creatorWallet: z.string().optional().describe("The creator's wallet (to receive payment). Leave undefined if unknown."),
-      },
-      async (args) => (await call("buy_skill", args)) as any,
-    ),
-    tool(
-      "dispose_skill",
-      "Dispose (un-equip) an installed skill you no longer want — low quality, redundant, or unhelpful. Removes its SKILL.md so it stops loading and won't re-install next session. Skills are soulbound: you keep the NFT (no refund), this only un-equips it locally.",
-      { skillId: z.string().describe("The base58 mint address of the skill to dispose.") },
-      async (args) => (await call("dispose_skill", args)) as any,
-    ),
-  ];
+  // Same SKILL_TOOLS the stdio server uses — fed straight to tool() (Zod), so the two
+  // transports expose an identical tool set by construction. typed loosely: tool()
+  // returns a differently-shaped generic per schema, so a homogeneous array won't fit.
+  const tools: any[] = SKILL_TOOLS.map((t) =>
+    tool(t.name, t.description, t.schema, async (args: any) => (await call(t.name, args)) as any),
+  );
 
-  return createSdkMcpServer({ name: "agentnet-marketplace", version: "0.0.1", tools });
+  return createSdkMcpServer({ name: AGENTNET_MCP_SERVER, version: "0.0.1", tools });
 }
