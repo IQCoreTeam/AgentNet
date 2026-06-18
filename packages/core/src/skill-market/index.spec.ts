@@ -3,12 +3,12 @@ import { getAgentNetTools, handleToolCall, newVerifyGuard } from "./index.js";
 import { searchSkills } from "../search/search.js";
 import { buySkill, publishSkill } from "../nft/skill.js";
 import { postNote, postAgentNote } from "../notes/notes.js";
-import { readSkillText } from "../nft/token2022.js";
+import { readSkillText, readSkillMintMetadata } from "../nft/token2022.js";
 import { Keypair } from "@solana/web3.js";
 
 vi.mock("../search/search.js", () => ({ searchSkills: vi.fn() }));
 vi.mock("../nft/skill.js", () => ({ buySkill: vi.fn(), publishSkill: vi.fn() }));
-vi.mock("../nft/token2022.js", () => ({ readSkillText: vi.fn() }));
+vi.mock("../nft/token2022.js", () => ({ readSkillText: vi.fn(), readSkillMintMetadata: vi.fn() }));
 vi.mock("../notes/notes.js", () => ({
   postNote: vi.fn(),
   postAgentNote: vi.fn(),
@@ -89,8 +89,10 @@ describe("skill-market", () => {
   it("should handle buy_skill tool call", async () => {
     vi.mocked(buySkill).mockResolvedValue("mockTxSig");
     const result = await handleToolCall(mockConn, signer, "defaultCreator", "buy_skill", { skillId: "skill1" });
-    expect(result.content[0].text).toContain("Successfully purchased");
+    expect(result.content[0].text).toContain("Purchased skill");
     expect(result.content[0].text).toContain("mockTxSig");
+    // buy now also equips: it reads the mint's metadata to install the SKILL.md.
+    expect(readSkillMintMetadata).toHaveBeenCalled();
     // Price is read from the item's on-chain config now — the client doesn't pass it.
     expect(buySkill).toHaveBeenCalledWith(mockConn, signer, {
       skillId: "skill1",
@@ -183,7 +185,7 @@ describe("skill-market", () => {
     expect(guard.isVerified("skill1")).toBe(true);
 
     const bought = await handleToolCall(mockConn, signer, "defaultCreator", "buy_skill", { skillId: "skill1" }, guard);
-    expect(bought.content[0].text).toContain("Successfully purchased");
+    expect(bought.content[0].text).toContain("Purchased skill");
     expect(buySkill).toHaveBeenCalledTimes(1);
   });
 

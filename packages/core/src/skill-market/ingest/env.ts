@@ -141,10 +141,9 @@ export async function marketplaceEnv(wallet: Wallet) {
     // program pays the creator on a priced buy. Falls back to the buyer if absent.
     async buySkill(skillId: string, creatorWallet?: string) {
       try {
-        await buySkill(conn, wallet, {
-          skillId, buyerWallet: wallet.address, creatorWallet: creatorWallet || wallet.address,
-        });
-        const slug = await skills.installBoughtAll(skillId); // equip: drop SKILL.md into skills dirs
+        // buy on-chain + equip (install SKILL.md) in one shared call — the SAME path the
+        // agent's buy_skill MCP tool uses, so a UI buy and an agent buy equip identically.
+        const { slug } = await skills.buyAndEquip(wallet, skillId, creatorWallet || wallet.address);
         return { ok: true, slug: slug ?? undefined };
       } catch (e) {
         return { ok: false, error: e instanceof Error ? e.message : String(e) };
