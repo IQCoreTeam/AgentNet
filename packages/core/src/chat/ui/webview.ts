@@ -905,6 +905,9 @@ export function chatHtml(): string {
   #send:disabled { background: var(--an-bg-2, var(--an-bg-1)); color: var(--vscode-foreground);
                    opacity: 0.4; cursor: default; }
   #send svg { width: 15px; height: 15px; flex: none; }
+  /* inline drawn icons (replace the old decorative emoji): size to the
+     surrounding text via 1em + inherit its color via currentColor. */
+  .anic { width: 1em; height: 1em; flex: none; vertical-align: -0.14em; }
   #send .lbl { display: none; }
   #send .ic-stop { display: none; }
   #send.stopping .ic-send { display: none; }
@@ -1363,7 +1366,7 @@ export function chatHtml(): string {
             </span>
             <span id="effortWrap">
               <button id="effortBtn" title="Reasoning effort: how deeply the model thinks before replying">
-                <span class="mglyph">⚡</span><span id="effortLabel">effort</span><span class="mcaret">▾</span>
+                <span class="mglyph"><svg class="anic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 19v-4M12 19v-9M19 19V6"/></svg></span><span id="effortLabel">effort</span><span class="mcaret">▾</span>
               </button>
               <div id="effortMenu" style="display:none"></div>
             </span>
@@ -2250,7 +2253,7 @@ export function chatHtml(): string {
       row.appendChild(card);
     } else {
       const card = document.createElement('div'); card.className = 'toolCard op';
-      const icon = t.name === 'Read' ? '📖' : t.name === 'Write' ? '✎' : '•';
+      const icon = t.name === 'Read' ? '<svg class="anic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h7l5 5v13H6Z"/><path d="M13 3v5h5"/><path d="M9 13h6M9 16.5h6"/></svg>' : t.name === 'Write' ? '✎' : '•';
       card.innerHTML = '<span class="icon">' + icon + '</span>';
       card.appendChild(document.createTextNode(msg.text || t.name || 'tool'));
       row.appendChild(card);
@@ -2285,7 +2288,7 @@ export function chatHtml(): string {
       card.classList.add('skillForge');
       const stars = document.createElement('div'); stars.className = 'forgeStars';
       for (let i = 0; i < 6; i++) {
-        const s = document.createElement('span'); s.className = 'st'; s.textContent = i % 2 === 0 ? '✦' : '✧';
+        const s = document.createElement('span'); s.className = 'st'; s.innerHTML = '<svg class="anic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2 14.4 9.6 22 12 14.4 14.4 12 22 9.6 14.4 2 12 9.6 9.6Z"/></svg>';
         s.style.left = (8 + Math.random() * 84) + '%';
         s.style.top = (12 + Math.random() * 70) + '%';
         s.style.animationDuration = (3.2 + Math.random() * 2.4) + 's';
@@ -2406,11 +2409,13 @@ export function chatHtml(): string {
     const isDanger = req.risk === 'danger';
     const head = document.createElement('div'); head.className = 'apHead' + (isDanger ? ' apDanger' : '');
     const glyphEl = document.createElement('span'); glyphEl.className = 'apk';
-    glyphEl.textContent = req.kind === 'bash' ? '$' : req.kind === 'read' ? '📖' : isPlan ? '✦' : isPublish ? '✨' : '✎';
+    var skSvg = '<svg class="anic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2 14.4 9.6 22 12 14.4 14.4 12 22 9.6 14.4 2 12 9.6 9.6Z"/></svg>';
+    var rdSvg = '<svg class="anic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h7l5 5v13H6Z"/><path d="M13 3v5h5"/><path d="M9 13h6M9 16.5h6"/></svg>';
+    glyphEl.innerHTML = req.kind === 'bash' ? '$' : req.kind === 'read' ? rdSvg : isPlan ? skSvg : isPublish ? skSvg : '✎';
     head.appendChild(glyphEl);
     if (isDanger) {
       const warn = document.createElement('span'); warn.style.cssText = 'color:var(--vscode-errorForeground,#f44);font-weight:700;margin-right:4px';
-      warn.textContent = '⚠ DANGER ·'; head.appendChild(warn);
+      warn.innerHTML = '<svg class="anic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 21 19.5H3L12 3.5Z"/><path d="M12 10v4"/><path d="M12 17h.01"/></svg> DANGER ·'; head.appendChild(warn);
     }
     const ttl = document.createElement('span'); ttl.className = 'apTitle';
     ttl.textContent = isPublish ? ('Forge skill: ' + ((req.input && req.input.name) || 'new skill')) : (req.title || req.tool);
@@ -2737,7 +2742,7 @@ export function chatHtml(): string {
     }
     if (info.count) {
       const chip = document.createElement('span'); chip.className = 'imgChip';
-      chip.textContent = '🖼 ' + info.count + (info.count > 1 ? ' images' : ' image');
+      chip.innerHTML = '<svg class="anic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m3.5 17 4.5-4.5 3.5 3.5 4-4 5 5"/></svg>' + info.count + (info.count > 1 ? ' images' : ' image');
       return chip;
     }
     return null;
