@@ -386,6 +386,49 @@ export function chatHtml(): string {
   .approvalCard { border: 1px solid var(--an-green-line); border-radius: var(--an-radius-sm);
                   background: var(--an-green-dim); overflow: hidden;
                   box-shadow: 0 4px 16px rgba(0,0,0,0.25); }
+  /* ── skill-forge: the magical glow ONLY on the publish_skill approval card ── */
+  .approvalCard.skillForge {
+    position: relative; border-color: transparent;
+    background:
+      linear-gradient(var(--an-bg-2,#15161c), var(--an-bg-2,#15161c)) padding-box,
+      linear-gradient(125deg,#b388ff,#7c4dff,#4dd0e1,#b388ff) border-box;
+    border: 1.5px solid transparent;
+    animation: forgeGlow 3.2s ease-in-out infinite;
+  }
+  @keyframes forgeGlow {
+    0%,100% { box-shadow: 0 0 18px -6px rgba(124,77,255,0.5), 0 0 0 1px rgba(124,77,255,0.22); }
+    50%     { box-shadow: 0 0 32px -2px rgba(77,208,225,0.6), 0 0 0 1px rgba(179,136,255,0.45); }
+  }
+  /* slow-rotating aura behind the content */
+  .approvalCard.skillForge::before {
+    content:''; position:absolute; inset:-45%; z-index:0; pointer-events:none;
+    background: conic-gradient(from 0deg, transparent 0 18%, rgba(124,77,255,0.20) 33%,
+                transparent 52%, rgba(77,208,225,0.16) 72%, transparent 100%);
+    animation: forgeSpin 9s linear infinite;
+  }
+  @keyframes forgeSpin { to { transform: rotate(360deg); } }
+  /* keep all card content above the aura + stars */
+  .approvalCard.skillForge > .apHead,
+  .approvalCard.skillForge > .apBody,
+  .approvalCard.skillForge > .apActions { position: relative; z-index: 2; }
+  .approvalCard.skillForge .apk { color:#cdb4ff; text-shadow:0 0 8px rgba(179,136,255,0.9); }
+  .approvalCard.skillForge .forgeBody { color: var(--vscode-foreground); }
+  /* drifting twinkle stars */
+  .forgeStars { position:absolute; inset:0; z-index:1; pointer-events:none; overflow:hidden; }
+  .forgeStars .st { position:absolute; bottom:-12px; color:#d9c6ff; opacity:0;
+                    animation-name: forgeRise; animation-timing-function: linear;
+                    animation-iteration-count: infinite;
+                    text-shadow: 0 0 6px rgba(179,136,255,0.95); }
+  @keyframes forgeRise {
+    0%   { transform: translateY(0) scale(0.5) rotate(0deg); opacity:0; }
+    15%  { opacity:0.95; }
+    85%  { opacity:0.95; }
+    100% { transform: translateY(-140px) scale(1.1) rotate(170deg); opacity:0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .approvalCard.skillForge, .approvalCard.skillForge::before, .forgeStars .st { animation: none; }
+    .forgeStars { display:none; }
+  }
   .apHead { display: flex; align-items: center; gap: 8px; padding: 8px 12px;
             font-family: var(--vscode-editor-font-family); font-size: 0.85em; }
   .apHead .apk { color: var(--an-green); font-weight: 700; }
@@ -2159,6 +2202,22 @@ export function chatHtml(): string {
   function renderApproval(req) {
     const card = document.createElement('div');
     card.className = 'approvalCard';
+    // ONLY the skill-publish approval gets the magical "forge" treatment — a glowing
+    // aura + drifting twinkle stars. Every other approval stays the plain green card.
+    const isPublish = /publish_skill/.test(req.tool || '') || /publish_skill/.test(req.title || '');
+    if (isPublish) {
+      card.classList.add('skillForge');
+      const stars = document.createElement('div'); stars.className = 'forgeStars';
+      for (let i = 0; i < 14; i++) {
+        const s = document.createElement('span'); s.className = 'st'; s.textContent = i % 3 === 0 ? '✦' : '✧';
+        s.style.left = (4 + Math.random() * 92) + '%';
+        s.style.animationDuration = (2.6 + Math.random() * 2.6) + 's';
+        s.style.animationDelay = (Math.random() * 3.2) + 's';
+        s.style.fontSize = (8 + Math.random() * 9) + 'px';
+        stars.appendChild(s);
+      }
+      card.appendChild(stars);
+    }
 
     // ── AskUserQuestion: a choice/free-text prompt (claude/codex both route here). The
     // user's answer becomes the tool result, so this card renders options as chips plus
@@ -2270,13 +2329,14 @@ export function chatHtml(): string {
     const isDanger = req.risk === 'danger';
     const head = document.createElement('div'); head.className = 'apHead' + (isDanger ? ' apDanger' : '');
     const glyphEl = document.createElement('span'); glyphEl.className = 'apk';
-    glyphEl.textContent = req.kind === 'bash' ? '$' : req.kind === 'read' ? '📖' : isPlan ? '✦' : '✎';
+    glyphEl.textContent = req.kind === 'bash' ? '$' : req.kind === 'read' ? '📖' : isPlan ? '✦' : isPublish ? '✨' : '✎';
     head.appendChild(glyphEl);
     if (isDanger) {
       const warn = document.createElement('span'); warn.style.cssText = 'color:var(--vscode-errorForeground,#f44);font-weight:700;margin-right:4px';
       warn.textContent = '⚠ DANGER ·'; head.appendChild(warn);
     }
-    const ttl = document.createElement('span'); ttl.className = 'apTitle'; ttl.textContent = req.title || req.tool;
+    const ttl = document.createElement('span'); ttl.className = 'apTitle';
+    ttl.textContent = isPublish ? ('Forge skill: ' + ((req.input && req.input.name) || 'new skill')) : (req.title || req.tool);
     head.appendChild(ttl);
     const tag = document.createElement('span'); tag.className = 'apTag'; tag.textContent = req.cli;
     head.appendChild(tag);
@@ -2321,6 +2381,19 @@ export function chatHtml(): string {
     } else if (req.file) {
       const f = document.createElement('div'); f.className = 'apBody'; f.textContent = req.file;
       card.appendChild(f);
+    } else if (isPublish && req.input) {
+      // show WHAT is being forged: name + description + price, so the approval is meaningful
+      const box = document.createElement('div'); box.className = 'apBody forgeBody';
+      const nm = document.createElement('div'); nm.style.cssText = 'font-weight:600;font-size:1.02em'; nm.textContent = req.input.name || 'new skill';
+      box.appendChild(nm);
+      if (req.input.description) {
+        const d = document.createElement('div'); d.style.cssText = 'opacity:0.85;font-size:0.85em;margin-top:2px'; d.textContent = req.input.description; box.appendChild(d);
+      }
+      const priceSol = req.input.priceSol;
+      const priceTxt = priceSol == null ? '0.1 SOL' : String(priceSol) === '0' ? 'free' : priceSol + ' SOL';
+      const meta = document.createElement('div'); meta.style.cssText = 'margin-top:5px;font-size:0.8em;opacity:0.7'; meta.textContent = 'mint a soulbound NFT · price ' + priceTxt;
+      box.appendChild(meta);
+      card.appendChild(box);
     }
 
     const actions = document.createElement('div'); actions.className = 'apActions';

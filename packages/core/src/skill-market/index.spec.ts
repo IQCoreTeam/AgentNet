@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getAgentNetTools, handleToolCall, newVerifyGuard, createAgentSdkMcpServer } from "./index.js";
+import { getAgentNetTools, handleToolCall, newVerifyGuard, createAgentSdkMcpServer, agentNetAllowedTools } from "./index.js";
 import { readSkillManifest } from "./registry.js";
 import { searchSkills } from "../search/search.js";
 import { buySkill, publishSkill } from "../nft/skill.js";
@@ -60,6 +60,15 @@ describe("skill-market", () => {
     const sdkNames = Object.keys(server.instance._registeredTools).sort();
     const stdioNames = getAgentNetTools().map((t) => t.name).sort();
     expect(sdkNames).toEqual(stdioNames);
+  });
+
+  it("spend/mint tools are NOT auto-allowed (must hit the approval card); read tools are", () => {
+    const allow = agentNetAllowedTools();
+    expect(allow).toContain("mcp__agentnet-marketplace__search_skills");
+    expect(allow).toContain("mcp__agentnet-marketplace__verify_skill");
+    // publish mints + buy spends on-chain → both must prompt, so they're excluded.
+    expect(allow).not.toContain("mcp__agentnet-marketplace__publish_skill");
+    expect(allow).not.toContain("mcp__agentnet-marketplace__buy_skill");
   });
 
   it("stdio JSON Schema is generated from the Zod source (correct shape + required fields)", () => {

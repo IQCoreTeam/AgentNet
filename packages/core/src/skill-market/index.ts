@@ -107,10 +107,20 @@ export async function verifySkills(
  *  unreachable from Claude). */
 export const AGENTNET_MCP_SERVER = "agentnet-marketplace";
 
-/** Fully-qualified tool ids for the Claude spawn allowlist, DERIVED from the tool
- *  defs so the allowlist can never miss a tool the server actually exposes. */
+/** Tools that must ASK the user instead of auto-executing: kept OUT of the auto-allow
+ *  list so the SDK routes them through canUseTool → the approval card. These spend or
+ *  mint on-chain (publish_skill mints a new asset — also what surfaces the skill-forge
+ *  approval UI; buy_skill spends SOL), so both always prompt. Read tools (search/verify)
+ *  stay auto-allowed. */
+const PROMPT_BEFORE_USE = new Set<string>(["publish_skill", "buy_skill"]);
+
+/** Fully-qualified tool ids auto-allowed for the Claude spawn (no permission prompt),
+ *  DERIVED from the tool defs minus the prompt-first tools — so the list can neither
+ *  miss a tool the server exposes nor silently auto-run one that should ask first. */
 export const agentNetAllowedTools = (): string[] =>
-  getAgentNetTools().map((t) => `mcp__${AGENTNET_MCP_SERVER}__${t.name}`);
+  getAgentNetTools()
+    .filter((t) => !PROMPT_BEFORE_USE.has(t.name))
+    .map((t) => `mcp__${AGENTNET_MCP_SERVER}__${t.name}`);
 
 // ── ONE declaration per marketplace tool (single source of truth) ───────────────
 // name + description + Zod param schema, defined ONCE. Both transports derive from
