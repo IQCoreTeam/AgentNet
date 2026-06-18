@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   ApprovalOutcome,
   ApprovalQuestionResponse,
@@ -23,6 +23,9 @@ export function ApprovalDock() {
   ) {
     resolveApproval(req.id);
     send({ type: "approvalDecision", id: req.id, outcome, ...extra });
+    if (req.kind === "plan" && outcome === "once") {
+      send({ type: "mode", mode: "acceptEdits" });
+    }
   }
 
   return (
@@ -175,12 +178,31 @@ function ApprovalCard({
   const [editedCmd, setEditedCmd] = useState(req.command ?? "");
   const [showReason, setShowReason] = useState(false);
   const [reason, setReason] = useState("");
+  const cardRef = useRef<HTMLDivElement>(null);
+  const { savePlan, send, resolveApproval } = useStore();
+
+  // Plan cards: Enter = approve, Escape = save plan to log + keep planning (Claude Code parity)
+  useEffect(() => {
+    if (!isPlan) return;
+    cardRef.current?.focus();
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onDecide("once"); }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (req.plan) savePlan(req.plan);
+        resolveApproval(req.id);
+        send({ type: "interrupt" });
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isPlan]);
 
   const borderColor = isDanger ? "border-red-700/60" : "border-emerald-700/50";
   const bgColor = isDanger ? "bg-red-950/20" : "bg-emerald-950/30";
 
   return (
-    <div className={`overflow-hidden rounded-lg border ${borderColor} ${bgColor} text-sm`}>
+    <div ref={cardRef} tabIndex={-1} className={`overflow-hidden rounded-lg border ${borderColor} ${bgColor} text-sm outline-none`}>
       {/* header */}
       <div className="flex items-center gap-2 px-3 py-1.5">
         {isDanger && (
@@ -280,9 +302,12 @@ function ApprovalCard({
             <button autoFocus onClick={() => onDecide("once")} className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white">
               Approve plan
             </button>
-            <button onClick={() => onDecide("deny")} className="rounded bg-red-900/60 px-3 py-1 text-xs text-red-200">
+            <button onClick={() => { if (req.plan) savePlan(req.plan); onDecide("deny"); }} className="rounded bg-red-900/60 px-3 py-1 text-xs text-red-200">
               Keep planning
             </button>
+            <span className="ml-auto text-[10px] text-zinc-600 self-center select-none">
+              ↩ approve · esc interrupt
+            </span>
           </>
         ) : editMode ? (
           <>

@@ -80,6 +80,7 @@ export interface Engine {
   send(text: string, images?: ImageInput[]): void;
   interrupt(): void; // stop the current turn, keep the session alive
   stop(): void;
+  updateMode?(mode: string): void;
 }
 
 export interface SpawnOpts {
@@ -234,6 +235,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
   const cb = callbacks();
   const approval = opts.approval ?? autoApprove();
   let sessionId = opts.sessionId ?? "";
+  let currentMode = opts.mode;
 
   // streaming input: an async queue the SDK pulls user turns from. send() pushes;
   // the generator yields them. This keeps ONE query() alive across many turns.
@@ -258,6 +260,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
   // default and killing the per-file-read approval spam.
   const allowed = loadPersistentWhitelist();
   const READONLY = new Set(["Read", "Glob", "Grep", "LS", "NotebookRead", "TodoWrite", "WebFetch", "WebSearch"]);
+  const EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write"]);
   const actionKey = (req: ApprovalRequest) =>
     req.kind === "bash" ? `bash:${req.command}` : `${req.tool}:${req.file || ""}`;
 
@@ -271,6 +274,10 @@ function claudeEngine(opts: SpawnOpts): Engine {
       return { behavior: "deny" as const, message: "Tool use is disabled for side-channel (/btw) queries." };
     }
     if (READONLY.has(toolName)) return { behavior: "allow" as const, updatedInput: input };
+    if (currentMode === "bypassPermissions") return { behavior: "allow" as const, updatedInput: input };
+    if (currentMode === "acceptEdits" && EDIT_TOOLS.has(toolName)) {
+      return { behavior: "allow" as const, updatedInput: input };
+    }
     const req = toApprovalRequest("claude", sessionId, toolName, input, opts.cwd);
     const key = actionKey(req);
     if (allowed.has(key)) return { behavior: "allow" as const, updatedInput: input };
@@ -382,6 +389,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
     // the next send resumes the same session. (stop() also sets closed=true to end it.)
     interrupt: () => { void q.interrupt?.().catch(() => {}); },
     stop: () => { closed = true; wake?.(); void q.interrupt?.().catch(() => {}); },
+    updateMode: (mode) => { currentMode = mode; },
   };
 }
 
@@ -821,6 +829,7 @@ function codexEngine(opts: SpawnOpts): Engine {
       pendingImgCleanup?.(); pendingImgCleanup = null;
       child.kill();
     },
+    updateMode: (mode) => {},
   };
 }
 

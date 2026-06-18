@@ -220,6 +220,9 @@ export function createRuntime(
           stopped = true; // mark so the resulting exit isn't reported as a failure
           cli.stop();
         },
+        updateMode(mode) {
+          cli.updateMode?.(mode);
+        },
       };
     },
 

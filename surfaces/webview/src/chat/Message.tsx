@@ -10,8 +10,17 @@ export function Message({ msg }: { msg: ChatMessage }) {
   if (msg.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] min-w-0 overflow-hidden rounded-2xl bg-zinc-700 px-3.5 py-2 text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+        <div
+          className={`max-w-[85%] min-w-0 overflow-hidden rounded-2xl px-3.5 py-2 text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere] ${
+            msg._pending
+              ? "bg-zinc-700/50 text-zinc-400"
+              : "bg-zinc-700 text-white"
+          }`}
+        >
           {msg.text}
+          {msg._pending && (
+            <span className="ml-2 inline-block animate-pulse text-[10px] text-zinc-500">⏳</span>
+          )}
         </div>
       </div>
     );

@@ -6,8 +6,8 @@ import { colors, glyph } from "../theme.js";
 // Focusable rows, in order. settings first, then one row per owned skill, then the market
 // entry. A single focus index walks all of them (Ctrl+S enters; [tab]/[↑↓] move). The
 // key on a settings row drives onEdit; skill/market rows are handled by their own index.
-export type PanelField = "wallet" | "cloud" | "engine" | "github" | "helius";
-const SETTINGS: PanelField[] = ["wallet", "cloud", "engine", "github", "helius"];
+export type PanelField = "wallet" | "cloud" | "engine" | "helius";
+const SETTINGS: PanelField[] = ["wallet", "cloud", "engine", "helius"];
 
 // Where to get a (free) Helius key — shown when the user opens the key editor.
 const HELIUS_QUICKSTART = "https://www.helius.dev/docs/quickstart";
@@ -75,26 +75,16 @@ export function WelcomePanel({
 }: {
   name?: string;
   walletAddr: string;
-  // { kind, account? } from getStorageInfo(); null = local only (no cloud mirror).
   cloud: { kind: string; account?: string } | null;
   engine: "claude" | "codex";
-  // maskedHeliusKey() → "••••AB12", or null when no key is set.
   heliusMasked: string | null;
-  // the wallet's owned skills (hydrated id+name). null = still loading; [] = none owned.
   skills: OwnedSkill[] | null;
-  // bundled/built-in skill slugs present on disk (skill-shopping, make-skill). Rendered as
-  // a small plain list — these aren't bought NFTs, so no color/effects and not focusable.
   passive?: string[];
-  // hasDasRpc(): false on the public default RPC, which can't read owned skills.
-  // Lets the empty state say "set a Helius key" instead of a misleading "none yet".
   dasReady: boolean;
-  // when true, the panel has focus and owns tab/arrow/enter (entered via Ctrl+S in Chat).
   active: boolean;
   onEdit: (field: PanelField) => void;
-  // commit a new Helius key (raw — SDK normalizes URL/bare). "" clears it (use default RPC).
   onSetHelius: (key: string) => void;
   onOpenMarket: () => void;
-  // Esc leaves the panel and returns focus to the composer.
   onExit: () => void;
 }) {
   const [focus, setFocus] = React.useState(0);
@@ -111,11 +101,10 @@ export function WelcomePanel({
   function activate(i: number) {
     if (i < SETTINGS.length) {
       const field = SETTINGS[i];
-      if (field === "helius") return setKeyInput(""); // open the key line editor (blank)
+      if (field === "helius") return setKeyInput("");
       return onEdit(field);
     }
     if (i === marketIdx) return onOpenMarket();
-    // a skill row — nothing to do yet (detail/market view comes later).
   }
 
   useInput(
@@ -173,7 +162,6 @@ export function WelcomePanel({
         <SettingRow label="wallet" value={shortAddr} connected={!!walletAddr} focused={active && focus === 0} />
         <SettingRow label="cloud" value={cloudValue} connected={cloudConnected} focused={active && focus === 1} />
         <SettingRow label="engine" value={engine} connected focused={active && focus === 2} />
-        <SettingRow label="github" value="not linked" connected={false} focused={active && focus === 3} />
         {keyInput !== null ? (
           <Box>
             <Text color={colors.iqCyan}>{"▸ "}</Text>
@@ -186,7 +174,7 @@ export function WelcomePanel({
             label="helius"
             value={heliusMasked ?? "default rpc"}
             connected={!!heliusMasked}
-            focused={active && focus === 4}
+            focused={active && focus === 3}
           />
         )}
         {keyInput !== null ? (

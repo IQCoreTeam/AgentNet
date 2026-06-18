@@ -54,6 +54,14 @@ import {
   saveGoogleCreds,
   hasGoogleCreds,
   isCloudConnected,
+  marketplaceEnv,
+  saveHeliusKey,
+  maskedHeliusKey,
+  hasDasRpc,
+  getNetwork,
+  saveGithubToken,
+  loadGithubToken,
+  maskedGithubToken,
 } from "@iqlabs-official/agent-sdk";
 
 const PORT = Number(process.env.AGENTNET_PORT ?? 4317);
@@ -276,6 +284,157 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
     if (m?.type === "cancelGoogleLogin") {
       googleLoginSession?.cancel();
       googleLoginSession = null;
+      return;
+    }
+  });
+
+  // ── market handlers ──
+  // Mirror exactly what VSCode's extension.ts passes to createChatSession, but as a
+  // standalone recv subscriber rather than chatSession options — localhost wires market
+  // messages here (HTTP surface can't use native dialogs, so setHeliusKey = submitHeliusKey).
+  const mktPromise = wallet ? marketplaceEnv(wallet) : null;
+  c.recvs.push(async (m: any) => {
+    if (!m?.type) return;
+    const mkt = await mktPromise;
+    if (!mkt) { c.send({ type: "toast", text: "Wallet not connected." }); return; }
+    switch (m.type) {
+      case "searchSkills": {
+        try {
+          const results = await mkt.searchSkills(m.query ?? "", m.kind);
+          c.send({ type: "searchResults", results });
+        } catch (e) {
+          c.send({ type: "searchError", message: (e as Error).message });
+        }
+        return;
+      }
+      case "getSkillDetail": {
+        try {
+          const detail = await mkt.getSkillDetail(m.mint);
+          c.send({ type: "skillDetail", detail });
+        } catch (e) {
+          c.send({ type: "toast", text: "Failed to load skill: " + (e as Error).message });
+        }
+        return;
+      }
+      case "buySkill": {
+        try {
+          const r = await mkt.buySkill(m.skillId, m.creatorWallet);
+          c.send({ type: "buyResult", skillId: m.skillId, ...r });
+        } catch (e) {
+          c.send({ type: "buyResult", skillId: m.skillId, ok: false, error: (e as Error).message });
+        }
+        return;
+      }
+      case "ownedSkills": {
+        try {
+          const r = await mkt.ownedSkills();
+          c.send({ type: "ownedSkills", ...r });
+        } catch (e) {
+          c.send({ type: "toast", text: "Failed to load owned skills: " + (e as Error).message });
+        }
+        return;
+      }
+      case "getBalance": {
+        try {
+          const lamports = await mkt.solBalance();
+          c.send({ type: "balance", lamports });
+        } catch { c.send({ type: "balance", lamports: null }); }
+        return;
+      }
+      case "getRpcStatus": {
+        const masked = await maskedHeliusKey();
+        c.send({ type: "rpcStatus", status: { dasReady: await hasDasRpc(), hasKey: !!masked, masked, network: getNetwork() } });
+        return;
+      }
+      case "submitHeliusKey": {
+        if (typeof m.key === "string" && m.key.trim()) {
+          await saveHeliusKey(m.key.trim());
+          const masked = await maskedHeliusKey();
+          c.send({ type: "rpcStatus", status: { dasReady: await hasDasRpc(), hasKey: !!masked, masked, network: getNetwork() } });
+          c.send({ type: "toast", text: "Helius key saved." });
+        }
+        return;
+      }
+      case "useDefaultRpc": {
+        await saveHeliusKey("");
+        c.send({ type: "rpcStatus", status: { dasReady: false, hasKey: false, masked: null, network: getNetwork() } });
+        return;
+      }
+      case "publishSkill": {
+        try {
+          const r = await mkt.publishSkill({ name: m.name, description: m.description, text: m.text, category: m.category, hashtags: m.hashtags, priceSol: m.priceSol, image: m.image });
+          c.send({ type: "publishResult", ...r });
+        } catch (e) {
+          c.send({ type: "publishResult", ok: false, error: (e as Error).message });
+        }
+        return;
+      }
+      case "postNote": {
+        try {
+          const r = await mkt.postNote(m.skillId, m.skillType, m.text, m.gitLink);
+          c.send({ type: "postNoteResult", skillId: m.skillId, ...r });
+        } catch (e) {
+          c.send({ type: "postNoteResult", skillId: m.skillId, ok: false, error: (e as Error).message });
+        }
+        return;
+      }
+      case "listAgents": {
+        try {
+          const r = await mkt.listAgents();
+          c.send({ type: "agents", agents: r });
+        } catch (e) {
+          c.send({ type: "toast", text: "Failed to list agents: " + (e as Error).message });
+        }
+        return;
+      }
+      case "getAgentProfile": {
+        try {
+          const profile = await mkt.getAgentProfile(m.wallet);
+          c.send({ type: "agentProfile", profile });
+        } catch (e) {
+          c.send({ type: "toast", text: "Failed to load agent: " + (e as Error).message });
+        }
+        return;
+      }
+      case "buyAllSkills": {
+        try {
+          const r = await mkt.buyAllSkills(m.wallet);
+          c.send({ type: "buyAllResult", wallet: m.wallet, ...r });
+        } catch (e) {
+          c.send({ type: "buyAllResult", wallet: m.wallet, ok: false, bought: 0, failed: 0, error: (e as Error).message });
+        }
+        return;
+      }
+      case "postAgentNote": {
+        try {
+          const r = await mkt.postAgentNote(m.agentWallet, m.text, m.gitLink);
+          c.send({ type: "agentNoteResult", agentWallet: m.agentWallet, ...r });
+        } catch (e) {
+          c.send({ type: "agentNoteResult", agentWallet: m.agentWallet, ok: false, error: (e as Error).message });
+        }
+        return;
+      }
+    }
+  });
+
+  // ── GitHub token handlers (outside market recv, no wallet required) ──
+  c.recvs.push(async (m: any) => {
+    if (m?.type === "submitGithubToken" && typeof m.token === "string" && m.token.trim()) {
+      await saveGithubToken(m.token.trim());
+      const masked = await maskedGithubToken();
+      const login = await loadGithubToken().then((t) => t?.token ? "configured" : undefined).catch(() => undefined);
+      c.send({ type: "githubStatus", hasToken: true, masked: masked ?? undefined });
+      c.send({ type: "toast", text: "GitHub token saved." });
+      return;
+    }
+    if (m?.type === "clearGithubToken") {
+      await saveGithubToken("");
+      c.send({ type: "githubStatus", hasToken: false });
+      return;
+    }
+    if (m?.type === "getGithubStatus") {
+      const masked = await maskedGithubToken();
+      c.send({ type: "githubStatus", hasToken: !!masked, masked: masked ?? undefined });
       return;
     }
   });

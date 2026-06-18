@@ -130,3 +130,36 @@ export async function maskedHeliusKey(): Promise<string | null> {
   const tail = key.slice(-4);
   return key.length <= 4 ? tail : "••••" + tail;
 }
+
+// ── GitHub Personal Access Token ──────────────────────────────────────────────
+// Stored same way as Helius key: secret, per-device, 0o600, never synced.
+// Used so the agent can `git push` (§0b round-trips) and for cross-device
+// GitHub-based session sync (§2 continuity).
+
+const GITHUB_PROVIDER = "github";
+
+interface StoredGithubToken {
+  token: string;
+}
+
+export async function saveGithubToken(token: string): Promise<void> {
+  await ensureDir(tokensDir());
+  const data: StoredGithubToken = { token: token.trim() };
+  await writeFile(tokenFile(GITHUB_PROVIDER), JSON.stringify(data), { mode: 0o600 });
+}
+
+export async function loadGithubToken(): Promise<StoredGithubToken | null> {
+  try {
+    const t = JSON.parse(await readFile(tokenFile(GITHUB_PROVIDER), "utf8")) as StoredGithubToken;
+    return t.token ? t : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function maskedGithubToken(): Promise<string | null> {
+  const t = await loadGithubToken();
+  if (!t) return null;
+  const tail = t.token.slice(-4);
+  return "••••" + tail;
+}

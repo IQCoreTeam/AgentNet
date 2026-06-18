@@ -290,7 +290,11 @@ export function createChatSession(
         // takes effect from the next message.
         if (typeof m.mode === "string") {
           slot().mode = m.mode;
-          if (slot().handle) slot().restage = true;
+          const h = slot().handle;
+          if (h) {
+            h.updateMode?.(m.mode);
+            slot().restage = true;
+          }
         }
         break;
       case "effort": {
