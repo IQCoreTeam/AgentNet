@@ -12,6 +12,7 @@ import { MemorySync, updateSkillsSection } from "../memory/index.js";
 import { getSkillShopping } from "../account/login.js";
 import { setSkillShoppingActive } from "../skill-market/passive.js";
 import { createAgentSdkMcpServer, newVerifyGuard } from "../skill-market/index.js";
+import { resolveRpcUrl, hasDasRpc } from "../core/rpc.js";
 import { getCodexApiKey } from "../account/codexAuth.js";
 import type { ApprovalChannel } from "./approval/channel.js";
 import type {
@@ -55,11 +56,13 @@ async function buildPassiveSpawn(
   if (!on || cli === "codex") return {};
 
   // Claude + ON: wire the marketplace MCP tools (search → verify → buy) with a per-spawn
-  // verify guard. Needs a DAS-capable RPC; without one the tools can't read the market, so
-  // leave them off (the skill is present but inert) rather than wire dead tools.
-  const rpcUrl = process.env.DAS_RPC_URL || process.env.SOLANA_RPC_URL;
-  if (!rpcUrl) return {};
-  const conn = new Connection(rpcUrl, "confirmed");
+  // verify guard. Use the SAME RPC resolution as the rest of the app (resolveRpcUrl: a
+  // stored Helius key — probed for liveness — beats env beats the public default), so a key
+  // set in the UI powers the agent's tools too, not just env vars. Still gate on hasDasRpc:
+  // without a key or explicit env RPC the catalog read (search_skills) is empty, so leave
+  // the tools off rather than wire a market the agent can't read.
+  if (!(await hasDasRpc())) return {};
+  const conn = new Connection(await resolveRpcUrl(), "confirmed");
   const server = createAgentSdkMcpServer(conn, wallet, wallet.address, newVerifyGuard());
   return { mcpServers: { "agentnet-marketplace": server }, allowedTools: MARKET_TOOLS };
 }

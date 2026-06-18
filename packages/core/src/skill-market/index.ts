@@ -26,9 +26,9 @@ import { z } from "zod";
 import type { Connection } from "@solana/web3.js";
 import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
 import { searchSkills } from "../search/search.js";
-import { buySkill, publishSkill } from "../nft/skill.js";
+import { publishSkill } from "../nft/skill.js";
 import { readSkillText } from "../nft/token2022.js";
-import { signerAddress } from "../core/chain.js";
+import { SkillSync } from "./ingest/index.js";
 import { postNote, postAgentNote } from "../notes/notes.js";
 import { getSkillsCollectionMint, getWorkflowsCollectionMint } from "../core/seed.js";
 import { scanSkillText } from "./scan.js";
@@ -258,12 +258,15 @@ export async function handleToolCall(
     }
 
     // Price is read from the item's on-chain config (set at publish) — the client doesn't
-    // pass it, so it can't be forged.
+    // pass it, so it can't be forged. buyAndEquip is the SAME buy+install path the human UI
+    // uses, so the agent's purchase is actually equipped (SKILL.md written), not just owned.
     const creatorWallet = (args?.creatorWallet as string) || defaultCreatorWallet;
-    const buyerWallet = await signerAddress(signer);
     try {
-      const txSig = await buySkill(conn, signer, { skillId, buyerWallet, creatorWallet });
-      return { content: [{ type: "text", text: `Successfully purchased and equipped skill ${skillId}.\nTransaction Signature: ${txSig}` }] };
+      const { txSig, slug } = await new SkillSync(conn).buyAndEquip(signer, skillId, creatorWallet);
+      const where = slug
+        ? ` and equipped it as "${slug}" (usable now)`
+        : " (purchase landed; its SKILL.md will install once the mint metadata is readable)";
+      return { content: [{ type: "text", text: `Purchased skill ${skillId}${where}.\nTransaction Signature: ${txSig}` }] };
     } catch (err: any) {
       return { isError: true, content: [{ type: "text", text: `Failed to buy skill: ${err.message}` }] };
     }
