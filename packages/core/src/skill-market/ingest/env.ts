@@ -171,6 +171,45 @@ export async function marketplaceEnv(wallet: Wallet) {
       }
     },
 
+    // Dispose (un-equip) an owned skill — the inverse of buySkill, shared with the
+    // dispose_skill MCP tool. Local + sticky (soulbound: the NFT stays owned, no refund).
+    async disposeSkill(skillId: string) {
+      try {
+        const slug = await skills.dispose(skillId);
+        return { ok: true, slug: slug ?? undefined };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) };
+      }
+    },
+
+    // Re-equip a previously-disposed skill the wallet still owns (undo a dispose without
+    // re-buying). Clears the disposed mark and re-installs the SKILL.md.
+    async reEquipSkill(skillId: string) {
+      try {
+        const slug = await skills.reEquip(skillId);
+        return { ok: true, slug: slug ?? undefined };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) };
+      }
+    },
+
+    // slug -> mint for the wallet's DISPOSED (un-pinned) skills, from the manifest. The UI
+    // shows these greyed in the equipped panel and offers a free Re-equip (not a paid re-Buy
+    // that would mint another copy). Parallel to ownedSkillMints, but for the disposed set.
+    async disposedSkillMints(): Promise<Record<string, string>> {
+      try {
+        const m = await readSkillManifest();
+        const disposed = new Set(m.disposed);
+        const out: Record<string, string> = {};
+        for (const slug of Object.keys(m.nft)) {
+          if (disposed.has(m.nft[slug].mint)) out[slug] = m.nft[slug].mint;
+        }
+        return out;
+      } catch {
+        return {};
+      }
+    },
+
     // make-skill: publish a new skill the user authored in the UI. priceSol is the
     // human SOL string from the form (default "0.1"); convert to lamports here so the
     // contract layer only ever sees lamports. image is passed through as-is (its shape

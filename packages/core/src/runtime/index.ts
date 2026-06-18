@@ -28,6 +28,7 @@ const MARKET_TOOLS = [
   "mcp__agentnet-marketplace__search_skills",
   "mcp__agentnet-marketplace__verify_skill",
   "mcp__agentnet-marketplace__buy_skill",
+  "mcp__agentnet-marketplace__dispose_skill",
 ];
 
 // Skill-shopping wiring (plans/skill-shopping.md), built fresh per session from the

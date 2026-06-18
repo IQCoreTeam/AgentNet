@@ -207,6 +207,11 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
     // the host returns null and the popup shows "No SKILL.md document found".
     getSkillDoc: async (name) => (await marketPromise).getSkillDoc(name),
     buySkill: async (skillId, creatorWallet) => (await marketPromise).buySkill(skillId, creatorWallet),
+    // dispose (un-equip) an owned skill locally + reverse it; without these the webview
+    // Remove/Re-equip buttons get "dispose unavailable" from the host.
+    disposeSkill: async (skillId) => (await marketPromise).disposeSkill(skillId),
+    reEquipSkill: async (skillId) => (await marketPromise).reEquipSkill(skillId),
+    disposedSkillMints: async () => (await marketPromise).disposedSkillMints(),
     postNote: async (skillId, skillType, text, gitLink) => (await marketPromise).postNote(skillId, skillType, text, gitLink),
     ownedSkills: async () => (await marketPromise).ownedSkills(),
     ownedNftSkills: async () => (await marketPromise).ownedNftSkills(),

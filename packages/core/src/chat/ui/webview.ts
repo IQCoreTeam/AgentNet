@@ -517,6 +517,10 @@ export function chatHtml(): string {
   .skSlot.item { flex-direction: column; gap: 5px; padding: 8px 6px; aspect-ratio: auto;
                  border: 1px solid var(--an-green-line); background: var(--an-green-dim);
                  color: var(--an-green); position: relative; overflow: hidden; }
+  /* un-pinned (disposed) skill — kept in the panel but greyed + desaturated; click re-equips */
+  .skSlot.item.disabled { border-color: var(--an-line); background: var(--an-bg-1);
+                          color: var(--vscode-descriptionForeground, #999); filter: grayscale(1); opacity: 0.5; }
+  .skSlot.item.disabled:hover { opacity: 0.75; }
   .skSlot.item .skWand { width: 18px; height: 18px; display: inline-flex; }
   .skSlot.item .skName { font-size: 0.72em; color: var(--vscode-foreground); opacity: 0.92;
                          text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -627,6 +631,12 @@ export function chatHtml(): string {
   #mktDetailBody .dt-buy { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
                            border-radius: var(--an-radius); padding: 8px 18px; cursor: pointer; font-weight: 600; }
   #mktDetailBody .dt-buy[disabled] { opacity: 0.5; cursor: default; }
+  /* dispose (Remove) — a quieter, destructive-tinted button beside the disabled "Owned" */
+  #mktDetailBody .dt-remove { margin-left: 8px; background: transparent; border: 1px solid var(--an-line);
+                              color: var(--vscode-descriptionForeground, #999); border-radius: var(--an-radius);
+                              padding: 8px 14px; cursor: pointer; font-weight: 600; }
+  #mktDetailBody .dt-remove:hover { border-color: var(--vscode-errorForeground, #f48771); color: var(--vscode-errorForeground, #f48771); }
+  #mktDetailBody .dt-remove[disabled] { opacity: 0.5; cursor: default; }
   /* a required skill row inside a workflow detail — clickable, opens its detail */
   #mktDetailBody .dt-req { display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: pointer;
                            border: 1px solid var(--an-line); border-radius: var(--an-radius); margin-bottom: 6px; }
@@ -637,7 +647,11 @@ export function chatHtml(): string {
   #mktDetailBody .dt-comments { margin-top: 14px; }
   #mktDetailBody .dt-comment { border: 1px solid var(--an-line); border-radius: var(--an-radius);
                                padding: 8px 10px; margin-bottom: 8px; font-size: 0.85em; }
-  #mktDetailBody .dt-comment .cm-author { font-size: 0.72em; opacity: 0.55; margin-bottom: 4px; font-family: var(--vscode-editor-font-family, monospace); }
+  #mktDetailBody .dt-comment .cm-author { display: flex; align-items: center; gap: 6px; font-size: 0.72em; opacity: 0.6; margin-bottom: 4px; font-family: var(--vscode-editor-font-family, monospace); }
+  #mktDetailBody .dt-comment .cm-avatar { width: 18px; height: 18px; flex-shrink: 0; border-radius: 50%; overflow: hidden; background: var(--an-bg); }
+  #mktDetailBody .dt-comment .cm-link { cursor: pointer; width: fit-content; }
+  #mktDetailBody .dt-comment .cm-link:hover { opacity: 1; }
+  #mktDetailBody .dt-comment .cm-link:hover .cm-addr { text-decoration: underline; }
   #mktDetailBody .dt-comment .cm-git { font-size: 0.72em; opacity: 0.6; margin-top: 4px; }
   #mktDetailBody .dt-comment .cm-git a { color: var(--an-green); text-decoration: none; }
   #mktDetailBody .dt-note-input { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
@@ -3145,10 +3159,13 @@ export function chatHtml(): string {
   // fill the rest. No count badge (ownership is the whole point, not a number).
   function setSkills(names, mints) {
     names = names || [];
-    if (mints) skillMints = mints;
+    // routing map includes disposed skills too, so clicking a greyed slot still opens its
+    // detail (where Re-equip lives) and ownsMint() still treats it as owned (it is, on-chain).
+    if (mints) skillMints = Object.assign({}, mints, disposedMints);
     const grid = document.getElementById('skillGrid');
     const status = document.getElementById('skillStatus');
     const n = names.length;
+    const disposedSlugs = Object.keys(disposedMints);
     // NOTE: do NOT light up "casting" here — owning a skill is not the same as using it.
     // The glow (panel/button/slot) is driven only by flashSkill when a skill actually fires.
     status.textContent = n ? (n === 1 ? '1 skill' : n + ' skills') : 'none yet';
@@ -3164,7 +3181,17 @@ export function chatHtml(): string {
       slot.addEventListener('click', () => { const mt = skillMints[name]; if (mt) { showView('market'); openDetail(mt); } else openSkillDoc(name); });
       grid.appendChild(slot);
     }
-    const fill = Math.max(0, 3 - n);
+    // un-pinned skills: shown greyed + desaturated, still listed (not gone). Click opens the
+    // detail view, which shows a Re-equip button for an owned-but-disposed skill.
+    for (const name of disposedSlugs) {
+      const slot = document.createElement('div'); slot.className = 'skSlot item disabled';
+      slot.innerHTML = '<span class="skWand">' + ${JSON.stringify(WAND_SVG)} + '</span>';
+      const lbl = document.createElement('div'); lbl.className = 'skName'; lbl.textContent = name;
+      slot.appendChild(lbl); slot.title = name + ' — un-pinned (click to re-equip)'; slot.style.cursor = 'pointer';
+      slot.addEventListener('click', () => { showView('market'); openDetail(disposedMints[name]); });
+      grid.appendChild(slot);
+    }
+    const fill = Math.max(0, 3 - n - disposedSlugs.length);
     for (let i = 0; i < fill; i++) { const s = document.createElement('div'); s.className = 'skSlot empty'; grid.appendChild(s); }
     ownedSkills = names;
     // mirror the owned count onto the wallet-menu Skills entry (badge hidden when 0)
@@ -3176,6 +3203,8 @@ export function chatHtml(): string {
   }
   let ownedSkills = [];
   let skillMints = {}; // slug/name -> mint for bought NFT skills (reuse market detail)
+  let disposedMints = {}; // slug -> mint for un-pinned skills (greyed in the panel)
+  let disposedMintSet = new Set(); // the mints above, for isDisposed() detail checks
   setSkills([]); // idle: grey coming-soon slots
 
   // ---- marketplace: search → buy → install (host does the chain work) ----
@@ -3382,7 +3411,17 @@ export function chatHtml(): string {
     for (const n of (notes || [])) {
       const el = document.createElement('div'); el.className = 'dt-comment';
       const auth = document.createElement('div'); auth.className = 'cm-author';
-      auth.textContent = n.author ? (n.author.slice(0, 6) + '…' + n.author.slice(-4)) : '?';
+      if (n.author) {
+        // avatar + truncated wallet, the whole row clickable -> that agent's profile
+        const av = document.createElement('span'); av.className = 'cm-avatar'; av.innerHTML = avatarSvg(n.author);
+        const addr = document.createElement('span'); addr.className = 'cm-addr';
+        addr.textContent = n.author.slice(0, 6) + '…' + n.author.slice(-4);
+        auth.appendChild(av); auth.appendChild(addr);
+        auth.classList.add('cm-link'); auth.title = 'View ' + n.author + "'s profile";
+        auth.addEventListener('click', () => showProfile(n.author));
+      } else {
+        auth.textContent = '?';
+      }
       const body = document.createElement('div');
       renderMd(body, n.text || '');
       el.appendChild(auth); el.appendChild(body);
@@ -3461,15 +3500,37 @@ export function chatHtml(): string {
     const detailPrice = fmtPrice(c.price);
     if (detailPrice) addTag(detailPrice); // "Free" / "0.1 SOL"
     if (meta.childElementCount) mktDetailBody.appendChild(meta);
-    // buy — show the price on the button too, so the spend is obvious before clicking
+    // buy / re-equip / remove. A disposed skill (owned on-chain, un-equipped) shows a free
+    // Re-equip; an owned skill shows "Owned" + a Remove (dispose); else the priced Buy.
     const buy = document.createElement('button'); buy.className = 'dt-buy';
-    const buyLabel = detailPrice && detailPrice !== 'Free' ? ('Buy · ' + detailPrice) : 'Buy';
-    buy.textContent = owned ? 'Owned' : buyLabel; buy.disabled = owned;
-    buy.addEventListener('click', () => {
-      buy.disabled = true; buy.textContent = 'Buying…';
-      vscode.postMessage({ type: 'buySkill', skillId: c.id, creatorWallet: c.creator });
-    });
-    mktDetailBody.appendChild(buy);
+    if (isDisposed(c.id)) {
+      buy.textContent = 'Re-equip';
+      buy.title = "You own this — re-equip it (re-buying would mint another copy)";
+      buy.addEventListener('click', () => {
+        buy.disabled = true; buy.textContent = 'Re-equipping…';
+        vscode.postMessage({ type: 'reEquipSkill', skillId: c.id });
+      });
+      mktDetailBody.appendChild(buy);
+    } else {
+      const buyLabel = detailPrice && detailPrice !== 'Free' ? ('Buy · ' + detailPrice) : 'Buy';
+      buy.textContent = owned ? 'Owned' : buyLabel; buy.disabled = owned;
+      buy.addEventListener('click', () => {
+        buy.disabled = true; buy.textContent = 'Buying…';
+        vscode.postMessage({ type: 'buySkill', skillId: c.id, creatorWallet: c.creator });
+      });
+      mktDetailBody.appendChild(buy);
+      if (owned) {
+        // un-pin: greys it out + stops the agent loading it, but keeps it (re-equip anytime).
+        // Non-destructive, so no confirm — it's a reversible toggle, not a delete.
+        const rm = document.createElement('button'); rm.className = 'dt-remove'; rm.textContent = 'Unequip';
+        rm.title = 'Un-pin this skill: grey it out and stop loading it. You keep the NFT; re-equip anytime.';
+        rm.addEventListener('click', () => {
+          rm.disabled = true; rm.textContent = 'Unequipping…';
+          vscode.postMessage({ type: 'disposeSkill', skillId: c.id });
+        });
+        mktDetailBody.appendChild(rm);
+      }
+    }
     detailBuyBtn = buy; currentDetailName = c.name || null; // remember so buyResult can update it
     // required skills (workflow only) — clickable rows
     const reqs = (detail && detail.requiredCards) || [];
@@ -3545,6 +3606,9 @@ export function chatHtml(): string {
     for (const k in skillMints) if (skillMints[k] === id) return true;
     return false;
   }
+  // A skill the wallet owns on-chain but un-pinned (disposed). Still owned (soulbound), so
+  // the detail offers a free Re-equip instead of a paid re-Buy.
+  function isDisposed(id) { return !!id && disposedMintSet.has(id); }
 
   // ---- skill-acquired celebration: pop the overlay, fire sparkles, auto-dismiss ----
   const celebrateEl = document.getElementById('celebrate');
@@ -3908,6 +3972,8 @@ export function chatHtml(): string {
       renderComments(currentDetail.id, currentDetail.type, m.notes, owned);
     }
     else if (m.type === 'ownedSkills') {
+      disposedMints = m.disposedMints || {};         // slug->mint, greyed in the panel
+      disposedMintSet = new Set(Object.values(disposedMints)); // mints, for isDisposed()
       setSkills(m.names || [], m.mints || {});  // updates ownedSkills used by both renders
       // flip Buy → Owned everywhere the item can appear: list cards, small panel, open detail
       if (panels.market.style.display !== 'none') renderMarketResults(lastMarketResults);
@@ -3930,6 +3996,23 @@ export function chatHtml(): string {
         if (skillModalBuyBtn) { skillModalBuyBtn.disabled = false; skillModalBuyBtn.textContent = 'Buy'; }
         renderMarketResults(lastMarketResults); // restore any card stuck on "Buying…"
         renderSkillResults(lastMarketResults);
+      }
+    }
+    // dispose / re-equip results: the ownedSkills message that follows updates disposedMints
+    // + the panel; re-open the detail (if open) so its button flips Remove<->Re-equip.
+    else if (m.type === 'disposeResult') {
+      if (m.ok) { if (currentDetail) openDetail(currentDetail.id); }
+      else {
+        showBuyError(m.error || 'Unequip failed');
+        const rm = mktDetailBody.querySelector('.dt-remove');
+        if (rm) { rm.disabled = false; rm.textContent = 'Unequip'; }
+      }
+    }
+    else if (m.type === 'reEquipResult') {
+      if (m.ok) { if (currentDetail) openDetail(currentDetail.id); }
+      else {
+        showBuyError(m.error || 'Re-equip failed');
+        if (detailBuyBtn) { detailBuyBtn.disabled = false; detailBuyBtn.textContent = 'Re-equip'; }
       }
     }
     // issue #35: agent directory + profile

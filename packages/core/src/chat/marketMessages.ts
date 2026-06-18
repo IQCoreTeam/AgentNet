@@ -71,6 +71,8 @@ export type MarketRequest =
   | { type: "getSkillDetail"; mint: string } // open the detail view for one item
   | { type: "getSkillDoc"; name: string } // read an installed skill's local SKILL.md by name
   | { type: "buySkill"; skillId: string; creatorWallet?: string }
+  | { type: "disposeSkill"; skillId: string } // un-equip an owned skill (local + sticky)
+  | { type: "reEquipSkill"; skillId: string } // undo a dispose (re-install, no re-buy)
   | { type: "ownedSkills" } // ask the host to (re)send the owned list
   | { type: "getBalance" } // ask the host for the wallet's native SOL balance
   | { type: "setHeliusKey" } // host opens a native input to capture + save the key
@@ -104,7 +106,11 @@ export type MarketEvent =
   | { type: "skillDetail"; detail: SkillDetail } // full detail for the opened item (includes notes)
   | { type: "skillDoc"; name: string; text: string | null } // installed skill's SKILL.md (null = not found)
   | { type: "buyResult"; skillId: string; ok: boolean; slug?: string; error?: string }
-  | { type: "ownedSkills"; names: string[]; mints?: Record<string, string> } // installed skill names (panel fill) + slug->mint for bought NFTs (reuse market detail)
+  | { type: "disposeResult"; skillId: string; ok: boolean; slug?: string; error?: string }
+  | { type: "reEquipResult"; skillId: string; ok: boolean; slug?: string; error?: string }
+  // installed skill names (panel fill) + slug->mint for bought NFTs (reuse market detail) +
+  // disposedMints = slug->mint for un-pinned skills (UI greys them, offers a free Re-equip)
+  | { type: "ownedSkills"; names: string[]; mints?: Record<string, string>; disposedMints?: Record<string, string> }
   | { type: "balance"; lamports: number | null } // wallet SOL balance (null = read failed)
   | { type: "skillActive"; name: string } // a skill fired -> "Casting <name>" cue
   | { type: "rpcStatus"; status: RpcStatus } // DAS-ready? which source? (issue #23)

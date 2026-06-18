@@ -49,6 +49,12 @@ export interface ChatEnv {
   getSkillDetail?(mint: string): Promise<import("./marketMessages.js").SkillDetail>;
   getSkillDoc?(name: string): Promise<string | null>;
   buySkill?(skillId: string, creatorWallet?: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
+  // dispose (un-equip) an owned skill: local + sticky (soulbound NFT stays owned, no refund).
+  disposeSkill?(skillId: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
+  // re-equip a previously-disposed skill the wallet still owns (undo, no re-buy).
+  reEquipSkill?(skillId: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
+  // slug -> mint for disposed (un-pinned) skills — the UI greys these + offers Re-equip.
+  disposedSkillMints?(): Promise<Record<string, string>>;
   // issue #34: post a comment on a skill (holder-gated), returns refreshed notes on success
   postNote?(skillId: string, skillType: "skill" | "workflow" | undefined, text: string, gitLink?: string): Promise<{ ok: boolean; notes?: import("./marketMessages.js").Note[]; error?: string }>;
   ownedSkills?(): Promise<string[]>; // skill names already installed (panel fill)
@@ -106,10 +112,11 @@ async function ownedNames(env: ChatEnv): Promise<string[]> {
 
 // Full "ownedSkills" message: names for the panel + slug->mint so a bought skill's
 // card can reuse the market's on-chain getSkillDetail(mint) instead of a local file.
-async function ownedSkillsMsg(env: ChatEnv): Promise<{ type: "ownedSkills"; names: string[]; mints?: Record<string, string> }> {
+async function ownedSkillsMsg(env: ChatEnv): Promise<{ type: "ownedSkills"; names: string[]; mints?: Record<string, string>; disposedMints?: Record<string, string> }> {
   const names = await ownedNames(env);
   const mints = env.ownedSkillMints ? await env.ownedSkillMints().catch(() => ({})) : {};
-  return { type: "ownedSkills", names, mints };
+  const disposedMints = env.disposedSkillMints ? await env.disposedSkillMints().catch(() => ({})) : {};
+  return { type: "ownedSkills", names, mints, disposedMints };
 }
 
 // Wire one chat UI to the runtime. Returns a stop() that tears down both engine
@@ -390,6 +397,20 @@ export function createChatSession(
           await env.loadOwnedSkills?.(); // re-sync the whole owned set after the buy
           sendMarket(await ownedSkillsMsg(env));
         }
+        break;
+      }
+      case "disposeSkill": {
+        const req = m as Extract<MarketRequest, { type: "disposeSkill" }>;
+        const res = env.disposeSkill ? await env.disposeSkill(req.skillId) : { ok: false, error: "dispose unavailable" };
+        sendMarket({ type: "disposeResult", skillId: req.skillId, ...res });
+        if (res.ok) sendMarket(await ownedSkillsMsg(env)); // re-sync so the panel drops it
+        break;
+      }
+      case "reEquipSkill": {
+        const req = m as Extract<MarketRequest, { type: "reEquipSkill" }>;
+        const res = env.reEquipSkill ? await env.reEquipSkill(req.skillId) : { ok: false, error: "re-equip unavailable" };
+        sendMarket({ type: "reEquipResult", skillId: req.skillId, ...res });
+        if (res.ok) sendMarket(await ownedSkillsMsg(env)); // re-sync so the panel shows it
         break;
       }
       case "ownedSkills":

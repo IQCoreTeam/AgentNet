@@ -37,15 +37,21 @@ export interface NftSkillRecord {
 export interface SkillManifest {
   version: 1;
   nft: Record<string, NftSkillRecord>; // slug → record
+  // Mints the wallet OWNS on-chain but has deliberately disposed (un-equipped). Soulbound
+  // tokens can't be sold or burned, so disposal is local + sticky: this list is what makes
+  // it stick — injectOwned (the session-start owned-sync) skips these, so a disposed skill
+  // doesn't silently re-install every session. Keyed by mint (the on-chain id, survives a
+  // slug rename). Re-equipping a skill removes its mint from here.
+  disposed: string[];
 }
 
 /** Read the manifest; a missing/corrupt file reads as empty (best-effort, never throws). */
 export async function readSkillManifest(): Promise<SkillManifest> {
   try {
     const parsed = JSON.parse(await readFile(skillsManifestFile(), "utf8")) as Partial<SkillManifest>;
-    return { version: 1, nft: parsed.nft ?? {} };
+    return { version: 1, nft: parsed.nft ?? {}, disposed: parsed.disposed ?? [] };
   } catch {
-    return { version: 1, nft: {} };
+    return { version: 1, nft: {}, disposed: [] };
   }
 }
 
@@ -72,6 +78,34 @@ export async function forgetNftSkill(slug: string): Promise<void> {
     const m = await readSkillManifest();
     if (m.nft[slug]) {
       delete m.nft[slug];
+      await writeSkillManifest(m);
+    }
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** Mark a mint as disposed so the session-start owned-sync (injectOwned) stops re-installing
+ *  it. Idempotent (deduped). Best-effort — a write failure must never block a dispose. */
+export async function disposeNftSkill(mint: string): Promise<void> {
+  try {
+    const m = await readSkillManifest();
+    if (!m.disposed.includes(mint)) {
+      m.disposed.push(mint);
+      await writeSkillManifest(m);
+    }
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** Un-dispose a mint (re-equip): drop it from the disposed list so the owned-sync installs
+ *  it again. Best-effort. */
+export async function undisposeNftSkill(mint: string): Promise<void> {
+  try {
+    const m = await readSkillManifest();
+    if (m.disposed.includes(mint)) {
+      m.disposed = m.disposed.filter((x) => x !== mint);
       await writeSkillManifest(m);
     }
   } catch {
