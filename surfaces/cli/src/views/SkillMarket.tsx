@@ -576,7 +576,7 @@ export function SkillMarket({
   return (
     <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
       <Box>
-        <Text bold color={colors.iqMagenta}>❖ skill market</Text>
+        <Text bold color={colors.iqMagenta}>❖ marketplace</Text>
         <Text dimColor>   balance {sol(balance)}</Text>
       </Box>
       {/* tabs */}

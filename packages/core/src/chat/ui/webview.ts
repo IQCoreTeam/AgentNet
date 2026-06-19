@@ -1472,20 +1472,20 @@ export function chatHtml(): string {
     </div>
   </div>
 
-  <!-- Markets: the full-screen skill marketplace (search → results → buy). Reuses the
+  <!-- Markets: the full-screen marketplace (search → results → buy/install-ready details). Reuses the
        shared market message contract; the same screens get a mobile design later. -->
   <div id="marketView" class="panel" style="display:none">
     <div class="page">
-      <!-- LIST sub-view: tabs (Skills/Workflows) + search + grid -->
+      <!-- LIST sub-view: tabs (Skills/Workflows/Plugins) + search + grid -->
       <div id="mktList">
         <div id="backToChatM" class="muted" style="cursor:pointer;margin-bottom:10px">‹ Back to chat</div>
         <div class="mktHead">
           <div class="mktTitleRow">
-            <div class="mktTitle"><span class="wand">${WAND_SVG}</span> Skill Market</div>
+            <div class="mktTitle"><span class="wand">${WAND_SVG}</span> Marketplace</div>
             <span id="mktBalance" class="mktBal" title="Your wallet balance" style="display:none"></span>
             <button id="mktMakeSkillBtn" class="mktMake" title="Publish a new skill">＋ Make skill</button>
           </div>
-          <div class="muted small">Popular first. Buy an item (soulbound) and your agent equips it.</div>
+          <div class="muted small">Popular first. Skills and workflows are buyable; plugin install/equip is coming next.</div>
         </div>
         <div class="mktTabs">
           <button class="mktTab on" data-kind="skill">Skills</button>
