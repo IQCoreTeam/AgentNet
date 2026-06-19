@@ -15,6 +15,7 @@ import type { Wallet } from "../../runtime/contract.js";
 import { searchSkills } from "../../search/index.js";
 import { dasSource, indexerSource, ownedSkillMints } from "../../core/skillSource.js";
 import { buySkill, publishSkill as corePublishSkill } from "../../nft/skill.js";
+import { publishWorkflow as corePublishWorkflow } from "../../nft/workflow.js";
 import { getSolBalance } from "../../notes/index.js";
 import { readSkillText, readSkillMintMetadata } from "../../nft/token2022.js";
 import { heldSkillCreators } from "../../notes/holdings.js";
@@ -222,15 +223,57 @@ export async function marketplaceEnv(wallet: Wallet) {
       try {
         const lamports = solToLamports(input.priceSol);
         if (lamports === null) return { ok: false, error: "Enter a valid price in SOL (e.g. 0.1)" };
-        const mint = await corePublishSkill(conn, wallet, {
-          name: input.name,
-          description: input.description,
-          text: input.text,
-          category: input.category,
-          hashtags: input.hashtags,
-          price: lamports,
-          image: input.image,
-        });
+
+        // Parse frontmatter to check if this is a workflow
+        const lines = input.text.split("\n");
+        let isWorkflow = false;
+        let requiredSkills: string[] = [];
+        let inFrontmatter = false;
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed === "---") {
+            if (inFrontmatter) {
+              break;
+            } else {
+              inFrontmatter = true;
+              continue;
+            }
+          }
+          if (inFrontmatter) {
+            const colon = trimmed.indexOf(":");
+            if (colon !== -1) {
+              const key = trimmed.slice(0, colon).trim();
+              const val = trimmed.slice(colon + 1).trim();
+              if (key === "type" && val.replace(/^['"]|['"]$/g, "") === "workflow") {
+                isWorkflow = true;
+              } else if (key === "requiredSkills") {
+                if (val.startsWith("[") && val.endsWith("]")) {
+                  requiredSkills = val.slice(1, -1).split(",").map((s) => s.trim().replace(/^['"]|['"]$/g, "")).filter(Boolean);
+                }
+              }
+            }
+          }
+        }
+
+        const mint = isWorkflow
+          ? await corePublishWorkflow(conn, wallet, {
+              name: input.name,
+              description: input.description,
+              text: input.text,
+              requiredSkills,
+              category: input.category,
+              hashtags: input.hashtags,
+              price: lamports,
+            })
+          : await corePublishSkill(conn, wallet, {
+              name: input.name,
+              description: input.description,
+              text: input.text,
+              category: input.category,
+              hashtags: input.hashtags,
+              price: lamports,
+              image: input.image,
+            });
         return { ok: true, mint };
       } catch (e) {
         return { ok: false, error: e instanceof Error ? e.message : String(e) };

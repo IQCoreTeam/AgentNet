@@ -11,12 +11,13 @@ interface Props {
 }
 
 export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
-  const { send } = useStore();
+  const { send, state } = useStore();
   const [buying, setBuying] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [noteGitLink, setNoteGitLink] = useState("");
   const { card, skillText, notes } = detail;
   const priceSol = card.price ? (Number(card.price) / 1_000_000_000).toFixed(3) : null;
+  const disposed = Object.values(state.marketDisposed).includes(card.id);
 
   function handleBuy() {
     setBuying(true);
@@ -39,6 +40,11 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
         {owned && (
           <span className="ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-green-900/60 text-green-400">
             owned
+          </span>
+        )}
+        {disposed && (
+          <span className="ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-zinc-800 text-zinc-500">
+            un-equipped
           </span>
         )}
       </header>
@@ -127,7 +133,29 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
         )}
       </div>
 
-      {!owned && (
+      {owned && (
+        <div className="shrink-0 border-t border-red-900/40 bg-gradient-to-t from-red-950/30 to-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <button
+            onClick={() => send({ type: "disposeSkill", skillId: card.id })}
+            className="w-full rounded-xl border border-red-500/30 bg-red-950/20 py-3 text-sm font-semibold text-red-400 active:bg-red-900/30"
+          >
+            Remove Skill
+          </button>
+        </div>
+      )}
+
+      {!owned && disposed && (
+        <div className="shrink-0 border-t border-green-800/40 bg-gradient-to-t from-green-900/30 to-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <button
+            onClick={() => send({ type: "reEquipSkill", skillId: card.id })}
+            className="w-full rounded-xl bg-green-600 py-3 text-sm font-semibold text-white active:bg-green-500"
+          >
+            Re-equip Skill
+          </button>
+        </div>
+      )}
+
+      {!owned && !disposed && (
         <div className="shrink-0 border-t border-amber-700/40 bg-gradient-to-t from-amber-900/30 to-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button
             onClick={handleBuy}

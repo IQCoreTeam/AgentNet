@@ -17,6 +17,7 @@ vi.mock("node:fs/promises", () => ({
 
 vi.mock("../core/paths.js", () => ({
   claudeSkillsDir: () => "/skills",
+  codexSkillsDir: () => "/codex-skills",
   claudeMemoryDir: () => "/mem",
   codexAgentsFile: (cwd: string) => `${cwd}/AGENTS.md`,
 }));

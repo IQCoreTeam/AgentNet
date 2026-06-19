@@ -196,6 +196,7 @@ export function MarketScreen() {
                   key={card.id}
                   card={card}
                   owned={state.marketOwned.includes(card.name)}
+                  disposed={Object.values(state.marketDisposed).includes(card.id)}
                   firing={state.firingSkill === card.name}
                   onOpen={handleOpenCard}
                 />
