@@ -42,6 +42,9 @@ class ServerManager(private val ctx: Context) {
     // before exec, makes proot start from a readable cwd. The guest args are passed
     // verbatim to that shell as a single argv.
     private fun prootCommand(p: Paths.Layout, cmd: String): List<String> {
+        val googleClientIdEnv =
+            if (BuildConfig.GOOGLE_OAUTH_CLIENT_ID.isBlank()) emptyList()
+            else listOf("GOOGLE_CLIENT_ID=${BuildConfig.GOOGLE_OAUTH_CLIENT_ID}")
         val guestArgv = listOf(
             p.proot,
             "--kill-on-exit",
@@ -68,6 +71,7 @@ class ServerManager(private val ctx: Context) {
             // the React SPA ships alongside the server bundle (build-assets.sh packs it at
             // ./webview); point the host at it so it serves the real UI, not the fallback.
             "AGENTNET_WEBVIEW_DIR=/root/agentnet-server/webview",
+            *googleClientIdEnv.toTypedArray(),
             "/bin/sh", "-lc", cmd,
         )
         // cd into a readable dir, then exec proot so it never inherits the unreadable "/".

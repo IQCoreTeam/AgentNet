@@ -2,10 +2,20 @@
 // generic native-shell mechanics (WebView + ProcessBuilder + targetSdk=28 + assets).
 // Everything OpenClaw/Codex-specific is NOT copied; our engine is the official
 // claude/codex CLIs installed inside a proot-distro Ubuntu (see ServerManager).
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+val googleOAuthClientId =
+    providers.environmentVariable("GOOGLE_CLIENT_ID").orNull
+        ?: localProperties.getProperty("googleOAuthClientId", "")
 
 android {
     namespace = "com.iqlabs.agentnet"
@@ -21,6 +31,15 @@ android {
         targetSdk = 28
         versionCode = 1
         versionName = "0.1.0"
+        buildConfigField(
+            "String",
+            "GOOGLE_OAUTH_CLIENT_ID",
+            "\"${googleOAuthClientId.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+        )
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     buildTypes {

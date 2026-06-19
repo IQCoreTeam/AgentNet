@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { useStore } from "../state/store";
+import { openExternalUrl } from "../platform/openExternalUrl";
+import { useAutoOpenExternalUrl } from "../platform/useAutoOpenExternalUrl";
 
 // Chat list drawer — the mobile answer to vscode's multi-panel "new tab": instead of
 // splitting the screen, the ☰ menu slides this in and you pick ONE chat to show. Telegram
@@ -15,17 +17,24 @@ export function Sessions({ onClose }: { onClose: () => void }) {
   const [code, setCode] = useState("");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [showManualCode, setShowManualCode] = useState(false);
 
   const info = storage?.info as { kind?: string; connected?: boolean; account?: string; location?: string } | null;
   const cloudConnected = !!(info && info.connected && info.kind !== "local");
+  useAutoOpenExternalUrl(googleLoginUrl);
 
   // Auto-close settings screen once Google Drive connects successfully
   useEffect(() => {
     if (settingsMode === "gdrive" && info?.kind === "gdrive" && info?.connected) {
       setSettingsMode("list");
       setBusy(false);
+      setShowManualCode(false);
     }
   }, [info, settingsMode]);
+
+  useEffect(() => {
+    if (googleLoginError) setBusy(false);
+  }, [googleLoginError]);
 
   // Esc closes the drawer (never a trap)
   useEffect(() => {
@@ -299,6 +308,7 @@ export function Sessions({ onClose }: { onClose: () => void }) {
                       disabled={busy}
                       onClick={() => {
                         setBusy(true);
+                        setShowManualCode(false);
                         send({ type: "startGoogleLogin" });
                       }}
                       className="w-full rounded-lg bg-[#00E673] hover:bg-[#00d068] text-xs font-semibold py-2.5 text-black mt-1 active:scale-95 transition disabled:opacity-40"
@@ -311,55 +321,69 @@ export function Sessions({ onClose }: { onClose: () => void }) {
                   </>
                 ) : (
                   <>
-                    <p className="text-[10px] text-zinc-400 leading-relaxed">
-                      1. Authorize Google Drive access by visiting the link below:
+                    <p className="text-[10px] text-zinc-400 leading-relaxed text-center">
+                      Google sign-in opened in your browser. Approve Drive access, then return to AgentNet.
                     </p>
-                    <a
-                      href={googleLoginUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="break-all rounded-lg bg-zinc-900 px-2.5 py-2 text-[10px] leading-relaxed text-[#00E673] border border-zinc-850 block text-center"
-                    >
-                      Open Authorization URL
-                    </a>
                     <button
-                      onClick={async () => {
-                        try {
-                          await navigator.clipboard.writeText(googleLoginUrl);
-                        } catch {
-                          const ta = document.createElement("textarea");
-                          ta.value = googleLoginUrl;
-                          document.body.appendChild(ta);
-                          ta.select();
-                          document.execCommand("copy");
-                          document.body.removeChild(ta);
-                        }
-                        setCopied(true);
-                        setTimeout(() => setCopied(false), 1500);
-                      }}
-                      className="w-full rounded bg-zinc-900 border border-zinc-850 hover:bg-zinc-800 text-[10px] font-medium py-1.5 text-zinc-400 active:scale-95 transition"
+                      onClick={() => openExternalUrl(googleLoginUrl)}
+                      className="w-full rounded-lg bg-zinc-900 border border-zinc-850 hover:bg-zinc-800 text-[10px] font-medium py-2 text-zinc-300 active:scale-95 transition"
                     >
-                      {copied ? "Copied!" : "Copy link"}
+                      Open Google Again
                     </button>
-                    <p className="text-[10px] text-zinc-400 leading-relaxed mt-1">
-                      2. Paste the redirect URL or authorization code below:
-                    </p>
-                    <input
-                      value={code}
-                      onChange={(e) => setCode(e.target.value)}
-                      placeholder="Paste URL or code here"
-                      className="w-full rounded bg-zinc-900 border border-zinc-850 px-2.5 py-2 text-xs text-white outline-none focus:border-[#00E673]/50"
-                    />
                     <button
-                      disabled={!code.trim()}
-                      onClick={() => {
-                        send({ type: "googleAuthCode", code: code.trim() });
-                        setCode("");
-                      }}
-                      className="w-full rounded-lg bg-[#00E673] hover:bg-[#00d068] text-xs font-semibold py-2.5 text-black mt-1 active:scale-95 transition disabled:opacity-40"
+                      type="button"
+                      onClick={() => setShowManualCode((v) => !v)}
+                      className="text-[10px] font-medium text-zinc-500 active:text-zinc-300"
                     >
-                      Confirm
+                      {showManualCode ? "Hide manual code entry" : "Having trouble? Use code manually"}
                     </button>
+                    {showManualCode && (
+                      <>
+                        <a
+                          href={googleLoginUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="break-all rounded-lg bg-zinc-900 px-2.5 py-2 text-[10px] leading-relaxed text-[#00E673] border border-zinc-850 block text-center"
+                        >
+                          Open Authorization URL
+                        </a>
+                        <button
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(googleLoginUrl);
+                            } catch {
+                              const ta = document.createElement("textarea");
+                              ta.value = googleLoginUrl;
+                              document.body.appendChild(ta);
+                              ta.select();
+                              document.execCommand("copy");
+                              document.body.removeChild(ta);
+                            }
+                            setCopied(true);
+                            setTimeout(() => setCopied(false), 1500);
+                          }}
+                          className="w-full rounded bg-zinc-900 border border-zinc-850 hover:bg-zinc-800 text-[10px] font-medium py-1.5 text-zinc-400 active:scale-95 transition"
+                        >
+                          {copied ? "Copied!" : "Copy link"}
+                        </button>
+                        <input
+                          value={code}
+                          onChange={(e) => setCode(e.target.value)}
+                          placeholder="Paste URL or code here"
+                          className="w-full rounded bg-zinc-900 border border-zinc-850 px-2.5 py-2 text-xs text-white outline-none focus:border-[#00E673]/50"
+                        />
+                        <button
+                          disabled={!code.trim()}
+                          onClick={() => {
+                            send({ type: "googleAuthCode", code: code.trim() });
+                            setCode("");
+                          }}
+                          className="w-full rounded-lg bg-[#00E673] hover:bg-[#00d068] text-xs font-semibold py-2.5 text-black mt-1 active:scale-95 transition disabled:opacity-40"
+                        >
+                          Confirm
+                        </button>
+                      </>
+                    )}
                   </>
                 )}
               </div>
@@ -367,6 +391,8 @@ export function Sessions({ onClose }: { onClose: () => void }) {
             <button
               onClick={() => {
                 if (googleLoginUrl) send({ type: "cancelGoogleLogin" });
+                setBusy(false);
+                setShowManualCode(false);
                 setSettingsMode("connect");
               }}
               className="w-full rounded-lg bg-zinc-800 hover:bg-zinc-750 py-2.5 text-xs text-zinc-200"

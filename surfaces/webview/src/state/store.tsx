@@ -13,6 +13,7 @@ import {
   type ReactNode,
 } from "react";
 import { Transport } from "../transport/client";
+import { openExternalUrl } from "../platform/openExternalUrl";
 import type {
   AgentProfile,
   ApprovalRequest,
@@ -252,7 +253,7 @@ function reducer(state: State, ev: Action): State {
         ? { ...state, googleLoginUrl: null, googleLoginError: null, phase: "engineSelect" }
         : { ...state, googleLoginUrl: null, googleLoginError: ev.error ?? "Login failed." };
     case "openUrl":
-      window.open(ev.url, "_blank");
+      openExternalUrl(ev.url);
       return state;
     case "claudeLoginUrl":
       return { ...state, claudeLoginUrl: ev.url, claudeLoginError: null };

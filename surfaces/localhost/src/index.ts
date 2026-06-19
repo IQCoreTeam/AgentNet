@@ -49,7 +49,6 @@ import {
   switchStorage,
   disconnectCloud,
   agentnetFolderLink,
-  startGoogleLogin,
   startGoogleLoginFixed,
   saveGoogleCreds,
   hasGoogleCreds,
@@ -120,6 +119,38 @@ let walletAddress: string | null = null;
 let lastCloudStatus: CloudStatus | null = null;
 let onCloudStatus: (() => void) | null = null;
 let googleLoginSession: GoogleLogin | null = null;
+
+function beginGoogleLogin(c: Client) {
+  try {
+    googleLoginSession?.cancel();
+    googleLoginSession = startGoogleLoginFixed(`http://127.0.0.1:${PORT}/oauth/google/callback`);
+    c.send({ type: "googleLoginUrl", url: googleLoginSession.url });
+    googleLoginSession.done.then(async (ok) => {
+      if (ok && wallet) {
+        await switchStorage(wallet, { kind: "gdrive" });
+        runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
+      }
+      const payload = {
+        type: "googleLoginStatus" as const,
+        status: ok ? "done" as const : "error" as const,
+        error: ok ? undefined : "Login was not completed.",
+      };
+      for (const client of clients.values()) client.send(payload);
+      googleLoginSession = null;
+    });
+  } catch (e) {
+    c.send({ type: "googleLoginStatus", status: "error", error: (e as Error).message });
+    googleLoginSession = null;
+  }
+}
+
+async function submitGoogleAuthCode(c: Client, code: string) {
+  try {
+    await googleLoginSession?.submitCode(code);
+  } catch (e) {
+    c.send({ type: "googleLoginStatus", status: "error", error: (e as Error).message });
+  }
+}
 
 // Build the runtime from a freshly connected wallet (idempotent for this host: a
 // second connect with the same address is a no-op so re-opened tabs don't rebuild).
@@ -240,9 +271,9 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
     },
   });
   c.recvs.push(async (m: any) => {
-    if (m?.type === "setGoogleCredentials" && typeof m.clientId === "string" && typeof m.clientSecret === "string") {
+    if (m?.type === "setGoogleCredentials" && typeof m.clientId === "string") {
       try {
-        await saveGoogleCreds(m.clientId, m.clientSecret);
+        await saveGoogleCreds(m.clientId, typeof m.clientSecret === "string" ? m.clientSecret : "");
         c.send({ type: "googleCredsStatus", status: "saved" });
       } catch (e) {
         c.send({ type: "googleCredsStatus", status: "error", error: (e as Error).message });
@@ -250,35 +281,11 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
       return;
     }
     if (m?.type === "startGoogleLogin") {
-      try {
-        googleLoginSession?.cancel();
-        googleLoginSession = startGoogleLoginFixed(`http://127.0.0.1:${PORT}/oauth/google/callback`);
-        c.send({ type: "googleLoginUrl", url: googleLoginSession.url });
-        googleLoginSession.done.then(async (ok) => {
-          if (ok && wallet) {
-            await switchStorage(wallet, { kind: "gdrive" });
-            runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
-          }
-          // Broadcast to ALL clients — the onboarding SSE may have been replaced by a
-          // chat SSE while the user was in Chrome (WebView drop + reconnect). Both need
-          // to hear the result; the store's googleLoginStatus handler will reopen the
-          // stream, picking up the new gdrive runtime on reconnect.
-          const payload = { type: "googleLoginStatus" as const, status: ok ? "done" as const : "error" as const, error: ok ? undefined : "Login was not completed." };
-          for (const client of clients.values()) client.send(payload);
-          googleLoginSession = null;
-        });
-      } catch (e) {
-        c.send({ type: "googleLoginStatus", status: "error", error: (e as Error).message });
-        googleLoginSession = null;
-      }
+      beginGoogleLogin(c);
       return;
     }
     if (m?.type === "googleAuthCode" && typeof m.code === "string") {
-      try {
-        await googleLoginSession?.submitCode(m.code);
-      } catch (e) {
-        c.send({ type: "googleLoginStatus", status: "error", error: (e as Error).message });
-      }
+      await submitGoogleAuthCode(c, m.code);
       return;
     }
     if (m?.type === "cancelGoogleLogin") {
@@ -533,9 +540,9 @@ function attachOnboarding(c: Client) {
       codexLogin = null;
       return;
     }
-    if (m?.type === "setGoogleCredentials" && typeof m.clientId === "string" && typeof m.clientSecret === "string") {
+    if (m?.type === "setGoogleCredentials" && typeof m.clientId === "string") {
       try {
-        await saveGoogleCreds(m.clientId, m.clientSecret);
+        await saveGoogleCreds(m.clientId, typeof m.clientSecret === "string" ? m.clientSecret : "");
         c.send({ type: "googleCredsStatus", status: "saved" });
       } catch (e) {
         c.send({ type: "googleCredsStatus", status: "error", error: (e as Error).message });
@@ -553,35 +560,11 @@ function attachOnboarding(c: Client) {
       return;
     }
     if (m?.type === "startGoogleLogin") {
-      try {
-        googleLoginSession?.cancel();
-        googleLoginSession = startGoogleLoginFixed(`http://127.0.0.1:${PORT}/oauth/google/callback`);
-        c.send({ type: "googleLoginUrl", url: googleLoginSession.url });
-        googleLoginSession.done.then(async (ok) => {
-          if (ok && wallet) {
-            await switchStorage(wallet, { kind: "gdrive" });
-            runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
-          }
-          // Broadcast to ALL clients — the onboarding SSE may have been replaced by a
-          // chat SSE while the user was in Chrome (WebView drop + reconnect). Both need
-          // to hear the result; the store's googleLoginStatus handler will reopen the
-          // stream, picking up the new gdrive runtime on reconnect.
-          const payload = { type: "googleLoginStatus" as const, status: ok ? "done" as const : "error" as const, error: ok ? undefined : "Login was not completed." };
-          for (const client of clients.values()) client.send(payload);
-          googleLoginSession = null;
-        });
-      } catch (e) {
-        c.send({ type: "googleLoginStatus", status: "error", error: (e as Error).message });
-        googleLoginSession = null;
-      }
+      beginGoogleLogin(c);
       return;
     }
     if (m?.type === "googleAuthCode" && typeof m.code === "string") {
-      try {
-        await googleLoginSession?.submitCode(m.code);
-      } catch (e) {
-        c.send({ type: "googleLoginStatus", status: "error", error: (e as Error).message });
-      }
+      await submitGoogleAuthCode(c, m.code);
       return;
     }
     if (m?.type === "cancelGoogleLogin") {

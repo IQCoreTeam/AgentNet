@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { OnboardingShell, OnboardingButton } from "./OnboardingShell";
 import { useStore } from "../state/store";
+import { openExternalUrl } from "../platform/openExternalUrl";
+import { useAutoOpenExternalUrl } from "../platform/useAutoOpenExternalUrl";
 
 export function ConnectStorage() {
   const { state, send, finishStorage } = useStore();
@@ -12,14 +14,15 @@ export function ConnectStorage() {
   const [code, setCode] = useState("");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [showManualCode, setShowManualCode] = useState(false);
   const [clientId, setClientId] = useState("");
-  const [clientSecret, setClientSecret] = useState("");
   const [savingCreds, setSavingCreds] = useState(false);
 
   // Auto-detect already connected storage
   const info = storage?.info as { kind?: string; connected?: boolean; account?: string } | null;
   const isCloudConnected = !!(info && info.connected && info.kind !== "local");
   const googleCredsConfigured = storage?.googleCredsConfigured ?? false;
+  useAutoOpenExternalUrl(googleLoginUrl);
 
   useEffect(() => {
     if (isCloudConnected && info?.kind) {
@@ -31,6 +34,10 @@ export function ConnectStorage() {
   useEffect(() => {
     if (googleCredsConfigured) setSavingCreds(false);
   }, [googleCredsConfigured]);
+
+  useEffect(() => {
+    if (googleLoginError) setBusy(false);
+  }, [googleLoginError]);
 
   async function copyUrl() {
     if (!googleLoginUrl) return;
@@ -50,6 +57,7 @@ export function ConnectStorage() {
 
   function startGoogleOAuth() {
     setBusy(true);
+    setShowManualCode(false);
     send({ type: "startGoogleLogin" });
   }
 
@@ -60,9 +68,9 @@ export function ConnectStorage() {
   }
 
   function submitGoogleCreds() {
-    if (!clientId.trim() || !clientSecret.trim()) return;
+    if (!clientId.trim()) return;
     setSavingCreds(true);
-    send({ type: "setGoogleCredentials", clientId: clientId.trim(), clientSecret: clientSecret.trim() });
+    send({ type: "setGoogleCredentials", clientId: clientId.trim() });
   }
 
   function connectCustom() {
@@ -148,8 +156,8 @@ export function ConnectStorage() {
             /* Step 1: collect OAuth app credentials */
             <>
               <p className="text-xs text-zinc-400 leading-relaxed">
-                Create a <strong className="text-zinc-200">Desktop app</strong> OAuth client in{" "}
-                <span className="text-[#00E673]">Google Cloud Console</span> and paste the credentials below.
+                This build is missing a Google OAuth client ID. For development builds,
+                paste a Desktop app client ID here. Users should not need this step.
               </p>
               <label className="text-xs text-zinc-500 font-semibold uppercase">Client ID</label>
               <input
@@ -158,19 +166,11 @@ export function ConnectStorage() {
                 placeholder="123456789-xxx.apps.googleusercontent.com"
                 className="rounded-xl bg-zinc-900 px-3 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 focus:ring-[#00E673]/50"
               />
-              <label className="text-xs text-zinc-500 font-semibold uppercase">Client Secret</label>
-              <input
-                value={clientSecret}
-                onChange={(e) => setClientSecret(e.target.value)}
-                placeholder="GOCSPX-..."
-                type="password"
-                className="rounded-xl bg-zinc-900 px-3 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 focus:ring-[#00E673]/50"
-              />
               {googleCredsError && (
                 <p className="text-center text-sm text-red-400">{googleCredsError}</p>
               )}
               <OnboardingButton
-                disabled={!clientId.trim() || !clientSecret.trim() || savingCreds}
+                disabled={!clientId.trim() || savingCreds}
                 onClick={submitGoogleCreds}
               >
                 {savingCreds ? "Saving…" : "Save & Continue"}
@@ -193,40 +193,52 @@ export function ConnectStorage() {
               </OnboardingButton>
             </>
           ) : (
-            /* Step 3: paste auth code */
+            /* Step 3: browser approval */
             <>
-              <p className="text-xs text-zinc-400">
-                1. Open this link and authorize Google Drive access:
+              <p className="text-sm text-zinc-300 leading-relaxed text-center">
+                Google sign-in opened in your browser. Approve Drive access, then return to AgentNet.
               </p>
-              <a
-                href={googleLoginUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="break-all rounded-lg bg-zinc-900 px-3 py-2.5 text-xs leading-relaxed text-[#00E673] ring-1 ring-zinc-800"
+              <OnboardingButton variant="outline" onClick={() => openExternalUrl(googleLoginUrl)}>
+                Open Google Again
+              </OnboardingButton>
+              <button
+                type="button"
+                onClick={() => setShowManualCode((v) => !v)}
+                className="text-xs font-medium text-zinc-500 active:text-zinc-300"
               >
-                {googleLoginUrl}
-              </a>
-              <OnboardingButton variant="outline" onClick={copyUrl}>
-                {copied ? "Copied!" : "Copy link"}
-              </OnboardingButton>
-              <p className="mt-1 text-xs text-zinc-400">
-                2. Paste the redirected URL or authorization code back:
-              </p>
-              <input
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && submitGoogleCode()}
-                placeholder="Paste code or redirect URL here"
-                className="rounded-xl bg-zinc-900 px-3 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 focus:ring-[#00E673]/50"
-              />
-              <OnboardingButton disabled={!code.trim()} onClick={submitGoogleCode}>
-                Confirm
-              </OnboardingButton>
+                {showManualCode ? "Hide manual code entry" : "Having trouble? Use code manually"}
+              </button>
+              {showManualCode && (
+                <>
+                  <a
+                    href={googleLoginUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="break-all rounded-lg bg-zinc-900 px-3 py-2.5 text-xs leading-relaxed text-[#00E673] ring-1 ring-zinc-800"
+                  >
+                    {googleLoginUrl}
+                  </a>
+                  <OnboardingButton variant="outline" onClick={copyUrl}>
+                    {copied ? "Copied!" : "Copy link"}
+                  </OnboardingButton>
+                  <input
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && submitGoogleCode()}
+                    placeholder="Paste code or redirect URL here"
+                    className="rounded-xl bg-zinc-900 px-3 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 focus:ring-[#00E673]/50"
+                  />
+                  <OnboardingButton disabled={!code.trim()} onClick={submitGoogleCode}>
+                    Confirm
+                  </OnboardingButton>
+                </>
+              )}
               <OnboardingButton
                 variant="outline"
                 onClick={() => {
                   send({ type: "cancelGoogleLogin" });
                   setBusy(false);
+                  setShowManualCode(false);
                 }}
               >
                 Cancel

@@ -100,6 +100,7 @@ class MainActivity : AppCompatActivity() {
             WalletBridge(this, webView, walletAdapter, activityResultSender),
             "AgentNetWallet",
         )
+        webView.addJavascriptInterface(ShellBridge(this), "AgentNetShell")
 
         startServerFlow()
     }

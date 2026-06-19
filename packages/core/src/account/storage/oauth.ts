@@ -264,17 +264,19 @@ export function startGoogleLoginFixed(redirectUri: string): GoogleLogin {
 
 
 async function exchangeCode(code: string, verifier: string, redirect: string): Promise<void> {
+  const body = new URLSearchParams({
+    client_id: clientId(),
+    redirect_uri: redirect,
+    grant_type: "authorization_code",
+    code,
+    code_verifier: verifier,
+  });
+  const secret = clientSecret();
+  if (secret) body.set("client_secret", secret);
   const res = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: clientId(),
-      client_secret: clientSecret(),
-      redirect_uri: redirect,
-      grant_type: "authorization_code",
-      code,
-      code_verifier: verifier,
-    }),
+    body,
   });
   if (!res.ok) throw new Error(`oauth token exchange failed: ${res.status} ${await res.text()}`);
   const t = (await res.json()) as { access_token: string; refresh_token: string; expires_in: number };
@@ -291,15 +293,17 @@ export async function getAccessToken(): Promise<string> {
   if (!tok) throw new Error("not signed in to Google — run googleLogin first");
   if (Date.now() < tok.expiry - 60_000) return tok.access_token;
 
+  const body = new URLSearchParams({
+    client_id: clientId(),
+    grant_type: "refresh_token",
+    refresh_token: tok.refresh_token,
+  });
+  const secret = clientSecret();
+  if (secret) body.set("client_secret", secret);
   const res = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: clientId(),
-      client_secret: clientSecret(),
-      grant_type: "refresh_token",
-      refresh_token: tok.refresh_token,
-    }),
+    body,
   });
   if (!res.ok) throw new Error(`oauth refresh failed: ${res.status}`);
   const t = (await res.json()) as { access_token: string; expires_in: number };

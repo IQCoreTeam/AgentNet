@@ -116,7 +116,7 @@ export type ClientMessage =
   | { type: "startGoogleLogin" }
   | { type: "googleAuthCode"; code: string }
   | { type: "cancelGoogleLogin" }
-  | { type: "setGoogleCredentials"; clientId: string; clientSecret: string }
+  | { type: "setGoogleCredentials"; clientId: string; clientSecret?: string }
   | { type: "toast"; text: string }
   // ── market (UI→server) ──
   | { type: "searchSkills"; query: string; kind?: "skill" | "workflow" }

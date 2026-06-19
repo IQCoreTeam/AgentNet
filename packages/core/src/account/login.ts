@@ -182,7 +182,7 @@ export const logout = disconnectCloud;
 // in #33's authoring flow. Wire it there once #33 lands.
 
 /** Save Google OAuth app credentials without touching the storage kind. */
-export async function saveGoogleCreds(clientId: string, clientSecret: string): Promise<void> {
+export async function saveGoogleCreds(clientId: string, clientSecret = ""): Promise<void> {
   await ensureDir(rootDir());
   const prev = await readRawConfig();
   await writeFile(
@@ -194,5 +194,5 @@ export async function saveGoogleCreds(clientId: string, clientSecret: string): P
 /** True if Google OAuth app credentials are present in config. */
 export async function hasGoogleCreds(): Promise<boolean> {
   const raw = await readRawConfig();
-  return !!(raw.google_client_id);
+  return !!(process.env.GOOGLE_CLIENT_ID || raw.google_client_id);
 }
