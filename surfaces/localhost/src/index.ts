@@ -487,6 +487,7 @@ function attachOnboarding(c: Client) {
       // the gdrive choice + token persist, so re-walking that screen (and re-auth) is
       // pointless. Only a true first run needs the picker.
       c.send({ type: "walletConnected", address: walletAddress, storageOptions: STORAGE_OPTIONS, storageConfigured: await isCloudConnected() });
+      c.send({ type: "storage", info: await getStorageInfo(), options: STORAGE_OPTIONS, googleCredsConfigured: await hasGoogleCreds() });
       c.send({ type: "cliStatus", claude: cli.claude, codex: cli.codex });
       return;
     }
