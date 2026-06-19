@@ -14,7 +14,7 @@ export type {
 
 // ─── On-chain marketplace layer (from Step-0 core PR: nft/search/notes/etc.) ──
 // chain + seed + domain types
-export type { SignerInput, Session, Skill, Workflow, Note, Row, ReadOptions } from "./core/types.js";
+export type { SignerInput, Session, MarketItemType, Skill, Workflow, Note, Row, ReadOptions } from "./core/types.js";
 export {
   init as initChain,
   ensureDbRoot,
@@ -28,7 +28,7 @@ export {
   getTablePdaRef,
   signerAddress,
 } from "./core/chain.js";
-export { AGENTNET_ROOT_ID, mysessionsHint, reviewsHint, reviewsAgentHint } from "./core/seed.js";
+export { AGENTNET_ROOT_ID, mysessionsHint, reviewsHint, reviewsAgentHint, collectionFor, getPluginsCollectionMint } from "./core/seed.js";
 // skill / workflow NFTs (Token-2022 + code-in)
 export {
   publishSkill,

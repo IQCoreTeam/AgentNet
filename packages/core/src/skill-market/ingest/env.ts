@@ -23,9 +23,9 @@ import { classifySkills, readSkillManifest } from "../registry.js";
 import { resolveRpcUrl } from "../../core/rpc.js";
 import { init as initChain } from "../../core/chain.js";
 import type { AgentProfile, SkillCard, SkillDetail } from "../../chat/marketMessages.js";
-import type { Skill } from "../../core/types.js";
+import type { MarketItemType, Skill } from "../../core/types.js";
 import { readNotes, postNote as corePostNote, readAgentNotes, postAgentNote as corePostAgentNote } from "../../notes/notes.js";
-import { getSkillsCollectionMint, getWorkflowsCollectionMint, getIndexerUrl } from "../../core/seed.js";
+import { getSkillsCollectionMint, getWorkflowsCollectionMint, getPluginsCollectionMint, getIndexerUrl } from "../../core/seed.js";
 import { getLeaderboard, getReputation } from "../../reputation/reputation.js";
 import { SkillSync } from "./index.js";
 
@@ -36,6 +36,8 @@ function toCard(s: Skill): SkillCard {
     id: s.id, type: s.type, name: s.name, description: s.description,
     category: s.category, hashtags: s.hashtags, supply: s.supply,
     price: s.price, creator: s.creator, requiredSkills: s.requiredSkills,
+    engines: s.engines, iqGitPda: s.iqGitPda, version: s.version,
+    capabilities: s.capabilities, permissions: s.permissions,
   };
 }
 
@@ -51,8 +53,11 @@ function toCard(s: Skill): SkillCard {
 // down. Override the URL with AGENTNET_INDEXER_URL.
 const INDEXER_URL = getIndexerUrl();
 
-function collectionIdFor(type?: "skill" | "workflow"): Promise<string | null> {
-  const id = type === "workflow" ? getWorkflowsCollectionMint() : getSkillsCollectionMint();
+function collectionIdFor(type?: MarketItemType): Promise<string | null> {
+  const id =
+    type === "workflow" ? getWorkflowsCollectionMint()
+    : type === "plugin" ? getPluginsCollectionMint()
+    : getSkillsCollectionMint();
   return Promise.resolve(id);
 }
 
@@ -98,7 +103,7 @@ export async function marketplaceEnv(wallet: Wallet) {
 
   // Run a search via the indexer (fast, has supply+traits); fall back to a direct DAS
   // scan only if it errors (server down). `kind` = the active Skills/Workflows tab.
-  async function runSearch(query: string, kind?: "skill" | "workflow"): Promise<Skill[]> {
+  async function runSearch(query: string, kind?: MarketItemType): Promise<Skill[]> {
     const filters = { keyword: query, ...(kind ? { type: kind } : {}) };
     try {
       return await searchSkills(conn, { source: indexerSource(INDEXER_URL), filters });
@@ -108,7 +113,7 @@ export async function marketplaceEnv(wallet: Wallet) {
   }
 
   return {
-    async searchSkills(query: string, kind?: "skill" | "workflow"): Promise<SkillCard[]> {
+    async searchSkills(query: string, kind?: MarketItemType): Promise<SkillCard[]> {
       return (await runSearch(query, kind)).map(toCard);
     },
 
@@ -147,9 +152,9 @@ export async function marketplaceEnv(wallet: Wallet) {
     },
 
     // Post a comment on a skill (issue #34). collectionId resolved from skillType.
-    async postNote(skillId: string, skillType: "skill" | "workflow" | undefined, text: string, gitLink?: string) {
+    async postNote(skillId: string, skillType: MarketItemType | undefined, text: string, gitLink?: string) {
       const collectionId = await collectionIdFor(skillType);
-      if (!collectionId) return { ok: false, error: "Skills collection not configured" };
+      if (!collectionId) return { ok: false, error: `${skillType ?? "skill"} collection not configured` };
       try {
         await corePostNote(conn, wallet, { collectionId, skillId, text, gitLink });
         const notes = await readNotes(collectionId, skillId).catch(() => []);

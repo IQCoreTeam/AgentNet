@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { Box, Text, useInput } from "ink";
-import type { SkillCard, SkillDetail } from "@iqlabs-official/agent-sdk";
+import type { MarketItemType, SkillCard, SkillDetail } from "@iqlabs-official/agent-sdk";
 import type { Reputation, AgentProfile } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../theme.js";
 
 export interface MarketApi {
-  searchSkills(query: string, kind?: "skill" | "workflow"): Promise<SkillCard[]>;
+  searchSkills(query: string, kind?: MarketItemType): Promise<SkillCard[]>;
   getSkillDetail(mint: string): Promise<SkillDetail>;
   buySkill(skillId: string, creatorWallet?: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
   solBalance(): Promise<number | null>;
-  postNote(skillId: string, skillType: "skill" | "workflow" | undefined, text: string, gitLink?: string): Promise<{ ok: boolean; error?: string }>;
+  postNote(skillId: string, skillType: MarketItemType | undefined, text: string, gitLink?: string): Promise<{ ok: boolean; error?: string }>;
   publishSkill(input: { name: string; description: string; text: string; category?: string; hashtags?: string[]; priceSol: string }): Promise<{ ok: boolean; mint?: string; error?: string }>;
   listAgents(): Promise<Reputation[]>;
   getAgentProfile(wallet: string): Promise<AgentProfile>;

@@ -14,7 +14,7 @@
 // below is literal substring, not semantic.
 
 import type { Connection } from "@solana/web3.js";
-import type { Skill } from "../core/types.js";
+import type { MarketItemType, Skill } from "../core/types.js";
 import { dasSource, type SkillSource } from "../core/skillSource.js";
 import { getMintSupply, readSkillMintMetadata } from "../nft/token2022.js";
 
@@ -22,7 +22,7 @@ export interface SearchFilters {
   keyword?: string;
   category?: string;
   hashtags?: string[];
-  type?: "skill" | "workflow";
+  type?: MarketItemType;
 }
 
 export type SortBy = "supply" | "name" | "recent";

@@ -1,4 +1,4 @@
-// SkillSource — the enumeration seam for "which skills/workflows exist".
+// SkillSource — the enumeration seam for "which marketplace items exist".
 //
 // skill-nft-structure.md §2 is emphatic: "No skills registry table. The NFT
 // collection IS the skill list." The canonical truth is each mint's `uri`
@@ -13,7 +13,7 @@
 // is a real, visible answer — not a hidden failure). The seam stays so a
 // gateway enumerator can replace it later without changing search/reviews.
 
-import type { Skill } from "./types.js";
+import type { MarketItemType, Skill } from "./types.js";
 import { resolveRpcUrl } from "./rpc.js";
 
 /** Token-2022 program id — our skill/workflow mints all live under it (NonTransferable +
@@ -33,7 +33,7 @@ type DasRpcResponse = {
 };
 
 export interface SkillSource {
-  /** Enumerate all known skills/workflows (id set + cached metadata snapshot). */
+  /** Enumerate all known skills/workflows/plugins (id set + cached metadata snapshot). */
   listSkills(limit?: number): Promise<Skill[]>;
   /**
    * True when listSkills() returns live `supply` already filled (e.g. an indexer
@@ -47,20 +47,33 @@ export interface SkillSource {
  *  (skill-nft-json.md §4/§4b): `category` (single), `skill` (repeated hashtags),
  *  and `requiredSkill` (repeated prerequisite mint ids, workflows only). DAS
  *  surfaces these under content.metadata.attributes after resolving the uri. */
-function traitsFromAttributes(
+export function traitsFromAttributes(
   attributes: unknown,
-): { category: string; hashtags: string[]; requiredSkills: string[] } {
-  if (!Array.isArray(attributes)) return { category: "", hashtags: [], requiredSkills: [] };
+): {
+  category: string;
+  hashtags: string[];
+  requiredSkills: string[];
+  engines: string[];
+  iqGitPda?: string;
+} {
+  if (!Array.isArray(attributes)) {
+    return { category: "", hashtags: [], requiredSkills: [], engines: [] };
+  }
   let category = "";
   const hashtags: string[] = [];
   const requiredSkills: string[] = [];
+  const engines: string[] = [];
+  let iqGitPda: string | undefined;
   for (const a of attributes) {
     if (!a || typeof a.value !== "string") continue;
     if (a.trait_type === "category") category = a.value;
     else if (a.trait_type === "skill") hashtags.push(a.value);
+    else if (a.trait_type === "plugin") hashtags.push(a.value);
+    else if (a.trait_type === "engine") engines.push(a.value);
+    else if (a.trait_type === "iqGitPda") iqGitPda = a.value;
     else if (a.trait_type === "requiredSkill") requiredSkills.push(a.value);
   }
-  return { category, hashtags, requiredSkills };
+  return { category, hashtags, requiredSkills, engines, iqGitPda };
 }
 
 /**
@@ -81,19 +94,20 @@ export const dasSource: SkillSource = {
     // Note: the default lacks DAS, so reads come back empty there — a Helius key is
     // what actually surfaces skills (the UI flags this).
     const rpcUrl = await resolveRpcUrl();
-    const { getSkillsCollectionMint, getWorkflowsCollectionMint } = await import("./seed.js");
+    const { getSkillsCollectionMint, getWorkflowsCollectionMint, getPluginsCollectionMint } = await import("./seed.js");
     const skillsCollection = getSkillsCollectionMint();
     const workflowsCollection = getWorkflowsCollectionMint();
+    const pluginsCollection = getPluginsCollectionMint();
 
-    if (!skillsCollection && !workflowsCollection) {
+    if (!skillsCollection && !workflowsCollection && !pluginsCollection) {
       throw new Error(
-        "dasSource: no collection mints configured (AGENTNET_SKILLS_COLLECTION_PUBKEY / _WORKFLOWS_)",
+        "dasSource: no collection mints configured (AGENTNET_SKILLS_COLLECTION_PUBKEY / _WORKFLOWS_ / _PLUGINS_)",
       );
     }
 
     const skills: Skill[] = [];
 
-    async function fetchGroup(group: string, type: "skill" | "workflow") {
+    async function fetchGroup(group: string, type: MarketItemType) {
       const response = await fetch(rpcUrl!, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -115,18 +129,24 @@ export const dasSource: SkillSource = {
         // hashtags come straight from the scan (skill-nft-json.md §4), no
         // per-mint re-read. supply is the one field DAS doesn't carry live, so
         // search.ts still hydrates that from the mint.
-        const { category, hashtags, requiredSkills } = traitsFromAttributes(item.content?.metadata?.attributes);
+        const { category, hashtags, requiredSkills, engines, iqGitPda } = traitsFromAttributes(item.content?.metadata?.attributes);
+        const metadata = item.content?.metadata ?? {};
         skills.push({
           id: item.id,
           type,
-          name: item.content?.metadata?.name || "Unknown",
-          description: item.content?.metadata?.description || "",
+          name: metadata.name || "Unknown",
+          description: metadata.description || "",
           // Token-2022 has no Metaplex `creators`; fall back to the asset
           // authority (= update authority). May be empty — caller tolerates.
           creator: item.authorities?.[0]?.address || "",
           category,
           hashtags,
           requiredSkills,
+          engines,
+          iqGitPda,
+          version: typeof metadata.version === "string" ? metadata.version : undefined,
+          capabilities: Array.isArray(metadata.capabilities) ? metadata.capabilities.filter((v: unknown): v is string => typeof v === "string") : undefined,
+          permissions: Array.isArray(metadata.permissions) ? metadata.permissions.filter((v: unknown): v is string => typeof v === "string") : undefined,
           price: "0",
           supply: 0, // hydrated by getMintSupply (live counter, not in the scan)
           uriTxid: item.content?.json_uri || "",
@@ -137,6 +157,7 @@ export const dasSource: SkillSource = {
 
     if (skillsCollection) await fetchGroup(skillsCollection, "skill");
     if (workflowsCollection) await fetchGroup(workflowsCollection, "workflow");
+    if (pluginsCollection) await fetchGroup(pluginsCollection, "plugin");
 
     return skills.slice(0, limit);
   },
@@ -368,13 +389,16 @@ export async function ownedSkills(
  *  core stays independent of the indexer repo — we only depend on its wire JSON. */
 interface IndexerItem {
   mint: string;
-  type: "skill" | "workflow";
+  type: MarketItemType;
   name: string;
   description: string;
   creator: string | null;
   supply: number;
   price: string | null; // lamports (decimal string) from the on-chain ItemConfig PDA
   attributes: { trait_type: string; value: string }[];
+  version?: string | null;
+  capabilities?: string[];
+  permissions?: string[];
 }
 
 /**
@@ -398,7 +422,7 @@ export function indexerSource(baseUrl: string): SkillSource {
       if (!res.ok) throw new Error(`indexer /items → HTTP ${res.status}`);
       const { items } = (await res.json()) as { items: IndexerItem[] };
       return items.map((it) => {
-        const { category, hashtags, requiredSkills } = traitsFromAttributes(it.attributes);
+        const { category, hashtags, requiredSkills, engines, iqGitPda } = traitsFromAttributes(it.attributes);
         return {
           id: it.mint,
           type: it.type,
@@ -408,6 +432,11 @@ export function indexerSource(baseUrl: string): SkillSource {
           category,
           hashtags,
           requiredSkills,
+          engines,
+          iqGitPda,
+          version: it.version ?? undefined,
+          capabilities: it.capabilities,
+          permissions: it.permissions,
           price: it.price ?? undefined, // on-chain price (lamports); absent if unpriced
           supply: it.supply, // live — already hydrated by the indexer
           uriTxid: "",

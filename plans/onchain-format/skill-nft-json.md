@@ -173,6 +173,50 @@ mints (§3 there). Both are trivial because the trait is already the mint id.
 
 ---
 
+## 4c. Plugin NFT — same standard JSON, plugin-specific extensions
+
+A **plugin** is the third marketplace umbrella collection beside skills and
+workflows ([`../plugin-nft.md`](../plugin-nft.md)). It keeps the same Token-2022 +
+code-in shape, but its JSON describes an installable plugin package/version
+instead of a skill body or workflow recipe.
+
+```jsonc
+{
+  "name": "iq-git-reviewer",
+  "image": "<txid | url | omitted>",
+  "description": "Review code with IQ Git context.",
+  "attributes": [
+    { "trait_type": "category", "value": "developer-tools" },
+    { "trait_type": "plugin", "value": "git" },
+    { "trait_type": "plugin", "value": "review" },
+    { "trait_type": "engine", "value": "claude" },
+    { "trait_type": "engine", "value": "codex" },
+    { "trait_type": "iqGitPda", "value": "IqGitPda111..." }
+  ],
+  "version": "1.2.3",
+  "iqGitPda": "IqGitPda111...",
+  "engines": ["claude", "codex"],
+  "capabilities": ["git.read", "review.write"],
+  "permissions": ["fs.read"],
+  "pluginManifest": {
+    "id": "iq-git-reviewer",
+    "entrypoint": ".codex-plugin/plugin.json"
+  }
+}
+```
+
+- **`engine`** → one row per supported runtime, e.g. `claude`, `codex`, `mcp`.
+  This is the marketplace badge source; a plugin is not assumed to be Claude-only.
+- **`plugin`** → repeated tag rows, parallel to skill hashtag traits.
+- **`iqGitPda`** → the canonical provenance anchor for the plugin package.
+- **`pluginManifest`** → install metadata. Buyers/equippers must still validate it
+  before writing local plugin files.
+
+This section defines the data contract only. Plugin publish/install UI is a later
+slice.
+
+---
+
 ## 5. `uri = txid`, kept pure — no gateway URL baked in
 
 `uri` holds the **code-in txid**, never a gateway URL.
@@ -207,6 +251,8 @@ this on-chain format. We don't design it in now.
 7. Workflow NFT = same ② JSON in its own collection; `requiredSkill` = one
    repeated trait per prerequisite, valued by the skill's **NFT id (mint addr)**,
    not its name (§4b).
+8. Plugin NFT = same ② JSON in its own collection; `engine` traits badge Claude,
+   Codex, MCP, and future runtimes; IQ Git PDA is the provenance anchor (§4c).
 
 ## 8. Still open (not decided — carry forward)
 
