@@ -200,7 +200,20 @@ instead of a skill body or workflow recipe.
   "permissions": ["fs.read"],
   "pluginManifest": {
     "id": "iq-git-reviewer",
-    "entrypoint": ".codex-plugin/plugin.json"
+    "entrypoint": ".codex-plugin/plugin.json",
+    "codex": {
+      "pluginName": "iq-git-reviewer",
+      "marketplaceName": "personal"
+    },
+    "claude": {
+      "marketplaceName": "iq-plugins",
+      "pluginName": "iq-git-reviewer",
+      "source": {
+        "source": "github",
+        "repo": "IQCoreTeam/agentnet-plugins",
+        "ref": "main"
+      }
+    }
   }
 }
 ```
@@ -209,8 +222,11 @@ instead of a skill body or workflow recipe.
   This is the marketplace badge source; a plugin is not assumed to be Claude-only.
 - **`plugin`** → repeated tag rows, parallel to skill hashtag traits.
 - **`iqGitPda`** → the canonical provenance anchor for the plugin package.
-- **`pluginManifest`** → install metadata. Buyers/equippers must still validate it
-  before writing local plugin files.
+- **`pluginManifest`** → install metadata. Buyers/equippers validate the selected
+  engine before running real engine installers. Codex uses `codex plugin add`
+  against `codex.marketplaceName` or `codex.marketplacePath`; Claude uses
+  `claude plugin install plugin@marketplace`, optionally adding the GitHub
+  marketplace source first.
 
 This section defines the data contract only. Plugin publish/install UI is a later
 slice.

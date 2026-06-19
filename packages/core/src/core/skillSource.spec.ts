@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { dasSource, indexerSource, ownedAssetIds, ownedSkillMints, traitsFromAttributes } from "./skillSource.js";
+import { dasSource, indexerSource, ownedAssetIds, ownedSkillMints, pluginManifestFromMetadata, traitsFromAttributes } from "./skillSource.js";
 import type { Skill } from "./types.js";
 
 // dasSource enumerates the TokenGroup collections via a DAS RPC. We mock fetch
@@ -111,6 +111,35 @@ describe("core/skillSource — marketplace traits", () => {
       iqGitPda: "IqGitPda111",
     });
   });
+
+  it("normalizes plugin manifest install coordinates", () => {
+    expect(pluginManifestFromMetadata({
+      pluginManifest: {
+        id: "iq-git-reviewer",
+        entrypoint: ".codex-plugin/plugin.json",
+        codex: { pluginName: "iq-git-reviewer", marketplaceName: "personal" },
+        claude: {
+          marketplaceName: "iq-plugins",
+          pluginName: "iq-git-reviewer",
+          source: { source: "github", repo: "IQCoreTeam/agentnet-plugins", ref: "main" },
+        },
+      },
+    })).toEqual({
+      id: "iq-git-reviewer",
+      entrypoint: ".codex-plugin/plugin.json",
+      codex: {
+        pluginName: "iq-git-reviewer",
+        marketplaceName: "personal",
+        marketplacePath: null,
+        remoteMarketplaceName: null,
+      },
+      claude: {
+        marketplaceName: "iq-plugins",
+        pluginName: "iq-git-reviewer",
+        source: { source: "github", repo: "IQCoreTeam/agentnet-plugins", ref: "main" },
+      },
+    });
+  });
 });
 
 describe("core/skillSource — indexerSource", () => {
@@ -178,6 +207,11 @@ describe("core/skillSource — indexerSource", () => {
               version: "1.2.3",
               capabilities: ["git.read", "review.write"],
               permissions: ["fs.read"],
+              pluginManifest: {
+                id: "iq-git-reviewer",
+                codex: { pluginName: "iq-git-reviewer", marketplaceName: "personal" },
+                claude: { marketplaceName: "iq-plugins", pluginName: "iq-git-reviewer" },
+              },
               attributes: [
                 { trait_type: "category", value: "developer-tools" },
                 { trait_type: "plugin", value: "git" },
@@ -200,6 +234,19 @@ describe("core/skillSource — indexerSource", () => {
       version: "1.2.3",
       capabilities: ["git.read", "review.write"],
       permissions: ["fs.read"],
+      pluginManifest: {
+        id: "iq-git-reviewer",
+        codex: {
+          pluginName: "iq-git-reviewer",
+          marketplaceName: "personal",
+          marketplacePath: null,
+          remoteMarketplaceName: null,
+        },
+        claude: {
+          marketplaceName: "iq-plugins",
+          pluginName: "iq-git-reviewer",
+        },
+      },
       hashtags: ["git"],
     });
   });

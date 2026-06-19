@@ -14,7 +14,7 @@ export type {
 
 // ─── On-chain marketplace layer (from Step-0 core PR: nft/search/notes/etc.) ──
 // chain + seed + domain types
-export type { SignerInput, Session, MarketItemType, Skill, Workflow, Note, Row, ReadOptions } from "./core/types.js";
+export type { SignerInput, Session, MarketItemType, PluginEngine, PluginManifest, Skill, Workflow, Note, Row, ReadOptions } from "./core/types.js";
 export {
   init as initChain,
   ensureDbRoot,

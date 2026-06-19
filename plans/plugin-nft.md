@@ -58,7 +58,20 @@ extensions:
   "permissions": ["fs.read"],
   "pluginManifest": {
     "id": "iq-git-reviewer",
-    "entrypoint": ".codex-plugin/plugin.json"
+    "entrypoint": ".codex-plugin/plugin.json",
+    "codex": {
+      "pluginName": "iq-git-reviewer",
+      "marketplaceName": "personal"
+    },
+    "claude": {
+      "marketplaceName": "iq-plugins",
+      "pluginName": "iq-git-reviewer",
+      "source": {
+        "source": "github",
+        "repo": "IQCoreTeam/agentnet-plugins",
+        "ref": "main"
+      }
+    }
   }
 }
 ```
@@ -70,8 +83,9 @@ Rules:
 - `iqGitPda` is the canonical provenance anchor. URLs may be display helpers, but
   they are not the identity.
 - `plugin` traits are tag-like labels, parallel to `skill` hashtag traits.
-- `pluginManifest` is descriptive in this v1 slice. Installers must still
-  validate the manifest and permissions before materializing anything locally.
+- `pluginManifest` carries real engine install coordinates. Installers must still
+  validate the selected engine, manifest, and permissions before materializing
+  anything locally.
 
 ## 3. Buy/equip model
 
@@ -96,6 +110,8 @@ No plugin-specific review table is added.
 
 1. Add plugin collection/type plumbing and metadata parsing.
 2. Add plugin browse/detail UI with engine badges and IQ Git PDA display.
-3. Add plugin publish from IQ Git PDA + plugin manifest.
-4. Add buy/equip that validates manifest, permissions, and engine compatibility.
-5. Show owned/equipped plugins on agent profiles beside skills and workflows.
+3. Add guarded engine install for plugin NFTs that include real Claude/Codex
+   marketplace coordinates.
+4. Add plugin publish from IQ Git PDA + plugin manifest.
+5. Add buy/equip ownership gating and show owned/equipped plugins on agent
+   profiles beside skills and workflows.

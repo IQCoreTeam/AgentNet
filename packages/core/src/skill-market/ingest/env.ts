@@ -23,11 +23,12 @@ import { classifySkills, readSkillManifest } from "../registry.js";
 import { resolveRpcUrl } from "../../core/rpc.js";
 import { init as initChain } from "../../core/chain.js";
 import type { AgentProfile, SkillCard, SkillDetail } from "../../chat/marketMessages.js";
-import type { MarketItemType, Skill } from "../../core/types.js";
+import type { MarketItemType, PluginEngine, Skill } from "../../core/types.js";
 import { readNotes, postNote as corePostNote, readAgentNotes, postAgentNote as corePostAgentNote } from "../../notes/notes.js";
 import { getSkillsCollectionMint, getWorkflowsCollectionMint, getPluginsCollectionMint, getIndexerUrl } from "../../core/seed.js";
 import { getLeaderboard, getReputation } from "../../reputation/reputation.js";
 import { SkillSync } from "./index.js";
+import { installPluginFromCard } from "./pluginInstall.js";
 
 // Skill (enumeration row) -> SkillCard (what the UI renders). One place so search +
 // detail map identically.
@@ -38,6 +39,7 @@ function toCard(s: Skill): SkillCard {
     price: s.price, creator: s.creator, requiredSkills: s.requiredSkills,
     engines: s.engines, iqGitPda: s.iqGitPda, version: s.version,
     capabilities: s.capabilities, permissions: s.permissions,
+    pluginManifest: s.pluginManifest,
   };
 }
 
@@ -172,6 +174,16 @@ export async function marketplaceEnv(wallet: Wallet) {
         // agent's buy_skill MCP tool uses, so a UI buy and an agent buy equip identically.
         const { slug } = await skills.buyAndEquip(wallet, skillId, creatorWallet || wallet.address);
         return { ok: true, slug: slug ?? undefined };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) };
+      }
+    },
+
+    async installPlugin(pluginId: string, engine: PluginEngine) {
+      try {
+        const plugin = (await runSearch("")).find((s) => s.id === pluginId);
+        if (!plugin) return { ok: false, error: "Plugin not found in marketplace catalog." };
+        return await installPluginFromCard(toCard(plugin), engine);
       } catch (e) {
         return { ok: false, error: e instanceof Error ? e.message : String(e) };
       }

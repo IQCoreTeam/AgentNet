@@ -10,17 +10,27 @@ interface Props {
 }
 
 export function SkillDetailView({ detail, owned, onBack }: Props) {
-  const { send } = useStore();
+  const { state, send } = useStore();
   const [buying, setBuying] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [noteGitLink, setNoteGitLink] = useState("");
   const { card, skillText, notes } = detail;
   const priceSol = card.price ? (Number(card.price) / 1_000_000_000).toFixed(3) : null;
   const isPlugin = card.type === "plugin";
+  const pluginEngine = state.cli;
+  const engineSupported = !card.engines?.length || card.engines.map((e) => e.toLowerCase()).includes(pluginEngine);
+  const hasInstallManifest = pluginEngine === "codex" ? !!card.pluginManifest?.codex : !!card.pluginManifest?.claude;
+  const canInstallPlugin = isPlugin && engineSupported && hasInstallManifest;
 
   function handleBuy() {
     setBuying(true);
     send({ type: "buySkill", skillId: card.id, creatorWallet: card.creator });
+    setTimeout(() => setBuying(false), 5000);
+  }
+
+  function handleInstallPlugin() {
+    setBuying(true);
+    send({ type: "installPlugin", pluginId: card.id, engine: pluginEngine });
     setTimeout(() => setBuying(false), 5000);
   }
 
@@ -135,10 +145,11 @@ export function SkillDetailView({ detail, owned, onBack }: Props) {
       {!owned && isPlugin && (
         <div className="shrink-0 border-t border-blue-700/40 bg-gradient-to-t from-blue-950/30 to-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button
-            disabled
-            className="w-full rounded-xl border border-blue-800/60 bg-blue-950/30 py-3 text-sm font-semibold text-blue-300 opacity-80"
+            onClick={handleInstallPlugin}
+            disabled={buying || !canInstallPlugin}
+            className="w-full rounded-xl border border-blue-700/70 bg-blue-500/15 py-3 text-sm font-semibold text-blue-200 active:bg-blue-500/25 disabled:opacity-50"
           >
-            Plugin install/equip coming next
+            {buying ? "Installing…" : canInstallPlugin ? `Install for ${pluginEngine}` : `No ${pluginEngine} install manifest`}
           </button>
         </div>
       )}

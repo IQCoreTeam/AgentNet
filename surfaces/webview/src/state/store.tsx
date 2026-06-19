@@ -353,6 +353,13 @@ function reducer(state: State, ev: Action): State {
         marketOwned: ev.ok ? [...state.marketOwned, ev.slug ?? ev.skillId] : state.marketOwned,
         buyCelebrate: ev.ok ? true : state.buyCelebrate,
       };
+    case "pluginInstallResult":
+      return {
+        ...state,
+        toast: ev.ok
+          ? `Installed plugin for ${ev.engine}. Restart that engine to load it.`
+          : `Plugin install failed: ${ev.error ?? "unknown"}`,
+      };
     case "ownedSkills":
       return { ...state, marketOwned: ev.names };
     case "balance":

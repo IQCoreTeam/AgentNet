@@ -10,7 +10,7 @@
 //
 // Direction is in the name: *Request = UI -> host; *Event = host -> UI.
 
-import type { MarketItemType, Note, Reputation } from "../core/types.js";
+import type { MarketItemType, Note, PluginEngine, PluginManifest, Reputation } from "../core/types.js";
 
 /** One item row as the UI renders it (cards + detail). Mirrors the subset of `Skill`
  *  the UI needs — kept here so host (env callbacks) and UI agree. Covers all marketplace
@@ -33,6 +33,7 @@ export interface SkillCard {
   version?: string;
   capabilities?: string[];
   permissions?: string[];
+  pluginManifest?: PluginManifest;
 }
 
 /** Full agent profile payload sent to the UI on getAgentProfile. */
@@ -80,6 +81,7 @@ export type MarketRequest =
   | { type: "getSkillDetail"; mint: string } // open the detail view for one item
   | { type: "getSkillDoc"; name: string } // read an installed skill's local SKILL.md by name
   | { type: "buySkill"; skillId: string; creatorWallet?: string }
+  | { type: "installPlugin"; pluginId: string; engine: PluginEngine }
   | { type: "disposeSkill"; skillId: string } // un-equip an owned skill (local + sticky)
   | { type: "reEquipSkill"; skillId: string } // undo a dispose (re-install, no re-buy)
   | { type: "ownedSkills" } // ask the host to (re)send the owned list
@@ -115,6 +117,7 @@ export type MarketEvent =
   | { type: "skillDetail"; detail: SkillDetail } // full detail for the opened item (includes notes)
   | { type: "skillDoc"; name: string; text: string | null } // installed skill's SKILL.md (null = not found)
   | { type: "buyResult"; skillId: string; ok: boolean; slug?: string; error?: string }
+  | { type: "pluginInstallResult"; pluginId: string; engine: PluginEngine; ok: boolean; error?: string }
   | { type: "disposeResult"; skillId: string; ok: boolean; slug?: string; error?: string }
   | { type: "reEquipResult"; skillId: string; ok: boolean; slug?: string; error?: string }
   // installed skill names (panel fill) + slug->mint for bought NFTs (reuse market detail) +

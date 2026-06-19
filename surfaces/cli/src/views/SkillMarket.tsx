@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Box, Text, useInput } from "ink";
-import type { MarketItemType, SkillCard, SkillDetail } from "@iqlabs-official/agent-sdk";
+import type { MarketItemType, PluginEngine, SkillCard, SkillDetail } from "@iqlabs-official/agent-sdk";
 import type { Reputation, AgentProfile } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../theme.js";
 
@@ -8,6 +8,7 @@ export interface MarketApi {
   searchSkills(query: string, kind?: MarketItemType): Promise<SkillCard[]>;
   getSkillDetail(mint: string): Promise<SkillDetail>;
   buySkill(skillId: string, creatorWallet?: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
+  installPlugin(pluginId: string, engine: PluginEngine): Promise<{ ok: boolean; error?: string }>;
   solBalance(): Promise<number | null>;
   postNote(skillId: string, skillType: MarketItemType | undefined, text: string, gitLink?: string): Promise<{ ok: boolean; error?: string }>;
   publishSkill(input: { name: string; description: string; text: string; category?: string; hashtags?: string[]; priceSol: string }): Promise<{ ok: boolean; mint?: string; error?: string }>;
@@ -42,6 +43,7 @@ export function SkillMarket({
   api,
   initialKind = "skill",
   walletAddr,
+  engine,
   ownedNames,
   onBought,
   onClose,
@@ -49,6 +51,7 @@ export function SkillMarket({
   api: MarketApi;
   initialKind?: MarketItemType;
   walletAddr: string;
+  engine: PluginEngine;
   ownedNames: string[];
   onBought: () => void;
   onClose: () => void;
@@ -90,6 +93,12 @@ export function SkillMarket({
   const owned = new Set(ownedNames);
   const clamped = Math.min(idx, Math.max(0, results.length - 1));
   const selected = results[clamped];
+  const canInstallPlugin = (card: SkillCard | null | undefined) => {
+    if (!card || card.type !== "plugin") return false;
+    const engines = card.engines?.map((e) => e.toLowerCase()) ?? [];
+    if (engines.length && !engines.includes(engine)) return false;
+    return engine === "codex" ? !!card.pluginManifest?.codex : !!card.pluginManifest?.claude;
+  };
 
   async function search(q: string, k: MarketItemType) {
     setLoading(true);
@@ -139,6 +148,14 @@ export function SkillMarket({
       setFlash(`buy failed: ${res.error ?? "unknown error"}`);
       setStage("detail");
     }
+  }
+
+  async function doInstall(card: SkillCard) {
+    setBusy(true);
+    setFlash(null);
+    const res = await api.installPlugin(card.id, engine);
+    setBusy(false);
+    setFlash(res.ok ? `installed ${card.name} for ${engine}; restart ${engine} to load it` : `install failed: ${res.error ?? "unknown error"}`);
   }
 
   async function doComment() {
@@ -303,6 +320,7 @@ export function SkillMarket({
     if (stage === "detail") {
       if (key.escape) { setStage("list"); setDetail(null); return; }
       if (input === "b" && detail && detail.card.type !== "plugin" && !owned.has(detail.card.name)) { setStage("confirm"); return; }
+      if (input === "i" && detail && detail.card.type === "plugin" && canInstallPlugin(detail.card)) { void doInstall(detail.card); return; }
       if (input === "c" && detail) {
         setCommentText(""); setCommentGitLink(""); setCommentField("text");
         setStage("comment");
@@ -335,6 +353,7 @@ export function SkillMarket({
     if (key.downArrow) return setIdx((i) => Math.min(results.length - 1, i + 1));
     if (key.return && selected) return void openDetail(selected.id);
     if (input === "b" && selected && selected.type !== "plugin" && !owned.has(selected.name)) { setDetail(null); setStage("confirm"); }
+    if (input === "i" && selected && selected.type === "plugin" && canInstallPlugin(selected)) { void doInstall(selected); }
   });
 
   // ── agent profile ─────────────────────────────────────────────────────────
@@ -534,7 +553,7 @@ export function SkillMarket({
             {c.iqGitPda ? <Text>IQ Git PDA {c.iqGitPda}</Text> : null}
             {c.capabilities?.length ? <Text>capabilities {c.capabilities.join(", ")}</Text> : null}
             {c.permissions?.length ? <Text>permissions {c.permissions.join(", ")}</Text> : null}
-            <Text dimColor>install/equip is not wired yet</Text>
+            <Text dimColor>{canInstallPlugin(c) ? `install target: ${engine}` : `no ${engine} install manifest`}</Text>
           </Box>
         ) : null}
         {detail.requiredCards.length ? (
@@ -565,7 +584,7 @@ export function SkillMarket({
         {flash ? <Box marginTop={1}><Text color={colors.ok}>{glyph.sparkle} {flash}</Text></Box> : null}
         <Box marginTop={1}>
           <Text dimColor>
-            {isPlugin ? "plugin install/equip later · " : isOwned ? "owned · " : "[b] buy · "}[c] comment · [esc] back
+            {isPlugin ? (canInstallPlugin(c) ? `[i] install for ${engine} · ` : `no ${engine} install manifest · `) : isOwned ? "owned · " : "[b] buy · "}[c] comment · [esc] back
           </Text>
         </Box>
       </Box>
@@ -632,7 +651,7 @@ export function SkillMarket({
         <Text dimColor>
           {typing
             ? "type to search · ↵ run · [tab] skills/workflows/plugins · ↓ results · esc close"
-            : "↑/↓ move · ↵ open · [b] buy non-plugin · [tab] switch · [/] search · [a] agents · [p] publish · esc close"}
+            : "↑/↓ move · ↵ open · [b] buy non-plugin · [i] install plugin · [tab] switch · [/] search · [a] agents · [p] publish · esc close"}
         </Text>
       </Box>
     </Box>

@@ -724,6 +724,7 @@ export function Chat({
         api={market}
         initialKind={marketKind}
         walletAddr={address}
+        engine={cli}
         ownedNames={installed}
         onBought={() => {
           // a buy installs the skill — refresh the badge source + the welcome panel list.

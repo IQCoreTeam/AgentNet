@@ -465,6 +465,15 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
         }
         return;
       }
+      case "installPlugin": {
+        try {
+          const r = await mkt.installPlugin(m.pluginId, m.engine);
+          c.send({ type: "pluginInstallResult", pluginId: m.pluginId, engine: m.engine, ...r });
+        } catch (e) {
+          c.send({ type: "pluginInstallResult", pluginId: m.pluginId, engine: m.engine, ok: false, error: (e as Error).message });
+        }
+        return;
+      }
       case "ownedSkills": {
         try {
           const r = await mkt.ownedSkills();

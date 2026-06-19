@@ -13,7 +13,7 @@
 
 import type { AgentRuntime, SessionHandle } from "../runtime/contract.js";
 import type { ApprovalChannel } from "../runtime/approval/channel.js";
-import type { MarketItemType } from "../core/types.js";
+import type { MarketItemType, PluginEngine } from "../core/types.js";
 import type { SkillCard, MarketRequest } from "./marketMessages.js";
 
 // The two-way pipe to ONE chat UI (one panel / one socket). Messages both ways are
@@ -50,6 +50,7 @@ export interface ChatEnv {
   getSkillDetail?(mint: string): Promise<import("./marketMessages.js").SkillDetail>;
   getSkillDoc?(name: string): Promise<string | null>;
   buySkill?(skillId: string, creatorWallet?: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
+  installPlugin?(pluginId: string, engine: PluginEngine): Promise<{ ok: boolean; error?: string }>;
   // dispose (un-equip) an owned skill: local + sticky (soulbound NFT stays owned, no refund).
   disposeSkill?(skillId: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
   // re-equip a previously-disposed skill the wallet still owns (undo, no re-buy).
@@ -398,6 +399,12 @@ export function createChatSession(
           await env.loadOwnedSkills?.(); // re-sync the whole owned set after the buy
           sendMarket(await ownedSkillsMsg(env));
         }
+        break;
+      }
+      case "installPlugin": {
+        const req = m as Extract<MarketRequest, { type: "installPlugin" }>;
+        const res = env.installPlugin ? await env.installPlugin(req.pluginId, req.engine) : { ok: false, error: "plugin install unavailable" };
+        sendMarket({ type: "pluginInstallResult", pluginId: req.pluginId, engine: req.engine, ...res });
         break;
       }
       case "disposeSkill": {

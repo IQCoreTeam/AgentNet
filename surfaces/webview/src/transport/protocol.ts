@@ -124,6 +124,7 @@ export type ClientMessage =
   | { type: "searchSkills"; query: string; kind?: MarketItemType }
   | { type: "getSkillDetail"; mint: string }
   | { type: "buySkill"; skillId: string; creatorWallet?: string }
+  | { type: "installPlugin"; pluginId: string; engine: "claude" | "codex" }
   | { type: "ownedSkills" }
   | { type: "getBalance" }
   | { type: "getRpcStatus" }
@@ -187,6 +188,7 @@ export type ServerMessage =
   | { type: "searchError"; message: string }
   | { type: "skillDetail"; detail: import("@iqlabs-official/agent-sdk").SkillDetail }
   | { type: "buyResult"; skillId: string; ok: boolean; slug?: string; error?: string }
+  | { type: "pluginInstallResult"; pluginId: string; engine: "claude" | "codex"; ok: boolean; error?: string }
   | { type: "ownedSkills"; names: string[]; mints?: Record<string, string> }
   | { type: "balance"; lamports: number | null }
   | { type: "skillActive"; name: string }

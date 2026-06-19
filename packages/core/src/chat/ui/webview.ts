@@ -1485,7 +1485,7 @@ export function chatHtml(): string {
             <span id="mktBalance" class="mktBal" title="Your wallet balance" style="display:none"></span>
             <button id="mktMakeSkillBtn" class="mktMake" title="Publish a new skill">＋ Make skill</button>
           </div>
-          <div class="muted small">Popular first. Skills and workflows are buyable; plugin install/equip is coming next.</div>
+          <div class="muted small">Popular first. Skills and workflows are buyable; plugins install when their NFT manifest includes real engine marketplace coordinates.</div>
         </div>
         <div class="mktTabs">
           <button class="mktTab on" data-kind="skill">Skills</button>
@@ -3588,6 +3588,13 @@ export function chatHtml(): string {
   let lastMarketResults = []; // last search results, kept to re-render on owned-list change
   let currentKind = 'skill';  // active tab: Skills | Workflows | Plugins
   let currentDetail = null;   // { id, type } of the open detail — for comments refresh
+  function canInstallPlugin(card) {
+    if (!card || card.type !== 'plugin') return false;
+    const engines = (card.engines || []).map((e) => String(e).toLowerCase());
+    if (engines.length && engines.indexOf(cli) < 0) return false;
+    const manifest = card.pluginManifest || {};
+    return cli === 'codex' ? !!manifest.codex : !!manifest.claude;
+  }
   function runMarketSearch() {
     mktResults.innerHTML = '<div class="mktEmpty">Searching…</div>';
     vscode.postMessage({ type: 'searchSkills', query: mktSearch.value.trim(), kind: currentKind });
@@ -3682,7 +3689,7 @@ export function chatHtml(): string {
       if (c.iqGitPda) lines.push('IQ Git PDA: ' + c.iqGitPda);
       if (c.capabilities && c.capabilities.length) lines.push('Capabilities: ' + c.capabilities.join(', '));
       if (c.permissions && c.permissions.length) lines.push('Permissions: ' + c.permissions.join(', '));
-      bd.textContent = lines.length ? lines.join('\\n') : 'Plugin metadata is available. Install/equip support is not wired yet.';
+      bd.textContent = lines.length ? lines.join('\\n') : 'Plugin metadata is available.';
       skillModalBody.appendChild(sec); skillModalBody.appendChild(bd);
     }
     // buy (hidden on your own skills — you can't buy what you authored)
@@ -3697,7 +3704,14 @@ export function chatHtml(): string {
       skillModalBody.appendChild(buy); skillModalBuyBtn = buy;
     } else if (c.type === 'plugin') {
       const buy = document.createElement('button'); buy.className = 'dt-buy';
-      buy.textContent = 'Plugin install/equip coming next'; buy.disabled = true;
+      const canInstall = canInstallPlugin(c);
+      buy.textContent = canInstall ? ('Install for ' + cli) : ('No ' + cli + ' install manifest');
+      buy.disabled = !canInstall;
+      buy.addEventListener('click', () => {
+        if (!canInstall) return;
+        buy.disabled = true; buy.textContent = 'Installing…';
+        vscode.postMessage({ type: 'installPlugin', pluginId: c.id, engine: cli });
+      });
       skillModalBody.appendChild(buy); skillModalBuyBtn = buy;
     }
     if (detail && detail.skillText && c.type !== 'plugin') {
@@ -3852,10 +3866,17 @@ export function chatHtml(): string {
       if (c.iqGitPda) lines.push('IQ Git PDA: ' + c.iqGitPda);
       if (c.capabilities && c.capabilities.length) lines.push('Capabilities: ' + c.capabilities.join(', '));
       if (c.permissions && c.permissions.length) lines.push('Permissions: ' + c.permissions.join(', '));
-      body.textContent = lines.length ? lines.join('\\n') : 'Plugin metadata is available. Install/equip support is not wired yet.';
+      body.textContent = lines.length ? lines.join('\\n') : 'Plugin metadata is available.';
       mktDetailBody.appendChild(sec); mktDetailBody.appendChild(body);
       const install = document.createElement('button'); install.className = 'dt-buy';
-      install.textContent = 'Plugin install/equip coming next'; install.disabled = true;
+      const canInstall = canInstallPlugin(c);
+      install.textContent = canInstall ? ('Install for ' + cli) : ('No ' + cli + ' install manifest');
+      install.disabled = !canInstall;
+      install.addEventListener('click', () => {
+        if (!canInstall) return;
+        install.disabled = true; install.textContent = 'Installing…';
+        vscode.postMessage({ type: 'installPlugin', pluginId: c.id, engine: cli });
+      });
       mktDetailBody.appendChild(install);
       detailBuyBtn = install; currentDetailName = c.name || null;
       renderComments(c.id, c.type, detail && detail.notes, owned);
@@ -3945,12 +3966,19 @@ export function chatHtml(): string {
       if (priceTxt) pr.textContent = priceTxt; // "Free" / "0.1 SOL"; empty when unknown
       const buy = document.createElement('button'); buy.className = 'mc-buy';
       const isPlugin = r.type === 'plugin';
-      buy.textContent = isPlugin ? 'Install later' : owned ? 'Owned' : 'Buy'; buy.disabled = owned || isPlugin;
+      const canInstall = isPlugin && canInstallPlugin(r);
+      buy.textContent = isPlugin ? (canInstall ? ('Install ' + cli) : ('No ' + cli)) : owned ? 'Owned' : 'Buy';
+      buy.disabled = owned || (isPlugin && !canInstall);
       buy.addEventListener('click', (e) => {
         e.stopPropagation(); // don't trigger the card-body detail open
-        if (isPlugin) return;
-        buy.disabled = true; buy.textContent = 'Buying…';
-        vscode.postMessage({ type: 'buySkill', skillId: r.id, creatorWallet: r.creator });
+        buy.disabled = true;
+        if (isPlugin) {
+          buy.textContent = 'Installing…';
+          vscode.postMessage({ type: 'installPlugin', pluginId: r.id, engine: cli });
+        } else {
+          buy.textContent = 'Buying…';
+          vscode.postMessage({ type: 'buySkill', skillId: r.id, creatorWallet: r.creator });
+        }
       });
       card.appendChild(img); card.appendChild(main); card.appendChild(sup); card.appendChild(pr); card.appendChild(buy);
       mktResults.appendChild(card);
@@ -4375,6 +4403,16 @@ export function chatHtml(): string {
         if (skillModalBuyBtn) { skillModalBuyBtn.disabled = false; skillModalBuyBtn.textContent = 'Buy'; }
         renderMarketResults(lastMarketResults); // restore any card stuck on "Buying…"
         renderSkillResults(lastMarketResults);
+      }
+    }
+    else if (m.type === 'pluginInstallResult') {
+      if (m.ok) {
+        celebrateSkill('Installed for ' + m.engine);
+        if (detailBuyBtn) { detailBuyBtn.disabled = true; detailBuyBtn.textContent = 'Installed'; }
+        if (skillModalBuyBtn) { skillModalBuyBtn.disabled = true; skillModalBuyBtn.textContent = 'Installed'; }
+      } else {
+        showBuyError(m.error || 'Plugin install failed');
+        renderMarketResults(lastMarketResults);
       }
     }
     // dispose / re-equip results: the ownedSkills message that follows updates disposedMints

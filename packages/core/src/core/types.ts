@@ -18,6 +18,31 @@ export interface Session {
 /** Marketplace NFT umbrella kind. */
 export type MarketItemType = "skill" | "workflow" | "plugin";
 
+export type PluginEngine = "claude" | "codex";
+
+/** Install coordinates carried by a plugin NFT. They intentionally mirror each
+ * engine's real plugin mechanism instead of inventing a generic fake package id. */
+export interface PluginManifest {
+  id?: string;
+  entrypoint?: string;
+  codex?: {
+    pluginName: string;
+    marketplaceName?: string | null;
+    marketplacePath?: string | null;
+    remoteMarketplaceName?: string | null;
+  };
+  claude?: {
+    marketplaceName: string;
+    pluginName?: string;
+    source?: {
+      source: "github";
+      repo: string;
+      ref?: string;
+    };
+  };
+  [key: string]: unknown;
+}
+
 /** Skill / workflow / plugin NFT metadata. */
 export interface Skill {
   id: string; // NFT mint address
@@ -38,6 +63,7 @@ export interface Skill {
   version?: string;
   capabilities?: string[];
   permissions?: string[];
+  pluginManifest?: PluginManifest;
   price?: string; // lamports as decimal string (bigint isn't JSON-serializable)
   supply: number; // mint supply = popularity
   uriTxid: string; // codeIn txid holding the skill text

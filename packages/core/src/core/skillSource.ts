@@ -13,7 +13,7 @@
 // is a real, visible answer — not a hidden failure). The seam stays so a
 // gateway enumerator can replace it later without changing search/reviews.
 
-import type { MarketItemType, Skill } from "./types.js";
+import type { MarketItemType, PluginManifest, Skill } from "./types.js";
 import { resolveRpcUrl } from "./rpc.js";
 
 /** Token-2022 program id — our skill/workflow mints all live under it (NonTransferable +
@@ -31,6 +31,55 @@ type DasRpcResponse = {
   error?: unknown;
   result?: { items?: any[] };
 };
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+function maybeString(v: unknown): string | undefined {
+  return typeof v === "string" && v.trim() ? v : undefined;
+}
+
+export function pluginManifestFromMetadata(metadata: unknown): PluginManifest | undefined {
+  if (!isRecord(metadata) || !isRecord(metadata.pluginManifest)) return undefined;
+  const raw = metadata.pluginManifest;
+  const out: PluginManifest = { ...raw };
+  const id = maybeString(raw.id);
+  const entrypoint = maybeString(raw.entrypoint);
+  if (id) out.id = id;
+  if (entrypoint) out.entrypoint = entrypoint;
+
+  if (isRecord(raw.codex)) {
+    const pluginName = maybeString(raw.codex.pluginName);
+    if (pluginName) {
+      out.codex = {
+        pluginName,
+        marketplaceName: maybeString(raw.codex.marketplaceName) ?? null,
+        marketplacePath: maybeString(raw.codex.marketplacePath) ?? null,
+        remoteMarketplaceName: maybeString(raw.codex.remoteMarketplaceName) ?? null,
+      };
+    }
+  }
+
+  if (isRecord(raw.claude)) {
+    const marketplaceName = maybeString(raw.claude.marketplaceName);
+    if (marketplaceName) {
+      const source = isRecord(raw.claude.source) && raw.claude.source.source === "github" && maybeString(raw.claude.source.repo)
+        ? {
+            source: "github" as const,
+            repo: maybeString(raw.claude.source.repo)!,
+            ref: maybeString(raw.claude.source.ref),
+          }
+        : undefined;
+      out.claude = {
+        marketplaceName,
+        pluginName: maybeString(raw.claude.pluginName),
+        ...(source ? { source } : {}),
+      };
+    }
+  }
+  return out;
+}
 
 export interface SkillSource {
   /** Enumerate all known skills/workflows/plugins (id set + cached metadata snapshot). */
@@ -147,6 +196,7 @@ export const dasSource: SkillSource = {
           version: typeof metadata.version === "string" ? metadata.version : undefined,
           capabilities: Array.isArray(metadata.capabilities) ? metadata.capabilities.filter((v: unknown): v is string => typeof v === "string") : undefined,
           permissions: Array.isArray(metadata.permissions) ? metadata.permissions.filter((v: unknown): v is string => typeof v === "string") : undefined,
+          pluginManifest: pluginManifestFromMetadata(metadata),
           price: "0",
           supply: 0, // hydrated by getMintSupply (live counter, not in the scan)
           uriTxid: item.content?.json_uri || "",
@@ -399,6 +449,7 @@ interface IndexerItem {
   version?: string | null;
   capabilities?: string[];
   permissions?: string[];
+  pluginManifest?: unknown;
 }
 
 /**
@@ -437,6 +488,7 @@ export function indexerSource(baseUrl: string): SkillSource {
           version: it.version ?? undefined,
           capabilities: it.capabilities,
           permissions: it.permissions,
+          pluginManifest: pluginManifestFromMetadata(it),
           price: it.price ?? undefined, // on-chain price (lamports); absent if unpriced
           supply: it.supply, // live — already hydrated by the indexer
           uriTxid: "",
