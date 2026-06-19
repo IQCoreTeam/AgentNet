@@ -4,12 +4,14 @@ import { SkillIcon } from "../icons";
 interface Props {
   card: SkillCard;
   owned?: boolean;
+  disposed?: boolean;
   firing?: boolean;
   onOpen: (card: SkillCard) => void;
 }
 
-export function SkillCardTile({ card, owned, firing, onOpen }: Props) {
+export function SkillCardTile({ card, owned, disposed, firing, onOpen }: Props) {
   const priceSol = card.price ? (Number(card.price) / 1_000_000_000).toFixed(3) : null;
+  const isPlugin = card.type === "plugin";
   return (
     <button
       onClick={() => onOpen(card)}
@@ -18,6 +20,7 @@ export function SkillCardTile({ card, owned, firing, onOpen }: Props) {
         "bg-zinc-900 border-zinc-800 hover:border-zinc-600 active:scale-[0.98]",
         firing ? "skill-firing border-green-500/60" : "",
         owned ? "border-l-2 border-l-green-500" : "",
+        disposed ? "opacity-55 grayscale border-dashed border-zinc-700" : "",
       ].join(" ")}
     >
       <div className="flex items-start gap-2">
@@ -36,6 +39,11 @@ export function SkillCardTile({ card, owned, firing, onOpen }: Props) {
                 owned
               </span>
             )}
+            {disposed && (
+              <span className="shrink-0 rounded px-1 py-0.5 text-[10px] font-semibold bg-zinc-800 text-zinc-500">
+                un-equipped
+              </span>
+            )}
             {firing && (
               <span className="shrink-0 rounded px-1 py-0.5 text-[10px] font-semibold bg-green-500/20 text-green-300 animate-pulse">
                 casting
@@ -47,6 +55,9 @@ export function SkillCardTile({ card, owned, firing, onOpen }: Props) {
           )}
           <div className="mt-1 flex items-center gap-2 text-[11px] text-zinc-600">
             {card.category && <span>{card.category}</span>}
+            {isPlugin && card.engines?.length ? (
+              <span className="text-blue-400/80">{card.engines.join(" + ")}</span>
+            ) : null}
             {card.supply != null && <span>↑{card.supply}</span>}
             {priceSol && <span className="text-green-500/80">{priceSol} SOL</span>}
           </div>

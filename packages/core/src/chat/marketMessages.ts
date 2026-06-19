@@ -10,15 +10,15 @@
 //
 // Direction is in the name: *Request = UI -> host; *Event = host -> UI.
 
-import type { Note, Reputation } from "../core/types.js";
+import type { MarketItemType, Note, PluginEngine, PluginManifest, Reputation } from "../core/types.js";
 
 /** One item row as the UI renders it (cards + detail). Mirrors the subset of `Skill`
- *  the UI needs — kept here so host (env callbacks) and UI agree. Covers both kinds:
- *  `type` splits the Skills / Workflows tabs; `requiredSkills` (workflows only) are
- *  the prerequisite skill mint ids the detail view renders as clickable links. */
+ *  the UI needs — kept here so host (env callbacks) and UI agree. Covers all marketplace
+ *  kinds: `type` identifies skills, workflows, and future plugin cards. `requiredSkills`
+ *  is workflow-only; plugin cards use engine/provenance fields for later badges/details. */
 export interface SkillCard {
   id: string; // mint address
-  type?: "skill" | "workflow";
+  type?: MarketItemType;
   name: string;
   description?: string;
   category?: string;
@@ -28,6 +28,12 @@ export interface SkillCard {
   price?: string; // lamports as decimal string (for buy-all cost summing)
   creator?: string; // wallet (paid on a priced buy)
   requiredSkills?: string[]; // workflows only: prerequisite skill mint ids
+  engines?: string[]; // plugins only: engine badges such as "claude", "codex", "mcp"
+  iqGitPda?: string; // plugins only: canonical IQ Git provenance anchor
+  version?: string;
+  capabilities?: string[];
+  permissions?: string[];
+  pluginManifest?: PluginManifest;
 }
 
 /** Full agent profile payload sent to the UI on getAgentProfile. */
@@ -71,10 +77,11 @@ export interface RpcStatus {
 
 // ── UI -> host (requests) ───────────────────────────────────────────────────
 export type MarketRequest =
-  | { type: "searchSkills"; query: string; kind?: "skill" | "workflow" } // kind = the active tab
+  | { type: "searchSkills"; query: string; kind?: MarketItemType } // kind = the active tab / future plugin tab
   | { type: "getSkillDetail"; mint: string } // open the detail view for one item
   | { type: "getSkillDoc"; name: string } // read an installed skill's local SKILL.md by name
   | { type: "buySkill"; skillId: string; creatorWallet?: string }
+  | { type: "installPlugin"; pluginId: string; engine: PluginEngine }
   | { type: "disposeSkill"; skillId: string } // un-equip an owned skill (local + sticky)
   | { type: "reEquipSkill"; skillId: string } // undo a dispose (re-install, no re-buy)
   | { type: "ownedSkills" } // ask the host to (re)send the owned list
@@ -83,7 +90,7 @@ export type MarketRequest =
   | { type: "useDefaultRpc" } // clear any key, fall back to the default
   | { type: "getRpcStatus" } // ask the host to (re)send rpcStatus
   // issue #34: post a comment on a skill (holder-gated client-side)
-  | { type: "postNote"; skillId: string; skillType?: "skill" | "workflow"; text: string; gitLink?: string }
+  | { type: "postNote"; skillId: string; skillType?: MarketItemType; text: string; gitLink?: string }
   // issue #35: agent directory + profile
   | { type: "listAgents" }
   | { type: "getAgentProfile"; wallet: string }
@@ -110,6 +117,7 @@ export type MarketEvent =
   | { type: "skillDetail"; detail: SkillDetail } // full detail for the opened item (includes notes)
   | { type: "skillDoc"; name: string; text: string | null } // installed skill's SKILL.md (null = not found)
   | { type: "buyResult"; skillId: string; ok: boolean; slug?: string; error?: string }
+  | { type: "pluginInstallResult"; pluginId: string; engine: PluginEngine; ok: boolean; error?: string }
   | { type: "disposeResult"; skillId: string; ok: boolean; slug?: string; error?: string }
   | { type: "reEquipResult"; skillId: string; ok: boolean; slug?: string; error?: string }
   // installed skill names (panel fill) + slug->mint for bought NFTs (reuse market detail) +

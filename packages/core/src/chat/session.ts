@@ -13,6 +13,7 @@
 
 import type { AgentRuntime, SessionHandle } from "../runtime/contract.js";
 import type { ApprovalChannel } from "../runtime/approval/channel.js";
+import type { MarketItemType, PluginEngine } from "../core/types.js";
 import type { SkillCard, MarketRequest } from "./marketMessages.js";
 
 // The two-way pipe to ONE chat UI (one panel / one socket). Messages both ways are
@@ -45,10 +46,11 @@ export interface ChatEnv {
   // are host-held (the extension owns them), so they're delegated like wallet/cloud.
   // buySkill installs the bought skill's SKILL.md into the runtime skills dir as part
   // of the buy (the host calls SkillSync.installBought), returning the installed slug.
-  searchSkills?(query: string, kind?: "skill" | "workflow"): Promise<SkillCard[]>;
+  searchSkills?(query: string, kind?: MarketItemType): Promise<SkillCard[]>;
   getSkillDetail?(mint: string): Promise<import("./marketMessages.js").SkillDetail>;
   getSkillDoc?(name: string): Promise<string | null>;
   buySkill?(skillId: string, creatorWallet?: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
+  installPlugin?(pluginId: string, engine: PluginEngine): Promise<{ ok: boolean; error?: string }>;
   // dispose (un-equip) an owned skill: local + sticky (soulbound NFT stays owned, no refund).
   disposeSkill?(skillId: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
   // re-equip a previously-disposed skill the wallet still owns (undo, no re-buy).
@@ -56,7 +58,7 @@ export interface ChatEnv {
   // slug -> mint for disposed (un-pinned) skills — the UI greys these + offers Re-equip.
   disposedSkillMints?(): Promise<Record<string, string>>;
   // issue #34: post a comment on a skill (holder-gated), returns refreshed notes on success
-  postNote?(skillId: string, skillType: "skill" | "workflow" | undefined, text: string, gitLink?: string): Promise<{ ok: boolean; notes?: import("./marketMessages.js").Note[]; error?: string }>;
+  postNote?(skillId: string, skillType: MarketItemType | undefined, text: string, gitLink?: string): Promise<{ ok: boolean; notes?: import("./marketMessages.js").Note[]; error?: string }>;
   ownedSkills?(): Promise<string[]>; // skill names already installed (panel fill)
   // The wallet's soulbound NFT skills, by display name (catalog ∩ holdings). This is
   // what the "Equipped skills" panel shows: skills you OWN on-chain, not local dirs.
@@ -397,6 +399,12 @@ export function createChatSession(
           await env.loadOwnedSkills?.(); // re-sync the whole owned set after the buy
           sendMarket(await ownedSkillsMsg(env));
         }
+        break;
+      }
+      case "installPlugin": {
+        const req = m as Extract<MarketRequest, { type: "installPlugin" }>;
+        const res = env.installPlugin ? await env.installPlugin(req.pluginId, req.engine) : { ok: false, error: "plugin install unavailable" };
+        sendMarket({ type: "pluginInstallResult", pluginId: req.pluginId, engine: req.engine, ...res });
         break;
       }
       case "disposeSkill": {

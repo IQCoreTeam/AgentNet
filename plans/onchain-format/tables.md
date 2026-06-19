@@ -23,7 +23,7 @@ mints themselves are NOT tables (the Token-2022 collection IS the registry; see
 | Table (seed hint) | Key | Holds | Writers |
 |---|---|---|---|
 | `mysessions:{wallet}` | wallet | session **pointer** list (sessionId), not the blob | owner only |
-| `reviews:{collectionId}:{nft}` | collection mint + item mint | comments on a skill/workflow item | (gate §3) |
+| `reviews:{collectionId}:{nft}` | collection mint + item mint | comments on a skill/workflow/plugin item | (gate §3) |
 | `reviews:agent:{wallet}` | agent wallet | comments on an agent + the owner's self-notes (blog) | (gate §3) |
 
 That's the entire table surface. The hint strings are produced by functions in
@@ -45,14 +45,18 @@ That's the entire table surface. The hint strings are produced by functions in
 collection (the umbrella)          item (under it)
   ┌─ skills collection mint ──┬── skill NFT mint ── reviews:{skillsColl}:{skillNft}
   │                           └── skill NFT mint ── reviews:{skillsColl}:{skillNft}
-  └─ workflows collection ────┬── workflow NFT ──── reviews:{wfColl}:{wfNft}
+  ├─ workflows collection ────┬── workflow NFT ──── reviews:{wfColl}:{wfNft}
+  │                           └── …
+  └─ plugins collection ──────┬── plugin NFT ────── reviews:{pluginColl}:{pluginNft}
                               └── …
 ```
 
-- **`collectionId`** = the umbrella collection mint (skills / workflows / a future
-  kind). zo: "컬렉션은 skills or workflow or 미래에 들어갈 수 있는 다른 우산이고,
+- **`collectionId`** = the umbrella collection mint (skills / workflows / plugins
+  / a future kind). zo: "컬렉션은 skills or workflow or 미래에 들어갈 수 있는 다른 우산이고,
   mint는 그 안에 각각 다른 아이템들이 스킬이 되는 것."
-- **There are only two collections today** (skills, workflows). The mapping
+- **There are three marketplace collection kinds** (skills, workflows, plugins).
+  The plugin collection may be unminted/unconfigured until the plugin market slice.
+  The mapping
   "item type → collection mint" is hardcoded in **one place** —
   `collectionFor(type)` in `seed.ts` (reads the configured collection pubkeys). A
   new umbrella adds a branch there, nowhere else. zo: "이건 어디 중앙화된 곳에
@@ -108,7 +112,7 @@ real on-chain enforcement waits on SDK Token-2022 ATA support.
 There is **no `skills:index`** and no off-chain index/cache designed into the
 structure at all (`501ac84`).
 
-- "Which skills/workflows exist" = scan the Token-2022 **collection** via DAS
+- "Which skills/workflows/plugins exist" = scan the Token-2022 **collection** via DAS
   `getAssetsByGroup` (`dasSource` in `core/skillSource.ts`, now the only + default
   `SkillSource`). The mint is the registry; nothing is mirrored into a table.
 - `publishSkill` / `publishWorkflow` no longer write an index row — they just mint.
@@ -145,8 +149,8 @@ zo: "민팅 수량이나 그런 걸 읽은 다음에 notes 등을 읽을 테니 
 
 1. Tables under `agentnet-root` = **`mysessions`, `reviews:*`** — that's all.
 2. `reviews` keyed by **collection THEN item**; `collectionId` = the
-   umbrella collection mint. Only two collections (skills, workflows); the
-   type→collection map is hardcoded in `collectionFor(type)` in `seed.ts`.
+   umbrella collection mint. Marketplace collections are skills, workflows, and
+   plugins; the type→collection map is hardcoded in `collectionFor(type)` in `seed.ts`.
 3. notes → **reviews** (rename). **No `audit` table** — skill safety is verified
    reader-side (buyer's agent runs a "verify" skill before buying), not an
    on-chain admin/QAgent record.

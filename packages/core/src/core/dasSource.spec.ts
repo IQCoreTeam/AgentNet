@@ -5,9 +5,10 @@ const RPC = "DAS_RPC_URL";
 const SOL = "SOLANA_RPC_URL";
 const SKILLS = "AGENTNET_SKILLS_COLLECTION_PUBKEY";
 const WORKFLOWS = "AGENTNET_WORKFLOWS_COLLECTION_PUBKEY";
+const PLUGINS = "AGENTNET_PLUGINS_COLLECTION_PUBKEY";
 
 function clearEnv() {
-  for (const k of [RPC, SOL, SKILLS, WORKFLOWS]) delete process.env[k];
+  for (const k of [RPC, SOL, SKILLS, WORKFLOWS, PLUGINS]) delete process.env[k];
   // isolate AGENTNET_HOME so resolveRpcUrl() can't pick up a real ~/.agentnet Helius key
   process.env.AGENTNET_HOME = "/tmp/agentnet-dassource-test";
 }

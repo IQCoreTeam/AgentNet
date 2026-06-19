@@ -4,6 +4,8 @@ import {
   mysessionsHint,
   reviewsHint,
   reviewsAgentHint,
+  collectionFor,
+  getPluginsCollectionMint,
   networkFromRpcUrl,
   getGatewayUrl,
   ENDPOINTS,
@@ -28,6 +30,15 @@ describe("core/seed", () => {
 
   it("should format reviewsAgentHint correctly", () => {
     expect(reviewsAgentHint("AgentWallet123")).toBe("reviews:agent:AgentWallet123");
+  });
+
+  it("maps plugin items to the plugin collection when configured", () => {
+    const prev = process.env.AGENTNET_PLUGINS_COLLECTION_PUBKEY;
+    process.env.AGENTNET_PLUGINS_COLLECTION_PUBKEY = "PluginsCollection";
+    expect(getPluginsCollectionMint()).toBe("PluginsCollection");
+    expect(collectionFor("plugin")).toBe("PluginsCollection");
+    if (prev === undefined) delete process.env.AGENTNET_PLUGINS_COLLECTION_PUBKEY;
+    else process.env.AGENTNET_PLUGINS_COLLECTION_PUBKEY = prev;
   });
 
   describe("networkFromRpcUrl — gateway follows the live RPC, not the static switch", () => {

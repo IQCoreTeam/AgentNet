@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { dasSource, indexerSource, ownedAssetIds, ownedSkillMints } from "./skillSource.js";
+import { dasSource, indexerSource, ownedAssetIds, ownedSkillMints, pluginManifestFromMetadata, traitsFromAttributes } from "./skillSource.js";
 import type { Skill } from "./types.js";
 
 // dasSource enumerates the TokenGroup collections via a DAS RPC. We mock fetch
@@ -12,6 +12,7 @@ describe("core/skillSource — dasSource", () => {
     process.env.DAS_RPC_URL = "https://das.example/rpc";
     process.env.AGENTNET_SKILLS_COLLECTION_PUBKEY = "SkillsCollection";
     delete process.env.AGENTNET_WORKFLOWS_COLLECTION_PUBKEY;
+    delete process.env.AGENTNET_PLUGINS_COLLECTION_PUBKEY;
     // isolate AGENTNET_HOME so resolveRpcUrl() can't read a real ~/.agentnet Helius key
     process.env.AGENTNET_HOME = "/tmp/agentnet-skillsource-test";
   });
@@ -91,6 +92,56 @@ describe("core/skillSource — dasSource", () => {
   // ids, so a collection is always configured unless explicitly overridden.)
 });
 
+describe("core/skillSource — marketplace traits", () => {
+  it("parses plugin tags, repeated engine badges, and IQ Git PDA", () => {
+    const traits = traitsFromAttributes([
+      { trait_type: "category", value: "developer-tools" },
+      { trait_type: "plugin", value: "git" },
+      { trait_type: "plugin", value: "review" },
+      { trait_type: "engine", value: "claude" },
+      { trait_type: "engine", value: "codex" },
+      { trait_type: "iqGitPda", value: "IqGitPda111" },
+    ]);
+
+    expect(traits).toEqual({
+      category: "developer-tools",
+      hashtags: ["git", "review"],
+      requiredSkills: [],
+      engines: ["claude", "codex"],
+      iqGitPda: "IqGitPda111",
+    });
+  });
+
+  it("normalizes plugin manifest install coordinates", () => {
+    expect(pluginManifestFromMetadata({
+      pluginManifest: {
+        id: "iq-git-reviewer",
+        entrypoint: ".codex-plugin/plugin.json",
+        codex: { pluginName: "iq-git-reviewer", marketplaceName: "personal" },
+        claude: {
+          marketplaceName: "iq-plugins",
+          pluginName: "iq-git-reviewer",
+          source: { source: "github", repo: "IQCoreTeam/agentnet-plugins", ref: "main" },
+        },
+      },
+    })).toEqual({
+      id: "iq-git-reviewer",
+      entrypoint: ".codex-plugin/plugin.json",
+      codex: {
+        pluginName: "iq-git-reviewer",
+        marketplaceName: "personal",
+        marketplacePath: null,
+        remoteMarketplaceName: null,
+      },
+      claude: {
+        marketplaceName: "iq-plugins",
+        pluginName: "iq-git-reviewer",
+        source: { source: "github", repo: "IQCoreTeam/agentnet-plugins", ref: "main" },
+      },
+    });
+  });
+});
+
 describe("core/skillSource — indexerSource", () => {
   afterEach(() => vi.restoreAllMocks());
 
@@ -136,6 +187,70 @@ describe("core/skillSource — indexerSource", () => {
     });
   });
 
+  it("maps plugin /items with engine badges and provenance fields", async () => {
+    const src = indexerSource("https://nft-index.iqlabs.dev/");
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          items: [
+            {
+              mint: "pluginMint",
+              type: "plugin",
+              name: "iq-git-reviewer",
+              description: "Review with IQ Git context.",
+              creator: "alice",
+              supply: 7,
+              price: "0",
+              version: "1.2.3",
+              capabilities: ["git.read", "review.write"],
+              permissions: ["fs.read"],
+              pluginManifest: {
+                id: "iq-git-reviewer",
+                codex: { pluginName: "iq-git-reviewer", marketplaceName: "personal" },
+                claude: { marketplaceName: "iq-plugins", pluginName: "iq-git-reviewer" },
+              },
+              attributes: [
+                { trait_type: "category", value: "developer-tools" },
+                { trait_type: "plugin", value: "git" },
+                { trait_type: "engine", value: "claude" },
+                { trait_type: "engine", value: "codex" },
+                { trait_type: "iqGitPda", value: "IqGitPda111" },
+              ],
+            },
+          ],
+        }),
+      }),
+    );
+
+    const items = await src.listSkills();
+    expect(items[0]).toMatchObject({
+      id: "pluginMint",
+      type: "plugin",
+      engines: ["claude", "codex"],
+      iqGitPda: "IqGitPda111",
+      version: "1.2.3",
+      capabilities: ["git.read", "review.write"],
+      permissions: ["fs.read"],
+      pluginManifest: {
+        id: "iq-git-reviewer",
+        codex: {
+          pluginName: "iq-git-reviewer",
+          marketplaceName: "personal",
+          marketplacePath: null,
+          remoteMarketplaceName: null,
+        },
+        claude: {
+          marketplaceName: "iq-plugins",
+          pluginName: "iq-git-reviewer",
+        },
+      },
+      hashtags: ["git"],
+    });
+  });
+
   it("throws on a non-ok indexer response (caller falls back to dasSource)", async () => {
     const src = indexerSource("https://nft-index.iqlabs.dev");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503 }));
@@ -156,6 +271,7 @@ describe("core/skillSource — ownedAssetIds / ownedSkillMints", () => {
     process.env.DAS_RPC_URL = "https://das.example/rpc";
     process.env.AGENTNET_SKILLS_COLLECTION_PUBKEY = "SkillsCollection";
     delete process.env.AGENTNET_WORKFLOWS_COLLECTION_PUBKEY;
+    delete process.env.AGENTNET_PLUGINS_COLLECTION_PUBKEY;
     process.env.AGENTNET_HOME = "/tmp/agentnet-owned-test";
   });
   afterEach(() => { process.env = { ...origEnv }; });

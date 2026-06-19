@@ -7,6 +7,7 @@ import { AgentDirectory } from "./AgentDirectory";
 import { AgentProfileView } from "./AgentProfileView";
 import { BuyCelebration } from "./BuyCelebration";
 import type { SkillCard } from "../transport/protocol";
+import type { MarketItemType } from "@iqlabs-official/agent-sdk";
 
 type MarketView = "browse" | "publish" | "helius" | "agents";
 
@@ -27,12 +28,12 @@ export function MarketScreen() {
     if (state.agentProfile) setView("agents");
   }, [state.agentProfile]);
 
-  function runSearch(q: string, tab?: "skill" | "workflow") {
+  function runSearch(q: string, tab?: MarketItemType) {
     marketSearching();
     send({ type: "searchSkills", query: q, kind: tab ?? state.marketTab });
   }
 
-  function handleTabChange(tab: "skill" | "workflow") {
+  function handleTabChange(tab: MarketItemType) {
     setMarketTab(tab);
     runSearch(state.marketQuery, tab);
   }
@@ -49,6 +50,7 @@ export function MarketScreen() {
           detail={state.marketDetail}
           owned={state.marketOwned.includes(state.marketDetail.card.name)}
           onBack={() => { send({ type: "ownedSkills" }); clearMarketDetail(); }}
+          onOpenSkill={(card) => send({ type: "getSkillDetail", mint: card.id })}
         />
         {state.buyCelebrate && <BuyCelebration />}
       </div>
@@ -124,7 +126,7 @@ export function MarketScreen() {
 
       {/* Tabs */}
       <div className="flex gap-0 border-b border-zinc-800 px-3 mt-2 shrink-0">
-        {(["skill", "workflow"] as const).map((tab) => (
+        {(["skill", "workflow", "plugin"] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => { setView("browse"); handleTabChange(tab); }}
@@ -135,7 +137,7 @@ export function MarketScreen() {
                 : "border-transparent text-zinc-500 active:text-zinc-300",
             ].join(" ")}
           >
-            {tab}s
+            {tab === "workflow" ? "Workflows" : tab === "plugin" ? "Plugins" : "Skills"}
           </button>
         ))}
         <button
@@ -159,7 +161,7 @@ export function MarketScreen() {
         >
           <input
             className="flex-1 rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-green-500/50"
-            placeholder={`Search ${state.marketTab}s…`}
+            placeholder={`Search ${state.marketTab === "workflow" ? "workflows" : state.marketTab === "plugin" ? "plugins" : "skills"}…`}
             value={state.marketQuery}
             onChange={(e) => setMarketQuery(e.target.value)}
           />
@@ -186,7 +188,7 @@ export function MarketScreen() {
             )}
             {!state.marketSearching && state.marketResults?.length === 0 && (
               <div className="py-8 text-center text-sm text-zinc-600">
-                No {state.marketTab}s found.{!state.rpcStatus?.hasKey && " Add a Helius key for better results."}
+                No {state.marketTab === "workflow" ? "workflows" : state.marketTab === "plugin" ? "plugins" : "skills"} found.{!state.rpcStatus?.hasKey && " Add a Helius key for better results."}
               </div>
             )}
             <div className="space-y-2 pt-1">
@@ -195,6 +197,7 @@ export function MarketScreen() {
                   key={card.id}
                   card={card}
                   owned={state.marketOwned.includes(card.name)}
+                  disposed={Object.values(state.marketDisposed).includes(card.id)}
                   firing={state.firingSkill === card.name}
                   onOpen={handleOpenCard}
                 />
