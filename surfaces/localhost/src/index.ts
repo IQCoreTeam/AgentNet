@@ -121,6 +121,8 @@ let lastCloudStatus: CloudStatus | null = null;
 let onCloudStatus: (() => void) | null = null;
 let googleLoginSession: GoogleLogin | null = null;
 let googleLoginError: string | null = null;
+let claudeLogin: ClaudeLogin | null = null;
+let codexLogin: CodexLogin | null = null;
 
 function googleLoginErrorMessage(e: unknown): string {
   const message = e instanceof Error ? e.message : String(e);
@@ -288,6 +290,94 @@ function scheduleTeardown(id: string, c: Client) {
   }, RECONNECT_GRACE_MS);
 }
 
+async function pushCliStatus(c: Client) {
+  const cli = await detectCli();
+  c.send({ type: "cliStatus", claude: cli.claude, codex: cli.codex });
+}
+
+function attachAuthHandlers(c: Client) {
+  c.recvs.push(async (m: any) => {
+    switch (m?.type) {
+      case "getCliStatus":
+        await pushCliStatus(c);
+        return;
+      case "startClaudeLogin":
+        try {
+          claudeLogin?.cancel();
+          claudeLogin = await startClaudeLogin();
+          c.send({ type: "claudeLoginUrl", url: claudeLogin.url });
+          claudeLogin.done.then(async (ok) => {
+            if (ok) await markClaudeConnected();
+            c.send({ type: "claudeLoginStatus", status: ok ? "done" : "error", error: ok ? undefined : "Login was not completed." });
+            if (ok) await pushCliStatus(c);
+            claudeLogin = null;
+          });
+        } catch (e) {
+          c.send({ type: "claudeLoginStatus", status: "error", error: (e as Error).message });
+          claudeLogin = null;
+        }
+        return;
+      case "claudeAuthCode":
+        if (typeof m.code === "string") claudeLogin?.submitCode(m.code);
+        return;
+      case "cancelClaudeLogin":
+        claudeLogin?.cancel();
+        claudeLogin = null;
+        return;
+      case "startCodexLogin":
+        try {
+          codexLogin?.cancel();
+          codexLogin = await startCodexLogin();
+          c.send({ type: "codexLoginChallenge", url: codexLogin.url, code: codexLogin.code });
+          codexLogin.done.then(async (ok) => {
+            if (ok) await markCodexConnected();
+            c.send({ type: "codexLoginStatus", status: ok ? "done" : "error", error: ok ? undefined : "Login was not completed." });
+            if (ok) await pushCliStatus(c);
+            codexLogin = null;
+          });
+        } catch (e) {
+          c.send({ type: "codexLoginStatus", status: "error", error: (e as Error).message });
+          codexLogin = null;
+        }
+        return;
+      case "cancelCodexLogin":
+        codexLogin?.cancel();
+        codexLogin = null;
+        return;
+      case "submitCodexApiKey":
+        if (typeof m.key !== "string" || !m.key.trim()) return;
+        try {
+          await saveCodexApiKey(m.key.trim());
+          await markCodexConnected();
+          c.send({ type: "codexLoginStatus", status: "done" });
+          await pushCliStatus(c);
+        } catch (e) {
+          c.send({ type: "codexLoginStatus", status: "error", error: (e as Error).message });
+        }
+        return;
+      case "setGoogleCredentials":
+        if (typeof m.clientId !== "string") return;
+        try {
+          await saveGoogleCreds(m.clientId, typeof m.clientSecret === "string" ? m.clientSecret : "");
+          c.send({ type: "googleCredsStatus", status: "saved" });
+        } catch (e) {
+          c.send({ type: "googleCredsStatus", status: "error", error: (e as Error).message });
+        }
+        return;
+      case "startGoogleLogin":
+        beginGoogleLogin(c);
+        return;
+      case "googleAuthCode":
+        if (typeof m.code === "string") await submitGoogleAuthCode(c, m.code);
+        return;
+      case "cancelGoogleLogin":
+        googleLoginSession?.cancel();
+        googleLoginSession = null;
+        return;
+    }
+  });
+}
+
 // Attach the full chat dispatcher to a client (runtime must exist). The dispatcher's
 // transport is {send: SSE write, onRecv: register the POST fan-in}. approvalDecision
 // arrives via the same onRecv (POST), so TransportApprovalChannel is unchanged.
@@ -333,29 +423,9 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
       }
     },
   });
+  attachAuthHandlers(c);
   c.recvs.push(async (m: any) => {
-    if (m?.type === "setGoogleCredentials" && typeof m.clientId === "string") {
-      try {
-        await saveGoogleCreds(m.clientId, typeof m.clientSecret === "string" ? m.clientSecret : "");
-        c.send({ type: "googleCredsStatus", status: "saved" });
-      } catch (e) {
-        c.send({ type: "googleCredsStatus", status: "error", error: (e as Error).message });
-      }
-      return;
-    }
-    if (m?.type === "startGoogleLogin") {
-      beginGoogleLogin(c);
-      return;
-    }
-    if (m?.type === "googleAuthCode" && typeof m.code === "string") {
-      await submitGoogleAuthCode(c, m.code);
-      return;
-    }
-    if (m?.type === "cancelGoogleLogin") {
-      googleLoginSession?.cancel();
-      googleLoginSession = null;
-      return;
-    }
+    if (m?.type === "ready") await pushCliStatus(c);
   });
 
   // ── market handlers ──
@@ -528,8 +598,7 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
 // / (chat), which opens a FRESH SSE client that finds the runtime ready and attaches
 // chat. So an onboarding client never carries chat itself — clean separation.
 function attachOnboarding(c: Client) {
-  let claudeLogin: ClaudeLogin | null = null;
-  let codexLogin: CodexLogin | null = null;
+  attachAuthHandlers(c);
 
   c.recvs.push(async (m: any) => {
     if (m?.type === "ready") {
@@ -543,97 +612,12 @@ function attachOnboarding(c: Client) {
         c.send({ type: "toast", text: "Wallet connect failed: " + (e as Error).message });
         return;
       }
-      // Wallet is in. Report CLI auth state so the UI can gate on claude login before
-      // chat; if claude is already logged in (or missing), the UI skips straight through.
-      const cli = await detectCli();
       // storageConfigured lets the UI skip the storage picker on a returning device —
       // the gdrive choice + token persist, so re-walking that screen (and re-auth) is
       // pointless. Only a true first run needs the picker.
       c.send({ type: "walletConnected", address: walletAddress, storageOptions: STORAGE_OPTIONS, storageConfigured: await isCloudConnected() });
       c.send({ type: "storage", info: await getStorageInfo(), options: STORAGE_OPTIONS, googleCredsConfigured: await hasGoogleCreds() });
-      c.send({ type: "cliStatus", claude: cli.claude, codex: cli.codex });
-      return;
-    }
-    // ── claude subscription login: spawn `claude auth login --claudeai`, stream the OAuth
-    // URL to the UI, relay the user's pasted code to the CLI's stdin, report the result.
-    if (m?.type === "startClaudeLogin") {
-      try {
-        claudeLogin?.cancel();
-        claudeLogin = await startClaudeLogin();
-        c.send({ type: "claudeLoginUrl", url: claudeLogin.url });
-        claudeLogin.done.then(async (ok) => {
-          if (ok) await markClaudeConnected();
-          c.send({ type: "claudeLoginStatus", status: ok ? "done" : "error", error: ok ? undefined : "Login was not completed." });
-          claudeLogin = null;
-        });
-      } catch (e) {
-        c.send({ type: "claudeLoginStatus", status: "error", error: (e as Error).message });
-        claudeLogin = null;
-      }
-      return;
-    }
-    if (m?.type === "claudeAuthCode" && typeof m.code === "string") {
-      claudeLogin?.submitCode(m.code);
-      return;
-    }
-    if (m?.type === "cancelClaudeLogin") {
-      claudeLogin?.cancel();
-      claudeLogin = null;
-      return;
-    }
-    // ── codex device-auth: spawn `codex login --device-auth`, parse URL + one-time code,
-    // stream both to the UI. CLI auto-polls; no code needs to come back from the UI.
-    if (m?.type === "startCodexLogin") {
-      try {
-        codexLogin?.cancel();
-        codexLogin = await startCodexLogin();
-        c.send({ type: "codexLoginChallenge", url: codexLogin.url, code: codexLogin.code });
-        codexLogin.done.then(async (ok) => {
-          if (ok) await markCodexConnected();
-          c.send({ type: "codexLoginStatus", status: ok ? "done" : "error", error: ok ? undefined : "Login was not completed." });
-          codexLogin = null;
-        });
-      } catch (e) {
-        c.send({ type: "codexLoginStatus", status: "error", error: (e as Error).message });
-        codexLogin = null;
-      }
-      return;
-    }
-    if (m?.type === "cancelCodexLogin") {
-      codexLogin?.cancel();
-      codexLogin = null;
-      return;
-    }
-    if (m?.type === "setGoogleCredentials" && typeof m.clientId === "string") {
-      try {
-        await saveGoogleCreds(m.clientId, typeof m.clientSecret === "string" ? m.clientSecret : "");
-        c.send({ type: "googleCredsStatus", status: "saved" });
-      } catch (e) {
-        c.send({ type: "googleCredsStatus", status: "error", error: (e as Error).message });
-      }
-      return;
-    }
-    if (m?.type === "submitCodexApiKey" && typeof m.key === "string") {
-      try {
-        await saveCodexApiKey(m.key);
-        await markCodexConnected();
-        c.send({ type: "codexLoginStatus", status: "done" });
-      } catch (e) {
-        c.send({ type: "codexLoginStatus", status: "error", error: (e as Error).message });
-      }
-      return;
-    }
-    if (m?.type === "startGoogleLogin") {
-      beginGoogleLogin(c);
-      return;
-    }
-    if (m?.type === "googleAuthCode" && typeof m.code === "string") {
-      await submitGoogleAuthCode(c, m.code);
-      return;
-    }
-    if (m?.type === "cancelGoogleLogin") {
-      googleLoginSession?.cancel();
-      googleLoginSession = null;
+      await pushCliStatus(c);
       return;
     }
   });

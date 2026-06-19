@@ -23,7 +23,7 @@ import java.io.FileOutputStream
 class Installer(private val ctx: Context) {
     companion object {
         private const val TAG = "AgentNet/Installer"
-        private const val MARKER = ".installed-v1"
+        private const val MARKER = ".installed-v2"
         // Server bundle is small and changes every app build; its marker holds the app's
         // versionCode so an APK update re-extracts ONLY the server bundle (the heavy
         // rootfs is left alone). Without this, the idempotent MARKER froze the server

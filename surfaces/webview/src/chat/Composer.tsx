@@ -49,7 +49,7 @@ const SLASH_CMDS = [
 
 // Input + engine tabs + model/effort pickers. FROZEN while an approval is pending.
 export function Composer() {
-  const { state, send, queueCount } = useStore();
+  const { state, send, selectEngine, queueCount } = useStore();
   const [text, setText] = useState("");
   const [effort, setEffort] = useState("default");
   const mode = state.modeByCli[state.cli] ?? MODES[state.cli][0].value;
@@ -211,7 +211,7 @@ export function Composer() {
           setText(""); return;
         }
         case "engine":
-          if (arg === "claude" || arg === "codex") send({ type: "platform", cli: arg });
+          if (arg === "claude" || arg === "codex") selectEngine(arg);
           setText(""); return;
         case "model":
           if (arg) send({ type: "model", model: arg });
@@ -285,7 +285,7 @@ export function Composer() {
           {(["claude", "codex"] as Cli[]).map((c) => (
             <button
               key={c}
-              onClick={() => send({ type: "platform", cli: c })}
+              onClick={() => selectEngine(c)}
               className={`rounded px-2 py-0.5 ${
                 state.cli === c
                   ? c === "claude"

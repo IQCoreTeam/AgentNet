@@ -96,6 +96,7 @@ export type ClientMessage =
   | { type: "loadMore"; cursor: number }
   | { type: "delete"; sessionId: string }
   | { type: "wallet" }
+  | { type: "getCliStatus" }
   | { type: "disconnectWallet" }
   | { type: "pickCloud" }
   | { type: "connectCloud"; kind: string; location?: string; authHeader?: string }
@@ -105,7 +106,7 @@ export type ClientMessage =
   | { type: "getSkillShopping" }
   | { type: "setSkillShopping"; on: boolean }
   | { type: "approvalDecision"; id: string; outcome: ApprovalOutcome; reason?: string; updatedInput?: Record<string, unknown>; questionResponses?: ApprovalQuestionResponse[] }
-  // onboarding-only:
+  // setup/auth:
   | { type: "connectWallet"; address: string; signature: number[] }
   | { type: "startClaudeLogin" }
   | { type: "claudeAuthCode"; code: string }
@@ -163,7 +164,7 @@ export type ServerMessage =
   | { type: "wallet"; address: string | null }
   | { type: "skillShopping"; on: boolean }
   | { type: "approval"; req: ApprovalRequest }
-  // onboarding-only:
+  // setup/auth:
   | { type: "init"; defaultPath: string | null; cloudKind: string | null }
   | { type: "walletConnected"; address: string | null; storageOptions: unknown; storageConfigured?: boolean }
   // claude subscription login: server reports whether login is needed, streams the OAuth

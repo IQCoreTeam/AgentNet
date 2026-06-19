@@ -214,18 +214,18 @@ function reducer(state: State, ev: Action): State {
     case "__clearToast":
       return { ...state, toast: null };
     case "__selectEngine": {
-      if (ev.cli === "claude") {
-        const needsLogin = state.cliReport?.claude === "no-login";
-        return { ...state, cli: "claude", phase: needsLogin ? "claudeAuth" : "chat" };
+      if (!state.cliReport) {
+        return { ...state, toast: "Checking engine sign-in. Try again in a moment." };
       }
-      // codex: gate on login state
-      if (state.cliReport?.codex === "missing") {
-        return { ...state, toast: "Codex is not installed. Install it first." };
+      const status = state.cliReport[ev.cli];
+      const name = ev.cli === "claude" ? "Claude" : "Codex";
+      if (status === "missing") {
+        return { ...state, toast: `${name} is not installed. Install it first.` };
       }
-      if (state.cliReport?.codex === "no-login") {
-        return { ...state, cli: "codex", phase: "codexAuth" };
+      if (status === "no-login") {
+        return { ...state, cli: ev.cli, phase: ev.cli === "claude" ? "claudeAuth" : "codexAuth" };
       }
-      return { ...state, cli: "codex", phase: "chat" };
+      return { ...state, cli: ev.cli, phase: "chat" };
     }
     case "init":
       // Onboarding handshake: no runtime yet → show ConnectWallet.
@@ -239,11 +239,14 @@ function reducer(state: State, ev: Action): State {
     case "cliStatus":
       // After wallet: don't force claude. Record both engines' status and show the engine
       // picker so the user chooses which one to activate. The chosen engine then runs its
-      // own gate (claude → login if needed; codex → coming-soon) via __selectEngine.
-      return {
-        ...state,
-        cliReport: { claude: ev.claude, codex: ev.codex },
-      };
+      // own gate (claude/codex login if needed) via __selectEngine.
+      if (state.phase === "chat" && ev[state.cli] === "no-login") {
+        return { ...state, cliReport: { claude: ev.claude, codex: ev.codex }, phase: state.cli === "claude" ? "claudeAuth" : "codexAuth" };
+      }
+      if (state.phase === "chat" && ev[state.cli] === "missing") {
+        return { ...state, cliReport: { claude: ev.claude, codex: ev.codex }, phase: "engineSelect", toast: `${state.cli === "claude" ? "Claude" : "Codex"} is not installed. Choose another engine.` };
+      }
+      return { ...state, cliReport: { claude: ev.claude, codex: ev.codex } };
     case "__finishStorage":
       return { ...state, phase: "engineSelect" };
     case "googleLoginUrl":
@@ -259,13 +262,13 @@ function reducer(state: State, ev: Action): State {
       return { ...state, claudeLoginUrl: ev.url, claudeLoginError: null };
     case "claudeLoginStatus":
       return ev.status === "done"
-        ? { ...state, phase: "chat", claudeLoginUrl: null, claudeLoginError: null }
+        ? { ...state, cli: "claude", phase: "chat", cliReport: state.cliReport ? { ...state.cliReport, claude: "ok" } : state.cliReport, claudeLoginUrl: null, claudeLoginError: null }
         : { ...state, claudeLoginUrl: null, claudeLoginError: ev.error ?? "Login failed." };
     case "codexLoginChallenge":
       return { ...state, codexLoginUrl: ev.url, codexLoginCode: ev.code, codexLoginError: null };
     case "codexLoginStatus":
       return ev.status === "done"
-        ? { ...state, phase: "chat", codexLoginUrl: null, codexLoginCode: null, codexLoginError: null }
+        ? { ...state, cli: "codex", phase: "chat", cliReport: state.cliReport ? { ...state.cliReport, codex: "ok" } : state.cliReport, codexLoginUrl: null, codexLoginCode: null, codexLoginError: null }
         : { ...state, codexLoginUrl: null, codexLoginCode: null, codexLoginError: ev.error ?? "Login failed." };
     case "usage":
       return { ...state, contextTokens: ev.contextTokens };
@@ -466,14 +469,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // ready (sent at mount) went to the now-discarded onboarding client. So re-send it,
       // or the chat lands with no session list and a stale "local only" storage pill.
       void transportRef.current?.post({ type: "ready" });
+      void transportRef.current?.post({ type: "platform", cli: state.cli });
     } else if (state.phase !== "chat") {
       wasChat.current = false;
     }
-  }, [state.phase]);
+  }, [state.phase, state.cli]);
 
   const store = useMemo<Store>(() => {
+    const selectEngine = (cli: Cli) => {
+      const status = state.cliReport?.[cli];
+      raw({ type: "__selectEngine", cli });
+      if (!state.cliReport) {
+        void transportRef.current?.post({ type: "getCliStatus" });
+        return;
+      }
+      if (status === "ok" && state.phase === "chat") {
+        void transportRef.current?.post({ type: "platform", cli });
+      }
+    };
     const send = (msg: ClientMessage) => {
+      if (msg.type === "platform") {
+        selectEngine(msg.cli);
+        return;
+      }
       if (msg.type === "send") {
+        if (!state.cliReport || state.cliReport[state.cli] !== "ok") {
+          selectEngine(state.cli);
+          return;
+        }
         if (busyRef.current) {
           // Agent busy — show pending bubble immediately, flush when turn ends.
           msgQueue.current.push({ text: msg.text, images: msg.images });
@@ -499,7 +522,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       resolveApproval: (id) => raw({ type: "__removeApproval", id }),
       clearToast: () => raw({ type: "__clearToast" }),
       // Activate the chosen engine; routing (login gate / chat) is decided in the reducer.
-      selectEngine: (cli) => raw({ type: "__selectEngine", cli }),
+      selectEngine,
       finishStorage: () => raw({ type: "__finishStorage" }),
       savePlan: (text) => raw({ type: "__savePlan", text }),
       openMarket: () => raw({ type: "__openMarket" }),

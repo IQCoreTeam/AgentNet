@@ -28,6 +28,11 @@ function stripAnsi(s: string): string {
   return s.replace(/\x1b\[[0-9;]*m/g, "");
 }
 
+function codexLoginStartupError(buf: string): Error {
+  const clean = stripAnsi(buf).trim();
+  return new Error(clean ? `codex login exited before showing a device code:\n${clean}` : "codex login exited before showing a device code");
+}
+
 export function startCodexLogin(codexBin = "codex"): Promise<CodexLogin> {
   return new Promise((resolve, reject) => {
     const child = spawn(codexBin, ["login", "--device-auth"], {
@@ -66,7 +71,7 @@ export function startCodexLogin(codexBin = "codex"): Promise<CodexLogin> {
       settleDone(false);
     });
     child.on("exit", (code) => {
-      if (!resolved) reject(new Error("codex login exited before showing a device code"));
+      if (!resolved) reject(codexLoginStartupError(buf));
       settleDone(code === 0);
     });
   });
@@ -103,10 +108,10 @@ export async function isCodexLoggedIn(codexBin = "codex"): Promise<boolean> {
     p.stdout.on("data", (d) => (out += d.toString()));
     p.stderr.on("data", (d) => (out += d.toString()));
     p.on("error", () => resolve(false));
-    p.on("exit", () => {
+    p.on("exit", (code) => {
       // "Logged in using ChatGPT" / "Logged in using API key" = ok
       // "not logged in" / "logged out" = false
-      resolve(/logged in/i.test(out) && !/not logged in|logged out/i.test(out));
+      resolve(code === 0 && /logged in|authenticated|api key/i.test(out) && !/not logged in|logged out|no auth|not authenticated/i.test(out));
     });
   });
 }
