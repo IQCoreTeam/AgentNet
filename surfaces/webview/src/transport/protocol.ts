@@ -123,6 +123,8 @@ export type ClientMessage =
   | { type: "searchSkills"; query: string; kind?: "skill" | "workflow" }
   | { type: "getSkillDetail"; mint: string }
   | { type: "buySkill"; skillId: string; creatorWallet?: string }
+  | { type: "disposeSkill"; skillId: string }
+  | { type: "reEquipSkill"; skillId: string }
   | { type: "ownedSkills" }
   | { type: "getBalance" }
   | { type: "getRpcStatus" }
@@ -185,8 +187,11 @@ export type ServerMessage =
   | { type: "searchResults"; results: import("@iqlabs-official/agent-sdk").SkillCard[] }
   | { type: "searchError"; message: string }
   | { type: "skillDetail"; detail: import("@iqlabs-official/agent-sdk").SkillDetail }
+  | { type: "skillDoc"; name: string; text: string | null }
   | { type: "buyResult"; skillId: string; ok: boolean; slug?: string; error?: string }
-  | { type: "ownedSkills"; names: string[]; mints?: Record<string, string> }
+  | { type: "disposeResult"; skillId: string; ok: boolean; slug?: string; error?: string }
+  | { type: "reEquipResult"; skillId: string; ok: boolean; slug?: string; error?: string }
+  | { type: "ownedSkills"; names: string[]; mints?: Record<string, string>; disposedMints?: Record<string, string> }
   | { type: "balance"; lamports: number | null }
   | { type: "skillActive"; name: string }
   | { type: "rpcStatus"; status: import("@iqlabs-official/agent-sdk").RpcStatus }

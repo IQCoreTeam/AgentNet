@@ -1,15 +1,16 @@
 import { useState } from "react";
 import { useStore } from "../state/store";
-import type { SkillDetail } from "../transport/protocol";
+import type { SkillCard, SkillDetail } from "../transport/protocol";
 import { SkillIcon } from "../icons";
 
 interface Props {
   detail: SkillDetail;
   owned: boolean;
   onBack: () => void;
+  onOpenSkill?: (card: SkillCard) => void;
 }
 
-export function SkillDetailView({ detail, owned, onBack }: Props) {
+export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
   const { send } = useStore();
   const [buying, setBuying] = useState(false);
   const [noteText, setNoteText] = useState("");
@@ -65,6 +66,25 @@ export function SkillDetailView({ detail, owned, onBack }: Props) {
           <div className="rounded-lg bg-zinc-900 border border-zinc-800 p-3">
             <p className="text-[11px] text-zinc-500 mb-1 uppercase tracking-wide">SKILL.md</p>
             <pre className="text-xs text-zinc-300 whitespace-pre-wrap font-mono overflow-x-auto">{skillText}</pre>
+          </div>
+        )}
+
+        {Array.isArray(detail.requiredCards) && detail.requiredCards.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[11px] text-zinc-500 uppercase tracking-wide">Required skills</p>
+            <div className="space-y-2">
+              {detail.requiredCards.map((req) => (
+                <button
+                  key={req.id}
+                  type="button"
+                  onClick={() => onOpenSkill?.(req)}
+                  className="w-full rounded-lg bg-zinc-900 border border-zinc-800 p-2.5 text-left active:bg-zinc-800"
+                >
+                  <p className="text-xs font-medium text-zinc-200">{req.name}</p>
+                  <p className="mt-0.5 line-clamp-2 text-[11px] text-zinc-500">{req.description}</p>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 

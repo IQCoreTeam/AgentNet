@@ -352,6 +352,18 @@ function reducer(state: State, ev: Action): State {
         marketOwned: ev.ok ? [...state.marketOwned, ev.slug ?? ev.skillId] : state.marketOwned,
         buyCelebrate: ev.ok ? true : state.buyCelebrate,
       };
+    case "disposeResult":
+      return {
+        ...state,
+        toast: ev.ok ? "Skill removed." : `Remove failed: ${ev.error ?? "unknown"}`,
+        marketOwned: ev.ok ? state.marketOwned.filter((name) => name !== (ev.slug ?? ev.skillId)) : state.marketOwned,
+      };
+    case "reEquipResult":
+      return {
+        ...state,
+        toast: ev.ok ? "Skill re-equipped." : `Re-equip failed: ${ev.error ?? "unknown"}`,
+        marketOwned: ev.ok ? [...state.marketOwned, ev.slug ?? ev.skillId] : state.marketOwned,
+      };
     case "ownedSkills":
       return { ...state, marketOwned: ev.names };
     case "balance":
@@ -373,6 +385,12 @@ function reducer(state: State, ev: Action): State {
     case "agentNoteResult":
       return { ...state, toast: ev.ok ? "Note posted." : `Note failed: ${ev.error ?? "unknown"}` };
     case "notes":
+      if (!state.marketDetail || state.marketDetail.card.id !== ev.skillId) return state;
+      return {
+        ...state,
+        marketDetail: { ...state.marketDetail, notes: ev.notes as SkillDetail["notes"] },
+      };
+    case "skillDoc":
       return state;
     case "githubStatus":
       return { ...state, githubStatus: { hasToken: ev.hasToken, masked: ev.masked } };
