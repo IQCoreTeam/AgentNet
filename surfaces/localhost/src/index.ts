@@ -64,6 +64,7 @@ import {
 } from "@iqlabs-official/agent-sdk";
 
 const PORT = Number(process.env.AGENTNET_PORT ?? 4317);
+const GOOGLE_AUTHORIZE_URL = process.env.GOOGLE_AUTHORIZE_URL || "";
 
 // The built React UI (surfaces/webview/dist) this host serves. Default is the sibling
 // surface relative to this bundle; the Android shell can point elsewhere via env. The
@@ -126,7 +127,36 @@ function googleLoginErrorMessage(e: unknown): string {
   if (message.includes("client_secret is missing")) {
     return "Google OAuth client type requires a client secret. Use a no-secret mobile/native OAuth flow; do not put a client secret in the APK.";
   }
+  if (message.includes("UNREGISTERED_ON_API_CONSOLE")) {
+    return "Google Drive is not registered for this Android build. Add an Android OAuth client in Google Cloud Console for package com.iqlabs.agentnet and this app's signing SHA-1, then try again.";
+  }
   return message || "Login was not completed.";
+}
+
+async function googleAuthorizeError(res: Response): Promise<string> {
+  const text = await res.text();
+  if (!text) return `Google Drive authorization failed: ${res.status}`;
+  try {
+    const data = JSON.parse(text) as { error?: unknown };
+    return typeof data.error === "string" ? data.error : text;
+  } catch {
+    return text;
+  }
+}
+
+async function connectGoogleDriveStorage() {
+  if (!wallet) return;
+  await switchStorage(wallet, { kind: "gdrive" });
+  runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
+}
+
+function broadcastGoogleLoginStatus(ok: boolean, error?: string) {
+  const payload = {
+    type: "googleLoginStatus" as const,
+    status: ok ? "done" as const : "error" as const,
+    error: ok ? undefined : error ?? "Login was not completed.",
+  };
+  for (const client of clients.values()) client.send(payload);
 }
 
 function escapeHtml(s: string): string {
@@ -141,24 +171,38 @@ function beginGoogleLogin(c: Client) {
   try {
     googleLoginSession?.cancel();
     googleLoginError = null;
+    if (GOOGLE_AUTHORIZE_URL) {
+      void beginNativeGoogleLogin(c);
+      return;
+    }
     googleLoginSession = startGoogleLoginFixed(`http://127.0.0.1:${PORT}/oauth/google/callback`);
     c.send({ type: "googleLoginUrl", url: googleLoginSession.url });
     googleLoginSession.done.then(async (ok) => {
-      if (ok && wallet) {
-        await switchStorage(wallet, { kind: "gdrive" });
-        runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
+      try {
+        if (ok) await connectGoogleDriveStorage();
+        broadcastGoogleLoginStatus(ok, googleLoginError ?? undefined);
+      } catch (e) {
+        googleLoginError = googleLoginErrorMessage(e);
+        broadcastGoogleLoginStatus(false, googleLoginError);
+      } finally {
+        googleLoginSession = null;
       }
-      const payload = {
-        type: "googleLoginStatus" as const,
-        status: ok ? "done" as const : "error" as const,
-        error: ok ? undefined : googleLoginError ?? "Login was not completed.",
-      };
-      for (const client of clients.values()) client.send(payload);
-      googleLoginSession = null;
     });
   } catch (e) {
     c.send({ type: "googleLoginStatus", status: "error", error: (e as Error).message });
     googleLoginSession = null;
+  }
+}
+
+async function beginNativeGoogleLogin(c: Client) {
+  try {
+    const res = await fetch(GOOGLE_AUTHORIZE_URL, { headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error(await googleAuthorizeError(res));
+    await connectGoogleDriveStorage();
+    broadcastGoogleLoginStatus(true);
+  } catch (e) {
+    googleLoginError = googleLoginErrorMessage(e);
+    c.send({ type: "googleLoginStatus", status: "error", error: googleLoginError });
   }
 }
 

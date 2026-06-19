@@ -45,6 +45,11 @@ class ServerManager(private val ctx: Context) {
         val googleClientIdEnv =
             if (BuildConfig.GOOGLE_OAUTH_CLIENT_ID.isBlank()) emptyList()
             else listOf("GOOGLE_CLIENT_ID=${BuildConfig.GOOGLE_OAUTH_CLIENT_ID}")
+        val googleNativeAuthEnv = listOf(
+            "GOOGLE_AUTHORIZE_URL=http://127.0.0.1:${Paths.GOOGLE_AUTH_PORT}/google-drive/authorize",
+            "GOOGLE_ACCESS_TOKEN_URL=http://127.0.0.1:${Paths.GOOGLE_AUTH_PORT}/google-drive/token",
+            "GOOGLE_AUTH_STATUS_URL=http://127.0.0.1:${Paths.GOOGLE_AUTH_PORT}/google-drive/status",
+        )
         val guestArgv = listOf(
             p.proot,
             "--kill-on-exit",
@@ -72,6 +77,7 @@ class ServerManager(private val ctx: Context) {
             // ./webview); point the host at it so it serves the real UI, not the fallback.
             "AGENTNET_WEBVIEW_DIR=/root/agentnet-server/webview",
             *googleClientIdEnv.toTypedArray(),
+            *googleNativeAuthEnv.toTypedArray(),
             "/bin/sh", "-lc", cmd,
         )
         // cd into a readable dir, then exec proot so it never inherits the unreadable "/".

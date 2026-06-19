@@ -15,7 +15,7 @@ import { buildStorage, type StorageConfig, type StorageKind } from "./storage/ad
 import { manualStorage, migrateLocalSessions } from "./storage/manual.js";
 import { mirrorStorage, type CloudStatus } from "./storage/mirror.js";
 import { migrateLegacyDriveSessions } from "./storage/gdrive.js";
-import { googleLogin, isSignedIn, googleAccount } from "./storage/oauth.js";
+import { googleLogin, isSignedIn, googleAccount, hasGoogleTokenProvider } from "./storage/oauth.js";
 import type { StorageAdapter, Wallet } from "../runtime/contract.js";
 
 export interface Session {
@@ -194,5 +194,5 @@ export async function saveGoogleCreds(clientId: string, clientSecret = ""): Prom
 /** True if Google OAuth app credentials are present in config. */
 export async function hasGoogleCreds(): Promise<boolean> {
   const raw = await readRawConfig();
-  return !!(process.env.GOOGLE_CLIENT_ID || raw.google_client_id);
+  return !!(hasGoogleTokenProvider() || process.env.GOOGLE_CLIENT_ID || raw.google_client_id);
 }

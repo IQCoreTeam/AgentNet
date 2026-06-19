@@ -9,6 +9,7 @@ import java.io.File
 // Linux (glibc, /lib, /usr) and run unmodified — the whole reason we use proot.
 object Paths {
     const val PORT = 4317 // matches surfaces/localhost's default (AGENTNET_PORT)
+    const val GOOGLE_AUTH_PORT = 4318 // Android-native Drive token bridge for the guest
 
     data class Layout(
         val filesDir: String,   // app private root

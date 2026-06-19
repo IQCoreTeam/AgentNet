@@ -1,10 +1,10 @@
 // Google OAuth 2.0 for native apps — loopback IP flow with PKCE.
 // Docs: https://developers.google.com/identity/protocols/oauth2/native-app
 //
-// We open a one-shot localhost HTTP listener, send the user to Google's consent
-// page, catch the redirect with ?code=, exchange it (+ PKCE verifier) for tokens,
-// and store them at core/paths tokenFile("google"). PER DEVICE, local only — our
-// server never sees a token. getAccessToken() refreshes transparently.
+// Desktop/dev opens a one-shot localhost HTTP listener, catches Google's redirect,
+// exchanges the code with PKCE, and stores tokens at core/paths tokenFile("google").
+// Android instead supplies GOOGLE_ACCESS_TOKEN_URL; getAccessToken() then asks the
+// native app process for short-lived Drive access tokens and never needs a client secret.
 //
 // Setup: provide a Google OAuth client_id via GOOGLE_CLIENT_ID or config.json.
 // Some client types require a client_secret at the token endpoint; that is OK for
@@ -33,9 +33,8 @@ interface StoredToken {
 }
 
 // OAuth client creds come from env (CI/dev) OR ~/.agentnet/config.json (so a
-// VSCode-launched extension, which gets no shell env, still has them). The
-// Desktop-app client_id/secret are not real secrets for installed apps, so keeping
-// them in the local config file is fine and avoids hardcoding them into the repo.
+// VSCode-launched extension, which gets no shell env, still has them). They are for
+// desktop/dev flows only; Android APKs use GOOGLE_ACCESS_TOKEN_URL instead.
 function configCreds(): { id?: string; secret?: string } {
   try {
     const c = JSON.parse(readFileSync(configFile(), "utf8")) as {
@@ -61,6 +60,31 @@ function clientSecret(): string {
   // Desktop/dev flows may use a secret. Android builds must leave this empty and use
   // a no-secret mobile/native flow; anything in an APK is visible to users.
   return process.env.GOOGLE_CLIENT_SECRET || configCreds().secret || "";
+}
+
+function googleAccessTokenUrl(): string {
+  return process.env.GOOGLE_ACCESS_TOKEN_URL || "";
+}
+
+export function hasGoogleTokenProvider(): boolean {
+  return !!googleAccessTokenUrl();
+}
+
+async function nativeGoogleJson(url: string): Promise<Record<string, unknown>> {
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  const text = await res.text();
+  let data: Record<string, unknown> = {};
+  if (text) {
+    try {
+      data = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      data = { error: text };
+    }
+  }
+  if (!res.ok) {
+    throw new Error(typeof data.error === "string" ? data.error : `native Google auth failed: ${res.status}`);
+  }
+  return data;
 }
 
 // PKCE: verifier + S256 challenge
@@ -292,6 +316,16 @@ async function exchangeCode(code: string, verifier: string, redirect: string): P
 
 // Valid access token, refreshing if expired. Throws if not logged in.
 export async function getAccessToken(): Promise<string> {
+  const nativeUrl = googleAccessTokenUrl();
+  if (nativeUrl) {
+    const data = await nativeGoogleJson(nativeUrl);
+    const token = data.access_token ?? data.accessToken;
+    if (typeof token !== "string" || !token) {
+      throw new Error("native Google auth did not return an access token");
+    }
+    return token;
+  }
+
   const tok = await loadToken();
   if (!tok) throw new Error("not signed in to Google — run googleLogin first");
   if (Date.now() < tok.expiry - 60_000) return tok.access_token;
@@ -320,6 +354,15 @@ export async function getAccessToken(): Promise<string> {
 }
 
 export async function isSignedIn(): Promise<boolean> {
+  const statusUrl = process.env.GOOGLE_AUTH_STATUS_URL || "";
+  if (statusUrl) {
+    try {
+      const data = await nativeGoogleJson(statusUrl);
+      return data.connected === true;
+    } catch {
+      return false;
+    }
+  }
   return (await loadToken()) !== null;
 }
 

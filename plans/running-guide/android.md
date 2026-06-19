@@ -162,7 +162,21 @@ repo root, or Android Studio won't recognize it.
 
 ### Optional — configure Google Drive OAuth for testing
 
-If you are testing the Google Drive storage path, put only the public OAuth client ID in
+Android-native Drive login does not need a client secret or a hardcoded client ID in the
+APK. In Google Cloud Console, create/register an **Android** OAuth client for package
+`com.iqlabs.agentnet` and the signing certificate SHA-1 for the build you install.
+
+For the debug APK, Android Studio can show the SHA-1 under Gradle `signingReport`, or run:
+
+```bash
+cd surfaces/android
+./gradlew signingReport
+```
+
+If Google returns `UNREGISTERED_ON_API_CONSOLE`, that package name + SHA-1 pair is missing
+from Google Cloud Console.
+
+Only the desktop/browser fallback path needs a public OAuth client ID in
 `surfaces/android/local.properties`:
 
 ```properties
@@ -174,10 +188,6 @@ assets, or Kotlin/TypeScript source. APK contents are visible to anyone who inst
 app. If Google returns `client_secret is missing`, the configured client ID belongs to a
 secret-required desktop/web flow and Android login will not complete without changing to a
 no-secret mobile/native OAuth path.
-
-For an Android-native OAuth client in Google Cloud Console, use package name
-`com.iqlabs.agentnet` and the signing certificate SHA-1 for the build you install. For the
-debug APK, Android Studio can show this under Gradle `signingReport`.
 
 ---
 

@@ -11,6 +11,9 @@ import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.TextView
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.solana.mobilewalletadapter.clientlib.ActivityResultSender
 import com.solana.mobilewalletadapter.clientlib.ConnectionIdentity
@@ -40,6 +43,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusSub: TextView
     private lateinit var bootBox: android.view.View
     private val server by lazy { ServerManager(this) }
+    private val googleDriveLauncher: ActivityResultLauncher<IntentSenderRequest> = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        if (::googleDriveAuth.isInitialized) googleDriveAuth.handleResolution(result.data)
+    }
+    private lateinit var googleDriveAuth: GoogleDriveAuth
+    private lateinit var googleTokenServer: GoogleDriveTokenServer
 
     // ActivityResultSender registers an activity-result callback in its constructor, which
     // must happen before the activity reaches STARTED — so build it as a field, not lazily.
@@ -102,6 +112,9 @@ class MainActivity : AppCompatActivity() {
         )
         webView.addJavascriptInterface(ShellBridge(this), "AgentNetShell")
 
+        googleDriveAuth = GoogleDriveAuth(this, googleDriveLauncher)
+        googleTokenServer = GoogleDriveTokenServer(googleDriveAuth)
+        googleTokenServer.start()
         startServerFlow()
     }
 
@@ -152,6 +165,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        if (::googleTokenServer.isInitialized) googleTokenServer.stop()
         server.stop()
         super.onDestroy()
     }
