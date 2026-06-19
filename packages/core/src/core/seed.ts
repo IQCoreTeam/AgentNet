@@ -5,6 +5,8 @@
 // `iqlabs.writer.createTable`. Keeping the naming convention in one place
 // prevents silent drift between writer and reader.
 
+import type { MarketItemType } from "./types.js";
+
 /** DbRoot id for every agentnet table. Bootstrap and every caller share this. */
 export const AGENTNET_ROOT_ID = "agentnet-root";
 
@@ -20,7 +22,7 @@ export function mysessionsHint(wallet: string): string {
 /**
  * Hint for reviews on an item NFT inside a collection.
  *
- * The collection is the umbrella (skills / workflows / future kinds); the NFT
+ * The collection is the umbrella (skills / workflows / plugins / future kinds); the NFT
  * mint is the individual item under it. Keying by collection THEN item keeps
  * reviews partitioned per umbrella, so a new collection kind extends the same
  * structure without a new table shape.
@@ -134,6 +136,9 @@ export function getPublicRpcUrl(): string {
 /** Devnet test ids — the single source. Swap here (or via env) to retarget. */
 export const SKILLS_COLLECTION_MINT = "5TPKvxXTpPVFrj9MUnFUr6XiGFEdtetsTvwRh6bKQ9Qg";
 export const WORKFLOWS_COLLECTION_MINT = "F474VEn2uevpCotRqrPEbZ4XvWyqrqL4iGmNnmp9zvNe";
+// Placeholder until the plugin umbrella collection is minted. Override with
+// AGENTNET_PLUGINS_COLLECTION_PUBKEY when testing a real plugin collection.
+export const PLUGINS_COLLECTION_MINT = "";
 /** agent-workflow-nft gate program — publish_workflow / buy_workflow. */
 export const WORKFLOW_GATE_PROGRAM_ID = "3ptXj4yuaQG51WTA3SZZ37jGvYFgMhgXnSKWJLASJNkt";
 /**
@@ -160,6 +165,14 @@ export function getWorkflowsCollectionMint(): string | null {
   return process.env.AGENTNET_WORKFLOWS_COLLECTION_PUBKEY || WORKFLOWS_COLLECTION_MINT;
 }
 
+/**
+ * The TokenGroup mint plugins are enrolled into. Env override wins; otherwise
+ * null until the plugin collection is minted for the target network.
+ */
+export function getPluginsCollectionMint(): string | null {
+  return process.env.AGENTNET_PLUGINS_COLLECTION_PUBKEY || PLUGINS_COLLECTION_MINT || null;
+}
+
 /** The workflow gate program id (env override wins). */
 export function getWorkflowGateProgramId(): string {
   return process.env.AGENTNET_WORKFLOW_GATE_PROGRAM_ID || WORKFLOW_GATE_PROGRAM_ID;
@@ -172,15 +185,16 @@ export function getFeeTreasury(): string {
 
 /**
  * The umbrella collection mint for an item type — the ONE place that maps
- * "skill" / "workflow" → its collection. There are only these two collections;
- * every item of a given type shares the same collection (a skill is one big
- * collection, a workflow another). New kinds get a branch here, nowhere else.
+ * "skill" / "workflow" / "plugin" → its collection. Every item of a given type
+ * shares the same collection. New kinds get a branch here, nowhere else.
  *
  * Returns "" when the collection isn't configured yet — reviewsHint still
  * produces a stable key, so reads/writes work before bootstrap.
  */
-export function collectionFor(type: "skill" | "workflow" | undefined): string {
-  return (type === "workflow" ? getWorkflowsCollectionMint() : getSkillsCollectionMint()) ?? "";
+export function collectionFor(type: MarketItemType | undefined): string {
+  if (type === "workflow") return getWorkflowsCollectionMint() ?? "";
+  if (type === "plugin") return getPluginsCollectionMint() ?? "";
+  return getSkillsCollectionMint() ?? "";
 }
 
 // ===== Table column declarations =====

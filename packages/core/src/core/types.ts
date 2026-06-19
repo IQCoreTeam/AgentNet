@@ -15,10 +15,38 @@ export interface Session {
   title?: string;
 }
 
-/** Skill NFT metadata. */
+/** Marketplace NFT umbrella kind. */
+export type MarketItemType = "skill" | "workflow" | "plugin";
+
+export type PluginEngine = "claude" | "codex";
+
+/** Install coordinates carried by a plugin NFT. They intentionally mirror each
+ * engine's real plugin mechanism instead of inventing a generic fake package id. */
+export interface PluginManifest {
+  id?: string;
+  entrypoint?: string;
+  codex?: {
+    pluginName: string;
+    marketplaceName?: string | null;
+    marketplacePath?: string | null;
+    remoteMarketplaceName?: string | null;
+  };
+  claude?: {
+    marketplaceName: string;
+    pluginName?: string;
+    source?: {
+      source: "github";
+      repo: string;
+      ref?: string;
+    };
+  };
+  [key: string]: unknown;
+}
+
+/** Skill / workflow / plugin NFT metadata. */
 export interface Skill {
   id: string; // NFT mint address
-  type?: "skill" | "workflow"; // distinguishes between skills and workflows in search
+  type?: MarketItemType; // distinguishes between skills, workflows, and plugins in search
   name: string;
   description: string;
   creator: string; // wallet address
@@ -28,6 +56,14 @@ export interface Skill {
   // traits, skill-nft-json.md §4b). Empty/absent for a plain skill. Carried on
   // Skill so an enumeration result is enough to compute "what can I unlock".
   requiredSkills?: string[];
+  // Plugins only: engine badges and provenance/install hints from plugin NFT JSON.
+  // `engines` is what the UI later renders as "Claude" / "Codex" / "MCP" support.
+  engines?: string[];
+  iqGitPda?: string;
+  version?: string;
+  capabilities?: string[];
+  permissions?: string[];
+  pluginManifest?: PluginManifest;
   price?: string; // lamports as decimal string (bigint isn't JSON-serializable)
   supply: number; // mint supply = popularity
   uriTxid: string; // codeIn txid holding the skill text
@@ -37,7 +73,7 @@ export interface Skill {
 /** Workflow NFT metadata — a skill bundle with gates. */
 export interface Workflow {
   id: string; // NFT mint address
-  type?: "skill" | "workflow";
+  type?: MarketItemType;
   name: string;
   description: string;
   creator: string;

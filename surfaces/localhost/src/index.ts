@@ -441,6 +441,10 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
       const mkt = await marketPromise;
       return mkt ? mkt.publishSkill(input) : { ok: false, error: "Wallet not connected." };
     },
+    installPlugin: async (pluginId, engine) => {
+      const mkt = await marketPromise;
+      return mkt ? mkt.installPlugin(pluginId, engine) : { ok: false, error: "Wallet not connected." };
+    },
     loadOwnedSkills: async () => (await marketPromise)?.loadOwnedSkills() ?? [],
     setHeliusKey: async () => {
       c.send({ type: "toast", text: "Open Markets and choose Add Helius key to enter it on this device." });

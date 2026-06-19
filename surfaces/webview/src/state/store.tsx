@@ -28,6 +28,7 @@ import type {
   RpcStatus,
   Reputation,
 } from "../transport/protocol";
+import type { MarketItemType } from "@iqlabs-official/agent-sdk";
 
 // A rendered log entry. We keep messages as-is and stream into the last assistant/
 // thinking bubble when `partial` is set, matching the HTML webview's bubble model.
@@ -44,7 +45,7 @@ export interface State {
     | "chat";
   // market overlay (accessible from chat phase via "Markets" button)
   marketOpen: boolean;
-  marketTab: "skill" | "workflow";
+  marketTab: MarketItemType;
   marketQuery: string;
   marketResults: SkillCard[] | null;
   marketSearching: boolean;
@@ -192,7 +193,7 @@ type LocalAction =
   | { type: "__savePlan"; text: string }
   | { type: "__openMarket" }
   | { type: "__closeMarket" }
-  | { type: "__setMarketTab"; tab: "skill" | "workflow" }
+  | { type: "__setMarketTab"; tab: MarketItemType }
   | { type: "__setMarketQuery"; query: string }
   | { type: "__marketSearching" }
   | { type: "__clearMarketDetail" }
@@ -370,6 +371,13 @@ function reducer(state: State, ev: Action): State {
           ? Object.fromEntries(Object.entries(state.marketDisposed).filter(([_, mint]) => mint !== (ev.slug ?? ev.skillId) && mint !== ev.skillId))
           : state.marketDisposed,
       };
+    case "pluginInstallResult":
+      return {
+        ...state,
+        toast: ev.ok
+          ? `Installed plugin for ${ev.engine}. Restart that engine to load it.`
+          : `Plugin install failed: ${ev.error ?? "unknown"}`,
+      };
     case "ownedSkills":
       return { ...state, marketOwned: ev.names, marketDisposed: ev.disposedMints ?? {} };
     case "balance":
@@ -431,9 +439,9 @@ interface Store {
   selectEngine: (cli: Cli) => void;
   finishStorage: () => void;
   savePlan: (text: string) => void;
-  openMarket: () => void;
+  openMarket: (tab?: MarketItemType) => void;
   closeMarket: () => void;
-  setMarketTab: (tab: "skill" | "workflow") => void;
+  setMarketTab: (tab: MarketItemType) => void;
   setMarketQuery: (q: string) => void;
   marketSearching: () => void;
   clearMarketDetail: () => void;
@@ -549,7 +557,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       selectEngine,
       finishStorage: () => raw({ type: "__finishStorage" }),
       savePlan: (text) => raw({ type: "__savePlan", text }),
-      openMarket: () => raw({ type: "__openMarket" }),
+      openMarket: (tab) => {
+        if (tab) raw({ type: "__setMarketTab", tab });
+        raw({ type: "__openMarket" });
+      },
       closeMarket: () => raw({ type: "__closeMarket" }),
       setMarketTab: (tab) => raw({ type: "__setMarketTab", tab }),
       setMarketQuery: (query) => raw({ type: "__setMarketQuery", query }),

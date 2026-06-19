@@ -44,12 +44,16 @@ const SLASH_CMDS = [
   { name: "model",  desc: "change model" },
   { name: "mode",   desc: "change permission mode" },
   { name: "effort", desc: "set reasoning effort" },
+  { name: "market", desc: "open marketplace" },
+  { name: "skills", desc: "open skills market" },
+  { name: "workflows", desc: "open workflows market" },
+  { name: "plugins", desc: "open plugins market" },
   { name: "help",   desc: "list commands" },
 ];
 
 // Input + engine tabs + model/effort pickers. FROZEN while an approval is pending.
 export function Composer() {
-  const { state, send, selectEngine, queueCount } = useStore();
+  const { state, send, selectEngine, openMarket, queueCount } = useStore();
   const [text, setText] = useState("");
   const [effort, setEffort] = useState("default");
   const mode = state.modeByCli[state.cli] ?? MODES[state.cli][0].value;
@@ -221,6 +225,18 @@ export function Composer() {
           setText(""); return;
         case "effort":
           if (arg) { setEffort(arg); send({ type: "effort", effort: arg === "default" ? undefined : arg }); }
+          setText(""); return;
+        case "market":
+          openMarket();
+          setText(""); return;
+        case "skills":
+          openMarket("skill");
+          setText(""); return;
+        case "workflows":
+          openMarket("workflow");
+          setText(""); return;
+        case "plugins":
+          openMarket("plugin");
           setText(""); return;
         case "help": {
           const lines = SLASH_CMDS

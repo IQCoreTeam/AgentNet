@@ -6,6 +6,7 @@
 
 // Market types are defined once in packages/core and re-exported here so every surface
 // that imports from this file gets compile-time checking on the market message contract.
+import type { MarketItemType } from "@iqlabs-official/agent-sdk";
 export type { SkillCard, SkillDetail, MarketRequest, MarketEvent, RpcStatus, AgentProfile, Reputation } from "@iqlabs-official/agent-sdk";
 
 // ── shared payload shapes ──
@@ -120,11 +121,12 @@ export type ClientMessage =
   | { type: "setGoogleCredentials"; clientId: string; clientSecret?: string }
   | { type: "toast"; text: string }
   // ── market (UI→server) ──
-  | { type: "searchSkills"; query: string; kind?: "skill" | "workflow" }
+  | { type: "searchSkills"; query: string; kind?: MarketItemType }
   | { type: "getSkillDetail"; mint: string }
   | { type: "buySkill"; skillId: string; creatorWallet?: string }
   | { type: "disposeSkill"; skillId: string }
   | { type: "reEquipSkill"; skillId: string }
+  | { type: "installPlugin"; pluginId: string; engine: "claude" | "codex" }
   | { type: "ownedSkills" }
   | { type: "getBalance" }
   | { type: "getRpcStatus" }
@@ -133,7 +135,7 @@ export type ClientMessage =
   | { type: "listAgents" }
   | { type: "getAgentProfile"; wallet: string }
   | { type: "buyAllSkills"; wallet: string }
-  | { type: "postNote"; skillId: string; skillType?: "skill" | "workflow"; text: string; gitLink?: string }
+  | { type: "postNote"; skillId: string; skillType?: MarketItemType; text: string; gitLink?: string }
   | { type: "postAgentNote"; agentWallet: string; text: string; gitLink?: string }
   | {
       type: "publishSkill";
@@ -191,6 +193,7 @@ export type ServerMessage =
   | { type: "buyResult"; skillId: string; ok: boolean; slug?: string; error?: string }
   | { type: "disposeResult"; skillId: string; ok: boolean; slug?: string; error?: string }
   | { type: "reEquipResult"; skillId: string; ok: boolean; slug?: string; error?: string }
+  | { type: "pluginInstallResult"; pluginId: string; engine: "claude" | "codex"; ok: boolean; error?: string }
   | { type: "ownedSkills"; names: string[]; mints?: Record<string, string>; disposedMints?: Record<string, string> }
   | { type: "balance"; lamports: number | null }
   | { type: "skillActive"; name: string }

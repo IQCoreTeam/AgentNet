@@ -11,17 +11,28 @@ interface Props {
 }
 
 export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
-  const { send, state } = useStore();
+  const { state, send } = useStore();
   const [buying, setBuying] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [noteGitLink, setNoteGitLink] = useState("");
   const { card, skillText, notes } = detail;
   const priceSol = card.price ? (Number(card.price) / 1_000_000_000).toFixed(3) : null;
   const disposed = Object.values(state.marketDisposed).includes(card.id);
+  const isPlugin = card.type === "plugin";
+  const pluginEngine = state.cli;
+  const engineSupported = !card.engines?.length || card.engines.map((e) => e.toLowerCase()).includes(pluginEngine);
+  const hasInstallManifest = pluginEngine === "codex" ? !!card.pluginManifest?.codex : !!card.pluginManifest?.claude;
+  const canInstallPlugin = isPlugin && engineSupported && hasInstallManifest;
 
   function handleBuy() {
     setBuying(true);
     send({ type: "buySkill", skillId: card.id, creatorWallet: card.creator });
+    setTimeout(() => setBuying(false), 5000);
+  }
+
+  function handleInstallPlugin() {
+    setBuying(true);
+    send({ type: "installPlugin", pluginId: card.id, engine: pluginEngine });
     setTimeout(() => setBuying(false), 5000);
   }
 
@@ -63,12 +74,25 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
               {card.hashtags?.map((h) => (
                 <span key={h} className="bg-zinc-800/60 text-zinc-500 px-1.5 py-0.5 rounded">#{h}</span>
               ))}
+              {card.engines?.map((engine) => (
+                <span key={engine} className="bg-blue-900/30 text-blue-300 px-1.5 py-0.5 rounded">{engine}</span>
+              ))}
               {card.supply != null && <span className="text-zinc-600">↑{card.supply} holders</span>}
             </div>
           </div>
         </div>
 
-        {skillText && (
+        {isPlugin && (
+          <div className="rounded-lg bg-zinc-900 border border-zinc-800 p-3 space-y-2">
+            <p className="text-[11px] text-zinc-500 uppercase tracking-wide">Plugin package</p>
+            {card.version && <p className="text-xs text-zinc-300">Version <span className="font-mono">{card.version}</span></p>}
+            {card.iqGitPda && <p className="text-xs text-zinc-300 break-all">IQ Git PDA <span className="font-mono text-zinc-400">{card.iqGitPda}</span></p>}
+            {card.capabilities?.length ? <p className="text-xs text-zinc-400">Capabilities: {card.capabilities.join(", ")}</p> : null}
+            {card.permissions?.length ? <p className="text-xs text-zinc-400">Permissions: {card.permissions.join(", ")}</p> : null}
+          </div>
+        )}
+
+        {skillText && !isPlugin && (
           <div className="rounded-lg bg-zinc-900 border border-zinc-800 p-3">
             <p className="text-[11px] text-zinc-500 mb-1 uppercase tracking-wide">SKILL.md</p>
             <pre className="text-xs text-zinc-300 whitespace-pre-wrap font-mono overflow-x-auto">{skillText}</pre>
@@ -155,7 +179,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
         </div>
       )}
 
-      {!owned && !disposed && (
+      {!owned && !disposed && !isPlugin && (
         <div className="shrink-0 border-t border-amber-700/40 bg-gradient-to-t from-amber-900/30 to-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button
             onClick={handleBuy}
@@ -163,6 +187,17 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
             className="w-full rounded-xl bg-amber-400 py-3 text-sm font-semibold text-zinc-900 active:bg-amber-300 disabled:opacity-50"
           >
             {buying ? "Buying…" : priceSol ? `Buy for ${priceSol} SOL` : "Buy (free)"}
+          </button>
+        </div>
+      )}
+      {!owned && isPlugin && (
+        <div className="shrink-0 border-t border-blue-700/40 bg-gradient-to-t from-blue-950/30 to-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <button
+            onClick={handleInstallPlugin}
+            disabled={buying || !canInstallPlugin}
+            className="w-full rounded-xl border border-blue-700/70 bg-blue-500/15 py-3 text-sm font-semibold text-blue-200 active:bg-blue-500/25 disabled:opacity-50"
+          >
+            {buying ? "Installing…" : canInstallPlugin ? `Install for ${pluginEngine}` : `No ${pluginEngine} install manifest`}
           </button>
         </div>
       )}

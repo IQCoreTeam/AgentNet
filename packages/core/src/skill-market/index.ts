@@ -25,6 +25,7 @@ import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import type { Connection } from "@solana/web3.js";
 import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
+import type { MarketItemType } from "../core/types.js";
 import { searchSkills } from "../search/search.js";
 import { publishSkill } from "../nft/skill.js";
 import { readSkillText } from "../nft/token2022.js";
@@ -139,11 +140,11 @@ export const agentNetAllowedTools = (): string[] =>
 const SKILL_TOOLS: { name: string; description: string; schema: z.ZodRawShape }[] = [
   {
     name: "search_skills",
-    description: "Search the AgentNet marketplace for available skills and workflows.",
+    description: "Search the AgentNet marketplace for available skills, workflows, and plugin NFTs.",
     schema: {
       keyword: z.string().optional().describe("Optional keyword to search in skill names and descriptions."),
       category: z.string().optional().describe("Optional category to filter skills by (e.g. 'ai', 'frontend')."),
-      type: z.enum(["skill", "workflow"]).optional().describe("Whether to search for individual skills or workflow bundles."),
+      type: z.enum(["skill", "workflow", "plugin"]).optional().describe("Whether to search for individual skills, workflow bundles, or plugin packages."),
     },
   },
   {
@@ -172,7 +173,7 @@ const SKILL_TOOLS: { name: string; description: string; schema: z.ZodRawShape }[
     description: "Post a comment/review on a skill. You must hold ≥1 of the skill's token to comment.",
     schema: {
       skillId: z.string().describe("The base58 mint address of the skill to comment on."),
-      collectionId: z.string().optional().describe("The collection mint address the skill belongs to (skills or workflows collection). Omit to use the default skills collection."),
+      collectionId: z.string().optional().describe("The collection mint address the item belongs to (skills, workflows, or plugins collection). Omit to use the default skills collection."),
       text: z.string().describe("The comment text (markdown supported)."),
       gitLink: z.string().optional().describe("Optional GitHub or on-chain git URL to attach to the comment."),
     },
@@ -238,11 +239,16 @@ export async function handleToolCall(
   if (name === "search_skills") {
     const keyword = args?.keyword as string | undefined;
     const category = args?.category as string | undefined;
-    const typeFilter = args?.type as "skill" | "workflow" | undefined;
+    const typeFilter = args?.type as MarketItemType | undefined;
     const skills = await searchSkills(conn, { filters: { keyword, category, type: typeFilter } });
     if (skills.length === 0) return { content: [{ type: "text", text: "No matching skills found." }] };
     const formatted = skills
-      .map((s) => `- ID: ${s.id}\n  Name: ${s.name}\n  Type: ${s.type ?? "skill"}\n  Category: ${s.category}\n  Creator: ${s.creator}\n  Description: ${s.description}`)
+      .map((s) => {
+        const pluginBits = s.type === "plugin"
+          ? `\n  Engines: ${(s.engines ?? []).join(", ") || "unspecified"}${s.iqGitPda ? `\n  IQ Git PDA: ${s.iqGitPda}` : ""}`
+          : "";
+        return `- ID: ${s.id}\n  Name: ${s.name}\n  Type: ${s.type ?? "skill"}\n  Category: ${s.category}\n  Creator: ${s.creator}\n  Description: ${s.description}${pluginBits}`;
+      })
       .join("\n\n");
     return { content: [{ type: "text", text: `Found ${skills.length} results:\n\n${formatted}` }] };
   }
