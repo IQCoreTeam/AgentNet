@@ -6,9 +6,11 @@
 // and store them at core/paths tokenFile("google"). PER DEVICE, local only — our
 // server never sees a token. getAccessToken() refreshes transparently.
 //
-// Setup: a Google Cloud OAuth client of type "Desktop app" gives a client_id
-// (and client_secret, which for installed apps is not secret). Provide via
-// GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET env.
+// Setup: provide a Google OAuth client_id via GOOGLE_CLIENT_ID or config.json.
+// Some client types require a client_secret at the token endpoint; that is OK for
+// local desktop/dev flows, but Android APKs must not ship the secret. Android needs
+// a no-secret mobile/native authorization path instead of baking GOOGLE_CLIENT_SECRET
+// into BuildConfig or app assets.
 
 import { createServer } from "node:http";
 import { randomBytes, createHash } from "node:crypto";
@@ -56,7 +58,8 @@ function clientId(): string {
   return id;
 }
 function clientSecret(): string {
-  // installed-app secret is not confidential; empty string is valid for pure PKCE
+  // Desktop/dev flows may use a secret. Android builds must leave this empty and use
+  // a no-secret mobile/native flow; anything in an APK is visible to users.
   return process.env.GOOGLE_CLIENT_SECRET || configCreds().secret || "";
 }
 

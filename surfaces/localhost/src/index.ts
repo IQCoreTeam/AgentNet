@@ -119,10 +119,28 @@ let walletAddress: string | null = null;
 let lastCloudStatus: CloudStatus | null = null;
 let onCloudStatus: (() => void) | null = null;
 let googleLoginSession: GoogleLogin | null = null;
+let googleLoginError: string | null = null;
+
+function googleLoginErrorMessage(e: unknown): string {
+  const message = e instanceof Error ? e.message : String(e);
+  if (message.includes("client_secret is missing")) {
+    return "Google OAuth client type requires a client secret. Use a no-secret mobile/native OAuth flow; do not put a client secret in the APK.";
+  }
+  return message || "Login was not completed.";
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 
 function beginGoogleLogin(c: Client) {
   try {
     googleLoginSession?.cancel();
+    googleLoginError = null;
     googleLoginSession = startGoogleLoginFixed(`http://127.0.0.1:${PORT}/oauth/google/callback`);
     c.send({ type: "googleLoginUrl", url: googleLoginSession.url });
     googleLoginSession.done.then(async (ok) => {
@@ -133,7 +151,7 @@ function beginGoogleLogin(c: Client) {
       const payload = {
         type: "googleLoginStatus" as const,
         status: ok ? "done" as const : "error" as const,
-        error: ok ? undefined : "Login was not completed.",
+        error: ok ? undefined : googleLoginError ?? "Login was not completed.",
       };
       for (const client of clients.values()) client.send(payload);
       googleLoginSession = null;
@@ -148,7 +166,8 @@ async function submitGoogleAuthCode(c: Client, code: string) {
   try {
     await googleLoginSession?.submitCode(code);
   } catch (e) {
-    c.send({ type: "googleLoginStatus", status: "error", error: (e as Error).message });
+    googleLoginError = googleLoginErrorMessage(e);
+    c.send({ type: "googleLoginStatus", status: "error", error: googleLoginError });
   }
 }
 
@@ -653,14 +672,33 @@ const http = createServer(async (req, res) => {
   // the code and hand it to the active Google login session, then show a close-tab page.
   if (req.method === "GET" && path === "/oauth/google/callback") {
     const code = url.searchParams.get("code");
-    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-    res.end(`<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;background:#111;color:#eee">
-      <h2 style="color:#00E673">✓ Google connected</h2><p>You can close this tab and return to AgentNet.</p>
-    </body></html>`);
     if (code && googleLoginSession) {
-      googleLoginSession.submitCode(url.toString()).catch((e) =>
-        console.error("[oauth] submitCode failed:", e),
-      );
+      try {
+        await googleLoginSession.submitCode(url.toString());
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.end(`<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;background:#111;color:#eee">
+          <h2 style="color:#00E673">Google connected</h2><p>You can close this tab and return to AgentNet.</p>
+        </body></html>`);
+      } catch (e) {
+        googleLoginError = googleLoginErrorMessage(e);
+        console.error("[oauth] submitCode failed:", e);
+        for (const client of clients.values()) {
+          client.send({ type: "googleLoginStatus", status: "error", error: googleLoginError });
+        }
+        res.writeHead(400, { "content-type": "text/html; charset=utf-8" });
+        res.end(`<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;background:#111;color:#eee">
+          <h2 style="color:#ff6b6b">Google login failed</h2><p>${escapeHtml(googleLoginError)}</p>
+        </body></html>`);
+      }
+    } else {
+      googleLoginError ??= "Google login callback was missing a code.";
+      for (const client of clients.values()) {
+        client.send({ type: "googleLoginStatus", status: "error", error: googleLoginError });
+      }
+      res.writeHead(400, { "content-type": "text/html; charset=utf-8" });
+      res.end(`<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;background:#111;color:#eee">
+        <h2 style="color:#ff6b6b">Google login failed</h2><p>${escapeHtml(googleLoginError)}</p>
+      </body></html>`);
     }
     return;
   }

@@ -160,6 +160,25 @@ repo root, or Android Studio won't recognize it.
    Gradle + dependencies — **let it finish** (a few minutes, needs internet). Wait for
    "Gradle sync finished."
 
+### Optional — configure Google Drive OAuth for testing
+
+If you are testing the Google Drive storage path, put only the public OAuth client ID in
+`surfaces/android/local.properties`:
+
+```properties
+googleOAuthClientId=YOUR_PUBLIC_CLIENT_ID
+```
+
+Do **not** put a Google OAuth client secret in `local.properties`, `BuildConfig`, app
+assets, or Kotlin/TypeScript source. APK contents are visible to anyone who installs the
+app. If Google returns `client_secret is missing`, the configured client ID belongs to a
+secret-required desktop/web flow and Android login will not complete without changing to a
+no-secret mobile/native OAuth path.
+
+For an Android-native OAuth client in Google Cloud Console, use package name
+`com.iqlabs.agentnet` and the signing certificate SHA-1 for the build you install. For the
+debug APK, Android Studio can show this under Gradle `signingReport`.
+
 ---
 
 ## Step 4 — Enable USB debugging
