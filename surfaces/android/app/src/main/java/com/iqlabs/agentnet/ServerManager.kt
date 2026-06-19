@@ -76,6 +76,13 @@ class ServerManager(private val ctx: Context) {
             // the React SPA ships alongside the server bundle (build-assets.sh packs it at
             // ./webview); point the host at it so it serves the real UI, not the fallback.
             "AGENTNET_WEBVIEW_DIR=/root/agentnet-server/webview",
+            // Codex's OS-level sandbox uses bubblewrap, which needs Linux namespaces that
+            // don't exist inside proot (proot is itself a ptrace fake-chroot for exactly
+            // that reason). So bubblewrap can't run here — installing it wouldn't help.
+            // proot + the Android app sandbox + our approval gate already isolate the guest,
+            // so we tell Codex to skip its own sandbox. Desktop never sets this and keeps
+            // its real sandbox. spawn.ts reads this and passes it as the Codex sandboxMode.
+            "AGENTNET_CODEX_SANDBOX=danger-full-access",
             *googleClientIdEnv.toTypedArray(),
             *googleNativeAuthEnv.toTypedArray(),
             "/bin/sh", "-lc", cmd,

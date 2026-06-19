@@ -126,24 +126,6 @@ function claudePermissionMode(
     : "default";
 }
 
-// codex governs via a sandbox + an approval policy (no inline per-tool callback). We
-// expose the three presets the codex CLI itself ships:
-//   readonly — read-only sandbox; codex can't write/network at all
-//   auto     — write inside the workspace, ask only when a command fails (default)
-//   full     — full disk + network, never ask (dangerous)
-// NOTE: the codex SDK has no inline approval callback (see codexEngine), so an
-// approvalPolicy that PAUSES to ask (on-request/untrusted) would hang the turn with no
-// way to answer. We keep "auto" on the established on-failure default but use "never"
-// for readonly (the sandbox already blocks writes — no need, and no way, to ask).
-function codexPolicy(mode?: string): {
-  sandboxMode: "read-only" | "workspace-write" | "danger-full-access";
-  approvalPolicy: "untrusted" | "on-failure" | "on-request" | "never";
-} {
-  if (mode === "readonly") return { sandboxMode: "read-only", approvalPolicy: "never" };
-  if (mode === "full") return { sandboxMode: "danger-full-access", approvalPolicy: "never" };
-  return { sandboxMode: "workspace-write", approvalPolicy: "on-failure" };
-}
-
 export function spawnCli(opts: SpawnOpts): Engine {
   return opts.cli === "claude" ? claudeEngine(opts) : codexEngine(opts);
 }
@@ -424,6 +406,11 @@ function codexEngine(opts: SpawnOpts): Engine {
   const approval = opts.approval ?? autoApprove();
 
   const codexPath = resolveExecutable("codex") || "codex";
+  // Codex's OS-level sandbox uses bubblewrap, which can't run inside proot (no Linux
+  // namespaces — that's why proot exists). On Android the launcher sets
+  // AGENTNET_CODEX_SANDBOX=danger-full-access so Codex skips its own sandbox and relies on
+  // proot + the app sandbox + our approval gate. Desktop leaves it unset → Codex's default.
+  const sandbox = process.env.AGENTNET_CODEX_SANDBOX || undefined;
   const childEnv = { ...process.env };
   if (opts.apiKey) {
     childEnv.OPENAI_API_KEY = opts.apiKey;
@@ -784,6 +771,7 @@ function codexEngine(opts: SpawnOpts): Engine {
           cwd: opts.cwd,
           approvalPolicy: "on-request",
           approvalsReviewer: "user",
+          ...(sandbox ? { sandbox } : {}),
           ...(opts.effort ? { reasoning_effort: opts.effort } : {}),
         });
         cb.emitSid(opts.sessionId);
@@ -793,6 +781,7 @@ function codexEngine(opts: SpawnOpts): Engine {
           cwd: opts.cwd,
           approvalPolicy: "on-request",
           approvalsReviewer: "user",
+          ...(sandbox ? { sandbox } : {}),
           ...(opts.effort ? { reasoning_effort: opts.effort } : {}),
         });
         const threadId = res?.thread?.id;
