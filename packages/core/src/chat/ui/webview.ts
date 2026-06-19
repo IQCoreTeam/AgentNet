@@ -1654,6 +1654,10 @@ export function chatHtml(): string {
     { name: 'model', desc: 'change model', insert: '/model ' },
     { name: 'mode', desc: 'change permission mode', insert: '/mode ' },
     { name: 'effort', desc: 'set reasoning effort', insert: '/effort ' },
+    { name: 'market', desc: 'open marketplace', insert: '/market' },
+    { name: 'skills', desc: 'open skills market', insert: '/skills' },
+    { name: 'workflows', desc: 'open workflows market', insert: '/workflows' },
+    { name: 'plugins', desc: 'open plugins market', insert: '/plugins' },
     { name: 'help', desc: 'show help text', insert: '/help' },
   ];
   let slashIdx = 0;
@@ -2836,12 +2840,29 @@ export function chatHtml(): string {
         case 'effort':
           if (arg) { effortByCli[cli] = arg; fillEfforts(); vscode.postMessage({ type: 'effort', effort: arg === 'default' ? undefined : arg }); }
           input.value = ''; return;
+        case 'market':
+          openMarket();
+          showView('market');
+          input.value = ''; return;
+        case 'skills':
+          openMarket('skill');
+          showView('market');
+          input.value = ''; return;
+        case 'workflows':
+          openMarket('workflow');
+          showView('market');
+          input.value = ''; return;
+        case 'plugins':
+          openMarket('plugin');
+          showView('market');
+          input.value = ''; return;
         case 'help': {
           const helpText = [
             '/new — start fresh session', '/clear — clear on-screen log',
             '/copy — copy last reply', '/engine claude|codex — switch engine',
             '/model <model> — change model', '/mode <mode> — change permission mode',
             '/effort low|medium|high|xhigh|max — set reasoning effort',
+            '/market — open marketplace', '/skills /workflows /plugins — open market tab',
           ].join('\\n');
           const pre = document.createElement('pre');
           pre.style.cssText = 'margin:8px 0;padding:8px 12px;background:var(--an-bg-1);border-radius:6px;font-size:0.82em;opacity:0.8';
@@ -3571,7 +3592,14 @@ export function chatHtml(): string {
     mktResults.innerHTML = '<div class="mktEmpty">Searching…</div>';
     vscode.postMessage({ type: 'searchSkills', query: mktSearch.value.trim(), kind: currentKind });
   }
-  function openMarket() {
+  function selectMarketKind(kind) {
+    currentKind = kind || 'skill';
+    for (const t of document.querySelectorAll('.mktTab')) {
+      t.classList.toggle('on', t.getAttribute('data-kind') === currentKind);
+    }
+  }
+  function openMarket(kind) {
+    if (kind) selectMarketKind(kind);
     showMktList();
     // first open (and re-open) loads the popular list (empty query = supply-sorted)
     mktResults.innerHTML = '<div class="mktEmpty">Loading…</div>';
@@ -3590,8 +3618,7 @@ export function chatHtml(): string {
   // Skills / Workflows / Plugins tabs — switching re-runs the search filtered to that kind.
   for (const tab of document.querySelectorAll('.mktTab')) {
     tab.addEventListener('click', () => {
-      currentKind = tab.getAttribute('data-kind');
-      for (const t of document.querySelectorAll('.mktTab')) t.classList.toggle('on', t === tab);
+      selectMarketKind(tab.getAttribute('data-kind'));
       runMarketSearch();
     });
   }

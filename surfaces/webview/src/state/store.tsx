@@ -408,7 +408,7 @@ interface Store {
   selectEngine: (cli: Cli) => void;
   finishStorage: () => void;
   savePlan: (text: string) => void;
-  openMarket: () => void;
+  openMarket: (tab?: MarketItemType) => void;
   closeMarket: () => void;
   setMarketTab: (tab: MarketItemType) => void;
   setMarketQuery: (q: string) => void;
@@ -526,7 +526,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       selectEngine,
       finishStorage: () => raw({ type: "__finishStorage" }),
       savePlan: (text) => raw({ type: "__savePlan", text }),
-      openMarket: () => raw({ type: "__openMarket" }),
+      openMarket: (tab) => {
+        if (tab) raw({ type: "__setMarketTab", tab });
+        raw({ type: "__openMarket" });
+      },
       closeMarket: () => raw({ type: "__closeMarket" }),
       setMarketTab: (tab) => raw({ type: "__setMarketTab", tab }),
       setMarketQuery: (query) => raw({ type: "__setMarketQuery", query }),

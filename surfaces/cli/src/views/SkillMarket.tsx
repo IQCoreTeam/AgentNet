@@ -40,19 +40,21 @@ function nextMarketKind(kind: MarketItemType): MarketItemType {
 
 export function SkillMarket({
   api,
+  initialKind = "skill",
   walletAddr,
   ownedNames,
   onBought,
   onClose,
 }: {
   api: MarketApi;
+  initialKind?: MarketItemType;
   walletAddr: string;
   ownedNames: string[];
   onBought: () => void;
   onClose: () => void;
 }) {
   const [stage, setStage] = useState<Stage>("list");
-  const [kind, setKind] = useState<MarketItemType>("skill");
+  const [kind, setKind] = useState<MarketItemType>(initialKind);
   const [query, setQuery] = useState("");
   const [typing, setTyping] = useState(true);
   const [results, setResults] = useState<SkillCard[]>([]);
@@ -104,10 +106,11 @@ export function SkillMarket({
   }
 
   useEffect(() => {
-    void search("", kind);
+    setKind(initialKind);
+    void search("", initialKind);
     void api.solBalance().then(setBalance).catch(() => setBalance(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [initialKind]);
 
   async function openDetail(mint: string) {
     setLoading(true);

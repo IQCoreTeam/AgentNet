@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Box, Text, Static, useApp, useInput } from "ink";
 import type { AgentRuntime, Wallet, ChatMessage } from "@iqlabs-official/agent-sdk/runtime/contract";
-import type { CliReport } from "@iqlabs-official/agent-sdk";
+import type { CliReport, MarketItemType } from "@iqlabs-official/agent-sdk";
 import type { ApprovalRequest } from "@iqlabs-official/agent-sdk/runtime/approval/channel";
 import type { AppOptions } from "../app.js";
 import type { InkApprovalChannel } from "../InkApprovalChannel.js";
@@ -177,6 +177,7 @@ export function Chat({
   const [replyText, setReplyText] = useState("");
   const [showSessions, setShowSessions] = useState(false);
   const [showMarket, setShowMarket] = useState(false);
+  const [marketKind, setMarketKind] = useState<MarketItemType>("skill");
   const [showModels, setShowModels] = useState(false);
   const [showEfforts, setShowEfforts] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
@@ -408,12 +409,13 @@ export function Chat({
     setPanelFocused(false);
   }
 
-  function openMarket() {
+  function openMarket(kind: MarketItemType = "skill") {
     setPanelFocused(false);
     if (!market) {
-      setNotice("skill market still loading, try again in a moment");
+      setNotice("marketplace still loading, try again in a moment");
       return;
     }
+    setMarketKind(kind);
     setShowMarket(true);
   }
 
@@ -541,6 +543,18 @@ export function Chat({
           setNotice(info ? `storage: ${info.kind}${info.account ? ` (${info.account})` : ""}` : "storage: local only"),
         );
         return;
+      case "market":
+        openMarket();
+        return;
+      case "skills":
+        openMarket("skill");
+        return;
+      case "workflows":
+        openMarket("workflow");
+        return;
+      case "plugins":
+        openMarket("plugin");
+        return;
       case "account":
         void (async () => {
           const lines: string[] = [];
@@ -571,7 +585,7 @@ export function Chat({
         startBtwQuery(arg.trim());
         return;
       case "help":
-        setNotice("/new /sessions /resume /more /compact /clear /copy /models /engine /effort /account /settings /wallet /storage /btw <question> /iq /quit · !cmd shell · Esc cancels · Ctrl+A/E/W/U edit");
+        setNotice("/new /sessions /resume /more /compact /clear /copy /models /engine /effort /account /settings /wallet /storage /market /skills /workflows /plugins /btw <question> /iq /quit · !cmd shell · Esc cancels · Ctrl+A/E/W/U edit");
         return;
       default:
         setNotice(`unknown command: /${cmd} (try /help)`);
@@ -708,6 +722,7 @@ export function Chat({
     return (
       <SkillMarket
         api={market}
+        initialKind={marketKind}
         walletAddr={address}
         ownedNames={installed}
         onBought={() => {
