@@ -679,7 +679,7 @@ export function chatHtml(): string {
   /* a card body is clickable (opens detail); the Buy button stops propagation */
   .mktCard .mc-main { cursor: pointer; }
   .mktCard .mc-main:hover .mc-name { color: var(--an-green); }
-  /* Skills / Workflows segmented tabs */
+  /* Skills / Workflows / Plugins segmented tabs */
   .mktTabs { display: inline-flex; gap: 2px; padding: 2px; margin-bottom: 12px;
              background: var(--an-bg); border: 1px solid var(--an-line); border-radius: 999px; }
   .mktTab { background: transparent; border: none; color: var(--vscode-foreground); opacity: 0.6;
@@ -1490,6 +1490,7 @@ export function chatHtml(): string {
         <div class="mktTabs">
           <button class="mktTab on" data-kind="skill">Skills</button>
           <button class="mktTab" data-kind="workflow">Workflows</button>
+          <button class="mktTab" data-kind="plugin">Plugins</button>
         </div>
         <div class="mktSearchRow">
           <input id="mktSearch" type="text" placeholder="Search…" />
@@ -3564,7 +3565,7 @@ export function chatHtml(): string {
   const mktDetailEl = document.getElementById('mktDetail');
   const mktDetailBody = document.getElementById('mktDetailBody');
   let lastMarketResults = []; // last search results, kept to re-render on owned-list change
-  let currentKind = 'skill';  // active tab: Skills | Workflows
+  let currentKind = 'skill';  // active tab: Skills | Workflows | Plugins
   let currentDetail = null;   // { id, type } of the open detail — for comments refresh
   function runMarketSearch() {
     mktResults.innerHTML = '<div class="mktEmpty">Searching…</div>';
@@ -3586,7 +3587,7 @@ export function chatHtml(): string {
     if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Enter') { e.preventDefault(); runMarketSearch(); }
   });
-  // Skills / Workflows tabs — switching re-runs the search filtered to that kind.
+  // Skills / Workflows / Plugins tabs — switching re-runs the search filtered to that kind.
   for (const tab of document.querySelectorAll('.mktTab')) {
     tab.addEventListener('click', () => {
       currentKind = tab.getAttribute('data-kind');
@@ -3642,11 +3643,23 @@ export function chatHtml(): string {
     const addTag = (t) => { const s = document.createElement('span'); s.className = 'dt-tag'; s.textContent = t; meta.appendChild(s); };
     if (c.category) addTag(c.category);
     for (const h of (c.hashtags || [])) addTag('#' + h);
+    for (const e of (c.engines || [])) addTag(e);
+    if (c.version) addTag('v' + c.version);
     if (typeof c.supply === 'number') addTag(c.supply + '\\u00d7 owned');
     const price = fmtPrice(c.price); if (price) addTag(price);
     if (meta.childElementCount) skillModalBody.appendChild(meta);
+    if (c.type === 'plugin') {
+      const sec = document.createElement('div'); sec.className = 'dt-sec'; sec.textContent = 'Plugin package';
+      const bd = document.createElement('div'); bd.className = 'dt-body';
+      const lines = [];
+      if (c.iqGitPda) lines.push('IQ Git PDA: ' + c.iqGitPda);
+      if (c.capabilities && c.capabilities.length) lines.push('Capabilities: ' + c.capabilities.join(', '));
+      if (c.permissions && c.permissions.length) lines.push('Permissions: ' + c.permissions.join(', '));
+      bd.textContent = lines.length ? lines.join('\\n') : 'Plugin metadata is available. Install/equip support is not wired yet.';
+      skillModalBody.appendChild(sec); skillModalBody.appendChild(bd);
+    }
     // buy (hidden on your own skills — you can't buy what you authored)
-    if (!owned || c.type) {
+    if (c.type !== 'plugin' && (!owned || c.type)) {
       const buy = document.createElement('button'); buy.className = 'dt-buy';
       const buyLabel = price && price !== 'Free' ? ('Buy · ' + price) : 'Buy';
       buy.textContent = owned ? 'Owned' : buyLabel; buy.disabled = owned;
@@ -3655,8 +3668,12 @@ export function chatHtml(): string {
         vscode.postMessage({ type: 'buySkill', skillId: c.id, creatorWallet: c.creator });
       });
       skillModalBody.appendChild(buy); skillModalBuyBtn = buy;
+    } else if (c.type === 'plugin') {
+      const buy = document.createElement('button'); buy.className = 'dt-buy';
+      buy.textContent = 'Plugin install/equip coming next'; buy.disabled = true;
+      skillModalBody.appendChild(buy); skillModalBuyBtn = buy;
     }
-    if (detail && detail.skillText) {
+    if (detail && detail.skillText && c.type !== 'plugin') {
       const sec = document.createElement('div'); sec.className = 'dt-sec'; sec.textContent = (c.type === 'workflow' ? 'Workflow' : 'Skill') + ' text';
       const bd = document.createElement('div'); bd.className = 'dt-body'; bd.textContent = detail.skillText;
       skillModalBody.appendChild(sec); skillModalBody.appendChild(bd);
@@ -3758,7 +3775,7 @@ export function chatHtml(): string {
       inputWrap.appendChild(ta); inputWrap.appendChild(errEl); inputWrap.appendChild(submit);
     } else {
       const gate = document.createElement('div'); gate.className = 'dt-note-gate';
-      gate.textContent = 'Buy this skill to leave a comment.';
+      gate.textContent = skillType === 'plugin' ? 'Own this plugin to leave a comment.' : 'Buy this skill to leave a comment.';
       inputWrap.appendChild(gate);
     }
     wrap.appendChild(inputWrap);
@@ -3795,10 +3812,28 @@ export function chatHtml(): string {
     const addTag = (t) => { const s = document.createElement('span'); s.className = 'dt-tag'; s.textContent = t; meta.appendChild(s); };
     if (c.category) addTag(c.category);
     for (const h of (c.hashtags || [])) addTag('#' + h);
+    for (const e of (c.engines || [])) addTag(e);
+    if (c.version) addTag('v' + c.version);
     if (typeof c.supply === 'number') addTag(c.supply + '\\u00d7 owned');
     const detailPrice = fmtPrice(c.price);
     if (detailPrice) addTag(detailPrice); // "Free" / "0.1 SOL"
     if (meta.childElementCount) mktDetailBody.appendChild(meta);
+    if (c.type === 'plugin') {
+      const sec = document.createElement('div'); sec.className = 'dt-sec'; sec.textContent = 'Plugin package';
+      const body = document.createElement('div'); body.className = 'dt-body';
+      const lines = [];
+      if (c.iqGitPda) lines.push('IQ Git PDA: ' + c.iqGitPda);
+      if (c.capabilities && c.capabilities.length) lines.push('Capabilities: ' + c.capabilities.join(', '));
+      if (c.permissions && c.permissions.length) lines.push('Permissions: ' + c.permissions.join(', '));
+      body.textContent = lines.length ? lines.join('\\n') : 'Plugin metadata is available. Install/equip support is not wired yet.';
+      mktDetailBody.appendChild(sec); mktDetailBody.appendChild(body);
+      const install = document.createElement('button'); install.className = 'dt-buy';
+      install.textContent = 'Plugin install/equip coming next'; install.disabled = true;
+      mktDetailBody.appendChild(install);
+      detailBuyBtn = install; currentDetailName = c.name || null;
+      renderComments(c.id, c.type, detail && detail.notes, owned);
+      return;
+    }
     // buy / re-equip / remove. A disposed skill (owned on-chain, un-equipped) shows a free
     // Re-equip; an owned skill shows "Owned" + a Remove (dispose); else the priced Buy.
     const buy = document.createElement('button'); buy.className = 'dt-buy';
@@ -3858,9 +3893,10 @@ export function chatHtml(): string {
     mktResults.innerHTML = '';
     if (!results.length) {
       // empty can mean "no match" OR "no DAS RPC so reads return nothing" — say which.
+      const kindLabel = currentKind === 'workflow' ? 'workflows' : currentKind === 'plugin' ? 'plugins' : 'skills';
       mktResults.innerHTML = dasReady
-        ? '<div class="mktEmpty">No skills found.</div>'
-        : '<div class="mktEmpty">No skills found. The default RPC can\\'t read the marketplace. Add a Helius key (free devnet tier) in the wallet menu \\u2192 RPC.</div>';
+        ? '<div class="mktEmpty">No ' + kindLabel + ' found.</div>'
+        : '<div class="mktEmpty">No ' + kindLabel + ' found. The default RPC can\\'t read the marketplace. Add a Helius key (free devnet tier) in the wallet menu \\u2192 RPC.</div>';
       return;
     }
     for (const r of results) {
@@ -3875,13 +3911,17 @@ export function chatHtml(): string {
       main.addEventListener('click', () => openDetail(r.id)); // card body → detail view
       const sup = document.createElement('span'); sup.className = 'mc-sup';
       const priceTxt = fmtPrice(r.price);
-      sup.textContent = (typeof r.supply === 'number') ? (r.supply + '\\u00d7') : '';
+      const engineTxt = r.type === 'plugin' && r.engines && r.engines.length ? r.engines.join(' + ') : '';
+      const supplyTxt = (typeof r.supply === 'number') ? (r.supply + '\\u00d7') : '';
+      sup.textContent = engineTxt ? (engineTxt + (supplyTxt ? ' · ' + supplyTxt : '')) : supplyTxt;
       const pr = document.createElement('span'); pr.className = 'mc-price';
       if (priceTxt) pr.textContent = priceTxt; // "Free" / "0.1 SOL"; empty when unknown
       const buy = document.createElement('button'); buy.className = 'mc-buy';
-      buy.textContent = owned ? 'Owned' : 'Buy'; buy.disabled = owned;
+      const isPlugin = r.type === 'plugin';
+      buy.textContent = isPlugin ? 'Install later' : owned ? 'Owned' : 'Buy'; buy.disabled = owned || isPlugin;
       buy.addEventListener('click', (e) => {
         e.stopPropagation(); // don't trigger the card-body detail open
+        if (isPlugin) return;
         buy.disabled = true; buy.textContent = 'Buying…';
         vscode.postMessage({ type: 'buySkill', skillId: r.id, creatorWallet: r.creator });
       });

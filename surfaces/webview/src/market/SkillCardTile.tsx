@@ -10,6 +10,7 @@ interface Props {
 
 export function SkillCardTile({ card, owned, firing, onOpen }: Props) {
   const priceSol = card.price ? (Number(card.price) / 1_000_000_000).toFixed(3) : null;
+  const isPlugin = card.type === "plugin";
   return (
     <button
       onClick={() => onOpen(card)}
@@ -47,6 +48,9 @@ export function SkillCardTile({ card, owned, firing, onOpen }: Props) {
           )}
           <div className="mt-1 flex items-center gap-2 text-[11px] text-zinc-600">
             {card.category && <span>{card.category}</span>}
+            {isPlugin && card.engines?.length ? (
+              <span className="text-blue-400/80">{card.engines.join(" + ")}</span>
+            ) : null}
             {card.supply != null && <span>↑{card.supply}</span>}
             {priceSol && <span className="text-green-500/80">{priceSol} SOL</span>}
           </div>

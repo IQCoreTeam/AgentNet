@@ -33,6 +33,10 @@ const SOL = 1_000_000_000;
 function sol(lamports: number | null): string {
   return lamports == null ? "—" : `${(lamports / SOL).toFixed(3)} SOL`;
 }
+const MARKET_KINDS: MarketItemType[] = ["skill", "workflow", "plugin"];
+function nextMarketKind(kind: MarketItemType): MarketItemType {
+  return MARKET_KINDS[(MARKET_KINDS.indexOf(kind) + 1) % MARKET_KINDS.length];
+}
 
 export function SkillMarket({
   api,
@@ -48,7 +52,7 @@ export function SkillMarket({
   onClose: () => void;
 }) {
   const [stage, setStage] = useState<Stage>("list");
-  const [kind, setKind] = useState<"skill" | "workflow">("skill");
+  const [kind, setKind] = useState<MarketItemType>("skill");
   const [query, setQuery] = useState("");
   const [typing, setTyping] = useState(true);
   const [results, setResults] = useState<SkillCard[]>([]);
@@ -85,7 +89,7 @@ export function SkillMarket({
   const clamped = Math.min(idx, Math.max(0, results.length - 1));
   const selected = results[clamped];
 
-  async function search(q: string, k: "skill" | "workflow") {
+  async function search(q: string, k: MarketItemType) {
     setLoading(true);
     setError(null);
     try {
@@ -295,7 +299,7 @@ export function SkillMarket({
     // ── detail ─────────────────────────────────────────────────────────────
     if (stage === "detail") {
       if (key.escape) { setStage("list"); setDetail(null); return; }
-      if (input === "b" && detail && !owned.has(detail.card.name)) { setStage("confirm"); return; }
+      if (input === "b" && detail && detail.card.type !== "plugin" && !owned.has(detail.card.name)) { setStage("confirm"); return; }
       if (input === "c" && detail) {
         setCommentText(""); setCommentGitLink(""); setCommentField("text");
         setStage("comment");
@@ -309,7 +313,7 @@ export function SkillMarket({
     if (typing) {
       if (key.return) { setTyping(false); void search(query, kind); return; }
       if (key.tab) {
-        const next = kind === "skill" ? "workflow" : "skill";
+        const next = nextMarketKind(kind);
         setKind(next); void search(query, next); return;
       }
       if (key.backspace || key.delete) return setQuery((q) => q.slice(0, -1));
@@ -321,13 +325,13 @@ export function SkillMarket({
     if (input === "a") { setStage("agents"); void loadAgents(); return; }
     if (input === "p") { setPubResult(null); setPubField("name"); setStage("publish"); return; }
     if (key.tab) {
-      const next = kind === "skill" ? "workflow" : "skill";
+      const next = nextMarketKind(kind);
       setKind(next); void search(query, next); return;
     }
     if (key.upArrow) { if (clamped === 0) return setTyping(true); return setIdx((i) => Math.max(0, i - 1)); }
     if (key.downArrow) return setIdx((i) => Math.min(results.length - 1, i + 1));
     if (key.return && selected) return void openDetail(selected.id);
-    if (input === "b" && selected && !owned.has(selected.name)) { setDetail(null); setStage("confirm"); }
+    if (input === "b" && selected && selected.type !== "plugin" && !owned.has(selected.name)) { setDetail(null); setStage("confirm"); }
   });
 
   // ── agent profile ─────────────────────────────────────────────────────────
@@ -501,6 +505,7 @@ export function SkillMarket({
   if (stage === "detail" && detail) {
     const c = detail.card;
     const isOwned = owned.has(c.name);
+    const isPlugin = c.type === "plugin";
     return (
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
         <Box>
@@ -508,12 +513,25 @@ export function SkillMarket({
           <Text dimColor>  {c.type ?? "skill"} · ×{c.supply ?? 0}{isOwned ? " · owned" : ""}</Text>
         </Box>
         {c.description ? <Text>{c.description}</Text> : null}
+        {isPlugin && c.engines?.length ? (
+          <Box marginTop={1}><Text color={colors.iqCyan}>engines: {c.engines.join(", ")}</Text></Box>
+        ) : null}
         {c.category || (c.hashtags && c.hashtags.length) ? (
           <Box marginTop={1}>
             {c.category ? <Text color={colors.iqViolet}>{c.category} </Text> : null}
             {(c.hashtags ?? []).map((h) => (
               <Text key={h} dimColor>#{h} </Text>
             ))}
+          </Box>
+        ) : null}
+        {isPlugin ? (
+          <Box flexDirection="column" marginTop={1}>
+            <Text dimColor>── plugin package ──</Text>
+            {c.version ? <Text>version {c.version}</Text> : null}
+            {c.iqGitPda ? <Text>IQ Git PDA {c.iqGitPda}</Text> : null}
+            {c.capabilities?.length ? <Text>capabilities {c.capabilities.join(", ")}</Text> : null}
+            {c.permissions?.length ? <Text>permissions {c.permissions.join(", ")}</Text> : null}
+            <Text dimColor>install/equip is not wired yet</Text>
           </Box>
         ) : null}
         {detail.requiredCards.length ? (
@@ -524,7 +542,7 @@ export function SkillMarket({
             ))}
           </Box>
         ) : null}
-        {detail.skillText ? (
+        {detail.skillText && !isPlugin ? (
           <Box flexDirection="column" marginTop={1}>
             <Text dimColor>── SKILL.md ──</Text>
             <Text>{detail.skillText.slice(0, 1200)}</Text>
@@ -544,7 +562,7 @@ export function SkillMarket({
         {flash ? <Box marginTop={1}><Text color={colors.ok}>{glyph.sparkle} {flash}</Text></Box> : null}
         <Box marginTop={1}>
           <Text dimColor>
-            {isOwned ? "owned · " : "[b] buy · "}[c] comment · [esc] back
+            {isPlugin ? "plugin install/equip later · " : isOwned ? "owned · " : "[b] buy · "}[c] comment · [esc] back
           </Text>
         </Box>
       </Box>
@@ -564,6 +582,8 @@ export function SkillMarket({
         <Text dimColor>  ·  </Text>
         <Text color={kind === "workflow" ? colors.iqCyan : colors.dim} bold={kind === "workflow"}>workflows</Text>
         <Text dimColor>  ·  </Text>
+        <Text color={kind === "plugin" ? colors.iqCyan : colors.dim} bold={kind === "plugin"}>plugins</Text>
+        <Text dimColor>  ·  </Text>
         <Text color={colors.dim}>[a] agents  [p] publish</Text>
       </Box>
       {/* search box */}
@@ -580,7 +600,7 @@ export function SkillMarket({
         ) : error ? (
           <Text color={colors.err}>{error}</Text>
         ) : results.length === 0 ? (
-          <Text dimColor>no {kind === "skill" ? "skills" : "workflows"} found</Text>
+          <Text dimColor>no {kind === "workflow" ? "workflows" : kind === "plugin" ? "plugins" : "skills"} found</Text>
         ) : (
           results.slice(0, 12).map((c, i) => {
             const on = !typing && i === clamped;
@@ -594,6 +614,7 @@ export function SkillMarket({
                   </Text>
                 </Box>
                 <Text dimColor>×{c.supply ?? 0} </Text>
+                {c.type === "plugin" && c.engines?.length ? <Text color={colors.iqCyan}>{c.engines.join("+")} </Text> : null}
                 {isOwned ? <Text color={colors.ok}>owned </Text> : null}
                 <Text dimColor>{(c.description ?? "").slice(0, 40)}</Text>
               </Box>
@@ -607,8 +628,8 @@ export function SkillMarket({
       <Box marginTop={1}>
         <Text dimColor>
           {typing
-            ? "type to search · ↵ run · [tab] skills/workflows · ↓ results · esc close"
-            : "↑/↓ move · ↵ open · [b] buy · [tab] switch · [/] search · [a] agents · [p] publish · esc close"}
+            ? "type to search · ↵ run · [tab] skills/workflows/plugins · ↓ results · esc close"
+            : "↑/↓ move · ↵ open · [b] buy non-plugin · [tab] switch · [/] search · [a] agents · [p] publish · esc close"}
         </Text>
       </Box>
     </Box>
