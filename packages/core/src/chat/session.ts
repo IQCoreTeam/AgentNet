@@ -14,6 +14,8 @@
 import type { AgentRuntime, SessionHandle } from "../runtime/contract.js";
 import type { ApprovalChannel } from "../runtime/approval/channel.js";
 import type { SkillCard, MarketRequest } from "./marketMessages.js";
+import { access, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 // The two-way pipe to ONE chat UI (one panel / one socket). Messages both ways are
 // flat {type, ...} JSON — the same shape the webview already speaks.
@@ -117,6 +119,33 @@ async function ownedSkillsMsg(env: ChatEnv): Promise<{ type: "ownedSkills"; name
   const mints = env.ownedSkillMints ? await env.ownedSkillMints().catch(() => ({})) : {};
   const disposedMints = env.disposedSkillMints ? await env.disposedSkillMints().catch(() => ({})) : {};
   return { type: "ownedSkills", names, mints, disposedMints };
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function initInstructionsFile(cli: "claude" | "codex", cwd: string): Promise<{ file: string; created: boolean }> {
+  const file = cli === "codex" ? "AGENTS.md" : "CLAUDE.md";
+  const path = join(cwd, file);
+  if (await exists(path)) return { file, created: false };
+  const tool = cli === "codex" ? "Codex" : "Claude Code";
+  await writeFile(path, [
+    `# ${file}`,
+    "",
+    `Project instructions for ${tool}.`,
+    "",
+    "- Follow the existing repository conventions.",
+    "- Keep changes focused on the user's request.",
+    "- Run the relevant checks before handing off changes.",
+    "",
+  ].join("\n"), "utf8");
+  return { file, created: true };
 }
 
 // Wire one chat UI to the runtime. Returns a stop() that tears down both engine
@@ -335,6 +364,27 @@ export function createChatSession(
       case "slashCommand": {
         const command = typeof m.command === "string" ? m.command : "";
         const arg = typeof m.arg === "string" ? m.arg.trim() : "";
+        if (command === "permissions") {
+          const modes = cli === "claude"
+            ? "default, acceptEdits, plan, bypassPermissions"
+            : "readonly, auto, full";
+          transport.send({ type: "notice", text: `Current permission mode: ${slot().mode ?? "default"}\nAvailable modes: ${modes}\nUse /permissions <mode> or /mode <mode> to change it.` });
+          break;
+        }
+        if (command === "init") {
+          try {
+            const res = await initInstructionsFile(cli, env.cwd());
+            transport.send({ type: "notice", text: res.created ? `Created ${res.file}.` : `${res.file} already exists.` });
+          } catch (e) {
+            transport.send({ type: "notice", text: `Could not create instructions file: ${e instanceof Error ? e.message : String(e)}` });
+          }
+          break;
+        }
+        if (command === "skills") {
+          sendMarket(await ownedSkillsMsg(env));
+          transport.send({ type: "notice", text: "Skills refreshed." });
+          break;
+        }
         if (command === "compact") {
           const h = await ensureHandle();
           h.runSlashCommand?.("compact", arg || undefined);
@@ -345,7 +395,12 @@ export function createChatSession(
           h.runSlashCommand?.("diff");
           break;
         }
-        if (command === "status") {
+        if (command === "review" || command === "mcp") {
+          const h = await ensureHandle();
+          h.runSlashCommand?.(command, arg || undefined);
+          break;
+        }
+        if (command === "status" || command === "cost" || command === "usage") {
           const s = slot();
           transport.send({
             type: "status",

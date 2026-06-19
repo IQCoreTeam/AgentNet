@@ -857,6 +857,38 @@ function codexEngine(opts: SpawnOpts): Engine {
         cb.emitTurn();
         return;
       }
+      if (command === "review") {
+        running = true;
+        await sendRequest("review/start", {
+          threadId: sessionId,
+          target: arg ? { type: "custom", instructions: arg } : { type: "uncommittedChanges" },
+          delivery: "inline",
+        });
+        return;
+      }
+      if (command === "mcp") {
+        const res = await sendRequest("mcpServerStatus/list", {
+          threadId: sessionId,
+          limit: 50,
+          detail: "toolsAndAuthOnly",
+        });
+        const servers = Array.isArray(res?.data) ? res.data : [];
+        const text = servers.length
+          ? servers.map((s: any) => {
+              const tools = s?.tools && typeof s.tools === "object" ? Object.keys(s.tools).length : 0;
+              const auth = typeof s?.authStatus === "string" ? s.authStatus : JSON.stringify(s?.authStatus ?? null);
+              return `${s?.name ?? "(unnamed)"}: ${auth}, ${tools} tools`;
+            }).join("\n")
+          : "No MCP servers configured.";
+        cb.emitMsg({
+          role: "tool",
+          text,
+          ts: Date.now(),
+          tool: { name: "MCP", command: "mcpServerStatus/list", output: text },
+        });
+        cb.emitTurn();
+        return;
+      }
       await runTurn("/" + command + (arg ? " " + arg : ""));
     } catch (e) {
       cb.emitErr(`[codex ${command}] ${e instanceof Error ? e.message : String(e)}`);

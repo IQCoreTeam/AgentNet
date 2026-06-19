@@ -1675,6 +1675,12 @@ export function chatHtml(): string {
     { name: 'status', desc: 'show model, mode, tokens, session', insert: '/status' },
     { name: 'resume', desc: 'refresh resumable sessions', insert: '/resume' },
     { name: 'diff', desc: 'show working-tree changes', insert: '/diff' },
+    { name: 'permissions', desc: 'show or change permission mode', insert: '/permissions ' },
+    { name: 'init', desc: 'create engine instructions file', insert: '/init' },
+    { name: 'review', desc: 'review changes', insert: '/review' },
+    { name: 'mcp', desc: 'show MCP server status', insert: '/mcp' },
+    { name: 'skills', desc: 'refresh equipped skills', insert: '/skills' },
+    { name: 'cost', desc: 'show usage/status', insert: '/cost' },
     { name: 'copy', desc: 'copy last reply', insert: '/copy' },
     { name: 'engine', desc: 'switch engine (claude|codex)', insert: '/engine ' },
     { name: 'model', desc: 'change model', insert: '/model ' },
@@ -2858,6 +2864,20 @@ export function chatHtml(): string {
           vscode.postMessage({ type: 'slashCommand', command: 'diff' });
           showTyping();
           input.value = ''; return;
+        case 'permissions':
+          if (arg) { modeByCli[cli] = arg; fillModes(); vscode.postMessage({ type: 'mode', mode: arg }); }
+          else vscode.postMessage({ type: 'slashCommand', command: 'permissions' });
+          input.value = ''; return;
+        case 'init':
+        case 'skills':
+        case 'cost':
+          vscode.postMessage({ type: 'slashCommand', command: cmd });
+          input.value = ''; return;
+        case 'review':
+        case 'mcp':
+          vscode.postMessage({ type: 'slashCommand', command: cmd, arg });
+          showTyping();
+          input.value = ''; return;
         case 'copy': {
           const last = Array.from(log.querySelectorAll('.bubble.assistant')).pop();
           if (last && navigator.clipboard) navigator.clipboard.writeText(last.textContent || '').catch(() => {});
@@ -2882,6 +2902,12 @@ export function chatHtml(): string {
             '/status — show model, mode, tokens, and session',
             '/resume — refresh resumable sessions',
             '/diff — show working-tree changes',
+            '/permissions [mode] — show or change permission mode',
+            '/init — create AGENTS.md for Codex or CLAUDE.md for Claude',
+            '/review [focus] — review changes',
+            '/mcp — show MCP server status',
+            '/skills — refresh equipped skills',
+            '/cost — show usage/status',
             '/copy — copy last reply', '/engine claude|codex — switch engine',
             '/model <model> — change model', '/mode <mode> — change permission mode',
             '/effort low|medium|high|xhigh|max — set reasoning effort',
