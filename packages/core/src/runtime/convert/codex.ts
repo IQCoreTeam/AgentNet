@@ -8,6 +8,7 @@
 
 import type { ParseResult } from "./types.js";
 import { codexSkillsDir } from "../../core/paths.js";
+import { codexFileChangeMessage } from "./toolFormatting.js";
 
 const OUTPUT_CAP = 4000;
 
@@ -42,7 +43,7 @@ export function mapCodexEvent(ev: unknown): ParseResult {
       command?: string;
       aggregated_output?: string;
       exit_code?: number;
-      changes?: { path: string; kind: string }[];
+      changes?: { path?: unknown; kind?: unknown; diff?: unknown }[];
       items?: { text: string; completed: boolean }[];
     };
   };
@@ -81,15 +82,9 @@ export function mapCodexEvent(ev: unknown): ParseResult {
       const todos = it.items.map((t) => ({ content: t.text, status: t.completed ? "completed" : "pending" }));
       out.messages.push({ role: "tool", text: "TodoWrite", ts: Date.now(), tool: { name: "TodoWrite", output: JSON.stringify(todos) } });
     } else if (it.type === "file_change" && Array.isArray(it.changes)) {
-      // codex reports WHICH files changed (add/update/delete) but not a line diff;
-      // surface each as a file-op tool card.
       for (const c of it.changes) {
-        out.messages.push({
-          role: "tool",
-          text: c.kind + " " + (c.path.split("/").pop() || c.path),
-          ts: Date.now(),
-          tool: { name: c.kind === "delete" ? "Delete" : "Write", file: c.path },
-        });
+        const msg = codexFileChangeMessage(c);
+        if (msg) out.messages.push(msg);
       }
     }
   }

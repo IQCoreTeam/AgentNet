@@ -26,18 +26,6 @@ export function ChatScreen() {
     return () => { if (firingTimer.current) clearTimeout(firingTimer.current); };
   }, [state.firingSkill, clearFiringSkill]);
 
-  // Track the visual viewport so the composer stays above the mobile keyboard. We set a
-  // CSS var on the root and size the shell to it; on desktop this is just window height.
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const sync = () =>
-      document.documentElement.style.setProperty("--vvh", `${vv.height}px`);
-    sync();
-    vv.addEventListener("resize", sync);
-    return () => vv.removeEventListener("resize", sync);
-  }, []);
-
   const addr = state.walletAddress;
   // The header title is the active chat's name (vscode shows it per-panel; here there's
   // one panel, so it names the chat the drawer last opened). Falls back to the brand.

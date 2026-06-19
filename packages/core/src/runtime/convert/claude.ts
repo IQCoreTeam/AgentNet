@@ -6,6 +6,7 @@
 
 import type { ChatMessage } from "../contract.js";
 import type { ParseResult } from "./types.js";
+import { displayFileName } from "./toolFormatting.js";
 
 interface Block {
   type: string;
@@ -23,7 +24,6 @@ interface Block {
 
 const OUTPUT_CAP = 4000;
 const base = (text: string): ChatMessage => ({ role: "tool", text, ts: Date.now() });
-const fileName = (p?: string) => (p ? p.split("/").pop() || p : "");
 
 // old/new → a line-level INTERLEAVED diff via LCS, so unchanged lines render as context
 // (" ") between the "-"/"+" changes instead of one block of removals then one of additions.
@@ -79,17 +79,17 @@ function toolUseMessage(b: Block): ChatMessage {
     case "MultiEdit": {
       const file = String(input.file_path ?? "");
       return {
-        ...base("Edit " + fileName(file)),
+        ...base("Edit " + displayFileName(file)),
         tool: { name: "Edit", file, diff: makeDiff(String(input.old_string ?? ""), String(input.new_string ?? "")) },
       };
     }
     case "Write": {
       const file = String(input.file_path ?? "");
-      return { ...base("Write " + fileName(file)), tool: { name, file } };
+      return { ...base("Write " + displayFileName(file)), tool: { name, file } };
     }
     case "Read": {
       const file = String(input.file_path ?? "");
-      return { ...base("Read " + fileName(file)), tool: { name, file } };
+      return { ...base("Read " + displayFileName(file)), tool: { name, file } };
     }
     case "TodoWrite": {
       // preserve the structured todo list in `output` (JSON) so a surface can render it

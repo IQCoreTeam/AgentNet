@@ -12,7 +12,12 @@ export function Toast() {
 
   if (!state.toast) return null;
   return (
-    <div className="fixed inset-x-0 z-30 flex justify-center px-4" style={{ bottom: "max(1rem, env(safe-area-inset-bottom))" }}>
+    <div
+      className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4"
+      style={{
+        bottom: "calc(var(--composer-height, 0px) + var(--approval-dock-height, 0px) + max(0.75rem, env(safe-area-inset-bottom)))",
+      }}
+    >
       <div className="rounded-lg bg-zinc-800 px-4 py-2 text-sm text-zinc-100 shadow-lg">
         {state.toast}
       </div>

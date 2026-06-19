@@ -15,7 +15,13 @@ export function OnboardingShell({
   children: ReactNode;
 }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-7 px-6">
+    <div
+      className="flex h-full flex-col items-center justify-center gap-7 overflow-y-auto px-6"
+      style={{
+        paddingTop: "max(1.5rem, env(safe-area-inset-top))",
+        paddingBottom: "calc(max(1.5rem, env(safe-area-inset-bottom)) + var(--keyboard-inset-bottom, 0px))",
+      }}
+    >
       <div className="flex flex-col items-center gap-4">
         <IqLogo className="h-12 w-auto" fill="#00E673" />
         <div className="text-center">

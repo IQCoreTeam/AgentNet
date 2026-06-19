@@ -9,6 +9,7 @@ body,
 #app {
   height: 100%;
   margin: 0;
+  overflow: hidden;
 }
 
 body {
@@ -16,6 +17,15 @@ body {
   color: #e8e8ea;
   font-family:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overscroll-behavior: none;
+}
+
+.app-viewport {
+  display: flex;
+  height: var(--vvh, 100dvh);
+  min-height: var(--vvh, 100dvh);
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* Rendered markdown (assistant bubbles). DOMPurify-sanitized HTML from core's marked. */

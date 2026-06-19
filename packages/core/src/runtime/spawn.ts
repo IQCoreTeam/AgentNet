@@ -23,6 +23,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { ChatMessage, ImageInput } from "./contract.js";
 import { mapClaudeMessage } from "./convert/claude.js";
 import { skillFromPath } from "./convert/codex.js";
+import { codexFileChangeMessage } from "./convert/toolFormatting.js";
 import type {
   ApprovalChannel,
   ApprovalDecision,
@@ -548,12 +549,8 @@ function codexEngine(opts: SpawnOpts): Engine {
         });
       } else if ((it.type === "fileChange" || it.type === "file_change") && Array.isArray(it.changes)) {
         for (const c of it.changes) {
-          cb.emitMsg({
-            role: "tool",
-            text: c.kind + " " + (c.path.split("/").pop() || c.path),
-            ts: Date.now(),
-            tool: { name: c.kind === "delete" ? "Delete" : "Write", file: c.path },
-          });
+          const msg = codexFileChangeMessage(c);
+          if (msg) cb.emitMsg(msg);
         }
       }
     } else if (msg.method === "rawResponseItem/completed" && params?.item) {

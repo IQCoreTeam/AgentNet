@@ -6,6 +6,7 @@ import type {
 } from "../transport/protocol";
 import { useStore } from "../state/store";
 import { SkillIcon } from "../icons";
+import { useElementHeightVariable } from "../layoutEffects";
 
 // Pending tool approvals, docked just above the composer (newest first). Most are a
 // yes/no permission (bash/edit/…). Two are different:
@@ -15,7 +16,8 @@ import { SkillIcon } from "../icons";
 // While any card is present the composer is frozen (see Composer).
 export function ApprovalDock() {
   const { state, send, resolveApproval } = useStore();
-  if (state.approvals.length === 0) return null;
+  const rootRef = useRef<HTMLDivElement>(null);
+  useElementHeightVariable(rootRef, "--approval-dock-height");
 
   function decide(
     req: ApprovalRequest,
@@ -30,7 +32,11 @@ export function ApprovalDock() {
   }
 
   return (
-    <div className="flex max-h-52 flex-col gap-2 overflow-y-auto px-3 pt-2">
+    <div
+      ref={rootRef}
+      className={`flex flex-col gap-2 overflow-y-auto px-3 pt-2 ${state.approvals.length === 0 ? "hidden" : ""}`}
+      style={{ maxHeight: "min(13rem, max(7rem, calc(var(--vvh, 100dvh) * 0.32)))" }}
+    >
       {state.approvals.map((req) =>
         req.kind === "question" && req.questions?.length ? (
           <QuestionCard key={req.id} req={req} onAnswer={(a) => decide(req, "once", { questionResponses: a })} />
@@ -248,7 +254,10 @@ function ApprovalCard({
         />
       )}
       {req.plan && (
-        <div className="max-h-64 overflow-y-auto whitespace-pre-wrap px-3 pb-2 text-xs leading-relaxed text-zinc-300 [overflow-wrap:anywhere]">
+        <div
+          className="overflow-y-auto whitespace-pre-wrap px-3 pb-2 text-xs leading-relaxed text-zinc-300 [overflow-wrap:anywhere]"
+          style={{ maxHeight: "min(16rem, max(8rem, calc(var(--vvh, 100dvh) * 0.36)))" }}
+        >
           {req.plan}
         </div>
       )}

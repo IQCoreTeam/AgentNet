@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import type { Cli, ImageInput } from "../transport/protocol";
 import { AttachIcon } from "../icons";
+import { useElementHeightVariable } from "../layoutEffects";
 
 const MODELS: Record<Cli, { value: string; label: string }[]> = {
   claude: [
@@ -57,13 +58,16 @@ export function Composer() {
   }
   const [attached, setAttached] = useState<(ImageInput & { dataUrl: string })[]>([]);
   const [slashNotice, setSlashNotice] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const composingRef = useRef(false);
   const busy = state.typing;
   const frozen = state.approvals.length > 0;
 
   const [slashIdx, setSlashIdx] = useState(0);
   const [suppressSlash, setSuppressSlash] = useState(false);
+  useElementHeightVariable(rootRef, "--composer-height");
 
   // Derived state: active slash matches
   let activeMatches: { name: string; desc: string; insert: string }[] = [];
@@ -177,6 +181,7 @@ export function Composer() {
     const arr = Array.from(files).filter((f) => f.type.startsWith("image/"));
     const encoded = await Promise.all(arr.map(encodeFile));
     setAttached((a) => [...a, ...encoded]);
+    requestAnimationFrame(() => taRef.current?.scrollIntoView({ block: "nearest" }));
   }
 
   function removeAttached(i: number) {
@@ -270,6 +275,7 @@ export function Composer() {
 
   return (
     <div
+      ref={rootRef}
       className="border-t border-zinc-800 px-3 pt-2"
       style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
     >
@@ -369,7 +375,10 @@ export function Composer() {
         onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files) void addFiles(e.dataTransfer.files); }}
       >
         {showMenu && (
-          <div className="absolute bottom-[calc(100%+6px)] left-0 right-0 z-50 flex flex-col gap-0.5 rounded-lg border border-zinc-800 bg-zinc-950 p-1 shadow-2xl max-h-48 overflow-y-auto">
+          <div
+            className="absolute bottom-[calc(100%+6px)] left-0 right-0 z-50 flex flex-col gap-0.5 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950 p-1 shadow-2xl"
+            style={{ maxHeight: "min(12rem, max(6rem, calc(var(--vvh, 100dvh) * 0.35)))" }}
+          >
             {activeMatches.map((cmd, idx) => {
               const isSel = idx === slashIdx;
               const label = subCmd ? cmd.name : '/' + cmd.name;
@@ -427,9 +436,19 @@ export function Composer() {
             setSuppressSlash(false);
             setSlashIdx(0);
           }}
+          onCompositionStart={() => {
+            composingRef.current = true;
+          }}
+          onCompositionEnd={(e) => {
+            composingRef.current = false;
+            setText(e.currentTarget.value);
+          }}
+          onFocus={() => {
+            setTimeout(() => taRef.current?.scrollIntoView({ block: "nearest" }), 80);
+          }}
           onPaste={onPaste}
           onKeyDown={(e) => {
-            if (e.nativeEvent.isComposing) return;
+            if (e.nativeEvent.isComposing || composingRef.current) return;
 
             if (showMenu) {
               if (e.key === "ArrowDown") {
@@ -458,6 +477,7 @@ export function Composer() {
             }
 
             if (e.key === "Enter" && !e.shiftKey) {
+              if (window.matchMedia("(pointer: coarse) and (not (any-pointer: fine))").matches) return;
               e.preventDefault();
               submit();
             }
@@ -471,7 +491,8 @@ export function Composer() {
                   ? `Message ${state.cli}… (queues while busy · Esc to stop)`
                   : `Message ${state.cli}… (Enter · paste image)`
           }
-          className="max-h-40 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-sm leading-relaxed outline-none [overflow-wrap:anywhere] disabled:cursor-not-allowed"
+          className="min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-sm leading-relaxed outline-none [overflow-wrap:anywhere] disabled:cursor-not-allowed"
+          style={{ maxHeight: "min(10rem, max(4rem, calc(var(--vvh, 100dvh) * 0.28)))" }}
         />
         <button
           onClick={busy ? interrupt : submit}

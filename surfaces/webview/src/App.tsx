@@ -7,6 +7,7 @@ import { ConnectCodex } from "./onboarding/ConnectCodex";
 import { ChatScreen } from "./chat/ChatScreen";
 import { MarketScreen } from "./market/MarketScreen";
 import { Toast } from "./Toast";
+import { useVisualViewportVars } from "./layoutEffects";
 
 // Phase router:
 //   connecting   → opening SSE stream / sent `ready`, waiting for init|sessions
@@ -18,16 +19,20 @@ import { Toast } from "./Toast";
 //   chat         → runtime ready → the chat shell
 export function App() {
   const { state } = useStore();
+  useVisualViewportVars();
+
   return (
     <>
-      {state.phase === "connecting" && <Connecting />}
-      {state.phase === "onboarding" && <ConnectWallet />}
-      {state.phase === "storageSelect" && <ConnectStorage />}
-      {state.phase === "engineSelect" && <PickEngine />}
-      {state.phase === "claudeAuth" && <ConnectClaude />}
-      {state.phase === "codexAuth" && <ConnectCodex />}
-      {state.phase === "chat" && !state.marketOpen && <ChatScreen />}
-      {state.phase === "chat" && state.marketOpen && <MarketScreen />}
+      <div className="app-viewport">
+        {state.phase === "connecting" && <Connecting />}
+        {state.phase === "onboarding" && <ConnectWallet />}
+        {state.phase === "storageSelect" && <ConnectStorage />}
+        {state.phase === "engineSelect" && <PickEngine />}
+        {state.phase === "claudeAuth" && <ConnectClaude />}
+        {state.phase === "codexAuth" && <ConnectCodex />}
+        {state.phase === "chat" && !state.marketOpen && <ChatScreen />}
+        {state.phase === "chat" && state.marketOpen && <MarketScreen />}
+      </div>
       <Toast />
     </>
   );
