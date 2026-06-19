@@ -7,14 +7,18 @@ import { describe, it, expect, vi } from "vitest";
 import { createChatSession } from "./session.js";
 
 function fakeHandle(id: string, cli: "claude" | "codex") {
+  const usageCbs: Array<(n: number) => void> = [];
   return {
     sessionId: id,
     cli,
     send: vi.fn(),
+    runSlashCommand: vi.fn(),
     onMessage: vi.fn(),
     onTurnEnd: vi.fn(),
     onSkill: vi.fn(),
-    onUsage: vi.fn(),
+    onUsage: vi.fn((cb: (n: number) => void) => usageCbs.push(cb)),
+    emitUsage: (n: number) => usageCbs.forEach((cb) => cb(n)),
+    interrupt: vi.fn(),
     stop: vi.fn(),
   };
 }
@@ -126,5 +130,64 @@ describe("chat/session — image attachments pass through to the engine", () => 
     fromUI({ type: "send", text: "", images: [] });
     await flush();
     expect(startSession).not.toHaveBeenCalled();
+  });
+});
+
+describe("chat/session — slash commands", () => {
+  it("routes /compact and /diff to the active engine handle", async () => {
+    const { handles, fromUI } = harness();
+
+    fromUI({ type: "slashCommand", command: "compact", arg: "repo state" });
+    await flush();
+    expect(handles[0].runSlashCommand).toHaveBeenCalledWith("compact", "repo state");
+
+    fromUI({ type: "slashCommand", command: "diff" });
+    await flush();
+    expect(handles[0].runSlashCommand).toHaveBeenCalledWith("diff");
+  });
+
+  it("/clear resets the active context without spawning an engine turn", async () => {
+    const { handles, startSession, fromUI, transport } = harness();
+
+    fromUI({ type: "send", text: "hi" });
+    await flush();
+    expect(startSession).toHaveBeenCalledTimes(1);
+
+    fromUI({ type: "clear" });
+    await flush();
+    expect(handles[0].stop).toHaveBeenCalledTimes(1);
+    expect(startSession).toHaveBeenCalledTimes(1);
+    expect(transport.send).toHaveBeenCalledWith({ type: "clear" });
+  });
+
+  it("/status surfaces active engine, session, config, and last usage", async () => {
+    const { handles, fromUI, transport } = harness();
+
+    fromUI({ type: "send", text: "hi" });
+    await flush();
+    handles[0].emitUsage(1234);
+
+    fromUI({ type: "slashCommand", command: "status" });
+    await flush();
+    expect(transport.send).toHaveBeenCalledWith({
+      type: "status",
+      status: {
+        cli: "claude",
+        sessionId: "sess-0",
+        model: "default",
+        mode: "acceptEdits",
+        effort: "default",
+        contextTokens: 1234,
+      },
+    });
+  });
+
+  it("/resume refreshes sessions and gives a visible instruction", async () => {
+    const { fromUI, transport } = harness();
+
+    fromUI({ type: "slashCommand", command: "resume" });
+    await flush();
+    expect(transport.send).toHaveBeenCalledWith({ type: "sessions", list: [], activeId: undefined });
+    expect(transport.send).toHaveBeenCalledWith({ type: "notice", text: "Resume: open a session from History." });
   });
 });

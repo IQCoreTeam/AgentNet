@@ -82,6 +82,7 @@ export interface Engine {
   onSkill(cb: (name: string) => void): void;
   onUsage(cb: (contextTokens: number) => void): void; // real context occupancy per turn
   send(text: string, images?: ImageInput[]): void;
+  runSlashCommand?(command: string, arg?: string): void;
   interrupt(): void; // stop the current turn, keep the session alive
   stop(): void;
   updateMode?(mode: string): void;
@@ -399,6 +400,10 @@ function claudeEngine(opts: SpawnOpts): Engine {
     onSkill: (c) => cb.skill.push(c),
     onUsage: (c) => cb.use.push(c),
     send: (t, images) => push(t, images),
+    runSlashCommand: (command, arg) => {
+      const text = "/" + command + (arg ? " " + arg : "");
+      push(text);
+    },
     // interrupt the running turn WITHOUT closing the query — prompts() keeps waiting, so
     // the next send resumes the same session. (stop() also sets closed=true to end it.)
     interrupt: () => { void q.interrupt?.().catch(() => {}); },
@@ -827,6 +832,38 @@ function codexEngine(opts: SpawnOpts): Engine {
     }
   };
 
+  const runSlashCommand = async (command: string, arg?: string) => {
+    try {
+      await initPromise;
+      if (command === "compact") {
+        await sendRequest("thread/compact/start", { threadId: sessionId });
+        cb.emitMsg({
+          role: "summary",
+          text: arg ? `context compacted: ${arg}` : "context compacted",
+          ts: Date.now(),
+        });
+        cb.emitTurn();
+        return;
+      }
+      if (command === "diff") {
+        const res = await sendRequest("gitDiffToRemote", { cwd: opts.cwd });
+        const diff = typeof res?.diff === "string" ? res.diff : "";
+        cb.emitMsg({
+          role: "tool",
+          text: diff || "No working-tree changes.",
+          ts: Date.now(),
+          tool: { name: "Diff", command: "git diff", output: diff },
+        });
+        cb.emitTurn();
+        return;
+      }
+      await runTurn("/" + command + (arg ? " " + arg : ""));
+    } catch (e) {
+      cb.emitErr(`[codex ${command}] ${e instanceof Error ? e.message : String(e)}`);
+      cb.emitTurn();
+    }
+  };
+
   return {
     onMessage: (c) => cb.msg.push(c),
     onSessionId: (c) => cb.sid.push(c),
@@ -838,6 +875,9 @@ function codexEngine(opts: SpawnOpts): Engine {
     onUsage: (c) => cb.use.push(c),
     send: (t, images) => {
       void initPromise.then(() => runTurn(t, images));
+    },
+    runSlashCommand: (command, arg) => {
+      void runSlashCommand(command, arg);
     },
     // ask the server to abort the in-flight turn (keeps the thread alive). The resulting
     // turn/completed|failed unblocks the UI and clears running/turnId as usual.

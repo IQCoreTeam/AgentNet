@@ -135,7 +135,7 @@ export function createChatSession(
   // q.interrupt / codex child.kill). Instead we re-spawn lazily on the next send,
   // carrying the live session over, so the running turn finishes untouched and the new
   // setting applies from the next message.
-  type Slot = { handle: SessionHandle | null; pendingId?: string; model?: string; mode?: string; effort?: "low" | "medium" | "high" | "xhigh" | "max"; restage?: boolean };
+  type Slot = { handle: SessionHandle | null; pendingId?: string; model?: string; mode?: string; effort?: "low" | "medium" | "high" | "xhigh" | "max"; restage?: boolean; lastUsage?: number };
   const slots: Record<"claude" | "codex", Slot> = {
     claude: { handle: null, mode: "acceptEdits" },
     codex: { handle: null, mode: "auto" },
@@ -158,7 +158,10 @@ export function createChatSession(
     // persisted; only painted for the active tab.
     h.onSkill((name) => { if (cli === forCli) sendMarket({ type: "skillActive", name }); });
     // token usage: forward to the active surface so it can render a context meter.
-    h.onUsage((contextTokens) => { if (cli === forCli) transport.send({ type: "usage", contextTokens }); });
+    h.onUsage((contextTokens) => {
+      slots[forCli].lastUsage = contextTokens;
+      if (cli === forCli) transport.send({ type: "usage", contextTokens });
+    });
     h.onTurnEnd(async () => {
       if (cli === forCli) transport.send({ type: "turnEnd" }); // stop the typing dots
       await pushSessions();
@@ -259,6 +262,13 @@ export function createChatSession(
         })().catch(() => {});
         break;
       case "new":   await open(); await pushSessions(); break;
+      case "clear":
+        // Reset context, not only the transcript DOM. This intentionally opens a blank
+        // in-place chat for the active engine; `/new` remains the explicit fresh-session
+        // action users can pick from the UI.
+        await open();
+        await pushSessions();
+        break;
       // Opening a session resumes it in the CURRENT tab's cli (cross-CLI). The
       // session's own cli is ignored — that's the whole point of cross-CLI resume.
       // If the guard rejected it (open elsewhere), don't repaint the session list.
@@ -319,6 +329,41 @@ export function createChatSession(
         const imgs = Array.isArray(m.images) && m.images.length ? m.images : undefined;
         if (typeof m.text === "string" && (m.text.length > 0 || imgs)) {
           (await ensureHandle()).send(m.text, imgs);
+        }
+        break;
+      }
+      case "slashCommand": {
+        const command = typeof m.command === "string" ? m.command : "";
+        const arg = typeof m.arg === "string" ? m.arg.trim() : "";
+        if (command === "compact") {
+          const h = await ensureHandle();
+          h.runSlashCommand?.("compact", arg || undefined);
+          break;
+        }
+        if (command === "diff") {
+          const h = await ensureHandle();
+          h.runSlashCommand?.("diff");
+          break;
+        }
+        if (command === "status") {
+          const s = slot();
+          transport.send({
+            type: "status",
+            status: {
+              cli,
+              sessionId: s.handle?.sessionId ?? s.pendingId,
+              model: s.model ?? "default",
+              mode: s.mode,
+              effort: s.effort ?? "default",
+              contextTokens: s.lastUsage,
+            },
+          });
+          break;
+        }
+        if (command === "resume") {
+          await pushSessions();
+          transport.send({ type: "notice", text: "Resume: open a session from History." });
+          break;
         }
         break;
       }
