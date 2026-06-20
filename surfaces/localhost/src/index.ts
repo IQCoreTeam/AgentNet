@@ -755,13 +755,16 @@ const http = createServer(async (req, res) => {
     res.write(`event: client\ndata: ${JSON.stringify({ client: id })}\n\n`);
     res.on("close", () => { clearInterval(ka); scheduleTeardown(id, c); });
     if (runtime) attachChat(id, c, runtime);
-    // Wallet is connected this session and storage is configured, but the runtime is null
-    // — e.g. a reconnect/reopen raced the deferred runtime build (connectWallet only builds
-    // it once storage exists). Rebuild it and bind CHAT, rather than falling back to the
-    // onboarding handler (which would re-send `init` and silently drop chat messages). Only
-    // when isInitialized() (storage set up): a mid-onboarding client with no storage yet
-    // must still finish the picker, and a true process restart (wallet lost) re-onboards.
-    else if (wallet && (await isInitialized())) {
+    // Wallet is connected this session but the runtime is null — the user finished
+    // onboarding and navigated to /chat (a fresh SSE), or a reconnect/reopen raced the
+    // deferred build (connectWallet defers it during onboarding to avoid the Chrome-OAuth
+    // stale-runtime race). Build it now and bind CHAT instead of falling back to onboarding
+    // (which would re-send `init` and silently drop chat messages). We do NOT gate on
+    // isInitialized(): local storage ALWAYS works and cloud is optional — connect() mirrors
+    // cloud only if one was configured — so a user who chose "continue without cloud" still
+    // gets a working chat (matches the desktop/VSCode connect(wallet) path). Only a true
+    // process restart (wallet lost from memory) re-onboards.
+    else if (wallet) {
       runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
       attachChat(id, c, runtime);
     }
