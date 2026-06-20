@@ -1,4 +1,4 @@
-// "Your skills" memory section — a managed, auto-updated one-liner that tells the
+// "Your skills" memory section — a managed, auto-updated block that tells the
 // agent which skills are installed, without the user ever typing a prompt and
 // without bloating the system prompt (we keep claude's system prompt vanilla).
 //
@@ -9,8 +9,8 @@
 //     sees this passively — no need to remember to scan the skills dir itself.
 //
 // It's a SETTER over a marker-delimited block: read the local skills dir (NO RPC —
-// just the filesystem, the same readdir the "owned skills" panel uses), render one
-// line of skill titles, and splice it into:
+// just the filesystem, the same readdir the "owned skills" panel uses), render
+// skill names plus one-line descriptions, and splice them into:
 //   - claude: the project memory index (MEMORY.md)
 //   - codex:  the repo AGENTS.md
 // Both already get our other managed blocks; we own ONLY between the markers and
@@ -18,34 +18,78 @@
 
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { claudeSkillsDir, claudeMemoryDir, codexSkillsDir, codexAgentsFile } from "../core/paths.js";
+import { claudeSkillsDir, claudeMemoryDir, codexAgentsFile } from "../core/paths.js";
 import { spliceMarkedBlock } from "./convert/codex.js";
 
 const START = "<!-- agentnet:skills:start -->";
 const END = "<!-- agentnet:skills:end -->";
 
-/** Read installed skill titles from the local skills dir (one subdir per skill).
- *  Pure filesystem, no RPC. Read the active runtime's skills dir so the memory
- *  line points to the exact SKILL.md files that runtime can load. Returns []
- *  when nothing is installed (or the dir is missing). */
-async function installedSkillNames(cli: "claude" | "codex"): Promise<string[]> {
+export interface InstalledSkillSummary {
+  name: string;
+  description?: string;
+}
+
+function parseFrontmatterScalar(skillMd: string, key: "name" | "description"): string | undefined {
+  const lines = skillMd.replace(/^﻿/, "").split("\n");
+  if (!lines[0]?.trim().startsWith("---")) return undefined;
+  const closeIdx = lines.findIndex((line, i) => i > 0 && line.trim() === "---");
+  if (closeIdx === -1) return undefined;
+
+  for (let i = 1; i < closeIdx; i++) {
+    const m = lines[i].match(/^([A-Za-z0-9_.-]+):[ \t]*(.*)$/);
+    if (!m || m[1] !== key) continue;
+    const raw = m[2].trim();
+    if (!raw) return undefined;
+    if (/^[|>][+-]?$/.test(raw)) {
+      const block: string[] = [];
+      for (let j = i + 1; j < closeIdx; j++) {
+        if (/^\s+\S/.test(lines[j])) block.push(lines[j].trim());
+        else break;
+      }
+      return block.join(" ").replace(/\s+/g, " ").trim() || undefined;
+    }
+    return raw.replace(/^['"]|['"]$/g, "").replace(/\s+/g, " ").trim() || undefined;
+  }
+  return undefined;
+}
+
+async function readSkillSummary(dirName: string): Promise<InstalledSkillSummary> {
   try {
-    const dir = cli === "claude" ? claudeSkillsDir() : codexSkillsDir();
-    const entries = await readdir(dir, { withFileTypes: true });
-    return entries.filter((e) => e.isDirectory()).map((e) => e.name).sort();
+    const body = await readFile(join(claudeSkillsDir(), dirName, "SKILL.md"), "utf8");
+    return {
+      name: parseFrontmatterScalar(body, "name") ?? dirName,
+      description: parseFrontmatterScalar(body, "description"),
+    };
+  } catch {
+    return { name: dirName };
+  }
+}
+
+/** Read installed skill metadata from the local skills dir (one subdir per skill).
+ *  Pure filesystem, no RPC. Both runtimes install the same SKILL.md, so claude's
+ *  dir is the single read. Returns [] when nothing is installed (or the dir is
+ *  missing) — the caller then writes an empty/cleared block. */
+export async function installedSkillSummaries(): Promise<InstalledSkillSummary[]> {
+  try {
+    const entries = await readdir(claudeSkillsDir(), { withFileTypes: true });
+    const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name).sort();
+    const summaries = await Promise.all(dirs.map(readSkillSummary));
+    return summaries.sort((a, b) => a.name.localeCompare(b.name));
   } catch {
     return [];
   }
 }
 
-/** The managed block: a single human-readable line naming the installed skills, so
- *  the agent knows they exist and can reach for them. The full SKILL.md body stays
- *  in the skills dir (read on demand) — we only list titles here. Empty list →
- *  a block that says so (keeps the markers present and idempotent). */
-function renderBlock(cli: "claude" | "codex", names: string[]): string {
-  const path = cli === "claude" ? "~/.claude/skills/" : "~/.codex/skills/";
-  const line = names.length
-    ? `The following skills are installed and ready under ${path} — to use a skill, view its instructions in ${path}<skill-name>/SKILL.md: ${names.join(", ")}.`
+/** The managed block names installed skills and includes their trigger descriptions, so
+ *  the agent knows what each skill does and when to reach for it. The full SKILL.md body
+ *  stays in the skills dir (read on demand). Empty list → a block that says so (keeps
+ *  the markers present and idempotent). */
+function renderBlock(skills: InstalledSkillSummary[]): string {
+  const line = skills.length
+    ? [
+        "The following skills are installed and ready. Use one when it fits the task:",
+        ...skills.map((s) => s.description ? `- ${s.name}: ${s.description}` : `- ${s.name}`),
+      ].join("\n")
     : "No skills are installed yet.";
   return `${START}\n${line}\n${END}`;
 }
@@ -73,12 +117,15 @@ async function spliceIntoFile(file: string, block: string): Promise<void> {
  * installed. Best-effort: a filesystem error is swallowed — a missing skills line
  * must never block a session or a purchase.
  */
-export async function updateSkillsSection(cli: "claude" | "codex", cwd: string): Promise<void> {
+export async function updateSkillsSection(cli: "claude" | "codex", cwd: string): Promise<InstalledSkillSummary[]> {
   try {
-    const block = renderBlock(cli, await installedSkillNames(cli));
+    const skills = await installedSkillSummaries();
+    const block = renderBlock(skills);
     const file = cli === "claude" ? join(claudeMemoryDir(cwd), "MEMORY.md") : codexAgentsFile(cwd);
     await spliceIntoFile(file, block);
+    return skills;
   } catch {
     /* never throw from skill-section sync */
+    return [];
   }
 }

@@ -103,6 +103,7 @@ export interface SpawnOpts {
   // system-prompt append — so there's no appendSystemPrompt option anymore.)
   mcpServers?: Record<string, unknown>;
   allowedTools?: string[];
+  enabledSkills?: string[];
   // Codex MCP (Phase 1): codex app-server loads MCP servers from config, not an
   // in-process object — so it's spawned as a child process. We inject it via `-c
   // mcp_servers.<name>...` overrides on the app-server command (process-scoped; the
@@ -324,6 +325,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
       // NOT injected here anymore — it's a managed memory section (skillsSection.ts).
       ...(opts.mcpServers ? { mcpServers: opts.mcpServers as never } : {}),
       ...(opts.allowedTools ? { allowedTools: opts.allowedTools } : {}),
+      ...(opts.enabledSkills?.length ? { skills: opts.enabledSkills } : {}),
       // NOTE: settingSources is deliberately omitted — the SDK then loads ALL sources
       // (user/project/local), which is what lets skills in the user dir (~/.claude/skills,
       // where owned NFTs + the passive workflow are installed) be discovered. Passing

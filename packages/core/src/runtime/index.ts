@@ -100,12 +100,14 @@ export function createRuntime(
       // Inject the project's shared memory into this CLI's native files (Claude's
       // memory dir / Codex's AGENTS.md) BEFORE it starts so it loads this run. Best
       // effort — a memory/storage hiccup must not block starting the session.
+      let enabledSkills: string[] | undefined;
       try {
         await memory.injectAtStart(opts.cli, opts.cwd);
         // After memory is written, refresh the managed "your skills" line so the agent
         // passively knows which skills are installed (no system-prompt nudge, no RPC).
         // Must run AFTER injectAtStart, which regenerates MEMORY.md / AGENTS.md.
-        await updateSkillsSection(opts.cli, opts.cwd);
+        const skills = await updateSkillsSection(opts.cli, opts.cwd);
+        if (opts.cli === "claude" && skills.length) enabledSkills = skills.map((s) => s.name);
       } catch (e) {
         console.warn("[memory] inject failed:", e);
       }
@@ -122,7 +124,7 @@ export function createRuntime(
       // per-session approval channel (each panel passes its own) wins; fall back to
       // the runtime-level default channel.
       const apiKey = opts.apiKey || (opts.cli === "codex" ? (await getCodexApiKey().catch(() => undefined)) ?? undefined : undefined);
-      const cli = spawnCli({ ...opts, sessionId: nativeId, approval: opts.approval ?? approval, apiKey, ...passive });
+      const cli = spawnCli({ ...opts, sessionId: nativeId, approval: opts.approval ?? approval, apiKey, enabledSkills, ...passive });
 
       // Storage key stays the CANONICAL id while resuming; the cli's emitted (native)
       // id must NOT overwrite it, or appended turns land in the wrong log.
