@@ -377,7 +377,7 @@ function reducer(state: State, ev: Action): State {
           : state.marketDisposed,
       };
     case "ownedSkills":
-      return { ...state, marketOwned: ev.names, marketDisposed: ev.disposedMints ?? {} };
+      return { ...state, marketOwned: Array.isArray(ev.names) ? ev.names : [], marketDisposed: ev.disposedMints ?? {} };
     case "balance":
       return { ...state, marketBalance: ev.lamports };
     case "rpcStatus":

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useStore } from "../state/store";
 import { openExternalUrl } from "../platform/openExternalUrl";
 import { useAutoOpenExternalUrl } from "../platform/useAutoOpenExternalUrl";
+import { HeliusKeyForm } from "../settings/HeliusKeyForm";
 
 // Chat list drawer — the mobile answer to vscode's multi-panel "new tab": instead of
 // splitting the screen, the ☰ menu slides this in and you pick ONE chat to show. Telegram
@@ -11,7 +12,7 @@ export function Sessions({ onClose }: { onClose: () => void }) {
   const { state, send } = useStore();
   const { storage, cloudSync, googleLoginUrl, googleLoginError } = state;
 
-  const [settingsMode, setSettingsMode] = useState<"list" | "connect" | "gdrive" | "custom">("list");
+  const [settingsMode, setSettingsMode] = useState<"list" | "connect" | "gdrive" | "custom" | "helius">("list");
   const [customUrl, setCustomUrl] = useState("");
   const [customAuth, setCustomAuth] = useState("");
   const [code, setCode] = useState("");
@@ -22,6 +23,10 @@ export function Sessions({ onClose }: { onClose: () => void }) {
   const info = storage?.info as { kind?: string; connected?: boolean; account?: string; location?: string } | null;
   const cloudConnected = !!(info && info.connected && info.kind !== "local");
   useAutoOpenExternalUrl(googleLoginUrl);
+
+  useEffect(() => {
+    send({ type: "getRpcStatus" });
+  }, []);
 
   // Auto-close settings screen once Google Drive connects successfully
   useEffect(() => {
@@ -169,6 +174,21 @@ export function Sessions({ onClose }: { onClose: () => void }) {
                 </div>
               )}
 
+              <div className="mt-1 rounded-lg bg-zinc-900/30 p-2.5 flex justify-between items-center text-xs border border-zinc-900">
+                <span className="min-w-0 text-zinc-500">
+                  <span className="block font-medium text-zinc-300">Market RPC</span>
+                  <span className="block truncate text-[10px]">
+                    {state.rpcStatus?.hasKey ? `${state.rpcStatus.network} · ${state.rpcStatus.masked}` : "Helius key recommended"}
+                  </span>
+                </span>
+                <button
+                  onClick={() => setSettingsMode("helius")}
+                  className="text-[#00E673] hover:text-[#00d068] font-medium active:scale-95 transition"
+                >
+                  Configure
+                </button>
+              </div>
+
               <button
                 onClick={() => {
                   send({ type: "disconnectWallet" });
@@ -180,6 +200,23 @@ export function Sessions({ onClose }: { onClose: () => void }) {
               </button>
             </div>
           </>
+        ) : settingsMode === "helius" ? (
+          <div className="flex flex-col h-full">
+            <div className="mb-4 flex items-center justify-between border-b border-zinc-900 pb-2">
+              <span className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">
+                Market RPC
+              </span>
+              <button
+                onClick={() => setSettingsMode("list")}
+                className="text-xs text-zinc-400 hover:text-zinc-200"
+              >
+                Back
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <HeliusKeyForm onDone={() => setSettingsMode("list")} />
+            </div>
+          </div>
         ) : settingsMode === "connect" ? (
           <div className="flex flex-col h-full justify-between">
             <div>

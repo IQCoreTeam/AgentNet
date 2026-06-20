@@ -3,6 +3,7 @@ import { OnboardingShell, OnboardingButton } from "./OnboardingShell";
 import { useStore } from "../state/store";
 import { openExternalUrl } from "../platform/openExternalUrl";
 import { useAutoOpenExternalUrl } from "../platform/useAutoOpenExternalUrl";
+import { HeliusKeyForm } from "../settings/HeliusKeyForm";
 
 export function ConnectStorage() {
   const { state, send, finishStorage } = useStore();
@@ -23,6 +24,10 @@ export function ConnectStorage() {
   const isCloudConnected = !!(info && info.connected && info.kind !== "local");
   const googleCredsConfigured = storage?.googleCredsConfigured ?? false;
   useAutoOpenExternalUrl(googleLoginUrl);
+
+  useEffect(() => {
+    send({ type: "getRpcStatus" });
+  }, []);
 
   useEffect(() => {
     if (isCloudConnected && info?.kind) {
@@ -90,20 +95,27 @@ export function ConnectStorage() {
 
   return (
     <OnboardingShell
-      title="Session Storage"
-      subtitle="Your sessions are always stored locally. Mirror them to a cloud to sync across devices."
+      title="Storage & Market RPC"
+      subtitle="Store sessions locally or mirror them to cloud, then add a Helius key so the NFT marketplace can load reliably."
     >
       {!selectedKind ? (
-        <div className="flex flex-col gap-2.5">
-          <OnboardingButton variant="outline" onClick={() => setSelectedKind("gdrive")}>
-            Google Drive
-          </OnboardingButton>
-          <OnboardingButton variant="outline" onClick={() => setSelectedKind("custom")}>
-            Custom (S3 / WebDAV / HTTP)
-          </OnboardingButton>
-          <OnboardingButton variant="outline" onClick={() => setSelectedKind("local")}>
-            Keep on this device only
-          </OnboardingButton>
+        <div className="flex flex-col gap-5">
+          <section className="flex flex-col gap-2.5">
+            <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Session mirror</div>
+            <OnboardingButton variant="outline" onClick={() => setSelectedKind("gdrive")}>
+              Google Drive
+            </OnboardingButton>
+            <OnboardingButton variant="outline" onClick={() => setSelectedKind("custom")}>
+              Custom (S3 / WebDAV / HTTP)
+            </OnboardingButton>
+            <OnboardingButton variant="outline" onClick={() => setSelectedKind("local")}>
+              Keep on this device only
+            </OnboardingButton>
+          </section>
+          <section className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-3">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Market RPC</div>
+            <HeliusKeyForm />
+          </section>
         </div>
       ) : selectedKind === "local" ? (
         <div className="flex flex-col gap-3">

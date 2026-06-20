@@ -60,7 +60,6 @@ import {
   hasDasRpc,
   getNetwork,
   saveGithubToken,
-  loadGithubToken,
   maskedGithubToken,
 } from "@iqlabs-official/agent-sdk";
 
@@ -378,6 +377,217 @@ function attachAuthHandlers(c: Client) {
   });
 }
 
+// Marketplace messages are not part of the agent runtime. They need a connected wallet,
+// but they should still work when the active SSE client is in onboarding/storage setup.
+function attachMarketHandlers(c: Client) {
+  let mktPromise: ReturnType<typeof marketplaceEnv> | null = null;
+  function withMarketTimeout<T>(task: Promise<T>, message: string) {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    return Promise.race([
+      task,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), 8000);
+      }),
+    ]).finally(() => {
+      if (timer) clearTimeout(timer);
+    });
+  }
+  async function getMarket() {
+    if (!wallet) throw new Error("Wallet not connected.");
+    if (!mktPromise) {
+      const currentWallet = wallet;
+      mktPromise = withMarketTimeout(
+        marketplaceEnv(currentWallet),
+        "Marketplace initialization timed out. Add a Helius key in Market RPC settings, then retry.",
+      ).catch((e) => {
+        mktPromise = null;
+        throw e;
+      });
+    }
+    return mktPromise;
+  }
+  function sendMarketError(m: any, error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    switch (m?.type) {
+      case "searchSkills":
+        c.send({ type: "searchError", message });
+        return;
+      case "listAgents":
+        c.send({ type: "agents", agents: [] });
+        c.send({ type: "toast", text: "Failed to list agents: " + message });
+        return;
+      case "getBalance":
+        c.send({ type: "balance", lamports: null });
+        return;
+      case "ownedSkills":
+        c.send({ type: "ownedSkills", names: [] });
+        return;
+      case "publishSkill":
+        c.send({ type: "publishResult", ok: false, error: message });
+        return;
+      case "buySkill":
+        c.send({ type: "buyResult", skillId: m.skillId ?? "", ok: false, error: message });
+        return;
+      case "buyAllSkills":
+        c.send({ type: "buyAllResult", wallet: m.wallet ?? "", ok: false, bought: 0, failed: 0, error: message });
+        return;
+      case "postNote":
+        c.send({ type: "postNoteResult", skillId: m.skillId ?? "", ok: false, error: message });
+        return;
+      case "postAgentNote":
+        c.send({ type: "agentNoteResult", agentWallet: m.agentWallet ?? "", ok: false, error: message });
+        return;
+      default:
+        c.send({ type: "toast", text: "Marketplace failed: " + message });
+    }
+  }
+  c.recvs.push(async (m: any) => {
+    if (!m?.type) return;
+    switch (m.type) {
+      case "getRpcStatus": {
+        const masked = await maskedHeliusKey();
+        c.send({ type: "rpcStatus", status: { dasReady: await hasDasRpc(), hasKey: !!masked, masked, network: getNetwork() } });
+        return;
+      }
+      case "submitHeliusKey": {
+        if (typeof m.key === "string" && m.key.trim()) {
+          await saveHeliusKey(m.key.trim());
+          mktPromise = null;
+          const masked = await maskedHeliusKey();
+          c.send({ type: "rpcStatus", status: { dasReady: await hasDasRpc(), hasKey: !!masked, masked, network: getNetwork() } });
+          c.send({ type: "toast", text: "Helius key saved." });
+        }
+        return;
+      }
+      case "useDefaultRpc": {
+        await saveHeliusKey("");
+        mktPromise = null;
+        c.send({ type: "rpcStatus", status: { dasReady: false, hasKey: false, masked: null, network: getNetwork() } });
+        return;
+      }
+    }
+    let mkt;
+    try {
+      mkt = await getMarket();
+    } catch (e) {
+      sendMarketError(m, e);
+      return;
+    }
+    switch (m.type) {
+      case "searchSkills": {
+        try {
+          const results = await withMarketTimeout(
+            mkt.searchSkills(m.query ?? "", m.kind),
+            "Skill search timed out. Add a Helius key in Market RPC settings, then retry.",
+          );
+          c.send({ type: "searchResults", results });
+        } catch (e) {
+          c.send({ type: "searchError", message: (e as Error).message });
+        }
+        return;
+      }
+      case "getSkillDetail": {
+        try {
+          const detail = await mkt.getSkillDetail(m.mint);
+          c.send({ type: "skillDetail", detail });
+        } catch (e) {
+          c.send({ type: "toast", text: "Failed to load skill: " + (e as Error).message });
+        }
+        return;
+      }
+      case "buySkill": {
+        try {
+          const r = await mkt.buySkill(m.skillId, m.creatorWallet);
+          c.send({ type: "buyResult", skillId: m.skillId, ...r });
+        } catch (e) {
+          c.send({ type: "buyResult", skillId: m.skillId, ok: false, error: (e as Error).message });
+        }
+        return;
+      }
+      case "ownedSkills": {
+        try {
+          // mkt.ownedNftSkills returns a string[] — send it as `names`, not spread
+          // (`...arr` would make {0:..,1:..}, dropping `names` and crashing the reducer).
+          const names = await mkt.ownedNftSkills();
+          const [mints, disposedMints] = await Promise.all([
+            mkt.ownedSkillMints().catch(() => ({})),
+            mkt.disposedSkillMints().catch(() => ({})),
+          ]);
+          c.send({ type: "ownedSkills", names, mints, disposedMints });
+        } catch (e) {
+          c.send({ type: "toast", text: "Failed to load owned skills: " + (e as Error).message });
+        }
+        return;
+      }
+      case "getBalance": {
+        try {
+          const lamports = await mkt.solBalance();
+          c.send({ type: "balance", lamports });
+        } catch { c.send({ type: "balance", lamports: null }); }
+        return;
+      }
+      case "publishSkill": {
+        try {
+          const r = await mkt.publishSkill({ name: m.name, description: m.description, text: m.text, category: m.category, hashtags: m.hashtags, priceSol: m.priceSol, image: m.image });
+          c.send({ type: "publishResult", ...r });
+        } catch (e) {
+          c.send({ type: "publishResult", ok: false, error: (e as Error).message });
+        }
+        return;
+      }
+      case "postNote": {
+        try {
+          const r = await mkt.postNote(m.skillId, m.skillType, m.text, m.gitLink);
+          c.send({ type: "postNoteResult", skillId: m.skillId, ...r });
+        } catch (e) {
+          c.send({ type: "postNoteResult", skillId: m.skillId, ok: false, error: (e as Error).message });
+        }
+        return;
+      }
+      case "listAgents": {
+        try {
+          const r = await withMarketTimeout(
+            mkt.listAgents(),
+            "Agent list timed out. Add a Helius key in Market RPC settings, then retry.",
+          );
+          c.send({ type: "agents", agents: r });
+        } catch (e) {
+          c.send({ type: "agents", agents: [] });
+          c.send({ type: "toast", text: "Failed to list agents: " + (e as Error).message });
+        }
+        return;
+      }
+      case "getAgentProfile": {
+        try {
+          const profile = await mkt.getAgentProfile(m.wallet);
+          c.send({ type: "agentProfile", profile });
+        } catch (e) {
+          c.send({ type: "toast", text: "Failed to load agent: " + (e as Error).message });
+        }
+        return;
+      }
+      case "buyAllSkills": {
+        try {
+          const r = await mkt.buyAllSkills(m.wallet);
+          c.send({ type: "buyAllResult", wallet: m.wallet, ...r });
+        } catch (e) {
+          c.send({ type: "buyAllResult", wallet: m.wallet, ok: false, bought: 0, failed: 0, error: (e as Error).message });
+        }
+        return;
+      }
+      case "postAgentNote": {
+        try {
+          const r = await mkt.postAgentNote(m.agentWallet, m.text, m.gitLink);
+          c.send({ type: "agentNoteResult", agentWallet: m.agentWallet, ...r });
+        } catch (e) {
+          c.send({ type: "agentNoteResult", agentWallet: m.agentWallet, ok: false, error: (e as Error).message });
+        }
+        return;
+      }
+    }
+  });
+}
+
 // Attach the full chat dispatcher to a client (runtime must exist). The dispatcher's
 // transport is {send: SSE write, onRecv: register the POST fan-in}. approvalDecision
 // arrives via the same onRecv (POST), so TransportApprovalChannel is unchanged.
@@ -427,142 +637,13 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
   c.recvs.push(async (m: any) => {
     if (m?.type === "ready") await pushCliStatus(c);
   });
-
-  // ── market handlers ──
-  // Mirror exactly what VSCode's extension.ts passes to createChatSession, but as a
-  // standalone recv subscriber rather than chatSession options — localhost wires market
-  // messages here (HTTP surface can't use native dialogs, so setHeliusKey = submitHeliusKey).
-  const mktPromise = wallet ? marketplaceEnv(wallet) : null;
-  c.recvs.push(async (m: any) => {
-    if (!m?.type) return;
-    const mkt = await mktPromise;
-    if (!mkt) { c.send({ type: "toast", text: "Wallet not connected." }); return; }
-    switch (m.type) {
-      case "searchSkills": {
-        try {
-          const results = await mkt.searchSkills(m.query ?? "", m.kind);
-          c.send({ type: "searchResults", results });
-        } catch (e) {
-          c.send({ type: "searchError", message: (e as Error).message });
-        }
-        return;
-      }
-      case "getSkillDetail": {
-        try {
-          const detail = await mkt.getSkillDetail(m.mint);
-          c.send({ type: "skillDetail", detail });
-        } catch (e) {
-          c.send({ type: "toast", text: "Failed to load skill: " + (e as Error).message });
-        }
-        return;
-      }
-      case "buySkill": {
-        try {
-          const r = await mkt.buySkill(m.skillId, m.creatorWallet);
-          c.send({ type: "buyResult", skillId: m.skillId, ...r });
-        } catch (e) {
-          c.send({ type: "buyResult", skillId: m.skillId, ok: false, error: (e as Error).message });
-        }
-        return;
-      }
-      case "ownedSkills": {
-        try {
-          const r = await mkt.ownedSkills();
-          c.send({ type: "ownedSkills", ...r });
-        } catch (e) {
-          c.send({ type: "toast", text: "Failed to load owned skills: " + (e as Error).message });
-        }
-        return;
-      }
-      case "getBalance": {
-        try {
-          const lamports = await mkt.solBalance();
-          c.send({ type: "balance", lamports });
-        } catch { c.send({ type: "balance", lamports: null }); }
-        return;
-      }
-      case "getRpcStatus": {
-        const masked = await maskedHeliusKey();
-        c.send({ type: "rpcStatus", status: { dasReady: await hasDasRpc(), hasKey: !!masked, masked, network: getNetwork() } });
-        return;
-      }
-      case "submitHeliusKey": {
-        if (typeof m.key === "string" && m.key.trim()) {
-          await saveHeliusKey(m.key.trim());
-          const masked = await maskedHeliusKey();
-          c.send({ type: "rpcStatus", status: { dasReady: await hasDasRpc(), hasKey: !!masked, masked, network: getNetwork() } });
-          c.send({ type: "toast", text: "Helius key saved." });
-        }
-        return;
-      }
-      case "useDefaultRpc": {
-        await saveHeliusKey("");
-        c.send({ type: "rpcStatus", status: { dasReady: false, hasKey: false, masked: null, network: getNetwork() } });
-        return;
-      }
-      case "publishSkill": {
-        try {
-          const r = await mkt.publishSkill({ name: m.name, description: m.description, text: m.text, category: m.category, hashtags: m.hashtags, priceSol: m.priceSol, image: m.image });
-          c.send({ type: "publishResult", ...r });
-        } catch (e) {
-          c.send({ type: "publishResult", ok: false, error: (e as Error).message });
-        }
-        return;
-      }
-      case "postNote": {
-        try {
-          const r = await mkt.postNote(m.skillId, m.skillType, m.text, m.gitLink);
-          c.send({ type: "postNoteResult", skillId: m.skillId, ...r });
-        } catch (e) {
-          c.send({ type: "postNoteResult", skillId: m.skillId, ok: false, error: (e as Error).message });
-        }
-        return;
-      }
-      case "listAgents": {
-        try {
-          const r = await mkt.listAgents();
-          c.send({ type: "agents", agents: r });
-        } catch (e) {
-          c.send({ type: "toast", text: "Failed to list agents: " + (e as Error).message });
-        }
-        return;
-      }
-      case "getAgentProfile": {
-        try {
-          const profile = await mkt.getAgentProfile(m.wallet);
-          c.send({ type: "agentProfile", profile });
-        } catch (e) {
-          c.send({ type: "toast", text: "Failed to load agent: " + (e as Error).message });
-        }
-        return;
-      }
-      case "buyAllSkills": {
-        try {
-          const r = await mkt.buyAllSkills(m.wallet);
-          c.send({ type: "buyAllResult", wallet: m.wallet, ...r });
-        } catch (e) {
-          c.send({ type: "buyAllResult", wallet: m.wallet, ok: false, bought: 0, failed: 0, error: (e as Error).message });
-        }
-        return;
-      }
-      case "postAgentNote": {
-        try {
-          const r = await mkt.postAgentNote(m.agentWallet, m.text, m.gitLink);
-          c.send({ type: "agentNoteResult", agentWallet: m.agentWallet, ...r });
-        } catch (e) {
-          c.send({ type: "agentNoteResult", agentWallet: m.agentWallet, ok: false, error: (e as Error).message });
-        }
-        return;
-      }
-    }
-  });
+  attachMarketHandlers(c);
 
   // ── GitHub token handlers (outside market recv, no wallet required) ──
   c.recvs.push(async (m: any) => {
     if (m?.type === "submitGithubToken" && typeof m.token === "string" && m.token.trim()) {
       await saveGithubToken(m.token.trim());
       const masked = await maskedGithubToken();
-      const login = await loadGithubToken().then((t) => t?.token ? "configured" : undefined).catch(() => undefined);
       c.send({ type: "githubStatus", hasToken: true, masked: masked ?? undefined });
       c.send({ type: "toast", text: "GitHub token saved." });
       return;
@@ -593,12 +674,14 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
   };
 }
 
-// Before a wallet exists, a client is in ONBOARDING: its recv handles only the wallet
-// handshake. On connect we build the runtime; the onboarding webview then navigates to
-// / (chat), which opens a FRESH SSE client that finds the runtime ready and attaches
-// chat. So an onboarding client never carries chat itself — clean separation.
+// Before a wallet exists, a client is in ONBOARDING: its recv handles the wallet
+// handshake plus market RPC/Helius settings (so the storage screen can configure Helius
+// before any runtime exists). On connect we build the runtime; the onboarding webview then
+// navigates to / (chat), which opens a FRESH SSE client that finds the runtime ready and
+// attaches chat. So an onboarding client never carries chat itself — clean separation.
 function attachOnboarding(c: Client) {
   attachAuthHandlers(c);
+  attachMarketHandlers(c);
 
   c.recvs.push(async (m: any) => {
     if (m?.type === "ready") {

@@ -7,6 +7,7 @@ import { AgentDirectory } from "./AgentDirectory";
 import { AgentProfileView } from "./AgentProfileView";
 import { BuyCelebration } from "./BuyCelebration";
 import type { SkillCard } from "../transport/protocol";
+import { HeliusSetupPanel } from "../settings/HeliusKeyForm";
 
 type MarketView = "browse" | "publish" | "helius" | "agents";
 
@@ -19,6 +20,7 @@ export function MarketScreen() {
     send({ type: "ownedSkills" });
     send({ type: "getRpcStatus" });
     send({ type: "getBalance" });
+    marketSearching();
     send({ type: "searchSkills", query: "", kind: state.marketTab });
   }, []);
 
@@ -80,7 +82,7 @@ export function MarketScreen() {
 
   // Helius key setup
   if (view === "helius") {
-    return <HeliusSetup onBack={() => setView("browse")} />;
+    return <HeliusSetupPanel onBack={() => setView("browse")} />;
   }
 
   const balanceSol = state.marketBalance != null ? (state.marketBalance / 1_000_000_000).toFixed(3) : null;
@@ -204,60 +206,6 @@ export function MarketScreen() {
             </div>
           </>
         )}
-      </div>
-    </div>
-  );
-}
-
-function HeliusSetup({ onBack }: { onBack: () => void }) {
-  const { send } = useStore();
-  const [key, setKey] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  function save() {
-    if (!key.trim()) return;
-    setSaving(true);
-    send({ type: "submitHeliusKey", key: key.trim() });
-    setTimeout(onBack, 1200);
-  }
-
-  function clear() {
-    send({ type: "useDefaultRpc" });
-    onBack();
-  }
-
-  return (
-    <div className="flex flex-col h-full bg-zinc-950">
-      <header className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2 shrink-0">
-        <button onClick={onBack} className="text-zinc-400 active:text-zinc-200 px-1 text-lg">←</button>
-        <span className="font-medium text-sm">Helius API Key</span>
-      </header>
-      <div className="flex-1 p-4 space-y-4">
-        <p className="text-sm text-zinc-400">
-          A Helius key enables fast NFT indexing and skill search. Stored locally, never synced.
-        </p>
-        <input
-          className="w-full rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-green-500/50 font-mono"
-          placeholder="xxxx-xxxx-xxxx or https://…helius-rpc.com/?api-key=…"
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          type="password"
-        />
-        <div className="flex gap-2">
-          <button
-            onClick={save}
-            disabled={saving || !key.trim()}
-            className="flex-1 rounded-xl bg-green-600 py-2.5 text-sm font-semibold text-white active:bg-green-500 disabled:opacity-50"
-          >
-            {saving ? "Saving…" : "Save Key"}
-          </button>
-          <button
-            onClick={clear}
-            className="rounded-xl border border-zinc-700 px-4 py-2.5 text-sm text-zinc-400 active:bg-zinc-800"
-          >
-            Use Default
-          </button>
-        </div>
       </div>
     </div>
   );
