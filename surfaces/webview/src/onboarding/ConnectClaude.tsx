@@ -7,6 +7,7 @@
 
 import { useState } from "react";
 import { OnboardingShell, OnboardingButton } from "./OnboardingShell";
+import { LoginUrlBlock } from "./LoginUrlBlock";
 import { useStore } from "../state/store";
 
 export function ConnectClaude() {
@@ -14,30 +15,10 @@ export function ConnectClaude() {
   const { claudeLoginUrl, claudeLoginError } = state;
   const [busy, setBusy] = useState(false);
   const [code, setCode] = useState("");
-  const [copied, setCopied] = useState(false);
 
   function start() {
     setBusy(true);
     send({ type: "startClaudeLogin" });
-  }
-
-  // Copy the OAuth URL so the user can authorize on ANOTHER device (e.g. a desktop where
-  // they're already signed into Claude) and just paste the code back here.
-  async function copyUrl() {
-    if (!claudeLoginUrl) return;
-    try {
-      await navigator.clipboard.writeText(claudeLoginUrl);
-    } catch {
-      // clipboard API can be blocked; fall back to a hidden textarea + execCommand
-      const ta = document.createElement("textarea");
-      ta.value = claudeLoginUrl;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      document.body.removeChild(ta);
-    }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
   }
 
   function submit() {
@@ -65,17 +46,7 @@ export function ConnectClaude() {
           <p className="text-sm text-zinc-400">
             1. Open this link and authorize (here or on another device):
           </p>
-          <a
-            href={claudeLoginUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="break-all rounded-lg bg-zinc-900 px-3 py-2.5 text-xs leading-relaxed text-[#00E673] ring-1 ring-zinc-800"
-          >
-            {claudeLoginUrl}
-          </a>
-          <OnboardingButton variant="outline" onClick={copyUrl}>
-            {copied ? "Copied!" : "Copy link"}
-          </OnboardingButton>
+          <LoginUrlBlock url={claudeLoginUrl} />
           <p className="mt-1 text-sm text-zinc-400">2. Paste the code you get back:</p>
           <input
             value={code}
