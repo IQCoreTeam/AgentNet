@@ -153,7 +153,7 @@ import { createRuntime } from "./runtime/index.js";
 import { login } from "./account/login.js";
 
 export type { ApprovalChannel, ApprovalRequest, ApprovalDecision } from "./runtime/approval/channel.js";
-export { autoApprove } from "./runtime/approval/channel.js";
+export { autoApprove, withTimeout } from "./runtime/approval/channel.js";
 
 // the transport-neutral chat dispatcher + its button-approval channel, shared by
 // every surface (vscode, server, android). A surface supplies a ChatTransport and a
