@@ -5,9 +5,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // replaced in place, and never disturbs content outside the markers.
 const files = new Map<string, string>();
 let skillDirs: string[] = [];
+let codexSkillDirs: string[] = [];
 
 vi.mock("node:fs/promises", () => ({
-  readdir: vi.fn(async () => skillDirs.map((name) => ({ name, isDirectory: () => true }))),
+  readdir: vi.fn(async (dir: string) => (dir === "/codex-skills" ? codexSkillDirs : skillDirs).map((name) => ({ name, isDirectory: () => true }))),
   readFile: vi.fn(async (f: string) => {
     if (files.has(f)) return files.get(f)!;
     throw new Error("ENOENT");
@@ -17,6 +18,7 @@ vi.mock("node:fs/promises", () => ({
 
 vi.mock("../core/paths.js", () => ({
   claudeSkillsDir: () => "/skills",
+  codexSkillsDir: () => "/codex-skills",
   claudeMemoryDir: () => "/mem",
   codexAgentsFile: (cwd: string) => `${cwd}/AGENTS.md`,
 }));
@@ -26,7 +28,7 @@ import { updateSkillsSection } from "./skillsSection.js";
 const MEMORY = "/mem/MEMORY.md";
 
 describe("memory/skillsSection", () => {
-  beforeEach(() => { files.clear(); skillDirs = []; });
+  beforeEach(() => { files.clear(); skillDirs = []; codexSkillDirs = []; });
 
   it("writes a one-line block naming installed skills (claude MEMORY.md)", async () => {
     skillDirs = ["code-review", "changelog-generator"];
@@ -35,6 +37,7 @@ describe("memory/skillsSection", () => {
     expect(out).toContain("<!-- agentnet:skills:start -->");
     expect(out).toContain("<!-- agentnet:skills:end -->");
     expect(out).toContain("changelog-generator, code-review"); // sorted, comma-joined
+    expect(out).toContain("~/.claude/skills/");
   });
 
   it("says none when no skills are installed", async () => {
@@ -56,9 +59,13 @@ describe("memory/skillsSection", () => {
   });
 
   it("targets AGENTS.md for codex", async () => {
-    skillDirs = ["x"];
+    skillDirs = ["claude-only"];
+    codexSkillDirs = ["codex-only"];
     await updateSkillsSection("codex", "/proj");
-    expect(files.has("/proj/AGENTS.md")).toBe(true);
+    const out = files.get("/proj/AGENTS.md")!;
+    expect(out).toContain("codex-only");
+    expect(out).toContain("~/.codex/skills/");
+    expect(out).not.toContain("claude-only");
     expect(files.has(MEMORY)).toBe(false);
   });
 });
