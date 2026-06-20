@@ -170,6 +170,31 @@ body {
   overflow: hidden;
 }
 
+.an-deck {
+  height: var(--vvh, 100dvh);
+  width: 100%;
+  overflow: hidden;
+  background: var(--an-bg-0);
+  touch-action: pan-y;
+}
+.an-deck-track {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  height: 100%;
+  width: 300%;
+  will-change: transform;
+}
+.an-deck-card {
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--an-bg-0);
+}
+.an-deck-drawer {
+  max-width: min(86vw, 22rem);
+  box-shadow: 18px 0 40px rgba(0, 0, 0, 0.34);
+}
+
 /* Turn-thread chat: user prompt pins at the top; assistant/tool replies hang from a
    thin rail. This mirrors the extension's reading model, but with tighter mobile spacing. */
 .an-turn {

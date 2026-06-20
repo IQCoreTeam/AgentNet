@@ -1,17 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useStore } from "../state/store";
 import { MessageList } from "./MessageList";
 import { ApprovalDock } from "./ApprovalDock";
 import { Composer } from "./Composer";
-import { Sessions } from "./Sessions";
 import { SkillIcon } from "../icons";
 
 // Chat shell: header (sessions toggle + wallet) over the scrolling log, with the approval
 // dock + composer pinned at the bottom. Uses --vvh (visual viewport height) so the layout
 // shrinks above the on-screen keyboard instead of being covered by it.
-export function ChatScreen() {
-  const { state, openMarket, clearFiringSkill } = useStore();
-  const [drawer, setDrawer] = useState(false);
+export function ChatScreen({ onOpenDrawer }: { onOpenDrawer: () => void }) {
+  const { state, openMarket, openOwnedSkills, clearFiringSkill } = useStore();
   // Clear the firing skill glow after the dwell time
   const firingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -36,7 +34,7 @@ export function ChatScreen() {
         style={{ paddingTop: "max(0.25rem, env(safe-area-inset-top))", paddingBottom: "0.25rem" }}
       >
         <button
-          onClick={() => setDrawer(true)}
+          onClick={onOpenDrawer}
           className="an-iconbtn shrink-0"
           title="Chats"
           aria-label="Open chat list"
@@ -60,10 +58,10 @@ export function ChatScreen() {
             </span>
           )}
           <button
-            onClick={openMarket}
+            onClick={openOwnedSkills}
             className="an-iconbtn shrink-0"
-            title="Skills"
-            aria-label="Skills"
+            title="Owned skills"
+            aria-label="Owned skills"
           >
             <SkillIcon className="h-5 w-5" />
           </button>
@@ -82,8 +80,6 @@ export function ChatScreen() {
       <MessageList />
       <ApprovalDock />
       <Composer />
-
-      {drawer && <Sessions onClose={() => setDrawer(false)} />}
     </div>
   );
 }
