@@ -49,6 +49,7 @@ export function MarketScreen() {
           detail={state.marketDetail}
           owned={state.marketOwned.includes(state.marketDetail.card.name)}
           onBack={() => { send({ type: "ownedSkills" }); clearMarketDetail(); }}
+          onOpenSkill={(card) => send({ type: "getSkillDetail", mint: card.id })}
         />
         {state.buyCelebrate && <BuyCelebration />}
       </div>
@@ -195,6 +196,7 @@ export function MarketScreen() {
                   key={card.id}
                   card={card}
                   owned={state.marketOwned.includes(card.name)}
+                  disposed={Object.values(state.marketDisposed).includes(card.id)}
                   firing={state.firingSkill === card.name}
                   onOpen={handleOpenCard}
                 />

@@ -1,21 +1,23 @@
 import { useState } from "react";
 import { useStore } from "../state/store";
-import type { SkillDetail } from "../transport/protocol";
+import type { SkillCard, SkillDetail } from "../transport/protocol";
 import { SkillIcon } from "../icons";
 
 interface Props {
   detail: SkillDetail;
   owned: boolean;
   onBack: () => void;
+  onOpenSkill?: (card: SkillCard) => void;
 }
 
-export function SkillDetailView({ detail, owned, onBack }: Props) {
-  const { send } = useStore();
+export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
+  const { state, send } = useStore();
   const [buying, setBuying] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [noteGitLink, setNoteGitLink] = useState("");
   const { card, skillText, notes } = detail;
   const priceSol = card.price ? (Number(card.price) / 1_000_000_000).toFixed(3) : null;
+  const disposed = Object.values(state.marketDisposed).includes(card.id);
 
   function handleBuy() {
     setBuying(true);
@@ -38,6 +40,11 @@ export function SkillDetailView({ detail, owned, onBack }: Props) {
         {owned && (
           <span className="ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-green-900/60 text-green-400">
             owned
+          </span>
+        )}
+        {disposed && (
+          <span className="ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-zinc-800 text-zinc-500">
+            un-equipped
           </span>
         )}
       </header>
@@ -65,6 +72,25 @@ export function SkillDetailView({ detail, owned, onBack }: Props) {
           <div className="rounded-lg bg-zinc-900 border border-zinc-800 p-3">
             <p className="text-[11px] text-zinc-500 mb-1 uppercase tracking-wide">SKILL.md</p>
             <pre className="text-xs text-zinc-300 whitespace-pre-wrap font-mono overflow-x-auto">{skillText}</pre>
+          </div>
+        )}
+
+        {Array.isArray(detail.requiredCards) && detail.requiredCards.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[11px] text-zinc-500 uppercase tracking-wide">Required skills</p>
+            <div className="space-y-2">
+              {detail.requiredCards.map((req) => (
+                <button
+                  key={req.id}
+                  type="button"
+                  onClick={() => onOpenSkill?.(req)}
+                  className="w-full rounded-lg bg-zinc-900 border border-zinc-800 p-2.5 text-left active:bg-zinc-800"
+                >
+                  <p className="text-xs font-medium text-zinc-200">{req.name}</p>
+                  <p className="mt-0.5 line-clamp-2 text-[11px] text-zinc-500">{req.description}</p>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -107,7 +133,29 @@ export function SkillDetailView({ detail, owned, onBack }: Props) {
         )}
       </div>
 
-      {!owned && (
+      {owned && (
+        <div className="shrink-0 border-t border-red-900/40 bg-gradient-to-t from-red-950/30 to-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <button
+            onClick={() => send({ type: "disposeSkill", skillId: card.id })}
+            className="w-full rounded-xl border border-red-500/30 bg-red-950/20 py-3 text-sm font-semibold text-red-400 active:bg-red-900/30"
+          >
+            Remove Skill
+          </button>
+        </div>
+      )}
+
+      {!owned && disposed && (
+        <div className="shrink-0 border-t border-green-800/40 bg-gradient-to-t from-green-900/30 to-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <button
+            onClick={() => send({ type: "reEquipSkill", skillId: card.id })}
+            className="w-full rounded-xl bg-green-600 py-3 text-sm font-semibold text-white active:bg-green-500"
+          >
+            Re-equip Skill
+          </button>
+        </div>
+      )}
+
+      {!owned && !disposed && (
         <div className="shrink-0 border-t border-amber-700/40 bg-gradient-to-t from-amber-900/30 to-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button
             onClick={handleBuy}

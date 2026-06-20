@@ -51,6 +51,7 @@ export interface State {
   marketSearchError: string | null;
   marketDetail: SkillDetail | null;
   marketOwned: string[];
+  marketDisposed: Record<string, string>;
   marketBalance: number | null;
   rpcStatus: RpcStatus | null;
   publishResult: { ok: boolean; mint?: string; error?: string } | null;
@@ -125,6 +126,7 @@ const initialState: State = {
   marketSearchError: null,
   marketDetail: null,
   marketOwned: [],
+  marketDisposed: {},
   marketBalance: null,
   rpcStatus: null,
   publishResult: null,
@@ -358,8 +360,24 @@ function reducer(state: State, ev: Action): State {
         marketOwned: ev.ok ? [...state.marketOwned, ev.slug ?? ev.skillId] : state.marketOwned,
         buyCelebrate: ev.ok ? true : state.buyCelebrate,
       };
+    case "disposeResult":
+      return {
+        ...state,
+        toast: ev.ok ? "Skill removed." : `Remove failed: ${ev.error ?? "unknown"}`,
+        marketOwned: ev.ok ? state.marketOwned.filter((name) => name !== (ev.slug ?? ev.skillId)) : state.marketOwned,
+        marketDisposed: ev.ok ? { ...state.marketDisposed, [ev.slug ?? ev.skillId]: ev.skillId } : state.marketDisposed,
+      };
+    case "reEquipResult":
+      return {
+        ...state,
+        toast: ev.ok ? "Skill re-equipped." : `Re-equip failed: ${ev.error ?? "unknown"}`,
+        marketOwned: ev.ok ? [...state.marketOwned, ev.slug ?? ev.skillId] : state.marketOwned,
+        marketDisposed: ev.ok
+          ? Object.fromEntries(Object.entries(state.marketDisposed).filter(([, mint]) => mint !== ev.skillId && mint !== ev.slug))
+          : state.marketDisposed,
+      };
     case "ownedSkills":
-      return { ...state, marketOwned: ev.names };
+      return { ...state, marketOwned: ev.names, marketDisposed: ev.disposedMints ?? {} };
     case "balance":
       return { ...state, marketBalance: ev.lamports };
     case "rpcStatus":
