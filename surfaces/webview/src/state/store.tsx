@@ -14,6 +14,8 @@ import {
 } from "react";
 import { Transport } from "../transport/client";
 import { openExternalUrl } from "../platform/openExternalUrl";
+import { isAndroidWallet, signAndroidTransaction } from "../onboarding/androidWallet";
+import { providerSignBase64 } from "@iqlabs-official/agent-sdk/account/webWallet";
 import type {
   AgentProfile,
   ApprovalRequest,
@@ -44,6 +46,7 @@ export interface State {
     | "chat";
   // market overlay (accessible from chat phase via "Markets" button)
   marketOpen: boolean;
+  marketInitialView: "browse" | "agents";
   marketTab: "skill" | "workflow";
   marketQuery: string;
   marketResults: SkillCard[] | null;
@@ -119,6 +122,7 @@ const initialState: State = {
   toast: null,
   buyCelebrate: false,
   marketOpen: false,
+  marketInitialView: "browse",
   marketTab: "skill",
   marketQuery: "",
   marketResults: null,
@@ -195,7 +199,7 @@ type LocalAction =
   | { type: "__selectEngine"; cli: Cli }
   | { type: "__finishStorage" }
   | { type: "__savePlan"; text: string }
-  | { type: "__openMarket" }
+  | { type: "__openMarket"; initialView?: "browse" | "agents" }
   | { type: "__closeMarket" }
   | { type: "__setMarketTab"; tab: "skill" | "workflow" }
   | { type: "__setMarketQuery"; query: string }
@@ -324,7 +328,7 @@ function reducer(state: State, ev: Action): State {
     case "__savePlan":
       return { ...state, log: [...state.log, { role: "summary" as const, text: `Saved plan\n\n${ev.text}` }] };
     case "__openMarket":
-      return { ...state, marketOpen: true };
+      return { ...state, marketOpen: true, marketInitialView: ev.initialView ?? "browse" };
     case "__closeMarket":
       return { ...state, marketOpen: false, marketDetail: null, publishResult: null };
     case "__setMarketTab":
@@ -437,6 +441,7 @@ interface Store {
   finishStorage: () => void;
   savePlan: (text: string) => void;
   openMarket: () => void;
+  openMarketAgents: () => void;
   closeMarket: () => void;
   setMarketTab: (tab: "skill" | "workflow") => void;
   setMarketQuery: (q: string) => void;
@@ -452,6 +457,24 @@ interface Store {
 
 const StoreContext = createContext<Store | null>(null);
 
+async function handleSignTransaction(t: Transport, id: string, txBase64: string): Promise<void> {
+  try {
+    let signedTx: string;
+    if (isAndroidWallet()) {
+      signedTx = await signAndroidTransaction(txBase64);
+    } else {
+      const provider = (window as unknown as {
+        solana?: { signTransaction?: Parameters<typeof providerSignBase64>[1] };
+      }).solana;
+      if (!provider?.signTransaction) throw new Error("No Solana wallet available to sign.");
+      signedTx = await providerSignBase64(txBase64, provider.signTransaction.bind(provider));
+    }
+    await t.post({ type: "signTransactionResult", id, signedTx });
+  } catch (e) {
+    await t.post({ type: "signTransactionResult", id, error: (e as Error)?.message || "Signing failed." });
+  }
+}
+
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, raw] = useReducer(reducer, initialState);
   const transportRef = useRef<Transport | null>(null);
@@ -461,7 +484,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const t = new Transport();
     transportRef.current = t;
-    const off = t.onEvent((msg) => raw(msg));
+    const off = t.onEvent((msg) => {
+      if (msg.type === "signTransaction") {
+        void handleSignTransaction(t, msg.id, msg.tx);
+        return;
+      }
+      raw(msg);
+    });
     t.open();
     void t.post({ type: "ready" });
     return () => {
@@ -555,6 +584,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       finishStorage: () => raw({ type: "__finishStorage" }),
       savePlan: (text) => raw({ type: "__savePlan", text }),
       openMarket: () => raw({ type: "__openMarket" }),
+      openMarketAgents: () => raw({ type: "__openMarket", initialView: "agents" }),
       closeMarket: () => raw({ type: "__closeMarket" }),
       setMarketTab: (tab) => raw({ type: "__setMarketTab", tab }),
       setMarketQuery: (query) => raw({ type: "__setMarketQuery", query }),

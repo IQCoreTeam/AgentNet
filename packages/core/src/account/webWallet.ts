@@ -12,11 +12,12 @@
 // the wallet need prompt the user exactly once (at connect), and every later session
 // reuses the cached signature — no round-trip to the wallet per message.
 //
-// signTransaction is on-chain (Track 2) and isn't wired through the browser yet; it
-// throws rather than fake-succeed. When the on-chain layer reaches the web surface,
-// fill it by round-tripping to window.solana.signTransaction over the transport.
+// signTransaction is on-chain (Track 2): the secret key is in the wallet app, so this
+// can't sign locally. The caller passes a `signTx` that round-trips the serialized tx to
+// the wallet (browser provider / Android MWA) over the transport and returns the signed
+// bytes. Without one (CLI/tests build a keypairWallet instead) it still throws.
 
-import { PublicKey, type Transaction, type VersionedTransaction } from "@solana/web3.js";
+import { PublicKey, Transaction, type VersionedTransaction } from "@solana/web3.js";
 import type { Wallet } from "../runtime/contract.js";
 
 // The exact message deriveX25519Keypair signs internally. The front-end MUST sign these
@@ -32,12 +33,37 @@ export function pubkeyToAddress(pubkey: Uint8Array): string {
   return new PublicKey(pubkey).toBase58();
 }
 
+export async function providerSignBase64(
+  txBase64: string,
+  sign: (tx: Transaction) => Promise<Transaction>,
+): Promise<string> {
+  const bytes = Uint8Array.from(atob(txBase64), (ch) => ch.charCodeAt(0));
+  const signed = await sign(Transaction.from(bytes));
+  return btoa(String.fromCharCode(...signed.serialize()));
+}
+
 // address: base58 from the connected wallet (provider.publicKey.toString()).
 // sessionKeySig: the wallet's signature over SESSION_KEY_MESSAGE's bytes.
-export function webWallet(address: string, sessionKeySig: Uint8Array): Wallet {
+export function webWallet(
+  address: string,
+  sessionKeySig: Uint8Array,
+  signTx?: (txBase64: string) => Promise<string>,
+): Wallet {
   const expected = new TextEncoder().encode(SESSION_KEY_MESSAGE);
   const sameBytes = (a: Uint8Array, b: Uint8Array) =>
     a.length === b.length && a.every((v, i) => v === b[i]);
+
+  async function roundTrip<T extends Transaction | VersionedTransaction>(tx: T): Promise<T> {
+    if (!signTx) {
+      throw new Error("on-chain signing not wired through the web wallet yet (Track 2).");
+    }
+    if ("version" in tx) {
+      throw new Error("versioned transaction signing is not wired through the web wallet yet.");
+    }
+    // Preserve partial signatures already added by mint/minter keypairs before wallet signing.
+    const unsigned = (tx as Transaction).serialize({ requireAllSignatures: false }).toString("base64");
+    return Transaction.from(Buffer.from(await signTx(unsigned), "base64")) as T;
+  }
 
   return {
     address,
@@ -50,11 +76,11 @@ export function webWallet(address: string, sessionKeySig: Uint8Array): Wallet {
       }
       return sessionKeySig;
     },
-    async signTransaction<T extends Transaction | VersionedTransaction>(_tx: T): Promise<T> {
-      throw new Error("on-chain signing not wired through the web wallet yet (Track 2).");
-    },
-    async signAllTransactions<T extends Transaction | VersionedTransaction>(_txs: T[]): Promise<T[]> {
-      throw new Error("on-chain signing not wired through the web wallet yet (Track 2).");
+    signTransaction: roundTrip,
+    async signAllTransactions<T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> {
+      const signed: T[] = [];
+      for (const tx of txs) signed.push(await roundTrip(tx));
+      return signed;
     },
   };
 }

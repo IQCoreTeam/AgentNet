@@ -1,5 +1,6 @@
 package com.iqlabs.agentnet
 
+import android.util.Base64
 import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
@@ -26,9 +27,11 @@ import org.json.JSONObject
 //
 // Wire protocol (JSON strings only — @JavascriptInterface can't marshal arrays/objects):
 //   in : connect('{"id":"<callbackId>","message":"<utf8 string to sign>"}')
+//        signTransaction('{"id":"<callbackId>","tx":"<base64 transaction>"}')
 //   out: window.__onWalletResult('{"id",...}')
-//        success {id, ok:true,  pubkey:number[32], signature:number[64]}
-//        failure {id, ok:false, error:string, reason:"NoWalletFound"|"Failure"}
+//        connect success         {id, ok:true,  pubkey:number[32], signature:number[64]}
+//        signTransaction success {id, ok:true,  signedTx:string (base64)}
+//        failure                 {id, ok:false, error:string, reason:"NoWalletFound"|"Failure"}
 // We send the RAW pubkey bytes (not base58) and let JS base58-encode with @solana/web3.js
 // (already bundled), so the address string matches exactly what the backend parses back.
 class WalletBridge(
@@ -64,6 +67,52 @@ class WalletBridge(
                 pushError(id, e.message ?: "Wallet request failed.", "Failure")
             }
         }
+    }
+
+    @JavascriptInterface
+    fun signTransaction(requestJson: String) {
+        val req = runCatching { JSONObject(requestJson) }.getOrNull()
+        val id = req?.optString("id").orEmpty()
+        val txB64 = req?.optString("tx").orEmpty()
+        if (id.isEmpty() || txB64.isEmpty()) {
+            Log.e(TAG, "signTransaction: malformed request")
+            if (id.isNotEmpty()) pushError(id, "Malformed sign request.", "Failure")
+            return
+        }
+        val txBytes = runCatching { Base64.decode(txB64, Base64.NO_WRAP) }.getOrNull()
+        if (txBytes == null) {
+            pushError(id, "Malformed transaction bytes.", "Failure")
+            return
+        }
+        activity.lifecycleScope.launch {
+            try {
+                runSignTransaction(id, txBytes)
+            } catch (e: Exception) {
+                Log.e(TAG, "signTransaction threw", e)
+                pushError(id, e.message ?: "Wallet sign failed.", "Failure")
+            }
+        }
+    }
+
+    private suspend fun runSignTransaction(id: String, txBytes: ByteArray) {
+        val result = walletAdapter.transact(sender) { _ ->
+            signTransactions(arrayOf(txBytes)).signedPayloads.first()
+        }
+        when (result) {
+            is TransactionResult.Success -> pushSignedTx(id, result.payload)
+            is TransactionResult.NoWalletFound ->
+                pushError(id, "No compatible wallet app is installed.", "NoWalletFound")
+            is TransactionResult.Failure ->
+                pushError(id, result.e.message ?: "Wallet sign failed.", "Failure")
+        }
+    }
+
+    private fun pushSignedTx(id: String, signedTx: ByteArray) {
+        val json = JSONObject()
+            .put("id", id)
+            .put("ok", true)
+            .put("signedTx", Base64.encodeToString(signedTx, Base64.NO_WRAP))
+        dispatch(json.toString())
     }
 
     private suspend fun runTransact(id: String, msgBytes: ByteArray) {

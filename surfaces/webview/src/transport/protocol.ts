@@ -147,7 +147,8 @@ export type ClientMessage =
     }
   | { type: "submitGithubToken"; token: string }
   | { type: "clearGithubToken" }
-  | { type: "getGithubStatus" };
+  | { type: "getGithubStatus" }
+  | { type: "signTransactionResult"; id: string; signedTx?: string; error?: string };
 
 // ── server → UI (SSE /events) ──
 
@@ -201,4 +202,5 @@ export type ServerMessage =
   | { type: "buyAllResult"; wallet: string; ok: boolean; bought: number; failed: number; error?: string }
   | { type: "agentNoteResult"; agentWallet: string; ok: boolean; error?: string }
   | { type: "publishResult"; ok: boolean; mint?: string; error?: string }
-  | { type: "githubStatus"; hasToken: boolean; masked?: string };
+  | { type: "githubStatus"; hasToken: boolean; masked?: string }
+  | { type: "signTransaction"; id: string; tx: string };

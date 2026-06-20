@@ -221,7 +221,7 @@ async function submitGoogleAuthCode(c: Client, code: string) {
 // second connect with the same address is a no-op so re-opened tabs don't rebuild).
 async function connectWallet(address: string, signature: Uint8Array): Promise<void> {
   if (runtime && walletAddress === address) return;
-  wallet = webWallet(address, signature);
+  wallet = webWallet(address, signature, signTransactionViaUi);
   walletAddress = address;
   // Only build the runtime immediately if storage is already configured (returning user).
   // First-time users go through onboarding (storage picker) before runtime is needed;
@@ -257,6 +257,28 @@ const RECONNECT_GRACE_MS = 15000;
 
 const clients = new Map<string, Client>();
 let clientCounter = 0;
+
+// On-chain signing must route through the active chat UI, not the onboarding client that
+// originally connected the wallet and may already be gone.
+let signClient: Client | null = null;
+let signCounter = 0;
+const pendingSign = new Map<string, { resolve: (signedTx: string) => void; reject: (e: Error) => void }>();
+
+function signTransactionViaUi(txBase64: string): Promise<string> {
+  const c = signClient;
+  if (!c) return Promise.reject(new Error("No connected wallet UI to sign the transaction."));
+  const id = `s${++signCounter}`;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      if (pendingSign.delete(id)) reject(new Error("Wallet signing timed out."));
+    }, 180_000);
+    pendingSign.set(id, {
+      resolve: (signedTx) => { clearTimeout(timer); resolve(signedTx); },
+      reject: (e) => { clearTimeout(timer); reject(e); },
+    });
+    c.send({ type: "signTransaction", id, tx: txBase64 });
+  });
+}
 
 function makeClient(res: ServerResponse): Client {
   const c: Client = {
@@ -406,15 +428,19 @@ function attachMarketHandlers(c: Client) {
     }
     return mktPromise;
   }
-  function sendMarketError(m: any, error: unknown) {
+  // `quiet` = expected transient (no wallet yet): answer reads with empty results and
+  // skip every toast, so the market just shows clean empty states until the wallet lands.
+  // Real errors (RPC failure, init timeout) pass quiet=false and surface normally.
+  function sendMarketError(m: any, error: unknown, quiet = false) {
     const message = error instanceof Error ? error.message : String(error);
     switch (m?.type) {
       case "searchSkills":
-        c.send({ type: "searchError", message });
+        if (quiet) c.send({ type: "searchResults", results: [] });
+        else c.send({ type: "searchError", message });
         return;
       case "listAgents":
         c.send({ type: "agents", agents: [] });
-        c.send({ type: "toast", text: "Failed to list agents: " + message });
+        if (!quiet) c.send({ type: "toast", text: "Failed to list agents: " + message });
         return;
       case "getBalance":
         c.send({ type: "balance", lamports: null });
@@ -438,7 +464,7 @@ function attachMarketHandlers(c: Client) {
         c.send({ type: "agentNoteResult", agentWallet: m.agentWallet ?? "", ok: false, error: message });
         return;
       default:
-        c.send({ type: "toast", text: "Marketplace failed: " + message });
+        if (!quiet) c.send({ type: "toast", text: "Marketplace failed: " + message });
     }
   }
   c.recvs.push(async (m: any) => {
@@ -470,7 +496,11 @@ function attachMarketHandlers(c: Client) {
     try {
       mkt = await getMarket();
     } catch (e) {
-      sendMarketError(m, e);
+      // A market message can land in the brief window before the wallet handshake
+      // finishes (the handlers are attached to onboarding clients too). That "Wallet not
+      // connected." is transient, not a failure — answer with empty results and NO toast.
+      const quiet = e instanceof Error && e.message === "Wallet not connected.";
+      sendMarketError(m, e, quiet);
       return;
     }
     switch (m.type) {
@@ -639,6 +669,16 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
   });
   attachMarketHandlers(c);
 
+  signClient = c;
+  c.recvs.push((m: any) => {
+    if (m?.type !== "signTransactionResult" || typeof m.id !== "string") return;
+    const entry = pendingSign.get(m.id);
+    if (!entry) return;
+    pendingSign.delete(m.id);
+    if (typeof m.signedTx === "string") entry.resolve(m.signedTx);
+    else entry.reject(new Error(typeof m.error === "string" ? m.error : "Wallet signing was rejected."));
+  });
+
   // ── GitHub token handlers (outside market recv, no wallet required) ──
   c.recvs.push(async (m: any) => {
     if (m?.type === "submitGithubToken" && typeof m.token === "string" && m.token.trim()) {
@@ -671,6 +711,7 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
     approval.drain();
     clients.delete(id);
     if (onCloudStatus === hook) onCloudStatus = null;
+    if (signClient === c) signClient = null;
   };
 }
 
