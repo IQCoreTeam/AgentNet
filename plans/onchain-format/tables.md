@@ -31,9 +31,13 @@ That's the entire table surface. The hint strings are produced by functions in
 `reviewsAgentHint(wallet)`.
 
 > No `audit` table. Skill safety is **not** an admin/QAgent eval written on-chain
-> — it's verified **reader-side**: before buying, the buyer's own agent runs a
-> "verify" skill over the candidate. Publishing stays permissionless; trust is the
-> buyer's call, not a gated official record. (Replaces the earlier Q-table model.)
+> — it's enforced **reader-side**: before buying, the buyer's own agent runs a
+> "verify" skill over the candidate, and `buy_skill` is **hard-blocked until that
+> verify passes** (`VerifyGuard`), plus a `scanSkillText` pattern check rejects
+> dangerous payloads. Publishing stays permissionless and the gate is the **buyer's**,
+> not a central official record — but it is a real client-side gate, **not just advice**.
+> (Replaces the earlier Q-table model. Doc drift fixed 2026-06: was previously worded
+> as advisory "trust is the buyer's call".)
 
 ---
 
@@ -147,9 +151,9 @@ zo: "민팅 수량이나 그런 걸 읽은 다음에 notes 등을 읽을 테니 
 2. `reviews` keyed by **collection THEN item**; `collectionId` = the
    umbrella collection mint. Only two collections (skills, workflows); the
    type→collection map is hardcoded in `collectionFor(type)` in `seed.ts`.
-3. notes → **reviews** (rename). **No `audit` table** — skill safety is verified
-   reader-side (buyer's agent runs a "verify" skill before buying), not an
-   on-chain admin/QAgent record.
+3. notes → **reviews** (rename). **No `audit` table** — skill safety is enforced
+   reader-side (buyer's agent must pass a "verify" before `buy_skill`, hard-gated by
+   `VerifyGuard` + `scanSkillText`), not an on-chain admin/QAgent record.
 4. **No `skills:index`** — enumeration is the DAS collection scan (`dasSource`),
    the only `SkillSource`. The mint is the registry. Empty until collections mint.
 5. **No `reputation` table** — derived live from mint `supply` + review counts.

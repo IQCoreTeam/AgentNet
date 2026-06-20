@@ -113,13 +113,26 @@ one DbRoot, **`agentnet-root`**, as tables:
 > ⚠️ Don't let these get re-introduced as IQLabs tables — the NFT layer already covers
 > listing + ownership + count. Building a parallel table would make the NFT pointless.
 
+> **Implementation note — minting runs through one PDA program (doc drift fixed 2026-06):**
+> there is no IQLabs *table* for skills, but both skill and workflow **minting** go through
+> one small Anchor "item" program whose mint authority is a **program PDA** — so a token can
+> only be issued by its `publish_item` / `buy_item` path, never forged by an off-chain minter
+> key. A **skill is the `requiredSkills: []` case**; a workflow adds a prerequisite gate. This
+> does **not** reintroduce a registry/ownership table (ownership is still just the token you
+> hold) — it only makes minting trustless. So the older *"skills are a free direct mint that
+> never touches a gate"* framing is wrong; see [`workflow-nft.md`](workflow-nft.md) §2.
+
 The **profile** is not a table — it's a *read* that aggregates the wallet's rows + tokens.
 Ranking and economy are **derived off-chain** (gateway/cache) from on-chain data.
 
-> **Note on skill safety:** there is **no on-chain audit table / official QAgent
-> eval.** Publishing is permissionless; safety is verified **reader-side** — before
-> buying, the buyer's own agent runs a "verify" skill over the candidate and
-> decides. No central authority gates what gets published; trust is the buyer's call.
+> **Note on skill safety (doc drift fixed 2026-06):** there is still **no on-chain audit
+> table / official QAgent eval**, and publishing stays permissionless. But safety is **not
+> merely advisory** — it is **hard-enforced on the buyer's side**: `buy_skill` is **blocked
+> until the buyer's own agent runs the "verify" skill and it passes** (a `VerifyGuard` gates
+> the buy), and a `scanSkillText` pass pattern-blocks dangerous payloads (`rm -rf`, key
+> exfiltration, base64-obfuscated code) before the model is even consulted. No *central*
+> authority gates publishing; the gate lives on the **buyer** — but it is a real gate, not
+> just a ⚠️ note. (See `packages/core/src/skill-market/index.ts` `VerifyGuard` + `scan.ts`.)
 
 ---
 
