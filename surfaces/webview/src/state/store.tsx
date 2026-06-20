@@ -228,7 +228,15 @@ function reducer(state: State, ev: Action): State {
       return { ...state, cli: ev.cli, phase: "chat" };
     }
     case "init":
-      // Onboarding handshake: no runtime yet → show ConnectWallet.
+      // Onboarding handshake: no runtime yet → show ConnectWallet. BUT only when this
+      // client hasn't already connected a wallet. A first-time user's runtime isn't built
+      // until storage is configured (server connectWallet defers it), so any SSE reconnect
+      // or WebView reload mid-onboarding (frequent on mobile) routes to the server's
+      // onboarding handler and re-sends `init`. Without this guard that stray `init` throws
+      // the user — who already passed the wallet step (walletAddress set) and may be in
+      // storageSelect/engineSelect/chat — all the way back to ConnectWallet. Once a wallet
+      // is connected, a re-`init` is a no-op: keep the phase we're already in.
+      if (state.walletAddress) return state;
       return { ...state, phase: "onboarding" };
     case "walletConnected":
       // Wallet is in. If storage was already configured on this device (returning user),
