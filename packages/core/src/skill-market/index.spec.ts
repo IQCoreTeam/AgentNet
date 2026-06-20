@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getAgentNetTools, handleToolCall, newVerifyGuard, createAgentSdkMcpServer, createAgentMcpServer, agentNetAllowedTools } from "./index.js";
+import { getAgentNetTools, handleToolCall, newVerifyGuard, createAgentSdkMcpServer, createAgentMcpServer, agentNetAllowedTools, resetBlogPostRateLimitForTests } from "./index.js";
 import { codexMcpFlags } from "../runtime/spawn.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -38,11 +38,12 @@ describe("skill-market", () => {
     mockConn = {};
     signer = Keypair.generate();
     vi.clearAllMocks();
+    resetBlogPostRateLimitForTests();
   });
 
-  it("exposes the marketplace tool set (incl. unequip_skill)", () => {
+  it("exposes the marketplace tool set (incl. unequip_skill and post_blog)", () => {
     const tools = getAgentNetTools();
-    expect(tools).toHaveLength(7);
+    expect(tools).toHaveLength(8);
     expect(tools.map((t) => t.name)).toEqual([
       "search_skills",
       "verify_skill",
@@ -50,6 +51,7 @@ describe("skill-market", () => {
       "unequip_skill",
       "post_skill_comment",
       "post_agent_comment",
+      "post_blog",
       "publish_skill",
     ]);
   });
@@ -197,6 +199,54 @@ describe("skill-market", () => {
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("Must hold");
+  });
+
+  it("post_blog writes a self-note to the connected wallet only", async () => {
+    vi.mocked(postAgentNote).mockResolvedValue("note:blog:123:xyz");
+    const result = await handleToolCall(mockConn, signer, "defaultCreator", "post_blog", {
+      agentWallet: "someoneElse",
+      text: "Shipped the carousel.",
+      gitLink: "https://github.com/IQCoreTeam/AgentNet/pull/52",
+    });
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0].text).toContain("note:blog:123:xyz");
+    expect(postAgentNote).toHaveBeenCalledWith(mockConn, signer, {
+      agentWallet: "mockSignerAddress",
+      text: "Shipped the carousel.",
+      gitLink: "https://github.com/IQCoreTeam/AgentNet/pull/52",
+    });
+  });
+
+  it("post_blog rejects over-long text", async () => {
+    const result = await handleToolCall(mockConn, signer, "defaultCreator", "post_blog", {
+      text: "x".repeat(2001),
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("too long");
+    expect(postAgentNote).not.toHaveBeenCalled();
+  });
+
+  it("post_blog validates gitLink as https GitHub", async () => {
+    const result = await handleToolCall(mockConn, signer, "defaultCreator", "post_blog", {
+      text: "Bad link",
+      gitLink: "http://github.com/IQCoreTeam/AgentNet",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("https://github.com");
+    expect(postAgentNote).not.toHaveBeenCalled();
+  });
+
+  it("post_blog applies a basic rate limit", async () => {
+    vi.mocked(postAgentNote).mockResolvedValue("note:blog:123:xyz");
+    for (let i = 0; i < 5; i++) {
+      const result = await handleToolCall(mockConn, signer, "defaultCreator", "post_blog", { text: `post ${i}` });
+      expect(result.isError).toBeUndefined();
+    }
+
+    const limited = await handleToolCall(mockConn, signer, "defaultCreator", "post_blog", { text: "post 6" });
+    expect(limited.isError).toBe(true);
+    expect(limited.content[0].text).toContain("Rate limit");
+    expect(postAgentNote).toHaveBeenCalledTimes(5);
   });
 
   it("unequip_skill un-equips locally + records the mint as disposed (no on-chain call)", async () => {

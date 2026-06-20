@@ -64,6 +64,8 @@ export type { SkillSource } from "./core/skillSource.js";
 // reputation (derived live from supply + reviews)
 export { getReputation, getLeaderboard } from "./reputation/index.js";
 export type { Reputation } from "./core/types.js";
+export { isHttpsGithubUrl, parseGithubLink, safeExternalUrl } from "./links/github.js";
+export type { GithubLinkInfo, GithubLinkKind } from "./links/github.js";
 // skill-market MCP surface (autonomous buy)
 export { createAgentMcpServer, createAgentSdkMcpServer, getAgentNetTools, handleToolCall, newVerifyGuard, verifyOneSkill, verifySkills } from "./skill-market/index.js";
 export type { VerifyGuard } from "./skill-market/index.js";

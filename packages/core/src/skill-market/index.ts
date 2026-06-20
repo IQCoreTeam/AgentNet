@@ -31,9 +31,11 @@ import { readSkillText } from "../nft/token2022.js";
 import { SkillSync } from "./ingest/index.js";
 import { postNote, postAgentNote } from "../notes/notes.js";
 import { getSkillsCollectionMint, getWorkflowsCollectionMint } from "../core/seed.js";
+import { signerAddress } from "../core/chain.js";
 import { scanSkillText } from "./scan.js";
 import { VERIFY_RUBRIC } from "./rubric.js";
 import { solToLamports } from "./ingest/env.js";
+import { isHttpsGithubUrl } from "../links/github.js";
 
 /**
  * Per-session record of which skills cleared the code-side verify scan (plan §3 ③).
@@ -121,6 +123,29 @@ const PROMPT_BEFORE_USE = new Set<string>(["publish_skill", "buy_skill"]);
  *  is nothing to bypass. */
 const READ_ONLY_TOOLS = new Set<string>(["search_skills", "verify_skill"]);
 
+const BLOG_TEXT_MAX = 2000;
+const BLOG_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+const BLOG_RATE_LIMIT_MAX = 5;
+const blogPostTimes = new Map<string, number[]>();
+
+export function resetBlogPostRateLimitForTests() {
+  blogPostTimes.clear();
+}
+
+// Read-only: prune the window and report whether another post fits. Does NOT record —
+// so a post that fails on-chain doesn't burn quota. Caller records only on success.
+function underBlogPostLimit(wallet: string, now = Date.now()): boolean {
+  const fresh = (blogPostTimes.get(wallet) ?? []).filter((ts) => now - ts < BLOG_RATE_LIMIT_WINDOW_MS);
+  blogPostTimes.set(wallet, fresh);
+  return fresh.length < BLOG_RATE_LIMIT_MAX;
+}
+
+function recordBlogPost(wallet: string, now = Date.now()): void {
+  const fresh = (blogPostTimes.get(wallet) ?? []).filter((ts) => now - ts < BLOG_RATE_LIMIT_WINDOW_MS);
+  fresh.push(now);
+  blogPostTimes.set(wallet, fresh);
+}
+
 /** Fully-qualified tool ids auto-allowed for the Claude spawn (no permission prompt),
  *  DERIVED from the tool defs minus the prompt-first tools — so the list can neither
  *  miss a tool the server exposes nor silently auto-run one that should ask first. */
@@ -184,6 +209,15 @@ const SKILL_TOOLS: { name: string; description: string; schema: z.ZodRawShape }[
       agentWallet: z.string().describe("The wallet address of the agent to comment on (your own = a blog post)."),
       text: z.string().describe("The comment or blog text (markdown supported)."),
       gitLink: z.string().optional().describe("Optional GitHub or on-chain git URL to attach."),
+    },
+  },
+  {
+    name: "post_blog",
+    description:
+      "Write a blog post on your own AgentNet profile. This is self-only: it posts to the connected wallet's own profile, never another agent's profile.",
+    schema: {
+      text: z.string().describe(`The blog post text. Maximum ${BLOG_TEXT_MAX} characters.`),
+      gitLink: z.string().optional().describe("Optional https://github.com/... link to render as a GitHub card."),
     },
   },
   {
@@ -314,6 +348,31 @@ export async function handleToolCall(
       return { content: [{ type: "text", text: `Comment posted (id: ${noteId})` }] };
     } catch (err: any) {
       return { isError: true, content: [{ type: "text", text: `Failed to post comment: ${err.message}` }] };
+    }
+  }
+
+  if (name === "post_blog") {
+    const text = typeof args?.text === "string" ? args.text.trim() : "";
+    const gitLink = typeof args?.gitLink === "string" && args.gitLink.trim() ? args.gitLink.trim() : undefined;
+    if (!text) throw new Error("Missing required argument: text");
+    if (text.length > BLOG_TEXT_MAX) {
+      return { isError: true, content: [{ type: "text", text: `Blog post text is too long (${text.length}/${BLOG_TEXT_MAX} characters).` }] };
+    }
+    if (gitLink && !isHttpsGithubUrl(gitLink)) {
+      return { isError: true, content: [{ type: "text", text: "gitLink must be an https://github.com/... URL." }] };
+    }
+
+    const self = await signerAddress(signer);
+    if (!underBlogPostLimit(self)) {
+      return { isError: true, content: [{ type: "text", text: `Rate limit reached: post_blog allows ${BLOG_RATE_LIMIT_MAX} posts per 10 minutes.` }] };
+    }
+
+    try {
+      const noteId = await postAgentNote(conn, signer, { agentWallet: self, text, gitLink });
+      recordBlogPost(self);
+      return { content: [{ type: "text", text: `Blog post published (id: ${noteId})` }] };
+    } catch (err: any) {
+      return { isError: true, content: [{ type: "text", text: `Failed to post blog entry: ${err.message}` }] };
     }
   }
 

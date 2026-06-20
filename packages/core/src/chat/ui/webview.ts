@@ -965,6 +965,7 @@ export function chatHtml(): string {
   .pr-blog { display:flex; gap:10px; overflow-x:auto; scroll-snap-type:x proximity;
              margin:10px 0; padding:2px 2px 10px; scroll-padding-left:2px;
              -webkit-overflow-scrolling:touch; cursor:grab; }
+  .pr-blog:focus-visible { outline:1px solid var(--an-green); outline-offset:2px; border-radius:4px; }
   .pr-blog.dragging { cursor:grabbing; scroll-snap-type:none; }
   .pr-blog.dragging * { user-select:none; cursor:grabbing; }
   .pr-blog::-webkit-scrollbar { height:8px; }
@@ -976,6 +977,16 @@ export function chatHtml(): string {
   .pr-note-author { font-size:0.78em; color:var(--an-muted,#888); margin-bottom:2px; }
   .pr-note-body { flex:1; word-break:break-word; }
   .pr-note-git { font-size:0.78em; margin-top:3px; }
+  .gh-card { display:block; margin-top:8px; padding:8px 10px; border:1px solid var(--an-line);
+             border-radius:8px; background:rgba(255,255,255,0.025); text-decoration:none;
+             color:var(--vscode-foreground); }
+  .gh-card:hover { border-color:var(--an-green-line); background:var(--an-bg-1); }
+  .gh-kind { display:block; font-size:0.7em; font-weight:700; letter-spacing:.05em;
+             text-transform:uppercase; color:var(--an-green); }
+  .gh-title { display:block; margin-top:2px; font-weight:650; white-space:nowrap;
+              overflow:hidden; text-overflow:ellipsis; }
+  .gh-meta { display:block; margin-top:2px; font-size:0.82em; color:var(--an-muted,#888);
+             white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .pr-note-foot { display:flex; align-items:center; justify-content:space-between; gap:8px;
                   margin-top:8px; padding-top:6px; border-top:1px solid var(--an-line);
                   font-size:0.72em; color:var(--an-muted,#888); }
@@ -3202,6 +3213,52 @@ export function chatHtml(): string {
       if (moved) { e.preventDefault(); e.stopPropagation(); moved = false; }
     }, true);
   }
+  // Mirror of packages/core/src/links/github.ts (the React surface imports that module;
+  // this browser-script copy can't). Keep the protocol allowlist + github.com host check
+  // in sync with the source of truth there — security depends on both matching.
+  function safeExternalUrl(raw) {
+    try {
+      const u = new URL(raw);
+      if (/^https?:|^git:/.test(u.protocol)) return u.href;
+    } catch {}
+    return null;
+  }
+  function parseGithubLink(raw) {
+    const href = safeExternalUrl(raw);
+    if (!href) return null;
+    let u;
+    try { u = new URL(href); } catch { return null; }
+    const host = u.hostname.toLowerCase();
+    if (host !== 'github.com' && host !== 'www.github.com') return null;
+    const parts = u.pathname.split('/').filter(Boolean);
+    if (parts.length < 2) return null;
+    const owner = parts[0], repo = parts[1].replace(/\\.git$/i, '');
+    const full = owner + '/' + repo;
+    const section = parts[2], value = parts[3], rest = parts.slice(4);
+    if (!section) return { href, kind: 'Repo', label: full, meta: 'GitHub repository' };
+    if (section === 'pull' && /^\\d+$/.test(value || '')) return { href, kind: 'PR', label: full + ' #' + value, meta: 'GitHub pull request' };
+    if (section === 'commit' && /^[0-9a-f]{7,40}$/i.test(value || '')) return { href, kind: 'Commit', label: full + '@' + value.slice(0, 7), meta: 'GitHub commit' };
+    if (section === 'blob' && value && rest.length) return { href, kind: 'File', label: rest.join('/'), meta: full };
+    return null;
+  }
+  function gitLinkNode(raw, className) {
+    const gh = parseGithubLink(raw);
+    const wrap = document.createElement('div'); wrap.className = className;
+    if (gh) {
+      const a = document.createElement('a'); a.className = 'gh-card'; a.href = gh.href;
+      a.target = '_blank'; a.rel = 'noopener noreferrer';
+      const kind = document.createElement('span'); kind.className = 'gh-kind'; kind.textContent = gh.kind;
+      const title = document.createElement('span'); title.className = 'gh-title'; title.textContent = gh.label;
+      const meta = document.createElement('span'); meta.className = 'gh-meta'; meta.textContent = gh.meta;
+      a.appendChild(kind); a.appendChild(title); a.appendChild(meta); wrap.appendChild(a);
+      return wrap;
+    }
+    const safeLink = safeExternalUrl(raw);
+    if (!safeLink) return null;
+    const a = document.createElement('a'); a.href = safeLink; a.textContent = safeLink;
+    a.target = '_blank'; a.rel = 'noopener noreferrer'; wrap.appendChild(a);
+    return wrap;
+  }
   function renderProfile(profile) {
     profile = mergeOptimistic(profile);
     const self = profile.self;
@@ -3327,13 +3384,8 @@ export function chatHtml(): string {
       }
       const bodyEl = document.createElement('div'); bodyEl.className = 'pr-note-body'; renderMd(bodyEl, n.text || ''); el.appendChild(bodyEl);
       if (n.gitLink) {
-        let safeLink = null;
-        try { const u = new URL(n.gitLink); if (/^https?:|^git:/.test(u.protocol)) safeLink = u.href; } catch {}
-        if (safeLink) {
-          const gl = document.createElement('div'); gl.className = 'pr-note-git';
-          const a = document.createElement('a'); a.href = safeLink; a.textContent = safeLink;
-          a.target = '_blank'; a.rel = 'noopener noreferrer'; gl.appendChild(a); el.appendChild(gl);
-        }
+        const gl = gitLinkNode(n.gitLink, 'pr-note-git');
+        if (gl) el.appendChild(gl);
       }
       const date = fmtNoteDate(n);
       const sig = typeof n.__txSignature === 'string' ? n.__txSignature : null;
@@ -3358,6 +3410,12 @@ export function chatHtml(): string {
       const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Blog';
       paneNotes.appendChild(sec);
       const blog = document.createElement('div'); blog.className = 'pr-blog';
+      blog.tabIndex = 0; blog.setAttribute('role', 'list'); blog.setAttribute('aria-label', 'Blog posts');
+      blog.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+        e.preventDefault();
+        blog.scrollBy({ left: e.key === 'ArrowRight' ? 260 : -260, behavior: 'smooth' });
+      });
       selfNotes.forEach(n => blog.appendChild(noteCard(n, false)));
       enableDragScroll(blog);
       paneNotes.appendChild(blog);
@@ -3798,15 +3856,8 @@ export function chatHtml(): string {
       renderMd(body, n.text || '');
       el.appendChild(auth); el.appendChild(body);
       if (n.gitLink) {
-        // only allow http/https/git protocols to prevent javascript: injection
-        let safeLink = null;
-        try { const u = new URL(n.gitLink); if (/^https?:|^git:/.test(u.protocol)) safeLink = u.href; } catch {}
-        if (safeLink) {
-          const gl = document.createElement('div'); gl.className = 'cm-git';
-          const a = document.createElement('a'); a.href = safeLink; a.textContent = safeLink;
-          a.target = '_blank'; a.rel = 'noopener noreferrer';
-          gl.appendChild(a); el.appendChild(gl);
-        }
+        const gl = gitLinkNode(n.gitLink, 'cm-git');
+        if (gl) el.appendChild(gl);
       }
       wrap.appendChild(el);
     }
