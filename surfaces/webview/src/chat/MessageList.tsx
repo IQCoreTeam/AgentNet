@@ -1,6 +1,25 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { Message } from "./Message";
+import type { ChatMessage } from "../transport/protocol";
+
+function groupTurns(log: ChatMessage[]): Array<{ user: ChatMessage | null; items: ChatMessage[]; key: number }> {
+  const turns: Array<{ user: ChatMessage | null; items: ChatMessage[]; key: number }> = [];
+  let current: { user: ChatMessage | null; items: ChatMessage[]; key: number } | null = null;
+  log.forEach((msg, index) => {
+    if (msg.role === "user") {
+      current = { user: msg, items: [], key: index };
+      turns.push(current);
+      return;
+    }
+    if (!current) {
+      current = { user: null, items: [], key: index };
+      turns.push(current);
+    }
+    current.items.push(msg);
+  });
+  return turns;
+}
 
 // The scrolling log. Anchors to the bottom as new messages arrive (unless the user has
 // scrolled up), and asks for an older page when scrolled near the top — preserving the
@@ -15,6 +34,7 @@ export function MessageList() {
   const loadingOlder = useRef(false);
   const [showPill, setShowPill] = useState(false);
   const logLen = state.log.length;
+  const turns = groupTurns(state.log);
 
   function scrollToLatest() {
     const el = scrollRef.current;
@@ -60,7 +80,7 @@ export function MessageList() {
   return (
     <div className="relative min-w-0 flex-1 overflow-hidden">
       <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto px-3 py-3">
-        <div className="mx-auto flex min-w-0 max-w-2xl flex-col gap-3">
+        <div className="mx-auto flex min-w-0 max-w-2xl flex-col">
           {state.hasMore && (
             <div className="py-1 text-center text-xs text-zinc-600">scroll up for older…</div>
           )}
@@ -69,8 +89,35 @@ export function MessageList() {
               <p className="text-sm text-zinc-600">Send a message to start</p>
             </div>
           )}
-          {state.log.map((msg, i) => (
-            <Message key={i} msg={msg} />
+          {turns.map((turn) => (
+            <section key={turn.key} className="an-turn">
+              {turn.user && (
+                <div className="an-turn-head">
+                  <span className="an-turn-marker">&gt;</span>
+                  <div className="an-turn-text">
+                    {turn.user.text}
+                    {turn.user._pending && (
+                      <span className="ml-2 inline-block animate-pulse text-[10px]" style={{ color: "var(--an-fg-mute)" }}>sending</span>
+                    )}
+                  </div>
+                </div>
+              )}
+              <div className="an-turn-body">
+                {turn.items.map((msg, i) => (
+                  <div
+                    key={`${turn.key}:${i}`}
+                    className={[
+                      "an-node",
+                      msg.role === "assistant" ? "assistant" : "",
+                      msg.role === "thinking" ? "thinking" : "",
+                      msg.cli === "claude" ? "claude" : "",
+                    ].join(" ")}
+                  >
+                    <Message msg={msg} />
+                  </div>
+                ))}
+              </div>
+            </section>
           ))}
           {state.typing && (
             <div className="flex gap-1 px-1 text-zinc-500">

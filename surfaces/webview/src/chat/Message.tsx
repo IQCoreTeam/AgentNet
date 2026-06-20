@@ -11,7 +11,7 @@ export function Message({ msg }: { msg: ChatMessage }) {
     return (
       <div className="flex justify-end">
         <div
-          className={`max-w-[85%] min-w-0 overflow-hidden rounded-2xl px-3.5 py-2 text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere] ${
+          className={`max-w-[85%] min-w-0 overflow-hidden rounded-2xl px-3.5 py-2 text-[15px] leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere] ${
             msg._pending
               ? "bg-zinc-700/50 text-zinc-400"
               : "bg-zinc-700 text-white"
@@ -44,7 +44,7 @@ export function Message({ msg }: { msg: ChatMessage }) {
 
   // assistant
   return (
-    <div className="min-w-0 overflow-hidden text-sm leading-relaxed [overflow-wrap:anywhere]">
+    <div className="min-w-0 overflow-hidden text-[15px] leading-relaxed [overflow-wrap:anywhere]">
       <Markdown text={msg.text} />
       {(msg.model || msg.durationMs) && (
         <div className="mt-1 text-[11px] text-zinc-600">

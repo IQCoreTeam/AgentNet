@@ -13,7 +13,7 @@ type MarketView = "browse" | "publish" | "helius" | "agents";
 
 export function MarketScreen() {
   const { state, send, closeMarket, setMarketTab, setMarketQuery, marketSearching, clearMarketDetail, clearAgentProfile } = useStore();
-  const [view, setView] = useState<MarketView>("browse");
+  const [view, setView] = useState<MarketView>(state.marketInitialView);
 
   // On first open: load owned skills, RPC status, and initial search
   useEffect(() => {

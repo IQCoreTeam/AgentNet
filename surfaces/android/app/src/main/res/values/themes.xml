@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- A no-action-bar Material theme; the UI is entirely inside the WebView. -->
-    <style name="Theme.AgentNet" parent="Theme.Material3.DayNight.NoActionBar" />
+    <!-- A no-action-bar Material theme; the UI is entirely inside the WebView. The
+         Material3 default tints the status/nav bars with its purple primary — override
+         them to the app surface so the bars read as part of our dark UI (light icons). -->
+    <style name="Theme.AgentNet" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:statusBarColor">@color/an_bg</item>
+        <item name="android:navigationBarColor">@color/an_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
 </resources>

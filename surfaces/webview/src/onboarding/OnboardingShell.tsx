@@ -22,11 +22,18 @@ export function OnboardingShell({
         paddingBottom: "calc(max(1.5rem, env(safe-area-inset-bottom)) + var(--keyboard-inset-bottom, 0px))",
       }}
     >
-      <div className="flex flex-col items-center gap-4">
-        <IqLogo className="h-12 w-auto" fill="#00E673" />
+      <div className="flex flex-col items-center gap-5">
+        <div className="relative flex items-center justify-center">
+          {/* soft brand halo behind the mark — quiet depth, not a glow gimmick */}
+          <div
+            className="absolute h-28 w-28 rounded-full blur-2xl"
+            style={{ background: "var(--an-green-dim)" }}
+          />
+          <IqLogo className="relative h-12 w-auto" fill="var(--an-green)" />
+        </div>
         <div className="text-center">
-          <h1 className="text-xl font-semibold tracking-tight text-zinc-100">{title}</h1>
-          <p className="mt-1.5 max-w-xs text-sm leading-relaxed text-zinc-400">{subtitle}</p>
+          <h1 className="text-2xl font-semibold tracking-tight" style={{ color: "var(--an-fg)" }}>{title}</h1>
+          <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed" style={{ color: "var(--an-fg-dim)" }}>{subtitle}</p>
         </div>
       </div>
       <div className="flex w-full max-w-xs flex-col gap-2.5">{children}</div>
@@ -41,10 +48,5 @@ export function OnboardingButton({
   className = "",
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "outline" }) {
-  const base = "rounded-xl px-4 py-3 text-sm font-medium transition disabled:opacity-40";
-  const styles =
-    variant === "primary"
-      ? "bg-[#00E673] text-black hover:bg-[#00d068]"
-      : "border border-zinc-700 text-zinc-200 hover:bg-zinc-800/60";
-  return <button className={`${base} ${styles} ${className}`} {...props} />;
+  return <button className={`${variant === "primary" ? "an-btn" : "an-btn an-btn-ghost"} ${className}`} {...props} />;
 }

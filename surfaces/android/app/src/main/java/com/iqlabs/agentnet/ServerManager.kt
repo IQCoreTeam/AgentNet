@@ -145,10 +145,16 @@ class ServerManager(private val ctx: Context) {
         // Drain stdout/stderr to logcat so server errors are visible (otherwise a
         // crash would be silent and the WebView would hang on a server that never came up).
         Thread {
-            BufferedReader(InputStreamReader(proc.inputStream)).useLines { lines ->
-                lines.forEach { Log.d(TAG, "[server] $it") }
+            try {
+                BufferedReader(InputStreamReader(proc.inputStream)).useLines { lines ->
+                    lines.forEach { Log.d(TAG, "[server] $it") }
+                }
+            } catch (e: Exception) {
+                if (proc.isAlive) Log.w(TAG, "server log stream ended unexpectedly", e)
+            } finally {
+                val exit = runCatching { proc.waitFor() }.getOrNull()
+                Log.i(TAG, "server process exited: ${exit ?: "unknown"}")
             }
-            Log.i(TAG, "server process exited: ${proc.waitFor()}")
         }.start()
         return true
     }

@@ -3,14 +3,14 @@ import { useStore } from "../state/store";
 import type { Cli, ImageInput } from "../transport/protocol";
 import { AttachIcon } from "../icons";
 import { useElementHeightVariable } from "../layoutEffects";
+import { CHAT_MODEL_OPTIONS } from "@iqlabs-official/agent-sdk/chat/modelOptions";
 
-const MODELS: Record<Cli, { value: string; label: string }[]> = {
-  claude: [
-    { value: "default", label: "default" },
-    { value: "opus", label: "opus" },
-    { value: "sonnet", label: "sonnet" },
-  ],
-  codex: [{ value: "default", label: "default" }],
+// The shared model catalog (same one vscode/cli use) — gives versioned chip labels
+// (Opus 4.8, Sonnet 4.6, GPT-5.5 Codex…) + a description, instead of bare aliases.
+// `value` is undefined for the engine default; the picker treats that as "default".
+const MODELS: Record<Cli, { value: string; label: string; desc: string }[]> = {
+  claude: CHAT_MODEL_OPTIONS.claude.map((o) => ({ value: o.value ?? "default", label: o.chipLabel, desc: o.description })),
+  codex: CHAT_MODEL_OPTIONS.codex.map((o) => ({ value: o.value ?? "default", label: o.chipLabel, desc: o.description })),
 };
 
 const EFFORTS = [
@@ -47,12 +47,74 @@ const SLASH_CMDS = [
   { name: "help",   desc: "list commands" },
 ];
 
+// A labelled row of tappable chips — the mobile replacement for a native <select>.
+// One chip is active (accent fill); tapping another picks it. Used for model/effort/mode.
+function ChipGroup({ label, value, options, onPick }: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onPick: (v: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="text-[0.62rem] font-bold uppercase tracking-wider" style={{ color: "var(--an-fg-mute)" }}>{label}</div>
+      <div className="flex flex-wrap gap-1.5">
+        {options.map((o) => {
+          const on = o.value === value;
+          return (
+            <button
+              key={o.value}
+              onClick={() => onPick(o.value)}
+              className="rounded-full px-3 py-1.5 text-xs font-medium transition"
+              style={on
+                ? { background: "var(--an-green-dim)", color: "var(--an-green)", border: "1px solid var(--an-green-line)" }
+                : { background: "var(--an-bg-2)", color: "var(--an-fg-dim)", border: "1px solid var(--an-line)" }}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // Input + engine tabs + model/effort pickers. FROZEN while an approval is pending.
 export function Composer() {
   const { state, send, selectEngine, queueCount } = useStore();
   const [text, setText] = useState("");
   const [effort, setEffort] = useState("default");
+  const [model, setModel] = useState("default");
+  const [controlsOpen, setControlsOpen] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const recognitionRef = useRef<any>(null);
   const mode = state.modeByCli[state.cli] ?? MODES[state.cli][0].value;
+  // The active engine tints the composer border (claude = orange, codex = green) so the
+  // input itself shows which platform you're talking to — vscode's folder-tab idea.
+  const engineAccent = state.cli === "claude" ? "var(--claude)" : "var(--an-green)";
+
+  // Voice dictation via the platform Web Speech API (Android WebView / Chrome support it).
+  // Interim results stream into the textarea; a second tap stops. Silent no-op if absent.
+  function toggleMic() {
+    if (recording) { recognitionRef.current?.stop(); return; }
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) { setSlashNotice("Voice input isn't available on this device."); return; }
+    const rec = new SR();
+    rec.lang = navigator.language || "en-US";
+    rec.interimResults = true;
+    rec.continuous = false;
+    const base = text ? text + " " : "";
+    rec.onresult = (e: any) => {
+      let s = "";
+      for (let i = 0; i < e.results.length; i++) s += e.results[i][0].transcript;
+      setText(base + s);
+    };
+    rec.onend = () => { setRecording(false); recognitionRef.current = null; taRef.current?.focus(); };
+    rec.onerror = () => { setRecording(false); recognitionRef.current = null; };
+    recognitionRef.current = rec;
+    setRecording(true);
+    rec.start();
+  }
   function changeMode(v: string) {
     send({ type: "mode", mode: v });
   }
@@ -276,71 +338,85 @@ export function Composer() {
   return (
     <div
       ref={rootRef}
-      className="border-t border-zinc-800 px-3 pt-2"
-      style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
+      className="px-2.5 pt-2"
+      style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))", borderTop: "1px solid var(--an-line)", background: "var(--an-bg-0)" }}
     >
-      {/* engine tabs + model/effort pickers */}
-      <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-xs">
-        <div className="flex gap-1">
-          {(["claude", "codex"] as Cli[]).map((c) => (
-            <button
-              key={c}
-              onClick={() => selectEngine(c)}
-              className={`rounded px-2 py-0.5 ${
-                state.cli === c
-                  ? c === "claude"
-                    ? "bg-orange-600/30 text-orange-300"
-                    : "bg-emerald-600/30 text-emerald-300"
-                  : "text-zinc-500"
-              }`}
-            >
-              {c}
-            </button>
-          ))}
+      {/* engine segmented control + a single "controls" disclosure (model/effort/mode
+          live in the popover so the bar stays clean on a phone) */}
+      <div className="relative mb-2 flex items-center gap-1.5 text-xs">
+        <div className="flex items-center gap-1 rounded-full p-0.5" style={{ background: "var(--an-bg-2)", height: "34px" }}>
+          {(["claude", "codex"] as Cli[]).map((c) => {
+            const on = state.cli === c;
+            const accent = c === "claude" ? "var(--claude)" : "var(--an-green)";
+            return (
+              <button
+                key={c}
+                onClick={() => selectEngine(c)}
+                className="flex h-full items-center rounded-full px-3.5 font-semibold capitalize transition"
+                style={on ? { background: accent, color: "#0a0b0d" } : { color: "var(--an-fg-mute)" }}
+              >
+                {c}
+              </button>
+            );
+          })}
         </div>
-        <select
-          value={MODELS[state.cli].map((m) => m.value).includes(state.cli) ? state.cli : "default"}
-          onChange={(e) => send({ type: "model", model: e.target.value === "default" ? undefined : e.target.value })}
-          className="rounded border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-zinc-300"
+        <button
+          onClick={() => setControlsOpen((o) => !o)}
+          className="an-pill shrink-0"
+          style={{ height: "34px" }}
+          aria-label="Model and mode settings"
+          aria-expanded={controlsOpen}
         >
-          {MODELS[state.cli].map((m) => (
-            <option key={m.value} value={m.value}>{m.label}</option>
-          ))}
-        </select>
-        <select
-          value={effort}
-          onChange={(e) => {
-            const v = e.target.value;
-            setEffort(v);
-            send({ type: "effort", effort: v === "default" ? undefined : v });
-          }}
-          className="rounded border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-zinc-300"
-          title="Reasoning effort"
-        >
-          {EFFORTS.map((e) => (
-            <option key={e.value} value={e.value}>{e.label}</option>
-          ))}
-        </select>
-        <select
-          value={mode}
-          onChange={(e) => changeMode(e.target.value)}
-          className="rounded border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-zinc-300"
-          title="Permission mode: how tools run before asking you"
-        >
-          {MODES[state.cli].map((m) => (
-            <option key={m.value} value={m.value} title={m.title}>{m.label}</option>
-          ))}
-        </select>
-        {/* context token meter — populated by store.contextTokens */}
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" /><circle cx="6" cy="4.5" r="1.5" fill="var(--an-bg-2)" /><circle cx="10.5" cy="8" r="1.5" fill="var(--an-bg-2)" /><circle cx="6" cy="11.5" r="1.5" fill="var(--an-bg-2)" />
+          </svg>
+          <span className="max-w-[7rem] truncate">{MODES[state.cli].find((m) => m.value === mode)?.label ?? mode}</span>
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" style={{ transform: controlsOpen ? "rotate(180deg)" : "none", transition: "transform .15s" }}><path d="M2.5 4l2.5 2.5L7.5 4" /></svg>
+        </button>
         {state.contextTokens !== undefined && (
-          <span className="ml-auto text-zinc-500">
+          <span className="ml-auto" style={{ color: "var(--an-fg-mute)" }}>
             ctx: {state.contextTokens >= 1000 ? Math.round(state.contextTokens / 1000) + "k" : state.contextTokens}
           </span>
         )}
         {queueCount > 0 && (
-          <span className="ml-auto text-amber-400 animate-pulse text-[10px]">
+          <span className="ml-auto animate-pulse text-[10px]" style={{ color: "var(--an-amber)" }}>
             ⏳ {queueCount} queued
           </span>
+        )}
+
+        {controlsOpen && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setControlsOpen(false)} />
+            <div
+              className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-50 flex flex-col gap-3 p-3 shadow-2xl"
+              style={{ background: "var(--an-bg-1)", border: "1px solid var(--an-line)", borderRadius: "var(--an-radius)" }}
+            >
+              <div className="flex flex-col gap-1.5">
+                <ChipGroup
+                  label="Model"
+                  value={model}
+                  options={MODELS[state.cli].map((m) => ({ value: m.value, label: m.label }))}
+                  onPick={(v) => { setModel(v); send({ type: "model", model: v === "default" ? undefined : v }); }}
+                />
+                {/* version/detail of the selected model, from the shared catalog */}
+                <p className="text-[0.68rem] leading-snug" style={{ color: "var(--an-fg-mute)" }}>
+                  {MODELS[state.cli].find((m) => m.value === model)?.desc}
+                </p>
+              </div>
+              <ChipGroup
+                label="Effort"
+                value={effort}
+                options={EFFORTS}
+                onPick={(v) => { setEffort(v); send({ type: "effort", effort: v === "default" ? undefined : v }); }}
+              />
+              <ChipGroup
+                label="Mode"
+                value={mode}
+                options={MODES[state.cli].map((m) => ({ value: m.value, label: m.label }))}
+                onPick={(v) => changeMode(v)}
+              />
+            </div>
+          </>
         )}
       </div>
 
@@ -368,16 +444,15 @@ export function Composer() {
       )}
 
       <div
-        className={`relative flex items-end gap-2 rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 ${
-          frozen ? "opacity-60" : ""
-        }`}
+        className={`relative flex items-center gap-1.5 px-2 py-1.5 ${frozen ? "opacity-60" : ""}`}
+        style={{ background: "var(--an-bg-2)", border: `1px solid color-mix(in srgb, ${engineAccent} 30%, var(--an-line))`, borderRadius: "var(--an-radius)" }}
         onDragOver={(e) => { e.preventDefault(); }}
         onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files) void addFiles(e.dataTransfer.files); }}
       >
         {showMenu && (
           <div
-            className="absolute bottom-[calc(100%+6px)] left-0 right-0 z-50 flex flex-col gap-0.5 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950 p-1 shadow-2xl"
-            style={{ maxHeight: "min(12rem, max(6rem, calc(var(--vvh, 100dvh) * 0.35)))" }}
+            className="absolute bottom-[calc(100%+6px)] left-0 right-0 z-50 flex flex-col gap-0.5 overflow-y-auto p-1 shadow-2xl"
+            style={{ maxHeight: "min(12rem, max(6rem, calc(var(--vvh, 100dvh) * 0.35)))", background: "var(--an-bg-1)", border: "1px solid var(--an-line)", borderRadius: "var(--an-radius-sm)" }}
           >
             {activeMatches.map((cmd, idx) => {
               const isSel = idx === slashIdx;
@@ -411,8 +486,10 @@ export function Composer() {
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={frozen}
-          className="shrink-0 self-end text-zinc-500 hover:text-zinc-300 disabled:opacity-40"
+          className="flex h-10 w-9 shrink-0 items-center justify-center self-end disabled:opacity-40"
+          style={{ color: "var(--an-fg-mute)" }}
           title="Attach image"
+          aria-label="Attach image"
         >
           <AttachIcon className="h-5 w-5" />
         </button>
@@ -491,19 +568,39 @@ export function Composer() {
                   ? `Message ${state.cli}… (queues while busy · Esc to stop)`
                   : `Message ${state.cli}… (Enter · paste image)`
           }
-          className="min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-sm leading-relaxed outline-none [overflow-wrap:anywhere] disabled:cursor-not-allowed"
+          className="min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-[16px] leading-relaxed outline-none [overflow-wrap:anywhere] disabled:cursor-not-allowed"
           style={{ maxHeight: "min(10rem, max(4rem, calc(var(--vvh, 100dvh) * 0.28)))" }}
         />
+        {/* mic: voice dictation into the textarea (red while listening) */}
+        <button
+          type="button"
+          onClick={toggleMic}
+          disabled={frozen}
+          className="flex h-10 w-9 shrink-0 items-center justify-center self-end disabled:opacity-40"
+          style={{ color: recording ? "#e5484d" : "var(--an-fg-mute)" }}
+          aria-label={recording ? "Stop dictation" : "Voice input"}
+          title={recording ? "Stop dictation" : "Voice input"}
+        >
+          {recording ? (
+            <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full" style={{ background: "#e5484d" }} />
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="6" y="2" width="4" height="7" rx="2" /><path d="M4 7.5a4 4 0 0 0 8 0M8 11.5V14M6 14h4" />
+            </svg>
+          )}
+        </button>
         <button
           onClick={busy ? interrupt : submit}
           disabled={!busy && frozen}
-          className={`shrink-0 self-end rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-40 ${
-            busy
-              ? "bg-red-600 text-white"
-              : "bg-zinc-200 text-zinc-900"
-          }`}
+          className={`an-send shrink-0 self-end mb-px ${busy ? "is-stop" : ""}`}
+          aria-label={busy ? "Stop" : "Send"}
+          title={busy ? "Stop" : "Send"}
         >
-          {busy ? "Stop" : "Send"}
+          {busy ? (
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="1.5" /></svg>
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 15V4M4.5 8.5L9 4l4.5 4.5" /></svg>
+          )}
         </button>
       </div>
     </div>

@@ -1,7 +1,38 @@
 @import "tailwindcss";
 
+/* ── AgentNet tone system (mobile) ─────────────────────────────────────────
+   Same CONCEPT as our VSCode extension — one refined green accent threaded
+   through the UI, layered surfaces for depth, hairline borders — but tuned for
+   touch instead of a desktop panel: larger hit targets (--an-tap), calmer
+   type, generous padding. Components read these vars so the whole app restyles
+   from one place. */
 :root {
   color-scheme: dark;
+
+  --an-bg-0: #0a0b0d;   /* deepest app surface (page) */
+  --an-bg-1: #141519;   /* raised: header, cards, drawer */
+  --an-bg-2: #1c1e23;   /* highest: inputs, active rows, bubbles */
+  --an-bg-glass: rgba(16, 17, 21, 0.82);
+
+  --an-fg: #ececee;
+  --an-fg-dim: #9a9aa3;   /* secondary text */
+  --an-fg-mute: #66666e;  /* tertiary / placeholder */
+
+  --an-line: rgba(255, 255, 255, 0.085);
+  --an-line-soft: rgba(255, 255, 255, 0.05);
+
+  --an-green: #3ac07a;    /* brand accent — refined, not neon */
+  --an-green-soft: rgba(58, 192, 122, 0.16);
+  --an-green-line: rgba(58, 192, 122, 0.42);
+  --an-green-dim: rgba(58, 192, 122, 0.10);
+  --claude: #e9883a;      /* claude engine accent (orange) */
+  --an-amber: #e0a23a;    /* compaction / warning */
+  --an-violet: #a98bff;   /* skill publish accent */
+
+  --an-radius: 16px;
+  --an-radius-sm: 11px;
+  --an-radius-pill: 999px;
+  --an-tap: 44px;         /* minimum comfortable touch target */
 }
 
 html,
@@ -13,12 +44,123 @@ body,
 }
 
 body {
-  background: #0b0b0d;
-  color: #e8e8ea;
+  background: var(--an-bg-0);
+  color: var(--an-fg);
   font-family:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
 }
+
+/* ── Mobile component primitives (extension concept, thumb-sized) ──────────── */
+
+/* Glassy sticky header — sits over the scrolling log, blurs content beneath it. */
+.an-header {
+  background: var(--an-bg-glass);
+  backdrop-filter: saturate(1.4) blur(14px);
+  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  border-bottom: 1px solid var(--an-line);
+}
+
+/* Pill buttons — the extension's signature control, enlarged for touch. */
+.an-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 13px;
+  border-radius: var(--an-radius-pill);
+  border: 1px solid var(--an-line);
+  background: transparent;
+  color: var(--an-fg-dim);
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1;
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
+}
+.an-pill:active { background: var(--an-bg-2); }
+.an-pill-accent {
+  border-color: var(--an-green-line);
+  background: var(--an-green-dim);
+  color: var(--an-green);
+  font-weight: 600;
+}
+.an-pill-accent:active { background: var(--an-green-soft); }
+
+/* Icon button — square, centered, full touch target. */
+.an-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--an-tap);
+  height: var(--an-tap);
+  border-radius: var(--an-radius-sm);
+  color: var(--an-fg-dim);
+  background: transparent;
+  transition: background 0.14s, color 0.14s;
+}
+.an-iconbtn:active { background: var(--an-bg-2); color: var(--an-fg); }
+
+/* Surfaces / cards. */
+.an-card {
+  background: var(--an-bg-1);
+  border: 1px solid var(--an-line);
+  border-radius: var(--an-radius);
+}
+
+/* Inputs / textarea. */
+.an-input {
+  width: 100%;
+  background: var(--an-bg-2);
+  border: 1px solid var(--an-line);
+  border-radius: var(--an-radius-sm);
+  padding: 0.7rem 0.85rem;
+  font-size: 1rem; /* >=16px so iOS/Android don't zoom on focus */
+  color: var(--an-fg);
+  outline: none;
+}
+.an-input::placeholder { color: var(--an-fg-mute); }
+.an-input:focus { border-color: var(--an-green-line); }
+
+/* Primary action button — thumb-reachable, bold. */
+.an-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  width: 100%;
+  border-radius: var(--an-radius);
+  background: var(--an-green);
+  color: #06140c;
+  font-size: 0.95rem;
+  font-weight: 700;
+  transition: filter 0.14s, transform 0.08s;
+}
+.an-btn:active { transform: scale(0.985); filter: brightness(1.06); }
+.an-btn:disabled { opacity: 0.45; }
+.an-btn-ghost {
+  background: var(--an-bg-2);
+  color: var(--an-fg-dim);
+  font-weight: 600;
+}
+
+/* Round, thumb-reachable send / stop button in the composer. */
+.an-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: var(--an-radius-pill);
+  background: var(--an-green);
+  color: #06140c;
+  transition: filter 0.14s, transform 0.08s, background 0.14s;
+}
+.an-send:active { transform: scale(0.92); }
+.an-send:disabled { opacity: 0.4; }
+.an-send.is-stop { background: #e5484d; color: #fff; }
 
 .app-viewport {
   display: flex;
@@ -26,6 +168,88 @@ body {
   min-height: var(--vvh, 100dvh);
   flex-direction: column;
   overflow: hidden;
+}
+
+/* Turn-thread chat: user prompt pins at the top; assistant/tool replies hang from a
+   thin rail. This mirrors the extension's reading model, but with tighter mobile spacing. */
+.an-turn {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+.an-turn-head {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 4px 10px 2px;
+  background: color-mix(in srgb, var(--an-bg-0) 86%, transparent);
+  border-bottom: 1px solid var(--an-line-soft);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.an-turn-marker {
+  flex: none;
+  color: var(--an-green);
+  font-weight: 800;
+  line-height: 1.55;
+  opacity: 0.9;
+}
+.an-turn-text {
+  min-width: 0;
+  flex: 1;
+  color: var(--an-fg);
+  font-size: 0.95rem;
+  font-weight: 650;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.an-turn-body {
+  margin-left: 8px;
+  padding: 5px 0 16px 15px;
+  border-left: 1.5px solid var(--an-line-soft);
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.an-turn:last-child .an-turn-body { min-height: 42px; }
+.an-node {
+  position: relative;
+  min-width: 0;
+  padding: 6px 0 6px 14px;
+}
+.an-node::before {
+  content: "";
+  position: absolute;
+  left: -20.5px;
+  top: 15px;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--an-bg-2);
+  border: 1.5px solid var(--an-line);
+  box-sizing: border-box;
+}
+.an-node.assistant::before {
+  background: var(--an-green);
+  border-color: var(--an-green);
+  box-shadow: 0 0 0 3px var(--an-green-dim);
+}
+.an-node.assistant.claude::before {
+  background: var(--claude);
+  border-color: var(--claude);
+  box-shadow: 0 0 0 3px rgba(233, 136, 58, 0.16);
+}
+.an-node.thinking::before {
+  background: transparent;
 }
 
 /* Rendered markdown (assistant bubbles). DOMPurify-sanitized HTML from core's marked. */
@@ -41,8 +265,9 @@ body {
 .md pre {
   position: relative;
   overflow-x: auto;
-  background: #18181b;
-  border-radius: 8px;
+  background: var(--an-bg-2);
+  border: 1px solid var(--an-line-soft);
+  border-radius: var(--an-radius-sm);
   padding: 10px 12px;
   margin: 0.5em 0;
   font-size: 0.85em;
@@ -70,13 +295,14 @@ body {
   font-size: 0.88em;
 }
 .md :not(pre) > code {
-  background: #27272a;
-  border-radius: 4px;
+  background: var(--an-bg-2);
+  border-radius: 5px;
   padding: 1px 5px;
 }
 .md a {
   color: #7dd3fc;
   text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .md ul,
 .md ol {
@@ -109,26 +335,26 @@ body {
 /* Market input fields */
 .input-field {
   width: 100%;
-  border-radius: 0.5rem;
-  background: #18181b;
-  border: 1px solid #3f3f46;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
-  color: #e4e4e7;
+  border-radius: var(--an-radius-sm);
+  background: var(--an-bg-2);
+  border: 1px solid var(--an-line);
+  padding: 0.6rem 0.85rem;
+  font-size: 1rem;
+  color: var(--an-fg);
   outline: none;
   resize: vertical;
 }
 .input-field:focus {
-  border-color: rgba(34, 197, 94, 0.4);
+  border-color: var(--an-green-line);
 }
 .input-field::placeholder {
-  color: #52525b;
+  color: var(--an-fg-mute);
 }
 
 /* God-mode: skill firing glow — a breathing green aura on the card while casting */
 @keyframes skill-breath {
-  0%, 100% { box-shadow: 0 0 8px 2px rgba(34, 197, 94, 0.3); }
-  50%       { box-shadow: 0 0 20px 6px rgba(34, 197, 94, 0.6); }
+  0%, 100% { box-shadow: 0 0 8px 2px var(--an-green-soft); }
+  50%       { box-shadow: 0 0 22px 6px var(--an-green-line); }
 }
 .skill-firing {
   animation: skill-breath 1.4s ease-in-out infinite;
