@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock the filesystem + paths so the test is pure (no real skills dir, no real
 // memory files). We assert the splice behaviour: the managed block is created,
-// replaced in place, and never disturbs content outside the markers.
+// includes each skill's trigger description, replaced in place, and never disturbs
+// content outside the markers.
 const files = new Map<string, string>();
 let skillDirs: string[] = [];
 
@@ -28,13 +29,32 @@ const MEMORY = "/mem/MEMORY.md";
 describe("memory/skillsSection", () => {
   beforeEach(() => { files.clear(); skillDirs = []; });
 
-  it("writes a one-line block naming installed skills (claude MEMORY.md)", async () => {
+  it("writes a block naming installed skills with descriptions (claude MEMORY.md)", async () => {
     skillDirs = ["code-review", "changelog-generator"];
-    await updateSkillsSection("claude", "/proj");
+    files.set("/skills/code-review/SKILL.md", "---\nname: code-review\ndescription: Review code for bugs and missing tests.\n---\n");
+    files.set("/skills/changelog-generator/SKILL.md", "---\nname: changelog-generator\ndescription: \"Draft release notes from git history.\"\n---\n");
+    const skills = await updateSkillsSection("claude", "/proj");
     const out = files.get(MEMORY)!;
     expect(out).toContain("<!-- agentnet:skills:start -->");
     expect(out).toContain("<!-- agentnet:skills:end -->");
-    expect(out).toContain("changelog-generator, code-review"); // sorted, comma-joined
+    expect(out).toContain("- changelog-generator: Draft release notes from git history.");
+    expect(out).toContain("- code-review: Review code for bugs and missing tests.");
+    expect(skills.map((s) => s.name)).toEqual(["changelog-generator", "code-review"]);
+  });
+
+  it("parses YAML block scalar descriptions (>- and |-)", async () => {
+    skillDirs = ["skill-shopping"];
+    files.set("/skills/skill-shopping/SKILL.md", "---\nname: skill-shopping\ndescription: >-\n  Find and acquire a skill from the marketplace.\n---\n");
+    await updateSkillsSection("claude", "/proj");
+    const out = files.get(MEMORY)!;
+    expect(out).toContain("- skill-shopping: Find and acquire a skill from the marketplace.");
+    expect(out).not.toContain(">-");
+  });
+
+  it("falls back to the directory name when a skill file cannot be read", async () => {
+    skillDirs = ["local-skill"];
+    await updateSkillsSection("claude", "/proj");
+    expect(files.get(MEMORY)!).toContain("- local-skill");
   });
 
   it("says none when no skills are installed", async () => {
