@@ -467,8 +467,12 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
       }
       case "ownedSkills": {
         try {
-          const r = await mkt.ownedSkills();
-          c.send({ type: "ownedSkills", ...r });
+          const names = mkt.ownedNftSkills ? await mkt.ownedNftSkills() : await mkt.ownedSkills();
+          const [mints, disposedMints] = await Promise.all([
+            mkt.ownedSkillMints ? mkt.ownedSkillMints().catch(() => ({})) : Promise.resolve({}),
+            mkt.disposedSkillMints ? mkt.disposedSkillMints().catch(() => ({})) : Promise.resolve({}),
+          ]);
+          c.send({ type: "ownedSkills", names, mints, disposedMints });
         } catch (e) {
           c.send({ type: "toast", text: "Failed to load owned skills: " + (e as Error).message });
         }

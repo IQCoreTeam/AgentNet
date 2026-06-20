@@ -359,7 +359,7 @@ function reducer(state: State, ev: Action): State {
         buyCelebrate: ev.ok ? true : state.buyCelebrate,
       };
     case "ownedSkills":
-      return { ...state, marketOwned: ev.names };
+      return { ...state, marketOwned: Array.isArray(ev.names) ? ev.names : [] };
     case "balance":
       return { ...state, marketBalance: ev.lamports };
     case "rpcStatus":
