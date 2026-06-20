@@ -9,6 +9,7 @@
 // Claude is the source of truth for capture.
 
 import { readFile, writeFile } from "node:fs/promises";
+import { isAbsolute, parse } from "node:path";
 import { codexAgentsFile } from "../../core/paths.js";
 import type { CanonicalMemory, MemoryRecord } from "../types.js";
 
@@ -58,6 +59,10 @@ export async function writeCodexMemory(
   cwd: string,
   mem: CanonicalMemory,
 ): Promise<void> {
+  // A surface with no project can report "/" or a relative process cwd. Codex only
+  // has project memory when there is a real repo/workspace root to hold AGENTS.md.
+  if (!isAbsolute(cwd) || cwd === parse(cwd).root) return;
+
   const file = codexAgentsFile(cwd);
   let existing = "";
   try {

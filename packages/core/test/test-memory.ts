@@ -84,6 +84,13 @@ await codexConv.writeCodexMemory(cwd, sample); // second sync
 agents = readFileSync(codexAgentsFile(cwd), "utf8");
 check("re-sync does not duplicate the block", agents.split("agentnet:memory:start").length === 2);
 check("re-sync keeps human content once", agents.split("Hand-written notes").length === 2);
+let rootCwdSkipped = true;
+try {
+  await codexConv.writeCodexMemory("/", sample);
+} catch {
+  rootCwdSkipped = false;
+}
+check("root cwd does not write /AGENTS.md", rootCwdSkipped);
 
 // 4. merge: newest updatedAt wins; disjoint records both kept.
 console.log("4. mergeMemory newest-wins");
