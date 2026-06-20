@@ -10,6 +10,23 @@ are stamped.)
 > kept as the reasoning trail — where they conflict, the DECIDED section wins. All reference
 > source links are collected in "## Reference sources (with links)" at the very bottom.
 
+> 🛑 **SUPERSEDED BY SHIPPED CODE (doc drift fixed 2026-06).** The "DECIDED" architecture
+> below — *no proot*, *no JS bridge*, *claude = Agent SDK on bionic node*, *codex deferred to
+> v2* — is **NOT what shipped.** The Android app in `surfaces/android` actually runs:
+> - **proot + a glibc Ubuntu rootfs** (`ServerManager.kt` builds the proot invocation;
+>   `Installer.kt` unpacks `rootfs-<abi>.tar`), running the **official `claude` / `codex` CLIs
+>   as real Linux binaries** — *not* the JS Agent SDK on bionic node.
+> - **`codex` enabled now**, inside proot (latest commit: "Skip Codex sandbox inside proot") —
+>   not deferred to v2.
+> - **a native JS bridge** — `MainActivity.kt` injects `addJavascriptInterface` for a **Mobile
+>   Wallet Adapter (MWA)** `WalletBridge` (mobile WebViews have no injected wallet) plus a
+>   `ShellBridge`. Only chat/data traffic uses HTTP/SSE.
+>
+> So the headline "no proot / no bridge / SDK-only" reasoning here did **not** survive contact
+> with the wallet-signing + native-CLI requirements. **`README.md` and
+> [`surfaces-summary.md`](surfaces-summary.md) §2C reflect the real Android design** — treat
+> everything below as the historical reasoning trail, not current truth.
+
 ## TL;DR
 
 - **Android only.** iOS shelved (Apple blocks fork/exec at the kernel — not a perf issue).

@@ -36,24 +36,64 @@ echo "==> ABI=$ABI  proot=$PROOT_ARCH"
 echo "==> assets -> $ASSETS"
 echo "==> work   -> $WORK"
 
-# 1) proot binary + loader (Android-native, relocatable loader). green-green-avk has NO
-#    GitHub releases — the prebuilt binaries are committed as tar.gz under /packages on
-#    master (proot dyn-linked vs Bionic /system/bin/linker64 = present on every Android;
-#    loader ships inside the SAME archive, found via the relative ../libexec path or the
-#    PROOT_LOADER env we set in ServerManager). Pin a commit via PROOT_REF for repro CI.
-PROOT_REF="${PROOT_REF:-master}"
-PROOT_PKG="proot-android-$PROOT_ARCH.tar.gz"
-PROOT_URL="https://raw.githubusercontent.com/green-green-avk/build-proot-android/$PROOT_REF/packages/$PROOT_PKG"
-echo "==> [1/3] fetching proot ($PROOT_PKG @ $PROOT_REF)"
+# 1) proot binary + loader + its shared libs. We use the TERMUX proot build, NOT
+#    green-green-avk. Why: this proot is compiled with the process_vm accelerator
+#    (process_vm_readv/writev) for guest-memory access. process_vm_readv strips arm64
+#    top-byte pointer tags, so it avoids the `ptrace(PEEKDATA): I/O error` on tagged
+#    addresses that breaks the sandbox on tag-enabled devices (Solana Seeker / Android
+#    16). The green-green-avk build is process_vm=no (PEEKDATA only) and fails there.
+#    See plans/running-guide/android.md for the full root cause.
+#
+#    Trade-off: the Termux proot is dynamically linked against libtalloc.so.2 +
+#    libandroid-shmem.so (and bionic libc, present on every device). We ship those two
+#    libs under proot/lib and point LD_LIBRARY_PATH at them in ServerManager. The loader
+#    ships in the SAME proot .deb so it always version-matches the binary.
+TERMUX_POOL="${TERMUX_POOL:-https://packages.termux.dev/apt/termux-main/pool/main}"
+# Discover the newest aarch64 .deb in each pool dir (override with *_DEB env for repro CI).
+termux_latest_deb() {  # $1 = pool subdir (e.g. p/proot) ; echoes full URL
+  local dir="$TERMUX_POOL/$1/"
+  local file
+  file=$(curl -fsSL "$dir" | grep -oE "[a-z0-9.+-]+_${PROOT_ARCH}\.deb" | sort -V | tail -1)
+  [ -n "$file" ] || { echo "!! no $PROOT_ARCH .deb under $dir" >&2; return 1; }
+  echo "$dir$file"
+}
+# Extract a .deb's data tree into $2 (portable: dpkg-deb if present, else ar + tar).
+deb_extract() {  # $1 = deb file, $2 = dest dir
+  mkdir -p "$2"
+  if command -v dpkg-deb >/dev/null 2>&1; then dpkg-deb -x "$1" "$2"; return; fi
+  local tmp; tmp=$(mktemp -d); ( cd "$tmp" && ar x "$1" )
+  local data; data=$(ls "$tmp"/data.tar.* | head -1)
+  case "$data" in
+    *.zst) zstd -dc "$data" | tar -x -C "$2" ;;
+    *.xz)  tar -xJf "$data" -C "$2" ;;
+    *.gz)  tar -xzf "$data" -C "$2" ;;
+    *)     tar -xf "$data" -C "$2" ;;
+  esac
+  rm -rf "$tmp"
+}
+PROOT_DEB="${PROOT_DEB:-$(termux_latest_deb p/proot)}"
+TALLOC_DEB="${TALLOC_DEB:-$(termux_latest_deb libt/libtalloc)}"
+SHMEM_DEB="${SHMEM_DEB:-$(termux_latest_deb liba/libandroid-shmem)}"
+echo "==> [1/3] fetching termux proot + libs"
+echo "    proot:  $PROOT_DEB"
+echo "    talloc: $TALLOC_DEB"
+echo "    shmem:  $SHMEM_DEB"
 PROOT_STAGE="$WORK/proot"
 rm -rf "$PROOT_STAGE"; mkdir -p "$PROOT_STAGE"
-# --strip-components=1 drops the archive's leading "root/" so we get bin/ + libexec/.
-curl -fsSL "$PROOT_URL" | tar -xz -C "$PROOT_STAGE" --strip-components=1
+curl -fsSL "$PROOT_DEB"  -o "$WORK/proot.deb"  && deb_extract "$WORK/proot.deb"  "$PROOT_STAGE/proot"
+curl -fsSL "$TALLOC_DEB" -o "$WORK/talloc.deb" && deb_extract "$WORK/talloc.deb" "$PROOT_STAGE/talloc"
+curl -fsSL "$SHMEM_DEB"  -o "$WORK/shmem.deb"  && deb_extract "$WORK/shmem.deb"  "$PROOT_STAGE/shmem"
+# Termux installs under data/data/com.termux/files/usr — pull the bits we need out of there.
+TUSR="data/data/com.termux/files/usr"
 # Lay out under assets to match Paths.kt: proot at proot/bin/proot, loader at
-# proot/libexec/proot/loader (ServerManager points PROOT_LOADER there).
+# proot/libexec/proot/loader (ServerManager points PROOT_LOADER there), libs at proot/lib.
 rm -rf "$ASSETS/proot-$ABI"
-mkdir -p "$ASSETS/proot-$ABI"
-cp -R "$PROOT_STAGE/bin" "$PROOT_STAGE/libexec" "$ASSETS/proot-$ABI/"
+mkdir -p "$ASSETS/proot-$ABI/bin" "$ASSETS/proot-$ABI/libexec/proot" "$ASSETS/proot-$ABI/lib"
+cp "$PROOT_STAGE/proot/$TUSR/bin/proot" "$ASSETS/proot-$ABI/bin/proot"
+cp "$PROOT_STAGE/proot/$TUSR/libexec/proot/loader"* "$ASSETS/proot-$ABI/libexec/proot/" 2>/dev/null || true
+# cp -L: the versioned .so.2 is a symlink in the .deb — copy the real bytes.
+cp -L "$PROOT_STAGE/talloc/$TUSR/lib/libtalloc.so.2"      "$ASSETS/proot-$ABI/lib/libtalloc.so.2"
+cp -L "$PROOT_STAGE/shmem/$TUSR/lib/libandroid-shmem.so"  "$ASSETS/proot-$ABI/lib/libandroid-shmem.so"
 chmod +x "$ASSETS/proot-$ABI/bin/proot" "$ASSETS/proot-$ABI/libexec/proot/loader"* 2>/dev/null || true
 
 # 2) Ubuntu rootfs with the engine installed. KEY: we don't download a rootfs — this

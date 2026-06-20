@@ -92,8 +92,21 @@ sequenceDiagram
 ### ✅ Implemented — the gate program (`agent-workflow-nft`)
 
 This is the one thing standard Token-2022 can't do on a mint: a **conditional**
-mint. So workflows (and ONLY workflows — skills are bought freely) go through a
-small Anchor program. **Skills never touch it.**
+mint. **Both skills and workflows are minted through this one small Anchor program**
+(a generic *item* `publish` / `buy`). A **skill is just the `requiredSkills: []`
+case** — nothing to gate, so it's bought freely — while a **workflow carries a
+non-empty `requiredSkills` gate** the program enforces on buy. Routing skills through
+the *same* program (instead of a free client-side mint) is deliberate: the mint
+authority is a **program PDA**, so *every* item token — skill or workflow — can only
+be issued by the program, and **no off-chain minter key can forge one** (trustless
+mint). The SDK reflects this — `nft/skill.ts` calls `publishItemIx(… requiredSkills:
+[])` / `buyItemIx(… requiredSkills: [])`, the exact builders `nft/workflow.ts` uses
+with a populated list.
+
+> ⚠️ **Doc drift fixed (2026-06):** this supersedes the earlier *"skills never touch
+> the gate / skills are a free direct mint"* framing (here and in
+> [`00-overview.md`](00-overview.md)). The shipped code consolidated skills **and**
+> workflows behind this single PDA-mint program; only the `requiredSkills` list differs.
 
 - Repo: **[IQCoreTeam/agent-workflow-nft](https://github.com/IQCoreTeam/agent-workflow-nft)** (Anchor 0.32.1).
 - Devnet program: `3ptXj4yuaQG51WTA3SZZ37jGvYFgMhgXnSKWJLASJNkt`.

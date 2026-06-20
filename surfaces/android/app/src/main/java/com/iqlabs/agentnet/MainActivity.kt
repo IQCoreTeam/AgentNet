@@ -25,8 +25,10 @@ import kotlin.concurrent.thread
 // (2) starts the foreground service + node server inside proot, (3) waits for the
 // server to answer on 127.0.0.1, then (4) shows the WebView pointed at it. The WebView
 // loads our React web surface served by surfaces/localhost; from there everything is
-// identical to the browser/vscode surfaces (one UI, one transport). No JS bridge — the
-// WebView just speaks HTTP/SSE to the loopback server, exactly like a browser.
+// identical to the browser/vscode surfaces (one UI, one transport). Chat/data flow over
+// HTTP/SSE to the loopback server like a browser; the one exception is wallet signing —
+// mobile WebViews have no injected wallet, so we addJavascriptInterface an MWA WalletBridge
+// (+ a ShellBridge) below.
 class MainActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "AgentNet/Main"

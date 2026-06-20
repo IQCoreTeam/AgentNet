@@ -42,9 +42,23 @@ function detectWallets(): { name: string; provider: SolanaProvider }[] {
   return found;
 }
 
+// When no wallet app is installed, the connect button flips into a "get Phantom" link.
+// Pick the store by platform: in the Android shell MainActivity's shouldOverrideUrlLoading
+// turns this https URL into an external ACTION_VIEW (so the Play Store app opens), and a
+// mobile browser opens its native store directly. (id app.phantom / App Store 1598432977.)
+function phantomStore(): { label: string; url: string } {
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+  return /iPad|iPhone|iPod/i.test(ua)
+    ? { label: "Go to App Store", url: "https://apps.apple.com/app/id1598432977" }
+    : { label: "Go to Play Store", url: "https://play.google.com/store/apps/details?id=app.phantom" };
+}
+
 export function ConnectWallet() {
   const { send } = useStore();
   const [busy, setBusy] = useState<string | null>(null);
+  // Android-only: MWA can't tell us a wallet is missing until we try, so we surface the
+  // "install a wallet" guidance reactively once transact reports NoWalletFound.
+  const [hint, setHint] = useState<string | null>(null);
   const wallets = useMemo(detectWallets, []);
   // Inside the Android shell there are no injected providers — the native MWA bridge is
   // the only path. Detect it once and, if present, show a single native connect button.
@@ -72,12 +86,30 @@ export function ConnectWallet() {
   // Android: hand off to the native MWA flow. It produces the same (address, signature)
   // shape, so the rest — session-key derivation, backend — is identical to the web path.
   async function connectAndroid() {
+    // After a no-wallet result the button becomes "get Phantom": send them to the store,
+    // then clear the hint so returning with a wallet installed shows Connect Wallet again
+    // (and the guidance never lingers once a wallet exists).
+    if (hint) {
+      const { url } = phantomStore();
+      setHint(null);
+      window.location.href = url; // shell opens it externally (shouldOverrideUrlLoading)
+      return;
+    }
     setBusy("Wallet");
     try {
       const { address, signature } = await connectAndroidWallet(SESSION_KEY_MESSAGE);
       send({ type: "connectWallet", address, signature });
-    } catch {
-      send({ type: "toast", text: "Wallet connection cancelled." });
+    } catch (e) {
+      // The native bridge tags a missing wallet app as reason "NoWalletFound" (see
+      // WalletBridge.kt). Guide the user to install one instead of mislabeling it a cancel.
+      const reason = (e as Error & { reason?: string })?.reason;
+      if (reason === "NoWalletFound") {
+        setHint(
+          "No Solana wallet app found. Install Phantom or Solflare from the Play Store, then tap Connect Wallet again.",
+        );
+      } else {
+        send({ type: "toast", text: (e as Error)?.message || "Wallet connection cancelled." });
+      }
       setBusy(null);
     }
   }
@@ -89,9 +121,14 @@ export function ConnectWallet() {
     >
       {android ? (
         // Android shell: one button drives the native wallet picker (Phantom/Solflare/…).
-        <OnboardingButton disabled={busy !== null} onClick={connectAndroid}>
-          {busy ? "Connecting…" : "Connect Wallet"}
-        </OnboardingButton>
+        <>
+          <OnboardingButton disabled={busy !== null} onClick={connectAndroid}>
+            {busy ? "Connecting…" : hint ? phantomStore().label : "Connect Wallet"}
+          </OnboardingButton>
+          {hint ? (
+            <p className="text-center text-sm text-zinc-500">{hint}</p>
+          ) : null}
+        </>
       ) : wallets.length === 0 ? (
         <p className="text-center text-sm text-zinc-500">
           No Solana wallet detected. Install Phantom, Solflare, or Backpack and reload.
