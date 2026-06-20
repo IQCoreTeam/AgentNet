@@ -15,6 +15,7 @@ import type { Wallet } from "../../runtime/contract.js";
 import { searchSkills } from "../../search/index.js";
 import { dasSource, indexerSource, ownedSkillMints } from "../../core/skillSource.js";
 import { buySkill, publishSkill as corePublishSkill } from "../../nft/skill.js";
+import { publishWorkflow as corePublishWorkflow } from "../../nft/workflow.js";
 import { getSolBalance } from "../../notes/index.js";
 import { readSkillText, readSkillMintMetadata } from "../../nft/token2022.js";
 import { heldSkillCreators } from "../../notes/holdings.js";
@@ -85,6 +86,33 @@ export function solToLamports(sol: string): bigint | null {
   const [whole, frac = ""] = s.split(".");
   if (frac.length > 9) return null; // more precision than a lamport can hold
   return BigInt(whole) * LAMPORTS_PER_SOL + BigInt(frac.padEnd(9, "0") || "0");
+}
+
+function publishFrontmatter(text: string): { type?: string; requiredSkills?: string[] } {
+  const lines = text.split("\n");
+  if (lines[0]?.trim() !== "---") return {};
+  let closeIdx = -1;
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i].trim() === "---") { closeIdx = i; break; }
+  }
+  if (closeIdx === -1) return {};
+
+  const out: { type?: string; requiredSkills?: string[] } = {};
+  for (const line of lines.slice(1, closeIdx)) {
+    const colon = line.indexOf(":");
+    if (colon === -1) continue;
+    const key = line.slice(0, colon).trim();
+    const raw = line.slice(colon + 1).trim();
+    if (key === "type") out.type = raw.replace(/^['"]|['"]$/g, "");
+    if (key === "requiredSkills" && raw.startsWith("[") && raw.endsWith("]")) {
+      out.requiredSkills = raw
+        .slice(1, -1)
+        .split(",")
+        .map((s) => s.trim().replace(/^['"]|['"]$/g, ""))
+        .filter(Boolean);
+    }
+  }
+  return out;
 }
 
 export async function marketplaceEnv(wallet: Wallet) {
@@ -222,6 +250,19 @@ export async function marketplaceEnv(wallet: Wallet) {
       try {
         const lamports = solToLamports(input.priceSol);
         if (lamports === null) return { ok: false, error: "Enter a valid price in SOL (e.g. 0.1)" };
+        const frontmatter = publishFrontmatter(input.text);
+        if (frontmatter.type === "workflow") {
+          const mint = await corePublishWorkflow(conn, wallet, {
+            name: input.name,
+            description: input.description,
+            text: input.text,
+            requiredSkills: frontmatter.requiredSkills ?? [],
+            category: input.category,
+            hashtags: input.hashtags,
+            price: lamports,
+          });
+          return { ok: true, mint };
+        }
         const mint = await corePublishSkill(conn, wallet, {
           name: input.name,
           description: input.description,
