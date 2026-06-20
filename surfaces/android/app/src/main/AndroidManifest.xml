@@ -23,6 +23,22 @@
         <!-- usesCleartextTraffic: the WebView loads http://127.0.0.1 (loopback only,
              never leaves the device), so plain HTTP to localhost is required. -->
 
+        <!-- arm64 pointer-tagging note (Solana Seeker = MediaTek MT6878, Android 16):
+             bionic tags heap pointers with an arm64 top-byte tag (TBI, e.g. 0xb4...).
+             A proot that reads guest memory via PTRACE_PEEKDATA hits EIO on a *tagged*
+             address ("ptrace(PEEKDATA): I/O error") — the kernel rejects tagged ptrace
+             addresses, so proot's first execve fails with EFAULT and node never starts.
+             Snapdragon/Android 9 never tagged, which is why they worked and Seeker did not.
+             (Proven on-device: identical address reads fine untagged, EIO with a 0xb4 top byte.)
+
+             FIX (shipped): we ship the Termux proot built with the process_vm accelerator
+             (process_vm_readv/writev), which strips the top-byte tag — so it never hits the
+             tagged-PEEKDATA path. See surfaces/android/scripts/build-assets.sh (fetches that
+             proot + libtalloc/libandroid-shmem) and ServerManager.kt (LD_LIBRARY_PATH).
+             NOTE: allowNativeHeapPointerTagging="false" does NOT work here — it only affects
+             this app's process, while proot is a separate fork+exec'd bionic process. -->
+
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

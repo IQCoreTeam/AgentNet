@@ -44,9 +44,10 @@ So:
 ## What you need
 
 - A computer (macOS or Windows).
-- An **Android phone with a Snapdragon chip** (e.g. Samsung Galaxy S/Z series). ⚠️ Some
-  MediaTek phones have a kernel defect that stops the sandbox from running — see
-  [Troubleshooting](#troubleshooting).
+- An **Android phone**, arm64 (virtually all are). Both older phones (Snapdragon / Android
+  9–13) and recent ones that enable **arm64 heap pointer tagging (TBI)** — including the
+  Solana Seeker (MediaTek MT6878 / Android 16) — are supported. (Tagging used to break the
+  sandbox; we now ship a proot build that handles it — see [Troubleshooting](#troubleshooting).)
 - A USB cable to connect the phone.
 - ~10 GB free disk space (Android Studio + SDK + the app's bundled Linux image).
 
@@ -266,8 +267,25 @@ gradlew.bat assembleDebug        # Windows
   ```bash
   ~/Library/Android/sdk/platform-tools/adb logcat -d | grep -E "AgentNet/|\[server\]"
   ```
-- **`proot error: ptrace(PEEKDATA): I/O error` / `Bad address`:** that phone's kernel
-  can't run the sandbox (seen on some MediaTek chips). **Use a Snapdragon phone.**
+- **`proot error: ptrace(PEEKDATA): I/O error` / `Bad address` (sandbox never starts):**
+  This is **arm64 pointer tagging (TBI)**, *not* a kernel/SoC defect. Root cause proven
+  on-device (Solana Seeker, MediaTek MT6878, Android 16):
+  - bionic tags heap pointers with a top-byte tag (e.g. `0xb4...`). proot reads/writes the
+    guest's memory with `PTRACE_PEEKDATA`/`POKEDATA`, and the kernel **rejects a tagged
+    address with `EIO`** (`process_vm_readv` strips the tag, ptrace does not). proot's
+    first `execve` then fails with `EFAULT` → server never comes up.
+  - Verified: the *identical* address reads fine untagged but returns `EIO` with a `0xb4`
+    top byte. Older phones (Snapdragon / Android 9) never tagged → they worked.
+  - **Not the fix:** `android:allowNativeHeapPointerTagging="false"` (tried — only affects
+    the app's own process; the fork+exec'd proot re-enables tagging, and targetSdk=28 may
+    ignore it anyway; targetSdk is pinned at 28 for the W^X execve exemption).
+  - **The fix (shipped):** we bundle the **Termux proot** built with the `process_vm`
+    accelerator (`process_vm_readv`/`writev`), which **strips the top-byte tag** and so never
+    hits the tagged-`PEEKDATA` path. `build-assets.sh` fetches it (plus `libtalloc.so.2` +
+    `libandroid-shmem.so`, which it dynamically links), and `ServerManager.kt` points
+    `LD_LIBRARY_PATH` at those libs. Verified on-device: Seeker reaches `server ready (HTTP 200)`.
+  - Full investigation notes live in the comment in
+    `surfaces/android/app/src/main/AndroidManifest.xml`.
 - **Phone not detected (`adb devices` empty):** different USB cable/port; re-accept the
   "Allow USB debugging" prompt; toggle USB debugging off/on.
 - **Gradle sync fails on Open:** make sure you opened **`surfaces/android`**, not the repo

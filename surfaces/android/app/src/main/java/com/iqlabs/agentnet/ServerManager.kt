@@ -54,10 +54,9 @@ class ServerManager(private val ctx: Context) {
             p.proot,
             "--kill-on-exit",
             "--link2symlink",           // app storage has no hardlinks; proot fakes them
-            // NOTE: kept to flags the green-green-avk proot build supports. --sysvipc is NOT
-            // one of them ("unknown option" → exit 1), and node doesn't need SysV IPC, so
-            // it's dropped. -L and --kernel-release are likewise omitted as non-essential
-            // (add back only if a specific build is confirmed to accept them).
+            // NOTE: kept to flags the Termux proot build supports. --sysvipc is dropped
+            // (node doesn't need SysV IPC). -L and --kernel-release are likewise omitted as
+            // non-essential (add back only if a specific build is confirmed to accept them).
             "-r", p.rootfs,
             "-0",                       // present as uid 0 inside the guest (fake root)
             "-b", "/dev",
@@ -114,6 +113,13 @@ class ServerManager(private val ctx: Context) {
         // Host-side env for the proot PROCESS (not the guest). These are load-bearing:
         val env = pb.environment()
         env["PROOT_LOADER"] = p.loader            // proot's own ELF loader helper
+        // proot is the Termux 5.1.0 build (process_vm=yes), dynamically linked against
+        // libtalloc.so.2 + libandroid-shmem.so under files/proot/lib. Point the linker at
+        // them. Why this proot: process_vm_readv strips arm64 top-byte pointer tags, so it
+        // avoids the PEEKDATA "I/O error" on tagged addresses that broke the sandbox on
+        // tag-enabled devices (Solana Seeker / Android 16). Full root cause: AndroidManifest.
+        env["LD_LIBRARY_PATH"] = listOfNotNull("${p.prootRoot}/lib", env["LD_LIBRARY_PATH"])
+            .joinToString(":")
         // PROOT_NO_SECCOMP: Android 12+/15 tighten the seccomp filter (e.g. set_robust_list
         // blocked), which makes glibc/node crash with SIGSYS under proot's seccomp fast
         // path. Turning seccomp off trades the speed win for "it runs at all" — necessary

@@ -97,6 +97,15 @@ class Installer(private val ctx: Context) {
         Os.chmod(p.proot, 0b111_101_101) // 0755
         Os.chmod(p.loader, 0b111_101_101)
         runCatching { Os.chmod("${p.loader}32", 0b111_101_101) } // loader32, if present
+        // proot 5.1.0 (Termux build, process_vm=yes) is dynamically linked against
+        // libtalloc.so.2 + libandroid-shmem.so, shipped under proot-<abi>/lib/. Make them
+        // readable/executable so the linker can map them (ServerManager points
+        // LD_LIBRARY_PATH here). process_vm_readv strips arm64 top-byte pointer tags,
+        // which is what lets the sandbox boot on tag-enabled devices (e.g. Solana Seeker)
+        // where the old PEEKDATA-only proot died with "ptrace(PEEKDATA): I/O error".
+        File("${p.prootRoot}/lib").listFiles()?.forEach {
+            runCatching { Os.chmod(it.absolutePath, 0b111_101_101) } // 0755
+        }
 
         onProgress("Setting up your environment\nFirst launch only — this takes a few minutes")
         // rootfs is large; stream it to disk, then let the guest's tar unpack it. We
