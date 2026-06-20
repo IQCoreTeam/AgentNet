@@ -53,6 +53,7 @@ import {
   saveGoogleCreds,
   hasGoogleCreds,
   isCloudConnected,
+  isInitialized,
   marketplaceEnv,
   saveHeliusKey,
   maskedHeliusKey,
@@ -227,7 +228,6 @@ async function connectWallet(address: string, signature: Uint8Array): Promise<vo
   // First-time users go through onboarding (storage picker) before runtime is needed;
   // building it here with no-cloud config and then rebuilding after Drive OAuth caused
   // the chat SSE to attach to a stale local runtime while the user was in Chrome.
-  const { isInitialized } = await import("@iqlabs-official/agent-sdk");
   if (await isInitialized()) {
     runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
   }
@@ -672,6 +672,16 @@ const http = createServer(async (req, res) => {
     res.write(`event: client\ndata: ${JSON.stringify({ client: id })}\n\n`);
     res.on("close", () => { clearInterval(ka); scheduleTeardown(id, c); });
     if (runtime) attachChat(id, c, runtime);
+    // Wallet is connected this session and storage is configured, but the runtime is null
+    // — e.g. a reconnect/reopen raced the deferred runtime build (connectWallet only builds
+    // it once storage exists). Rebuild it and bind CHAT, rather than falling back to the
+    // onboarding handler (which would re-send `init` and silently drop chat messages). Only
+    // when isInitialized() (storage set up): a mid-onboarding client with no storage yet
+    // must still finish the picker, and a true process restart (wallet lost) re-onboards.
+    else if (wallet && (await isInitialized())) {
+      runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
+      attachChat(id, c, runtime);
+    }
     else attachOnboarding(c);
     return;
   }
