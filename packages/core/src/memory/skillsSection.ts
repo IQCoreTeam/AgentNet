@@ -18,19 +18,20 @@
 
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { claudeSkillsDir, claudeMemoryDir, codexAgentsFile } from "../core/paths.js";
+import { claudeSkillsDir, claudeMemoryDir, codexSkillsDir, codexAgentsFile } from "../core/paths.js";
 import { spliceMarkedBlock } from "./convert/codex.js";
 
 const START = "<!-- agentnet:skills:start -->";
 const END = "<!-- agentnet:skills:end -->";
 
 /** Read installed skill titles from the local skills dir (one subdir per skill).
- *  Pure filesystem, no RPC. Both runtimes install the same SKILL.md, so claude's
- *  dir is the single read. Returns [] when nothing is installed (or the dir is
- *  missing) — the caller then writes an empty/cleared block. */
-async function installedSkillNames(): Promise<string[]> {
+ *  Pure filesystem, no RPC. Read the active runtime's skills dir so the memory
+ *  line points to the exact SKILL.md files that runtime can load. Returns []
+ *  when nothing is installed (or the dir is missing). */
+async function installedSkillNames(cli: "claude" | "codex"): Promise<string[]> {
   try {
-    const entries = await readdir(claudeSkillsDir(), { withFileTypes: true });
+    const dir = cli === "claude" ? claudeSkillsDir() : codexSkillsDir();
+    const entries = await readdir(dir, { withFileTypes: true });
     return entries.filter((e) => e.isDirectory()).map((e) => e.name).sort();
   } catch {
     return [];
@@ -41,9 +42,10 @@ async function installedSkillNames(): Promise<string[]> {
  *  the agent knows they exist and can reach for them. The full SKILL.md body stays
  *  in the skills dir (read on demand) — we only list titles here. Empty list →
  *  a block that says so (keeps the markers present and idempotent). */
-function renderBlock(names: string[]): string {
+function renderBlock(cli: "claude" | "codex", names: string[]): string {
+  const path = cli === "claude" ? "~/.claude/skills/" : "~/.codex/skills/";
   const line = names.length
-    ? `The following skills are installed and ready — use one when it fits the task: ${names.join(", ")}.`
+    ? `The following skills are installed and ready under ${path} — to use a skill, view its instructions in ${path}<skill-name>/SKILL.md: ${names.join(", ")}.`
     : "No skills are installed yet.";
   return `${START}\n${line}\n${END}`;
 }
@@ -73,7 +75,7 @@ async function spliceIntoFile(file: string, block: string): Promise<void> {
  */
 export async function updateSkillsSection(cli: "claude" | "codex", cwd: string): Promise<void> {
   try {
-    const block = renderBlock(await installedSkillNames());
+    const block = renderBlock(cli, await installedSkillNames(cli));
     const file = cli === "claude" ? join(claudeMemoryDir(cwd), "MEMORY.md") : codexAgentsFile(cwd);
     await spliceIntoFile(file, block);
   } catch {
