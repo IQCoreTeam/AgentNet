@@ -165,7 +165,7 @@ export type ServerMessage =
   | { type: "skillShopping"; on: boolean }
   | { type: "approval"; req: ApprovalRequest }
   // setup/auth:
-  | { type: "init"; defaultPath: string | null; cloudKind: string | null }
+  | { type: "init"; defaultPath: string | null; cloudKind: string | null; hasWallet?: boolean }
   | { type: "walletConnected"; address: string | null; storageOptions: unknown; storageConfigured?: boolean }
   // claude subscription login: server reports whether login is needed, streams the OAuth
   // URL to open, and the final result after the user pastes their code.

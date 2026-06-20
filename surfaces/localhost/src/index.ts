@@ -412,7 +412,7 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
       walletAddress = null;
       runtime = null;
       c.send({ type: "clear" });
-      c.send({ type: "init", defaultPath: null, cloudKind: null });
+      c.send({ type: "init", defaultPath: null, cloudKind: null, hasWallet: false });
     },
     openCloud: async (kind, location) => {
       if (kind === "gdrive" && walletAddress) {
@@ -602,7 +602,7 @@ function attachOnboarding(c: Client) {
 
   c.recvs.push(async (m: any) => {
     if (m?.type === "ready") {
-      c.send({ type: "init", defaultPath: null, cloudKind: null });
+      c.send({ type: "init", defaultPath: null, cloudKind: null, hasWallet: !!wallet });
       return;
     }
     if (m?.type === "connectWallet" && typeof m.address === "string" && Array.isArray(m.signature)) {
