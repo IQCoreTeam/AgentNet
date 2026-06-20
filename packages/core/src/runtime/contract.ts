@@ -90,6 +90,7 @@ export interface SessionHandle {
   readonly sessionId: string; // from the CLI's system/init
   readonly cli: "claude" | "codex";
   send(userText: string, images?: ImageInput[]): void; // user input (+ attached images) → CLI
+  runSlashCommand?(command: string, arg?: string): void; // native CLI slash command, not a chat turn
   onMessage(cb: (msg: ChatMessage) => void): void; // CLI output (UI renders)
   onTurnEnd(cb: () => void): void; // turn finished (runtime auto-saves here)
   onSkill(cb: (name: string) => void): void; // a skill fired → UI "Casting <skill>" cue

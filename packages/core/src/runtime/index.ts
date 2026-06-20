@@ -208,6 +208,9 @@ export function createRuntime(
           emit({ role: "user", text: userText, ts: Date.now(), imageCount: images?.length || undefined });
           cli.send(userText, images);
         },
+        runSlashCommand(command: string, arg?: string) {
+          cli.runSlashCommand?.(command, arg);
+        },
         onMessage(cb) {
           msgCbs.push(cb);
         },

@@ -1570,6 +1570,29 @@ export function chatHtml(): string {
   const loadingEl = document.getElementById('loading');
   // hide the IQ watermark once the chat has any content; show it on an empty log
   function syncWatermark() { mainEl.classList.toggle('hasMsgs', log.childElementCount > 0); }
+  function renderNotice(text) {
+    const notice = document.createElement('div');
+    notice.style.cssText = 'padding:4px 12px;font-size:0.82em;opacity:0.65;white-space:pre-wrap';
+    notice.textContent = text;
+    log.appendChild(notice); syncWatermark(); stickToBottom();
+  }
+  function renderStatus(status) {
+    const ctx = typeof status.contextTokens === 'number'
+      ? (status.contextTokens >= 1000 ? Math.round(status.contextTokens / 1000) + 'k' : String(status.contextTokens))
+      : 'unknown';
+    const text = [
+      'engine: ' + status.cli,
+      'session: ' + (status.sessionId || '(none)'),
+      'model: ' + (status.model || 'default'),
+      'mode: ' + (status.mode || 'default'),
+      'effort: ' + (status.effort || 'default'),
+      'context tokens: ' + ctx,
+    ].join('\\n');
+    const pre = document.createElement('pre');
+    pre.style.cssText = 'margin:8px 0;padding:8px 12px;background:var(--an-bg-1);border-radius:6px;font-size:0.82em;opacity:0.85;white-space:pre-wrap';
+    pre.textContent = text;
+    log.appendChild(pre); syncWatermark(); stickToBottom();
+  }
 
   // ---- stick-to-bottom + jump-to-latest (normal chat-app feel) ----
   // Follow the newest message ONLY while the user is already near the bottom (a generous
@@ -1647,7 +1670,17 @@ export function chatHtml(): string {
   // ---- slash command autocomplete ----
   const SLASH_CMDS = [
     { name: 'new', desc: 'start fresh session', insert: '/new' },
-    { name: 'clear', desc: 'clear on-screen log', insert: '/clear' },
+    { name: 'clear', desc: 'reset conversation context', insert: '/clear' },
+    { name: 'compact', desc: 'compact context, optionally with focus', insert: '/compact ' },
+    { name: 'status', desc: 'show model, mode, tokens, session', insert: '/status' },
+    { name: 'resume', desc: 'refresh resumable sessions', insert: '/resume' },
+    { name: 'diff', desc: 'show working-tree changes', insert: '/diff' },
+    { name: 'permissions', desc: 'show or change permission mode', insert: '/permissions ' },
+    { name: 'init', desc: 'create engine instructions file', insert: '/init' },
+    { name: 'review', desc: 'review changes', insert: '/review' },
+    { name: 'mcp', desc: 'show MCP server status', insert: '/mcp' },
+    { name: 'skills', desc: 'refresh equipped skills', insert: '/skills' },
+    { name: 'cost', desc: 'show usage/status', insert: '/cost' },
     { name: 'copy', desc: 'copy last reply', insert: '/copy' },
     { name: 'engine', desc: 'switch engine (claude|codex)', insert: '/engine ' },
     { name: 'model', desc: 'change model', insert: '/model ' },
@@ -2815,8 +2848,35 @@ export function chatHtml(): string {
           vscode.postMessage({ type: 'new' });
           input.value = ''; return;
         case 'clear':
-          while (log.firstChild) log.removeChild(log.firstChild);
-          syncWatermark();
+          vscode.postMessage({ type: 'clear' });
+          input.value = ''; return;
+        case 'compact':
+          vscode.postMessage({ type: 'slashCommand', command: 'compact', arg });
+          showTyping();
+          input.value = ''; return;
+        case 'status':
+          vscode.postMessage({ type: 'slashCommand', command: 'status' });
+          input.value = ''; return;
+        case 'resume':
+          vscode.postMessage({ type: 'slashCommand', command: 'resume' });
+          input.value = ''; return;
+        case 'diff':
+          vscode.postMessage({ type: 'slashCommand', command: 'diff' });
+          showTyping();
+          input.value = ''; return;
+        case 'permissions':
+          if (arg) { modeByCli[cli] = arg; fillModes(); vscode.postMessage({ type: 'mode', mode: arg }); }
+          else vscode.postMessage({ type: 'slashCommand', command: 'permissions' });
+          input.value = ''; return;
+        case 'init':
+        case 'skills':
+        case 'cost':
+          vscode.postMessage({ type: 'slashCommand', command: cmd });
+          input.value = ''; return;
+        case 'review':
+        case 'mcp':
+          vscode.postMessage({ type: 'slashCommand', command: cmd, arg });
+          showTyping();
           input.value = ''; return;
         case 'copy': {
           const last = Array.from(log.querySelectorAll('.bubble.assistant')).pop();
@@ -2837,7 +2897,17 @@ export function chatHtml(): string {
           input.value = ''; return;
         case 'help': {
           const helpText = [
-            '/new — start fresh session', '/clear — clear on-screen log',
+            '/new — start fresh session', '/clear — reset conversation context',
+            '/compact [focus] — compact conversation context',
+            '/status — show model, mode, tokens, and session',
+            '/resume — refresh resumable sessions',
+            '/diff — show working-tree changes',
+            '/permissions [mode] — show or change permission mode',
+            '/init — create AGENTS.md for Codex or CLAUDE.md for Claude',
+            '/review [focus] — review changes',
+            '/mcp — show MCP server status',
+            '/skills — refresh equipped skills',
+            '/cost — show usage/status',
             '/copy — copy last reply', '/engine claude|codex — switch engine',
             '/model <model> — change model', '/mode <mode> — change permission mode',
             '/effort low|medium|high|xhigh|max — set reasoning effort',
@@ -4237,6 +4307,8 @@ export function chatHtml(): string {
     const m = event.data;
     if (m.type === 'message') onMessage(m.msg);
     else if (m.type === 'sessions') { allSessions = m.list || []; activeId = m.activeId; renderSessions(); }
+    else if (m.type === 'notice') renderNotice(m.text || '');
+    else if (m.type === 'status') renderStatus(m.status || {});
     else if (m.type === 'loading') showLoading();
     else if (m.type === 'clear') { log.innerHTML = ''; approvalDock.innerHTML = ''; ctxMeter.style.display = 'none'; syncComposerLock(); streaming = null; openBash = null; tailTurn = null; headTurn = null; hideTyping(); hideActivity(); resetPaging(); syncWatermark(); hideLoading(); }
     else if (m.type === 'turnEnd') { hideTyping(); hideActivity(); }

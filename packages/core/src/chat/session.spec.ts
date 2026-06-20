@@ -5,16 +5,23 @@
 // send carrying the live sessionId so the turn finishes and the new mode applies next.
 import { describe, it, expect, vi } from "vitest";
 import { createChatSession } from "./session.js";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 function fakeHandle(id: string, cli: "claude" | "codex") {
+  const usageCbs: Array<(n: number) => void> = [];
   return {
     sessionId: id,
     cli,
     send: vi.fn(),
+    runSlashCommand: vi.fn(),
     onMessage: vi.fn(),
     onTurnEnd: vi.fn(),
     onSkill: vi.fn(),
-    onUsage: vi.fn(),
+    onUsage: vi.fn((cb: (n: number) => void) => usageCbs.push(cb)),
+    emitUsage: (n: number) => usageCbs.forEach((cb) => cb(n)),
+    interrupt: vi.fn(),
     stop: vi.fn(),
   };
 }
@@ -25,7 +32,7 @@ const flush = async () => {
   await new Promise((r) => setTimeout(r, 0));
 };
 
-function harness() {
+function harness(opts: { cwd?: string; ownedSkills?: string[] } = {}) {
   const handles: ReturnType<typeof fakeHandle>[] = [];
   const startSession = vi.fn(async (opts: any) => {
     const h = fakeHandle("sess-" + handles.length, opts.cli);
@@ -37,10 +44,11 @@ function harness() {
   const transport = { send: vi.fn(), onRecv: (cb: (m: any) => void) => recv.push(cb) };
   const fromUI = (m: any) => recv.forEach((cb) => cb(m));
   const env: any = {
-    cwd: () => "/tmp",
+    cwd: () => opts.cwd ?? "/tmp",
     approval: { onDecision: () => {}, request: async () => "deny" },
     walletAddress: () => null,
     storageInfo: async () => ({ info: {}, options: [] }),
+    ownedSkills: opts.ownedSkills ? async () => opts.ownedSkills : undefined,
   };
   const chat = createChatSession(startSessionRuntime(startSession), transport as any, env);
   return { handles, startSession, fromUI, chat, transport };
@@ -126,5 +134,136 @@ describe("chat/session — image attachments pass through to the engine", () => 
     fromUI({ type: "send", text: "", images: [] });
     await flush();
     expect(startSession).not.toHaveBeenCalled();
+  });
+});
+
+describe("chat/session — slash commands", () => {
+  it("routes /compact and /diff to the active engine handle", async () => {
+    const { handles, fromUI } = harness();
+
+    fromUI({ type: "slashCommand", command: "compact", arg: "repo state" });
+    await flush();
+    expect(handles[0].runSlashCommand).toHaveBeenCalledWith("compact", "repo state");
+
+    fromUI({ type: "slashCommand", command: "diff" });
+    await flush();
+    expect(handles[0].runSlashCommand).toHaveBeenCalledWith("diff");
+  });
+
+  it("/clear resets the active context without spawning an engine turn", async () => {
+    const { handles, startSession, fromUI, transport } = harness();
+
+    fromUI({ type: "send", text: "hi" });
+    await flush();
+    expect(startSession).toHaveBeenCalledTimes(1);
+
+    fromUI({ type: "clear" });
+    await flush();
+    expect(handles[0].stop).toHaveBeenCalledTimes(1);
+    expect(startSession).toHaveBeenCalledTimes(1);
+    expect(transport.send).toHaveBeenCalledWith({ type: "clear" });
+  });
+
+  it("/status surfaces active engine, session, config, and last usage", async () => {
+    const { handles, fromUI, transport } = harness();
+
+    fromUI({ type: "send", text: "hi" });
+    await flush();
+    handles[0].emitUsage(1234);
+
+    fromUI({ type: "slashCommand", command: "status" });
+    await flush();
+    expect(transport.send).toHaveBeenCalledWith({
+      type: "status",
+      status: {
+        cli: "claude",
+        sessionId: "sess-0",
+        model: "default",
+        mode: "acceptEdits",
+        effort: "default",
+        contextTokens: 1234,
+      },
+    });
+  });
+
+  it("/resume refreshes sessions and gives a visible instruction", async () => {
+    const { fromUI, transport } = harness();
+
+    fromUI({ type: "slashCommand", command: "resume" });
+    await flush();
+    expect(transport.send).toHaveBeenCalledWith({ type: "sessions", list: [], activeId: undefined });
+    expect(transport.send).toHaveBeenCalledWith({ type: "notice", text: "Resume: open a session from History." });
+  });
+
+  it("aliases /cost to the same status payload", async () => {
+    const { handles, fromUI, transport } = harness();
+
+    fromUI({ type: "send", text: "hi" });
+    await flush();
+    handles[0].emitUsage(77);
+
+    fromUI({ type: "slashCommand", command: "cost" });
+    await flush();
+    expect(transport.send).toHaveBeenCalledWith(expect.objectContaining({
+      type: "status",
+      status: expect.objectContaining({ contextTokens: 77 }),
+    }));
+  });
+
+  it("/permissions reports current mode and available modes", async () => {
+    const { fromUI, transport } = harness();
+
+    fromUI({ type: "slashCommand", command: "permissions" });
+    await flush();
+    expect(transport.send).toHaveBeenCalledWith({
+      type: "notice",
+      text: expect.stringContaining("Current permission mode: acceptEdits"),
+    });
+  });
+
+  it("/skills refreshes owned skills", async () => {
+    const { fromUI, transport } = harness({ ownedSkills: ["clean-code"] });
+
+    fromUI({ type: "slashCommand", command: "skills" });
+    await flush();
+    expect(transport.send).toHaveBeenCalledWith({
+      type: "ownedSkills",
+      names: ["clean-code"],
+      mints: {},
+      disposedMints: {},
+    });
+  });
+
+  it("/review and /mcp route to the active engine handle", async () => {
+    const { handles, fromUI } = harness();
+
+    fromUI({ type: "slashCommand", command: "review", arg: "security" });
+    await flush();
+    expect(handles[0].runSlashCommand).toHaveBeenCalledWith("review", "security");
+
+    fromUI({ type: "slashCommand", command: "mcp" });
+    await flush();
+    expect(handles[0].runSlashCommand).toHaveBeenCalledWith("mcp", undefined);
+  });
+
+  it("/init creates CLAUDE.md for Claude and AGENTS.md for Codex", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "agentnet-init-"));
+    try {
+      const { fromUI, transport } = harness({ cwd });
+
+      fromUI({ type: "slashCommand", command: "init" });
+      await flush();
+      await expect(readFile(join(cwd, "CLAUDE.md"), "utf8")).resolves.toContain("Project instructions for Claude Code.");
+      expect(transport.send).toHaveBeenCalledWith({ type: "notice", text: "Created CLAUDE.md." });
+
+      fromUI({ type: "platform", cli: "codex" });
+      await flush();
+      fromUI({ type: "slashCommand", command: "init" });
+      await flush();
+      await expect(readFile(join(cwd, "AGENTS.md"), "utf8")).resolves.toContain("Project instructions for Codex.");
+      expect(transport.send).toHaveBeenCalledWith({ type: "notice", text: "Created AGENTS.md." });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
   });
 });
