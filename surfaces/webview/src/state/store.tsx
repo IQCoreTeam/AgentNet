@@ -150,16 +150,21 @@ const initialState: State = {
 // replace the pending one instead of appending — avoids duplicate user bubbles on queue flush.
 function appendMessage(log: ChatMessage[], msg: ChatMessage): ChatMessage[] {
   const tail = log[log.length - 1];
-  const streamingInto =
-    msg.partial &&
+  // Streaming assistant/thinking bubbles: the engines emit cumulative snapshots — each
+  // event carries the FULL text so far (replace-semantics), NOT just the new delta. While
+  // the tail bubble is the in-progress partial of the same role/cli, REPLACE it with the
+  // latest snapshot. This also covers the final non-partial block that finalizes the bubble
+  // (clears `partial`), so it replaces the streamed bubble instead of appending a duplicate.
+  // (Concatenating tail.text + msg.text double-counts the cumulative text — that produced
+  // garbled output like "YepYep,Yep, alive…" for codex.)
+  const continuesStream =
     tail &&
     tail.partial &&
     tail.role === msg.role &&
     tail.cli === msg.cli &&
     (msg.role === "assistant" || msg.role === "thinking");
-  if (streamingInto) {
-    const merged: ChatMessage = { ...tail, ...msg, text: tail.text + msg.text };
-    return [...log.slice(0, -1), merged];
+  if (continuesStream) {
+    return [...log.slice(0, -1), { ...tail, ...msg }];
   }
   // Server echoes user message → find and replace the matching pending bubble.
   if (msg.role === "user" && !msg.partial) {

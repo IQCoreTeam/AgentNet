@@ -429,7 +429,12 @@ function codexEngine(opts: SpawnOpts): Engine {
   child.stderr.on("data", (d) => {
     const text = d.toString().trim();
     if (text) {
-      cb.emitErr(`[codex app-server stderr] ${text}`);
+      // codex app-server writes its tracing logs (INFO/WARN/ERROR) to stderr — e.g. the
+      // benign "could not find bubblewrap on PATH" notice when sandboxing is disabled
+      // (expected: we run danger-full-access inside proot). These are diagnostics, not turn
+      // failures (real failures arrive over JSON-RPC as turn/failed), so route them to the
+      // host log (logcat `[server]`) instead of rendering them as chat bubbles.
+      console.error(`[codex app-server stderr] ${text}`);
     }
   });
 
