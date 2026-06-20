@@ -5,6 +5,7 @@
 
 import * as vscode from "vscode";
 import * as path from "node:path";
+import { homedir } from "node:os";
 import type { AgentRuntime, Wallet } from "@iqlabs-official/agent-sdk/runtime/contract";
 import {
   connect,
@@ -27,6 +28,7 @@ import {
   TransportApprovalChannel,
   chatHtml,
   onboardingHtml,
+  listCodexModelOptions,
   type StorageConfig,
 } from "@iqlabs-official/agent-sdk";
 import { localWallet, solanaDefaultKeypairPath } from "@iqlabs-official/agent-sdk/account/localWallet";
@@ -202,10 +204,12 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
   // marketplace search/buy/install — needs the wallet + a chain connection. The RPC is
   // resolved inside (registered Helius key wins; else env; else public-devnet default).
   const marketPromise = marketplaceEnv(wallet!);
+  const codexModelOptionsPromise = listCodexModelOptions().catch(() => null);
   const chat = createChatSession(runtime!, transport, {
     cwd: getCwd,
     approval,
     claimSession,
+    modelOptions: async (cli) => (cli === "codex" ? await codexModelOptionsPromise : null),
     searchSkills: async (query, kind) => (await marketPromise).searchSkills(query, kind),
     getSkillDetail: async (mint) => (await marketPromise).getSkillDetail(mint),
     // local SKILL.md body for the equipped-skill popup (mint-less skills); without this
@@ -346,7 +350,14 @@ async function pickCloud(): Promise<StorageConfig | undefined> {
 }
 
 function getCwd(): string {
-  return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+  const workspace = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (workspace) return workspace;
+
+  const activeFile = vscode.window.activeTextEditor?.document.uri;
+  if (activeFile?.scheme === "file") return path.dirname(activeFile.fsPath);
+
+  const cwd = process.cwd();
+  return cwd && cwd !== path.parse(cwd).root ? cwd : homedir();
 }
 
 export function deactivate() {}

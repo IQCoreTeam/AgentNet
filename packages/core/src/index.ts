@@ -86,6 +86,7 @@ export type { SkillOrigin, ClassifiedSkill, SkillManifest, NftSkillRecord } from
 export { createRuntime } from "./runtime/index.js";
 export { detectCli } from "./runtime/detect.js";
 export type { CliStatus, CliReport } from "./runtime/detect.js";
+export { listCodexModelOptions } from "./runtime/codexModels.js";
 export {
   solanaDefaultKeypairPath,
   inspectKeypair,
@@ -158,6 +159,8 @@ export { autoApprove } from "./runtime/approval/channel.js";
 export { createChatSession } from "./chat/session.js";
 export type { ChatTransport, ChatEnv } from "./chat/session.js";
 export { TransportApprovalChannel } from "./chat/approvalChannel.js";
+export { CHAT_MODEL_OPTIONS, findChatModelOption } from "./chat/modelOptions.js";
+export type { ChatModelOption, EngineKey } from "./chat/modelOptions.js";
 
 // the chat + onboarding HTML (one webview, transport-shimmed: vscode acquireVsCodeApi
 // or a WebSocket in the browser/Android). Surfaces serve these strings as-is.

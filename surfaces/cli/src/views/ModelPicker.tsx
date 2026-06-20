@@ -33,14 +33,15 @@ export function ModelPicker({
       </Text>
       {opts.map((o, i) => {
         const on = i === idx;
+        const value = o.value;
         return (
-          <Box key={o.label}>
+          <Box key={o.value ?? "default"}>
             <Text color={on ? colors.iqCyan : undefined}>{on ? "› " : "  "}</Text>
             <Text color={on ? colors.iqCyan : undefined} bold={on}>
               {o.label.padEnd(16)}
             </Text>
-            <Text dimColor>{o.hint}</Text>
-            {o.value === current ? <Text color={colors.ok}> ●</Text> : null}
+            <Text dimColor>{o.description}</Text>
+            {value === current || (!value && !current) ? <Text color={colors.ok}> ●</Text> : null}
           </Box>
         );
       })}

@@ -16,6 +16,7 @@ import type { ApprovalChannel } from "../runtime/approval/channel.js";
 import type { SkillCard, MarketRequest } from "./marketMessages.js";
 import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { ChatModelOption } from "./modelOptions.js";
 
 // The two-way pipe to ONE chat UI (one panel / one socket). Messages both ways are
 // flat {type, ...} JSON — the same shape the webview already speaks.
@@ -96,6 +97,9 @@ export interface ChatEnv {
   setHeliusKey?(): Promise<void>;
   useDefaultRpc?(): Promise<void>;
   rpcStatus?(): Promise<import("./marketMessages.js").RpcStatus>;
+  // Optional model catalog override from the host. VSCode uses this for Codex so the
+  // picker can show the actual models exposed by the logged-in app-server account.
+  modelOptions?(cli: "claude" | "codex"): Promise<ChatModelOption[] | null>;
   // OPTIONAL multi-tab guard: vscode can open the same session in two panels (two
   // tabs writing one log races), so it claims a session before opening and yields
   // false to abort if another panel already holds it. One-socket surfaces (server,
@@ -260,6 +264,12 @@ export function createChatSession(
     transport.send({ type: "skillShopping", on });
   }
 
+  async function pushModelOptions(forCli: "claude" | "codex") {
+    if (!env.modelOptions) return;
+    const options = await env.modelOptions(forCli).catch(() => null);
+    if (options?.length) transport.send({ type: "modelOptions", cli: forCli, options });
+  }
+
   // Process messages STRICTLY in order — each handler runs to completion before the
   // next starts. Without this, two async handlers race: e.g. "ready" (which awaits
   // open()) and a fast "send" overlap, and ready's open() stops the handle send just
@@ -282,6 +292,7 @@ export function createChatSession(
     switch (m?.type) {
       case "ready":
         await pushSessions(); await pushStorage(); await pushSkillShopping(); await open();
+        void pushModelOptions("codex");
         // install the wallet's owned skills so they're present + discoverable this
         // session (issue #17). Fire-and-forget: a chain hiccup must not delay the chat;
         // refresh the panel once it lands.
@@ -311,6 +322,7 @@ export function createChatSession(
         if ((m.cli === "claude" || m.cli === "codex") && m.cli !== cli) {
           const carry = slot().pendingId; // the session the OLD engine was showing
           cli = m.cli;
+          void pushModelOptions(cli);
           if (carry && slot().pendingId !== carry) {
             transport.send({ type: "loading" });
             await open(carry); // resume the same canonical session in the new cli

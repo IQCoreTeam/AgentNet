@@ -14,6 +14,7 @@
 import { AVATAR_SVG, AVATAR_SCRIPT } from "./avatar.js";
 import { IQ_LOGO_SVG } from "./iqlogo.js";
 import { MD_LIBS } from "./mdLibs.generated.js";
+import { CHAT_MODEL_OPTIONS } from "../modelOptions.js";
 
 // marked (md → html) + dompurify (XSS sanitize) inlined into the webview <script>.
 // The webview is an isolated browser context, so we ship the libraries' browser
@@ -33,6 +34,7 @@ function markdownLibs(): string {
 // as SVG instead of an emoji so it matches the UI weight and themes cleanly.
 const WAND_SVG = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l7-7"/><path d="M9.5 4.5l2 2"/><path d="M12.5 2v2M14.5 3.5h-2M13 6.2l1 .4M12.6 1.2l.4 1"/></svg>';
 const PAPERCLIP_SVG = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 6.5l-5.6 5.6a2.5 2.5 0 0 1-3.5-3.5L9 3a1.7 1.7 0 0 1 2.4 2.4l-5.4 5.4a0.85 0.85 0 0 1-1.2-1.2l5-5"/></svg>';
+const MODEL_OPTIONS_JSON = JSON.stringify(CHAT_MODEL_OPTIONS);
 
 export function chatHtml(): string {
   return /* html */ `<!DOCTYPE html>
@@ -830,7 +832,7 @@ export function chatHtml(): string {
   #modelBtn:hover { border-color: var(--eng); }
   #modelBtn .mglyph { opacity: 0.5; font-size: 0.82em; font-weight: 700; letter-spacing: 0.02em; }
   #modelBtn .mcaret { opacity: 0.5; font-size: 0.8em; }
-  #modelMenu { position: fixed; z-index: 60; min-width: 176px; padding: 5px;
+  #modelMenu { position: fixed; z-index: 60; min-width: 260px; max-width: min(360px, calc(100vw - 24px)); padding: 5px;
                background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
                border: 1px solid var(--an-line); border-radius: var(--an-radius);
                box-shadow: 0 8px 28px rgba(0,0,0,0.4); }
@@ -1824,24 +1826,11 @@ export function chatHtml(): string {
     }
   });
 
-  // Platform = which CLI. Model = the actual model inside it.
-  // value 'default' = pass no --model (CLI's own default); label shows WHICH model
-  // that currently is, so the user knows what 'default' resolves to. We're just a
-  // wrapper — when a CLI ships a new default, only this label needs updating.
-  const MODELS = {
-    claude: [
-      { value: 'default', label: 'default (Opus 4.8)' },
-      { value: 'opus',    label: 'opus' },
-      { value: 'sonnet',  label: 'sonnet' },
-      { value: 'haiku',   label: 'haiku' },
-    ],
-    codex: [
-      { value: 'default',      label: 'default (gpt-5-codex)' },
-      { value: 'gpt-5',        label: 'gpt-5' },
-      { value: 'gpt-5-codex',  label: 'gpt-5-codex' },
-      { value: 'o3',           label: 'o3' },
-    ],
-  };
+  // Platform = which CLI. Model = the actual model inside it. This shared catalog is
+  // also used by the CLI picker so surfaces don't drift (the old webview list had stale
+  // Codex entries that no longer matched the CLI).
+  const MODELS = ${MODEL_OPTIONS_JSON};
+  const modelValue = (opt) => (opt && opt.value) ? opt.value : 'default';
   // Permission/approval mode per engine. claude → SDK permissionMode; codex → a
   // sandbox+approval preset (mapped host-side in spawn). Like MODELS this is just a
   // wrapper label table — when a CLI changes its modes, only this list needs editing.
@@ -1876,32 +1865,46 @@ export function chatHtml(): string {
   // ---- platform tabs + model picker (chip + popover, mirroring the mode picker) ----
   function currentModel() {
     const opts = MODELS[cli] || [];
-    return modelByCli[cli] || (opts[0] && opts[0].value);
+    return modelByCli[cli] || modelValue(opts[0]);
   }
   // Build the model picker for the active engine: set the chip label to the current
-  // model and render one popover row per model (label + a check on the selected one).
+  // model and render one popover row per model (label + actual value + a check on the
+  // selected one). Keep the chip concise; put the extra detail in the picker rows.
   function fillModels() {
-    const opts = MODELS[cli] || [{ value: 'default', label: 'default' }];
+    const opts = MODELS[cli] || [{ chipLabel: 'default', label: 'Default', description: 'No model override' }];
     const cur = currentModel();
-    const curOpt = opts.find(o => o.value === cur) || opts[0];
-    modelLabel.textContent = curOpt ? curOpt.label : 'model';
+    const curOpt = opts.find(o => modelValue(o) === cur) || opts[0];
+    modelLabel.textContent = curOpt ? (curOpt.chipLabel || curOpt.label) : (cur === 'default' ? 'default' : cur);
     modelMenu.innerHTML = '';
     for (const m of opts) {
       const row = document.createElement('div');
-      row.className = 'modeOpt' + (m.value === cur ? ' sel' : '');
+      const value = modelValue(m);
+      row.className = 'modeOpt' + (value === cur ? ' sel' : '');
       const txt = document.createElement('div'); txt.className = 'mtext';
       const lab = document.createElement('div'); lab.className = 'mlabel'; lab.textContent = m.label;
       txt.appendChild(lab);
+      if (m.description) { const d = document.createElement('div'); d.className = 'mdesc'; d.textContent = m.description; txt.appendChild(d); }
       const chk = document.createElement('span'); chk.className = 'mcheck'; chk.textContent = '✓';
       row.appendChild(txt); row.appendChild(chk);
       row.addEventListener('click', (e) => {
         e.stopPropagation();
-        modelByCli[cli] = m.value;
+        modelByCli[cli] = value;
         modelMenu.style.display = 'none';
         fillModels();
-        vscode.postMessage({ type: 'model', model: m.value });
+        vscode.postMessage({ type: 'model', model: value });
       });
       modelMenu.appendChild(row);
+    }
+  }
+  function applyModelOptions(engine, options) {
+    if (!engine || !Array.isArray(options) || !options.length) return;
+    MODELS[engine] = options;
+    const cur = modelByCli[engine] || 'default';
+    const changed = !options.some((o) => modelValue(o) === cur);
+    if (changed) modelByCli[engine] = modelValue(options[0]);
+    if (engine === cli) {
+      fillModels();
+      if (changed) vscode.postMessage({ type: 'model', model: currentModel() });
     }
   }
   // open the model popover anchored above its chip (composer is at the bottom, so it
@@ -4312,6 +4315,7 @@ export function chatHtml(): string {
     else if (m.type === 'loading') showLoading();
     else if (m.type === 'clear') { log.innerHTML = ''; approvalDock.innerHTML = ''; ctxMeter.style.display = 'none'; syncComposerLock(); streaming = null; openBash = null; tailTurn = null; headTurn = null; hideTyping(); hideActivity(); resetPaging(); syncWatermark(); hideLoading(); }
     else if (m.type === 'turnEnd') { hideTyping(); hideActivity(); }
+    else if (m.type === 'modelOptions') { applyModelOptions(m.cli, m.options); }
     else if (m.type === 'usage') {
       // update the context token meter near the composer chips
       const n = m.contextTokens;
