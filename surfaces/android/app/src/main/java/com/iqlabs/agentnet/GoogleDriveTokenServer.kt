@@ -3,8 +3,10 @@ package com.iqlabs.agentnet
 import android.util.Log
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.IOException
 import java.io.InputStreamReader
 import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
@@ -24,7 +26,20 @@ class GoogleDriveTokenServer(private val auth: GoogleDriveAuth) {
 
     fun start() {
         if (server != null) return
-        val socket = ServerSocket(Paths.GOOGLE_AUTH_PORT, 16, InetAddress.getByName("127.0.0.1"))
+        // Bind with SO_REUSEADDR so a fast restart (the previous process's socket still in
+        // TIME_WAIT) can rebind 127.0.0.1:GOOGLE_AUTH_PORT instead of throwing EADDRINUSE.
+        // If it still fails (e.g. a lingering instance is actively holding the port), don't
+        // crash the whole Activity over this optional Drive auth bridge — log and skip; a
+        // later clean launch rebinds.
+        val socket = try {
+            ServerSocket().apply {
+                reuseAddress = true
+                bind(InetSocketAddress(InetAddress.getByName("127.0.0.1"), Paths.GOOGLE_AUTH_PORT), 16)
+            }
+        } catch (e: IOException) {
+            Log.w(TAG, "could not bind 127.0.0.1:${Paths.GOOGLE_AUTH_PORT}; Drive bridge disabled this launch", e)
+            return
+        }
         server = socket
         thread(name = "agentnet-google-token") {
             Log.i(TAG, "listening on 127.0.0.1:${Paths.GOOGLE_AUTH_PORT}")
