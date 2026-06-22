@@ -32,6 +32,17 @@ const flush = async () => {
   await new Promise((r) => setTimeout(r, 0));
 };
 
+// Wait for a specific notice to be sent. `/init` does real fs writes before sending the
+// notice, so the notice is the completion signal — polling for it is deterministic where a
+// fixed microtask flush races the fs IO under full-suite load. Throws if it never arrives.
+const waitForNotice = async (transport: any, text: string) => {
+  for (let i = 0; i < 200; i++) {
+    if (transport.send.mock.calls.some((c: any[]) => c[0]?.type === "notice" && c[0]?.text === text)) return;
+    await new Promise((r) => setTimeout(r, 0));
+  }
+  throw new Error(`notice "${text}" was never sent`);
+};
+
 function harness(opts: { cwd?: string; ownedSkills?: string[] } = {}) {
   const handles: ReturnType<typeof fakeHandle>[] = [];
   const startSession = vi.fn(async (opts: any) => {
@@ -261,16 +272,14 @@ describe("chat/session — slash commands", () => {
       const { fromUI, transport } = harness({ cwd });
 
       fromUI({ type: "slashCommand", command: "init" });
-      await flush();
+      await waitForNotice(transport, "Created CLAUDE.md.");
       await expect(readFile(join(cwd, "CLAUDE.md"), "utf8")).resolves.toContain("Project instructions for Claude Code.");
-      expect(transport.send).toHaveBeenCalledWith({ type: "notice", text: "Created CLAUDE.md." });
 
       fromUI({ type: "platform", cli: "codex" });
       await flush();
       fromUI({ type: "slashCommand", command: "init" });
-      await flush();
+      await waitForNotice(transport, "Created AGENTS.md.");
       await expect(readFile(join(cwd, "AGENTS.md"), "utf8")).resolves.toContain("Project instructions for Codex.");
-      expect(transport.send).toHaveBeenCalledWith({ type: "notice", text: "Created AGENTS.md." });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
