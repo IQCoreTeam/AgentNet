@@ -34,7 +34,7 @@ function MenuRow({ icon, label, subtitle, onClick, accent = false }: {
   );
 }
 
-export function Sessions({ onClose }: { onClose: () => void }) {
+export function Sessions({ onClose, embedded = false }: { onClose: () => void; embedded?: boolean }) {
   const { state, send, openMarket, openMarketAgents } = useStore();
   const { storage, cloudSync, googleLoginUrl, googleLoginError } = state;
 
@@ -78,11 +78,9 @@ export function Sessions({ onClose }: { onClose: () => void }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [settingsMode, onClose]);
 
-  return (
-    <div className="fixed inset-0 z-50 flex" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/60" />
+  const panel = (
       <div
-        className="relative flex w-[82vw] max-w-xs flex-col p-3"
+        className={embedded ? "flex h-full w-full flex-col p-3" : "relative flex w-[82vw] max-w-xs flex-col p-3"}
         style={{ background: "var(--an-bg-1)", borderRight: "1px solid var(--an-line)", paddingTop: "max(0.75rem, env(safe-area-inset-top))", paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -485,6 +483,14 @@ export function Sessions({ onClose }: { onClose: () => void }) {
           </div>
         )}
       </div>
+  );
+
+  if (embedded) return panel;
+
+  return (
+    <div className="fixed inset-0 z-50 flex" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60" />
+      {panel}
     </div>
   );
 }

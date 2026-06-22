@@ -46,7 +46,7 @@ export interface State {
     | "chat";
   // market overlay (accessible from chat phase via "Markets" button)
   marketOpen: boolean;
-  marketInitialView: "browse" | "agents";
+  marketInitialView: "browse" | "agents" | "owned";
   marketTab: "skill" | "workflow";
   marketQuery: string;
   marketResults: SkillCard[] | null;
@@ -54,6 +54,7 @@ export interface State {
   marketSearchError: string | null;
   marketDetail: SkillDetail | null;
   marketOwned: string[];
+  marketOwnedMints: Record<string, string>;
   marketDisposed: Record<string, string>;
   marketBalance: number | null;
   rpcStatus: RpcStatus | null;
@@ -130,6 +131,7 @@ const initialState: State = {
   marketSearchError: null,
   marketDetail: null,
   marketOwned: [],
+  marketOwnedMints: {},
   marketDisposed: {},
   marketBalance: null,
   rpcStatus: null,
@@ -199,7 +201,7 @@ type LocalAction =
   | { type: "__selectEngine"; cli: Cli }
   | { type: "__finishStorage" }
   | { type: "__savePlan"; text: string }
-  | { type: "__openMarket"; initialView?: "browse" | "agents" }
+  | { type: "__openMarket"; initialView?: "browse" | "agents" | "owned" }
   | { type: "__closeMarket" }
   | { type: "__setMarketTab"; tab: "skill" | "workflow" }
   | { type: "__setMarketQuery"; query: string }
@@ -386,7 +388,12 @@ function reducer(state: State, ev: Action): State {
           : state.marketDisposed,
       };
     case "ownedSkills":
-      return { ...state, marketOwned: Array.isArray(ev.names) ? ev.names : [], marketDisposed: ev.disposedMints ?? {} };
+      return {
+        ...state,
+        marketOwned: Array.isArray(ev.names) ? ev.names : [],
+        marketOwnedMints: ev.mints ?? {},
+        marketDisposed: ev.disposedMints ?? {},
+      };
     case "balance":
       return { ...state, marketBalance: ev.lamports };
     case "rpcStatus":
@@ -442,6 +449,7 @@ interface Store {
   savePlan: (text: string) => void;
   openMarket: () => void;
   openMarketAgents: () => void;
+  openOwnedSkills: () => void;
   closeMarket: () => void;
   setMarketTab: (tab: "skill" | "workflow") => void;
   setMarketQuery: (q: string) => void;
@@ -585,6 +593,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       savePlan: (text) => raw({ type: "__savePlan", text }),
       openMarket: () => raw({ type: "__openMarket" }),
       openMarketAgents: () => raw({ type: "__openMarket", initialView: "agents" }),
+      openOwnedSkills: () => raw({ type: "__openMarket", initialView: "owned" }),
       closeMarket: () => raw({ type: "__closeMarket" }),
       setMarketTab: (tab) => raw({ type: "__setMarketTab", tab }),
       setMarketQuery: (query) => raw({ type: "__setMarketQuery", query }),

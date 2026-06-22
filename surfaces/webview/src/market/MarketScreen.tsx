@@ -9,20 +9,22 @@ import { BuyCelebration } from "./BuyCelebration";
 import type { SkillCard } from "../transport/protocol";
 import { HeliusSetupPanel } from "../settings/HeliusKeyForm";
 
-type MarketView = "browse" | "publish" | "helius" | "agents";
+type MarketView = "browse" | "publish" | "helius" | "agents" | "owned";
 
 export function MarketScreen() {
   const { state, send, closeMarket, setMarketTab, setMarketQuery, marketSearching, clearMarketDetail, clearAgentProfile } = useStore();
   const [view, setView] = useState<MarketView>(state.marketInitialView);
 
-  // On first open: load owned skills, RPC status, and initial search
+  // On open: refresh owned skills/RPC state and honor the entry point that opened the card.
   useEffect(() => {
+    if (!state.marketOpen) return;
+    setView(state.marketInitialView);
     send({ type: "ownedSkills" });
     send({ type: "getRpcStatus" });
     send({ type: "getBalance" });
     marketSearching();
     send({ type: "searchSkills", query: "", kind: state.marketTab });
-  }, []);
+  }, [state.marketOpen, state.marketInitialView]);
 
   // When agent profile loads, switch to agents view to show it
   useEffect(() => {
@@ -67,6 +69,17 @@ export function MarketScreen() {
     );
   }
 
+  const resultByName = new Map((state.marketResults ?? []).map((card) => [card.name, card]));
+  const ownedCards: SkillCard[] = state.marketOwned.map((name) => {
+    const found = resultByName.get(name);
+    if (found) return found;
+    return {
+      id: state.marketOwnedMints[name] ?? name,
+      name,
+      description: "Owned skill",
+    } as SkillCard;
+  });
+
   // Agent profile
   if (view === "agents" && state.agentProfile) {
     return (
@@ -95,7 +108,7 @@ export function MarketScreen() {
         style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))" }}
       >
         <button onClick={closeMarket} className="shrink-0 text-zinc-400 active:text-zinc-200 px-1 text-lg">←</button>
-        <span className="font-semibold text-sm">Markets</span>
+        <span className="font-semibold text-sm">{view === "owned" ? "Owned skills" : "Markets"}</span>
         {balanceSol && (
           <span className="ml-auto text-xs text-zinc-500 font-mono">{balanceSol} SOL</span>
         )}
@@ -142,6 +155,17 @@ export function MarketScreen() {
           </button>
         ))}
         <button
+          onClick={() => setView("owned")}
+          className={[
+            "px-4 py-2 text-sm border-b-2 transition-colors",
+            view === "owned"
+              ? "border-green-500 text-green-400"
+              : "border-transparent text-zinc-500 active:text-zinc-300",
+          ].join(" ")}
+        >
+          Owned
+        </button>
+        <button
           onClick={() => setView("agents")}
           className={[
             "px-4 py-2 text-sm border-b-2 transition-colors",
@@ -179,6 +203,27 @@ export function MarketScreen() {
       <div className="flex-1 overflow-y-auto px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         {view === "agents" ? (
           <AgentDirectory />
+        ) : view === "owned" ? (
+          <>
+            {state.marketOwned.length === 0 ? (
+              <div className="py-8 text-center text-sm text-zinc-600">
+                No owned skills yet. Browse Markets to buy one.
+              </div>
+            ) : (
+              <div className="space-y-2 pt-1">
+                {ownedCards.map((card) => (
+                  <SkillCardTile
+                    key={card.id}
+                    card={card}
+                    owned
+                    disposed={Object.values(state.marketDisposed).includes(card.id)}
+                    firing={state.firingSkill === card.name}
+                    onOpen={handleOpenCard}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         ) : (
           <>
             {state.marketSearching && (
