@@ -67,10 +67,38 @@ export interface ApprovalDecision {
 // later PushApprovalChannel (mobile alarm). All interchangeable.
 export interface ApprovalChannel {
   request(req: ApprovalRequest): Promise<ApprovalDecision>;
+  // Auto-deny everything still pending when the surface goes away (closed panel /
+  // dropped socket). Optional: auto channels have nothing to drain.
+  drain?(reason?: string): void;
 }
 
 // Convenience: a channel that always returns the same outcome (no UI). Used as the
 // codex default (sandbox-governed) and as a safe fallback when no surface is wired.
 export function autoApprove(outcome: ApprovalDecision["outcome"] = "once"): ApprovalChannel {
   return { request: async () => ({ outcome }) };
+}
+
+// Wrap any channel so requests that go unanswered for `ms` milliseconds auto-deny.
+// Prevents the engine from hanging forever when the user dismisses a notification, closes
+// the tab, or the app is killed mid-turn. Default: 10 minutes.
+export function withTimeout(
+  channel: ApprovalChannel,
+  ms = 10 * 60 * 1000,
+  reason = "Approval timed out — no response received.",
+): ApprovalChannel {
+  return {
+    async request(req) {
+      let timer: ReturnType<typeof setTimeout>;
+      const timeout = new Promise<ApprovalDecision>((resolve) => {
+        timer = setTimeout(() => resolve({ outcome: "deny", reason }), ms);
+      });
+      try {
+        return await Promise.race([channel.request(req), timeout]);
+      } finally {
+        clearTimeout(timer!);
+      }
+    },
+    // Forward drain so dispose-time fail-safe still reaches the wrapped channel.
+    drain: (r) => channel.drain?.(r),
+  };
 }

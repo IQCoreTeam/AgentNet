@@ -4,6 +4,7 @@ import { openExternalUrl } from "../platform/openExternalUrl";
 import { useAutoOpenExternalUrl } from "../platform/useAutoOpenExternalUrl";
 import { HeliusKeyForm } from "../settings/HeliusKeyForm";
 import { ConnectGithub } from "../onboarding/ConnectGithub";
+import { hasAgentService, backgroundExecEnabled, setBackgroundExecEnabled } from "../platform/agentService";
 
 // Chat list drawer — the mobile answer to vscode's multi-panel "new tab": instead of
 // splitting the screen, the ☰ menu slides this in and you pick ONE chat to show. Telegram
@@ -35,7 +36,7 @@ function MenuRow({ icon, label, subtitle, onClick, accent = false }: {
 }
 
 export function Sessions({ onClose, embedded = false }: { onClose: () => void; embedded?: boolean }) {
-  const { state, send, openMarket, openMarketAgents } = useStore();
+  const { state, send, openMarket, openMarketAgents, getClientId, notify } = useStore();
   const { storage, cloudSync, googleLoginUrl, googleLoginError } = state;
 
   const [settingsMode, setSettingsMode] = useState<"list" | "connect" | "gdrive" | "custom" | "helius" | "github">("list");
@@ -44,6 +45,7 @@ export function Sessions({ onClose, embedded = false }: { onClose: () => void; e
   const [code, setCode] = useState("");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [bgExec, setBgExec] = useState(backgroundExecEnabled());
   const [showManualCode, setShowManualCode] = useState(false);
 
   const info = storage?.info as { kind?: string; connected?: boolean; account?: string; location?: string } | null;
@@ -161,6 +163,40 @@ export function Sessions({ onClose, embedded = false }: { onClose: () => void; e
                   onClick={() => { send({ type: "getGithubStatus" }); setSettingsMode("github"); }}
                   icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 16.5c-3 .9-3-1.5-4.2-1.8M15 19v-3.1c0-.8-.3-1.4-.8-1.8 2.6-.3 5.3-1.3 5.3-5.7 0-1.3-.4-2.3-1.2-3.2.1-.3.5-1.6-.1-3.1 0 0-1-.3-3.3 1.2a11.5 11.5 0 0 0-6 0C6.6 1.8 5.6 2.1 5.6 2.1c-.6 1.5-.2 2.8-.1 3.1-.8.9-1.2 2-1.2 3.2 0 4.4 2.7 5.4 5.3 5.7-.4.4-.7.9-.8 1.6V19" /></svg>}
                 />
+                {/* Android shell only: keep the agent running (and notify on approvals)
+                    while the app is backgrounded — but ONLY while a task is active. Off =
+                    idle process is reclaimed. Turning OFF mid-turn is foreground-only: the
+                    current turn keeps running while the app is open, it just won't survive
+                    backgrounding. (#53) */}
+                {hasAgentService() && (
+                  <>
+                    <button
+                      onClick={() => {
+                        const v = !bgExec;
+                        setBgExec(v);
+                        setBackgroundExecEnabled(v, getClientId());
+                        if (!v && state.typing) notify("Background off — task keeps running while the app is open.");
+                      }}
+                      className="flex w-full items-center gap-3.5 rounded-2xl px-2.5 py-3 text-left transition active:bg-[color:var(--an-bg-2)]"
+                    >
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center" style={{ color: bgExec ? "var(--an-green)" : "var(--an-fg-dim)" }}>
+                        <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="M11 7v4l2.5 2" /></svg>
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[1.12rem] font-semibold leading-tight" style={{ color: "var(--an-fg)" }}>Background execution</span>
+                        <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>{bgExec ? "Runs in the background only while a task is active" : "Agent stops when you leave the app"}</span>
+                      </span>
+                      <span className="relative h-[1.35rem] w-[2.4rem] shrink-0 rounded-full transition" style={{ background: bgExec ? "var(--an-green)" : "var(--an-bg-2)" }}>
+                        <span className="absolute top-[0.15rem] h-[1.05rem] w-[1.05rem] rounded-full bg-white transition-all" style={{ left: bgExec ? "1.2rem" : "0.15rem" }} />
+                      </span>
+                    </button>
+                    {bgExec && (
+                      <p className="px-2.5 pb-1 text-[0.68rem] leading-snug" style={{ color: "var(--an-fg-mute)" }}>
+                        Uses more battery while a task runs in the background. No task = nothing runs.
+                      </p>
+                    )}
+                  </>
+                )}
               </div>
             </div>
 

@@ -1,11 +1,4 @@
-declare global {
-  interface Window {
-    AgentNetShell?: {
-      openUrl(url: string): void;
-    };
-  }
-}
-
+// `window.AgentNetShell` type is declared in ./agentService (one canonical declaration).
 export function openExternalUrl(url: string): void {
   if (typeof window.AgentNetShell?.openUrl === "function") {
     window.AgentNetShell.openUrl(url);

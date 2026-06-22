@@ -30,6 +30,7 @@ import {
   connect,
   createChatSession,
   TransportApprovalChannel,
+  withTimeout,
   webWallet,
   getStorageInfo,
   STORAGE_OPTIONS,
@@ -642,7 +643,7 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
     // handler on the same transport. POST fans out to all of them.
     onRecv: (cb: (m: any) => void) => { c.recvs.push(cb); },
   };
-  const approval = new TransportApprovalChannel(transport);
+  const approval = withTimeout(new TransportApprovalChannel(transport));
   const chat = createChatSession(rt, transport, {
     cwd: () => process.cwd(),
     approval,
@@ -722,7 +723,7 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
   // down only if the UI really went away.
   c.teardown = () => {
     chat.stop();
-    approval.drain();
+    approval.drain?.();
     clients.delete(id);
     if (onCloudStatus === hook) onCloudStatus = null;
     if (signClient === c) signClient = null;

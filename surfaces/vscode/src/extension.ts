@@ -33,6 +33,7 @@ import {
   maskedHeliusKey,
   getNetwork,
   TransportApprovalChannel,
+  withTimeout,
   chatHtml,
   onboardingHtml,
   listCodexModelOptions,
@@ -284,8 +285,8 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
   // This panel's OWN approval channel — tool approvals from sessions started here
   // dock in THIS panel (it shares this panel's transport). Drained on dispose so a
   // request to a closed panel auto-denies instead of hanging the engine.
-  const approval = new TransportApprovalChannel(transport);
-  panel.onDidDispose(() => approval.drain());
+  const approval = withTimeout(new TransportApprovalChannel(transport));
+  panel.onDidDispose(() => approval.drain?.());
 
   // Multi-tab guard: VSCode can open the same session in two panels (two tabs writing
   // one log races). Claim a session before opening; if another panel holds it, reveal

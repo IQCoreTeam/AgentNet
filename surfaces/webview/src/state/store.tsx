@@ -215,6 +215,7 @@ type LocalAction =
   | { type: "__clearAgentProfile" }
   | { type: "__changeMode"; mode: string }
   | { type: "__clearFiringSkill" }
+  | { type: "__setToast"; text: string }
   | { type: "__clearCelebrate" };
 type Action = ServerMessage | LocalAction;
 
@@ -226,6 +227,8 @@ function reducer(state: State, ev: Action): State {
       return { ...state, approvals: state.approvals.filter((a) => a.id !== ev.id) };
     case "__clearToast":
       return { ...state, toast: null };
+    case "__setToast":
+      return { ...state, toast: ev.text };
     case "__selectEngine": {
       if (!state.cliReport) {
         return { ...state, toast: "Checking engine sign-in. Try again in a moment." };
@@ -473,6 +476,10 @@ interface Store {
   clearAgentProfile: () => void;
   clearFiringSkill: () => void;
   clearCelebrate: () => void;
+  // Current SSE client id — native (Android) notification actions POST to /rpc with it.
+  getClientId: () => string | null;
+  // Show a transient toast locally (e.g. the foreground-only turn-off notice, #53).
+  notify: (text: string) => void;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -617,6 +624,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       clearAgentProfile: () => raw({ type: "__clearAgentProfile" }),
       clearFiringSkill: () => raw({ type: "__clearFiringSkill" }),
       clearCelebrate: () => raw({ type: "__clearCelebrate" }),
+      getClientId: () => transportRef.current?.getClientId() ?? null,
+      notify: (text) => raw({ type: "__setToast", text }),
     };
   }, [state]);
 

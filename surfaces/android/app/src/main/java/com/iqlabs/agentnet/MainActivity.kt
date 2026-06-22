@@ -1,7 +1,13 @@
 package com.iqlabs.agentnet
 
+import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -38,7 +44,14 @@ class MainActivity : AppCompatActivity() {
         private const val IDENTITY_NAME = "AgentNet"
         private const val IDENTITY_URI = "https://agentnet.iqlabs.com"
         private const val IDENTITY_ICON = "favicon.ico" // relative to IDENTITY_URI
+        private const val APPROVAL_CHANNEL = "agentnet_approval"
+        private const val APPROVAL_NOTIF_ID = 2
+        private const val REQ_POST_NOTIFICATIONS = 101
     }
+
+    // Whether the Activity is currently in the foreground. An approval that arrives while
+    // foreground is handled in the WebView; only a backgrounded one raises a notification.
+    @Volatile private var inForeground = false
 
     private lateinit var webView: WebView
     private lateinit var status: TextView
@@ -117,8 +130,111 @@ class MainActivity : AppCompatActivity() {
         googleDriveAuth = GoogleDriveAuth(this, googleDriveLauncher)
         googleTokenServer = GoogleDriveTokenServer(googleDriveAuth)
         googleTokenServer.start()
+
+        // Android 13+ needs runtime consent to post notifications. We need it for the
+        // backgrounded-approval alert (#53); best-effort, the app works without it.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_POST_NOTIFICATIONS)
+        }
+
         startServerFlow()
     }
+
+    override fun onResume() {
+        super.onResume()
+        inForeground = true
+        // Returning to the app clears any pending approval alert — the WebView shows it now.
+        getSystemService(NotificationManager::class.java)?.cancel(APPROVAL_NOTIF_ID)
+    }
+
+    override fun onPause() {
+        inForeground = false
+        super.onPause()
+    }
+
+    // ── ShellBridge entry points (#53) ──────────────────────────────────────────────
+
+    // Promote/demote the foreground service that keeps this process (and the node runtime)
+    // alive while backgrounded. The web UI calls this with `active && backgroundExecEnabled`.
+    // `clientId` rides along so the notification's Stop action can reach /rpc.
+    fun setAgentActive(active: Boolean, clientId: String) {
+        val svc = Intent(this, ServerService::class.java).putExtra(ServerService.EXTRA_CLIENT, clientId)
+        if (active) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(svc)
+            else startService(svc)
+        } else {
+            stopService(svc)
+        }
+    }
+
+    // First time the user enables background execution: ask to exempt us from battery
+    // optimization so Android doesn't reap a long-running background task. Guarded so we
+    // only ever prompt once (and skip if already exempt).
+    @SuppressLint("BatteryLife")
+    fun onBackgroundEnabled() {
+        val prefs = getSharedPreferences("agentnet", MODE_PRIVATE)
+        if (prefs.getBoolean("batteryPrompted", false)) return
+        val pm = getSystemService(android.os.PowerManager::class.java)
+        if (pm?.isIgnoringBatteryOptimizations(packageName) == true) return
+        prefs.edit().putBoolean("batteryPrompted", true).apply()
+        runCatching {
+            startActivity(
+                Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                    .setData(Uri.parse("package:$packageName")),
+            )
+        }
+    }
+
+    // A turn needs approval. If the app is foreground the WebView already shows it, so we
+    // only raise a notification when backgrounded. Tapping reopens the chat; the Approve /
+    // Reject actions POST an approvalDecision to /rpc (same as the in-app buttons).
+    fun requestApproval(id: String, title: String, clientId: String) {
+        if (inForeground) return
+        val mgr = getSystemService(NotificationManager::class.java) ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            mgr.createNotificationChannel(
+                NotificationChannel(APPROVAL_CHANNEL, "AgentNet approvals", NotificationManager.IMPORTANCE_HIGH)
+            )
+        }
+        val tap = PendingIntent.getActivity(
+            this, 0,
+            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, APPROVAL_CHANNEL)
+        } else {
+            @Suppress("DEPRECATION") Notification.Builder(this)
+        }
+        mgr.notify(
+            APPROVAL_NOTIF_ID,
+            builder
+                .setContentTitle("Approval needed")
+                .setContentText(title)
+                .setSmallIcon(android.R.drawable.stat_sys_warning)
+                .setContentIntent(tap)
+                .setAutoCancel(true)
+                .addAction(android.R.drawable.ic_menu_revert, "Reject", approvalAction("reject", id, clientId, 2))
+                .addAction(android.R.drawable.ic_menu_send, "Approve", approvalAction("approve", id, clientId, 3))
+                .build(),
+        )
+    }
+
+    // PendingIntent → NotifActionReceiver for an approve/reject button. `reqCode` keeps the
+    // two PendingIntents distinct (same Intent action would otherwise collide).
+    private fun approvalAction(kind: String, id: String, clientId: String, reqCode: Int): PendingIntent =
+        PendingIntent.getBroadcast(
+            this, reqCode,
+            Intent(this, NotifActionReceiver::class.java).apply {
+                action = NotifActionReceiver.ACTION
+                putExtra(NotifActionReceiver.EXTRA_KIND, kind)
+                putExtra(NotifActionReceiver.EXTRA_CLIENT, clientId)
+                putExtra(NotifActionReceiver.EXTRA_APPROVAL_ID, id)
+                putExtra(NotifActionReceiver.EXTRA_NOTIF_ID, APPROVAL_NOTIF_ID)
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
 
     // A status may carry a muted second line after a newline ("main\nsubtitle"); split it
     // so the splash shows a bright primary line over a dimmer detail line.
@@ -143,12 +259,11 @@ class MainActivity : AppCompatActivity() {
 
     // Everything heavy runs off the UI thread; the UI shows progress until the server
     // is ready. Errors surface in the status view instead of a blank WebView.
+    // NOTE (#53): we do NOT start ServerService here anymore. The node server runs as a
+    // child of this process and lives as long as the Activity is foreground. The
+    // foreground service is promoted only while a turn is active AND the user enabled
+    // background exec — driven from the web UI via ShellBridge.setAgentActive().
     private fun startServerFlow() {
-        // Keep the server alive across backgrounding before we start it.
-        val svc = Intent(this, ServerService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(svc)
-        else startService(svc)
-
         thread {
             try {
                 val installer = Installer(this)
@@ -168,6 +283,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         if (::googleTokenServer.isInitialized) googleTokenServer.stop()
+        stopService(Intent(this, ServerService::class.java)) // no orphaned foreground notif
         server.stop()
         super.onDestroy()
     }

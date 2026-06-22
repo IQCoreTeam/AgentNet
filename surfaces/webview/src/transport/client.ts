@@ -19,6 +19,12 @@ export class Transport {
   private listeners = new Set<Listener>();
   private closed = false;
 
+  /** The SSE client id (null until the handshake lands). Native notification actions POST
+   *  to /rpc?client=<id> with it, so the Android shell needs to read it. */
+  getClientId(): string | null {
+    return this.clientId;
+  }
+
   /** Subscribe to server→UI events. Returns an unsubscribe fn. */
   onEvent(cb: Listener): () => void {
     this.listeners.add(cb);
