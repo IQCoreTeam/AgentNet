@@ -1,5 +1,7 @@
 import { useState, useEffect, type ReactNode } from "react";
 import { useStore } from "../state/store";
+import { IqLogo } from "../icons";
+import { forgetAndroidWallet } from "../onboarding/androidWallet";
 import { openExternalUrl } from "../platform/openExternalUrl";
 import { useAutoOpenExternalUrl } from "../platform/useAutoOpenExternalUrl";
 import { HeliusKeyForm } from "../settings/HeliusKeyForm";
@@ -89,12 +91,15 @@ export function Sessions({ onClose, embedded = false }: { onClose: () => void; e
         {settingsMode === "list" ? (
           <>
             <div className="mb-3 flex items-center justify-between px-1">
-              <div>
-                <div className="text-[1.45rem] font-semibold leading-none" style={{ color: "var(--an-fg)" }}>
-                  AgentNet
-                </div>
-                <div className="mt-1 font-mono text-[0.72rem]" style={{ color: "var(--an-fg-mute)" }}>
-                  {state.walletAddress ? `${state.walletAddress.slice(0, 4)}…${state.walletAddress.slice(-4)}` : "wallet not connected"}
+              <div className="flex items-center gap-2.5">
+                <IqLogo className="h-10 w-10 shrink-0" style={{ color: "var(--an-green)" }} />
+                <div>
+                  <div className="text-[1.18rem] font-semibold leading-none" style={{ color: "var(--an-fg)" }}>
+                    AgentNet
+                  </div>
+                  <div className="mt-1 font-mono text-[0.72rem]" style={{ color: "var(--an-fg-mute)" }}>
+                    {state.walletAddress ? `${state.walletAddress.slice(0, 4)}…${state.walletAddress.slice(-4)}` : "wallet not connected"}
+                  </div>
                 </div>
               </div>
               <button
@@ -206,11 +211,17 @@ export function Sessions({ onClose, embedded = false }: { onClose: () => void; e
                   Recents
                 </span>
                 <span className="text-[0.72rem]" style={{ color: "var(--an-fg-mute)" }}>
-                  {state.sessions.length}
+                  {state.sessionsSynced ? state.sessions.length : ""}
                 </span>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-                {state.sessions.length === 0 && (
+                {!state.sessionsSynced && (
+                  <p className="flex items-center gap-2 px-2 py-5 text-[0.95rem]" style={{ color: "var(--an-fg-mute)" }}>
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    syncing…
+                  </p>
+                )}
+                {state.sessionsSynced && state.sessions.length === 0 && (
                   <p className="px-2 py-5 text-[0.95rem]" style={{ color: "var(--an-fg-mute)" }}>No chats yet.</p>
                 )}
                 {state.sessions.map((s) => {
@@ -254,6 +265,7 @@ export function Sessions({ onClose, embedded = false }: { onClose: () => void; e
 
             <button
               onClick={() => {
+                forgetAndroidWallet(); // clear the Keystore creds so we don't silently reconnect
                 send({ type: "disconnectWallet" });
                 onClose();
               }}

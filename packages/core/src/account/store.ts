@@ -31,6 +31,16 @@ function parsePageKey(key: string): { sessionId: string; page: number } | null {
   return { sessionId: key.slice(0, i), page };
 }
 
+// Highest page index for `sessionId` among `keys` (-1 if none).
+function maxPageOf(keys: string[], sessionId: string): number {
+  let max = -1;
+  for (const key of keys) {
+    const p = parsePageKey(key);
+    if (p && p.sessionId === sessionId && p.page > max) max = p.page;
+  }
+  return max;
+}
+
 export interface PageResult {
   messages: ChatMessage[];
   hasMore: boolean; // older pages exist
@@ -67,13 +77,19 @@ export class SessionStore {
   }
 
   // Find the highest existing page index for a session (-1 if none).
+  // Prefer the LOCAL tier: writes always hit local first, so any session used on this
+  // device is fully present locally and we can find its newest page without a network
+  // round-trip (the mirror's cloud list is a Drive API call, paid on EVERY open before
+  // this). Only when local has nothing for the session do we fall back to the full list
+  // — e.g. first open of a session synced from another device.
+  private lastTier: "local" | "cloud" = "local"; // which tier answered the last lastPageIndex (perf diag)
   private async lastPageIndex(sessionId: string): Promise<number> {
-    let max = -1;
-    for (const key of await this.storage.list()) {
-      const p = parsePageKey(key);
-      if (p && p.sessionId === sessionId && p.page > max) max = p.page;
+    if (this.storage.listLocal) {
+      const local = maxPageOf(await this.storage.listLocal(), sessionId);
+      if (local >= 0) { this.lastTier = "local"; return local; }
     }
-    return max;
+    this.lastTier = "cloud";
+    return maxPageOf(await this.storage.list(), sessionId);
   }
 
   // Resolve the current page + how many messages are in it, loading from storage
@@ -133,10 +149,21 @@ export class SessionStore {
 
   // Newest page + cursor to the page before it.
   async loadLatest(sessionId: string): Promise<PageResult> {
+    const t0 = Date.now();
     const last = await this.lastPageIndex(sessionId);
+    const t1 = Date.now();
     if (last < 0) return { messages: [], hasMore: false, cursor: null };
-    const s = await this.loadPage(sessionId, last);
-    return { messages: s?.messages ?? [], hasMore: last > 0, cursor: last > 0 ? last - 1 : null };
+    // Inline get + decode (instead of loadPage) so we can time each leg separately:
+    // get = storage read (local fs vs Drive download), decode = decrypt+parse the blob.
+    const blob = await this.storage.get(pageKey(sessionId, last));
+    const t2 = Date.now();
+    const decoded = blob ? await decodeLog(await this.getKey(), blob) : null;
+    const t3 = Date.now();
+    console.error(
+      `[perf] loadLatest ${sessionId.slice(0, 8)} page=${last} discover=${t1 - t0}ms(${this.lastTier}) ` +
+      `get=${t2 - t1}ms(${blob?.length ?? 0}B) decode=${t3 - t2}ms msgs=${decoded?.messages.length ?? 0}`,
+    );
+    return { messages: decoded?.messages ?? [], hasMore: last > 0, cursor: last > 0 ? last - 1 : null };
   }
 
   // The page at `cursor` (older). Returns its messages + cursor to the one before.

@@ -3,11 +3,11 @@
 // sign the FIXED SESSION_KEY_MESSAGE once (that signature derives the session key), and
 // send {connectWallet, address, signature}. The store flips to chat on `walletConnected`.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 // Subpath import (not the barrel) — the core index drags in node-only modules that can't
 // bundle for the browser. webWallet.ts is browser-safe (only @solana/web3.js + types).
 import { SESSION_KEY_MESSAGE } from "@iqlabs-official/agent-sdk/account/webWallet";
-import { isAndroidWallet, connectAndroidWallet } from "./androidWallet";
+import { isAndroidWallet, connectAndroidWallet, restoreAndroidWallet } from "./androidWallet";
 import { OnboardingShell, OnboardingButton } from "./OnboardingShell";
 import { useStore } from "../state/store";
 
@@ -63,6 +63,25 @@ export function ConnectWallet() {
   // Inside the Android shell there are no injected providers — the native MWA bridge is
   // the only path. Detect it once and, if present, show a single native connect button.
   const android = useMemo(isAndroidWallet, []);
+  // On the Android shell, try a SILENT reconnect from the Keystore-saved signature first, so
+  // a fresh process (rotation / background kill / return from the wallet app) lands straight
+  // back in chat with no wallet round-trip. Until we know, show "Reconnecting…" instead of a
+  // bare Connect button. Falls through to the manual button when nothing is saved.
+  const [restoring, setRestoring] = useState(android);
+  useEffect(() => {
+    if (!android) return;
+    let cancelled = false;
+    void (async () => {
+      const creds = await restoreAndroidWallet().catch(() => null);
+      if (cancelled) return;
+      if (creds) {
+        send({ type: "connectWallet", address: creds.address, signature: creds.signature });
+        return; // keep the "Reconnecting…" veil until the store flips phase to chat
+      }
+      setRestoring(false);
+    })();
+    return () => { cancelled = true; };
+  }, [android, send]);
 
   async function connectWith(name: string, provider: SolanaProvider) {
     setBusy(name);
@@ -122,8 +141,8 @@ export function ConnectWallet() {
       {android ? (
         // Android shell: one button drives the native wallet picker (Phantom/Solflare/…).
         <>
-          <OnboardingButton disabled={busy !== null} onClick={connectAndroid}>
-            {busy ? "Connecting…" : hint ? phantomStore().label : "Connect Wallet"}
+          <OnboardingButton disabled={busy !== null || restoring} onClick={connectAndroid}>
+            {restoring ? "Reconnecting…" : busy ? "Connecting…" : hint ? phantomStore().label : "Connect Wallet"}
           </OnboardingButton>
           {hint ? (
             <p className="text-center text-sm text-zinc-500">{hint}</p>

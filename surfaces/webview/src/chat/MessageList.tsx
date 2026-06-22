@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { Message } from "./Message";
+import { IqLogo } from "../icons";
 import type { ChatMessage } from "../transport/protocol";
 
 function groupTurns(log: ChatMessage[]): Array<{ user: ChatMessage | null; items: ChatMessage[]; key: number }> {
@@ -33,6 +34,7 @@ export function MessageList() {
   const prevHeight = useRef(0);
   const loadingOlder = useRef(false);
   const [showPill, setShowPill] = useState(false);
+  const [olderLoading, setOlderLoading] = useState(false);
   const logLen = state.log.length;
   const turns = groupTurns(state.log);
 
@@ -52,6 +54,7 @@ export function MessageList() {
     setShowPill(!atBottom);
     if (el.scrollTop < 100 && state.hasMore && !loadingOlder.current) {
       loadingOlder.current = true;
+      setOlderLoading(true);
       prevHeight.current = el.scrollHeight;
       send({ type: "loadMore", cursor: state.cursor });
     }
@@ -71,6 +74,13 @@ export function MessageList() {
     }
   }, [logLen]);
 
+  // Clear the older-page spinner once the response lands (cursor advances or there's
+  // no more), covering the rare empty-page case where logLen doesn't change.
+  useEffect(() => {
+    setOlderLoading(false);
+    loadingOlder.current = false;
+  }, [state.cursor, state.hasMore]);
+
   // Only yank to bottom on stream update if the user hasn't scrolled away.
   useEffect(() => {
     const el = scrollRef.current;
@@ -79,23 +89,34 @@ export function MessageList() {
 
   return (
     <div className="relative min-w-0 flex-1 overflow-hidden">
-      <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto px-3 py-3">
-        <div className="mx-auto flex min-w-0 max-w-2xl flex-col">
-          {state.hasMore && (
-            <div className="py-1 text-center text-xs text-zinc-600">scroll up for older…</div>
-          )}
-          {logLen === 0 && state.loading && (
-            <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+      {/* Empty / loading state, centered in the whole chat viewport (both axes) rather than
+          pinned near the top — an absolute overlay so it ignores scroll-area padding. */}
+      {logLen === 0 && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-6 px-3 text-center">
+          {state.loading ? (
+            <>
               <span
                 className="h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent"
                 style={{ color: "var(--an-green)" }}
               />
               <p className="text-sm" style={{ color: "var(--an-fg-mute)" }}>Loading chat…</p>
-            </div>
-          )}
-          {logLen === 0 && !state.loading && (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
+            </>
+          ) : (
+            <>
+              <IqLogo className="h-24 w-24" style={{ color: "var(--an-fg-mute)", opacity: 0.55 }} />
               <p className="text-sm text-zinc-600">Send a message to start</p>
+            </>
+          )}
+        </div>
+      )}
+      <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto px-3 py-3" style={{ touchAction: "pan-y" }}>
+        <div className="mx-auto flex min-w-0 max-w-2xl flex-col">
+          {state.hasMore && (
+            <div className="flex items-center justify-center gap-2 py-1 text-center text-xs text-zinc-600">
+              {olderLoading && (
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              )}
+              {olderLoading ? "loading older…" : "scroll up for older…"}
             </div>
           )}
           {turns.map((turn) => (

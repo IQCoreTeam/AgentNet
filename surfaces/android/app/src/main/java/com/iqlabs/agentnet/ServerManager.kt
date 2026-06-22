@@ -151,7 +151,9 @@ class ServerManager(private val ctx: Context) {
         Thread {
             try {
                 BufferedReader(InputStreamReader(proc.inputStream)).useLines { lines ->
-                    lines.forEach { Log.d(TAG, "[server] $it") }
+                    // Info, not Debug: many retail ROMs drop app debug logs, which made this
+                    // drain (the only window into the proot node server) silently invisible.
+                    lines.forEach { Log.i(TAG, "[server] $it") }
                 }
             } catch (e: Exception) {
                 if (proc.isAlive) Log.w(TAG, "server log stream ended unexpectedly", e)

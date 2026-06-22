@@ -32,6 +32,11 @@ export interface StorageAdapter {
   // writes. Cloud adapters can omit it; the store falls back to get+put (which,
   // because the blob is an append-only log, still only adds content).
   append?(sessionId: string, chunk: Uint8Array): Promise<void>;
+  // OPTIONAL fast/local-only listing. Adapters with a slow tier (the mirror's cloud
+  // mirror) expose JUST the local tier here, so callers that only need to locate an
+  // already-local session's pages can skip a network round-trip. Single-tier adapters
+  // omit it and callers fall back to list().
+  listLocal?(): Promise<string[]>;
 }
 
 // ── chat message ────────────────────────────────────────

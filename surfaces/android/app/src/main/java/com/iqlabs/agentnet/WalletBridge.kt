@@ -44,6 +44,32 @@ class WalletBridge(
         private const val TAG = "AgentNet/Wallet"
     }
 
+    // Keystore-backed store of the last connect result, for silent reconnect on a fresh
+    // process (no wallet-app round-trip). Written on a successful connect, read by restore().
+    private val vault = WalletVault(activity)
+
+    // Silent reconnect: return the persisted {pubkey, signature} WITHOUT launching the wallet
+    // app, so a process restart (rotation / background kill / return from the wallet) doesn't
+    // re-prompt for a signature. reason "NoCached" = nothing stored → the SPA falls back to a
+    // normal connect. Runs on a binder thread; keystore I/O here is fine (not the UI thread).
+    @JavascriptInterface
+    fun restore(requestJson: String) {
+        val id = runCatching { JSONObject(requestJson).optString("id") }.getOrNull().orEmpty()
+        if (id.isEmpty()) return
+        val creds = vault.load()
+        if (creds == null) {
+            pushError(id, "No saved wallet on this device.", "NoCached")
+            return
+        }
+        pushSuccess(id, creds.first, creds.second)
+    }
+
+    // Explicit disconnect → forget the saved credentials so we don't silently reconnect.
+    @JavascriptInterface
+    fun forget() {
+        vault.clear()
+    }
+
     @JavascriptInterface
     fun connect(requestJson: String) {
         // Runs on a WebView JavaBridge thread — do no UI work here, just launch.
@@ -135,6 +161,8 @@ class WalletBridge(
         when (result) {
             is TransactionResult.Success -> {
                 val (pubkey, signature) = result.payload
+                // Remember it so the next launch reconnects silently (no wallet round-trip).
+                vault.save(pubkey, signature)
                 pushSuccess(id, pubkey, signature)
             }
             is TransactionResult.NoWalletFound ->

@@ -68,14 +68,21 @@ export function mirrorStorage(
     async list() {
       const ids = new Set(await local.list());
       if (cloud) {
+        const t0 = Date.now();
         try {
           for (const id of await cloud.list()) ids.add(id);
+          console.error(`[perf] cloud.list ${Date.now() - t0}ms`);
         } catch {
           /* offline — show what local has */
         }
       }
       return [...ids];
     },
+
+    // Fast, local-only listing (no network). The session store uses this to find a
+    // session's newest page without a Drive round-trip when local already holds it —
+    // local is always written first, so a session used on this device is fully local.
+    listLocal: () => local.list(),
 
     async remove(sessionId) {
       await local.remove(sessionId);

@@ -108,12 +108,18 @@ function ChatDeck({
     if (!d || d.id !== e.pointerId) return;
     const dx = e.clientX - d.startX;
     const dy = e.clientY - d.startY;
-    if (!d.locked && Math.abs(dx) < 10) return;
-    if (!d.locked && Math.abs(dy) > Math.abs(dx)) {
+    if (!d.locked && Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+    if (!d.locked && Math.abs(dy) >= Math.abs(dx)) {
       drag.current = null;
       return;
     }
-    d.locked = true;
+    if (!d.locked) {
+      d.locked = true;
+      // Pin every later pointer event for this gesture to the deck. The track transform
+      // re-renders on each move, which can re-create the child under the finger and lose
+      // pointermove/up without capture — the gesture would "stick" or never fire end.
+      try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* not all WebViews */ }
+    }
     d.dx = Math.max(maxLeft, Math.min(maxRight, dx));
     setDragging(true);
     setDragDx(d.dx);

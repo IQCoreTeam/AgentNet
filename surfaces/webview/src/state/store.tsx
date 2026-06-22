@@ -77,6 +77,10 @@ export interface State {
   codexLoginError: string | null;
   log: ChatMessage[];
   sessions: SessionMeta[];
+  // false until the FIRST `sessions` list lands from the server. Lets the drawer show a
+  // "syncing…" state on initial login (while listMine() does its cloud round-trip) instead
+  // of a misleading "No chats yet" before the list has actually been fetched.
+  sessionsSynced: boolean;
   activeSessionId?: string;
   approvals: ApprovalRequest[];
   storage: { info: unknown; options: unknown; googleCredsConfigured?: boolean } | null;
@@ -112,6 +116,7 @@ const initialState: State = {
   codexLoginError: null,
   log: [],
   sessions: [],
+  sessionsSynced: false,
   approvals: [],
   storage: null,
   googleCredsError: null,
@@ -311,7 +316,7 @@ function reducer(state: State, ev: Action): State {
         cursor: ev.cursor,
       };
     case "sessions":
-      return { ...state, phase: "chat", sessions: ev.list, activeSessionId: ev.activeId };
+      return { ...state, phase: "chat", sessions: ev.list, sessionsSynced: true, activeSessionId: ev.activeId };
     case "loading":
       return { ...state, loading: true };
     // Optimistic session switch: the moment the user taps a chat, flip the active id (so
@@ -515,6 +520,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const transportRef = useRef<Transport | null>(null);
   const msgQueue = useRef<{ text: string; images?: ImageInput[] }[]>([]);
   const busyRef = useRef(false);
+  const perfLoadStart = useRef<number | null>(null); // perf diag: session-open timing
 
   useEffect(() => {
     const t = new Transport();
@@ -524,7 +530,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         void handleSignTransaction(t, msg.id, msg.tx);
         return;
       }
+      // perf diag: measure session-open from the server's `loading` to the painted
+      // history. dispatch = reducer time for the message burst; paint = after the browser
+      // actually composites (double rAF). Compare against the server [perf] loadLatest to
+      // localize the cost (storage vs client render). Logged to chromium console → logcat.
+      if (msg.type === "loading") perfLoadStart.current = performance.now();
       raw(msg);
+      if (msg.type === "page" && perfLoadStart.current != null) {
+        const start = perfLoadStart.current;
+        perfLoadStart.current = null;
+        const dispatched = performance.now();
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() =>
+            console.log(
+              `[perf-client] session paint: dispatch=${Math.round(dispatched - start)}ms paint=${Math.round(performance.now() - start)}ms`,
+            ),
+          ),
+        );
+      }
     });
     t.open();
     void t.post({ type: "ready" });

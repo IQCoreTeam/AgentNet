@@ -1,10 +1,25 @@
-import type { SVGProps } from "react";
+import type { CSSProperties, SVGProps } from "react";
+import { IQ_LOGO_SVG } from "@iqlabs-official/agent-sdk/chat/ui/iqlogo";
 
 // Drawn SVG icons that replace the decorative emoji the UI used to lean on
 // (🔮 ✨ ⭐ 🎉 📷 🤖 ⚠️ 📎). Each inherits color via `currentColor` and size from
 // className (e.g. "h-5 w-5"), so they restyle like text rather than like emoji.
 
 type IconProps = SVGProps<SVGSVGElement>;
+
+// The IQ Labs brand mark — the SAME logo the VSCode extension renders. The SVG fills with
+// currentColor and is 100%×100% of its box, so set the size on the wrapper (h-/w- classes)
+// and tint via `color`/`style.color`. Used as the empty-chat watermark and drawer header.
+export function IqLogo({ className, style }: { className?: string; style?: CSSProperties }) {
+  return (
+    <span
+      className={className}
+      aria-hidden="true"
+      style={{ display: "inline-flex", lineHeight: 0, ...style }}
+      dangerouslySetInnerHTML={{ __html: IQ_LOGO_SVG }}
+    />
+  );
+}
 
 // Skill / "magic" mark — a clean four-point sparkle. Replaces 🔮 (skill avatar) and the
 // ✦ / ⭐ / ✨ stars in the approval card and the buy/publish celebration.

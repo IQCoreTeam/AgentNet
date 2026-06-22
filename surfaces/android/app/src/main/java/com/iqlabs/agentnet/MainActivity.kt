@@ -113,7 +113,9 @@ class MainActivity : AppCompatActivity() {
         }
         webView.webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(m: ConsoleMessage): Boolean {
-                Log.d(TAG, "[web] ${m.sourceId()}:${m.lineNumber()} ${m.message()}")
+                // Info, not Debug: retail ROMs drop app debug logs, so WebView console (our
+                // only client-side log window) was invisible. Keep it visible in logcat.
+                Log.i(TAG, "[web] ${m.sourceId()}:${m.lineNumber()} ${m.message()}")
                 return true
             }
         }

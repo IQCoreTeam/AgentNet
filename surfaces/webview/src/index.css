@@ -189,6 +189,10 @@ body {
   height: 100%;
   overflow: hidden;
   background: var(--an-bg-0);
+  /* Route horizontal gestures on the card surface to the deck's JS swipe handler while
+     still letting vertical scroll happen natively. touch-action doesn't inherit, so the
+     vertically-scrolling children (the message list, etc.) set pan-y themselves too. */
+  touch-action: pan-y;
 }
 .an-deck-drawer {
   max-width: min(86vw, 22rem);

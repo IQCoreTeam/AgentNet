@@ -15,6 +15,11 @@ import { pubkeyToAddress } from "@iqlabs-official/agent-sdk/account/webWallet";
 interface NativeWallet {
   connect(requestJson: string): void;
   signTransaction(requestJson: string): void;
+  // Silent reconnect from a Keystore-saved connect result (no wallet-app round-trip).
+  // Optional: older shells without it → restoreAndroidWallet resolves null.
+  restore?(requestJson: string): void;
+  // Forget the saved credentials (explicit disconnect).
+  forget?(): void;
 }
 interface WalletResult {
   id: string;
@@ -95,6 +100,28 @@ export function connectAndroidWallet(
     if (!r.pubkey || !r.signature) throw new Error("Wallet returned no signature.");
     return { address: pubkeyToAddress(Uint8Array.from(r.pubkey)), signature: r.signature };
   });
+}
+
+// Silent reconnect: ask the shell for a Keystore-saved connect result, WITHOUT launching the
+// wallet app. Resolves the same {address, signature} as connectAndroidWallet, or null when
+// nothing is saved (reason "NoCached") or the shell is too old to support it — caller then
+// shows the normal Connect button.
+export function restoreAndroidWallet(): Promise<{ address: string; signature: number[] } | null> {
+  const bridge = window.AgentNetWallet;
+  if (!bridge?.restore) return Promise.resolve(null);
+  const invoke = bridge.restore.bind(bridge);
+  return callBridge((json) => invoke(json), {}).then(
+    (r) =>
+      r.pubkey && r.signature
+        ? { address: pubkeyToAddress(Uint8Array.from(r.pubkey)), signature: r.signature }
+        : null,
+    () => null, // NoCached / any error → fall back to a fresh connect
+  );
+}
+
+// Forget the Keystore-saved credentials so we don't silently reconnect (explicit disconnect).
+export function forgetAndroidWallet(): void {
+  window.AgentNetWallet?.forget?.();
 }
 
 export function signAndroidTransaction(txBase64: string): Promise<string> {
