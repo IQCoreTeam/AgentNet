@@ -216,6 +216,7 @@ type LocalAction =
   | { type: "__changeMode"; mode: string }
   | { type: "__clearFiringSkill" }
   | { type: "__setToast"; text: string }
+  | { type: "__openingSession"; sessionId: string }
   | { type: "__clearCelebrate" };
 type Action = ServerMessage | LocalAction;
 
@@ -313,6 +314,13 @@ function reducer(state: State, ev: Action): State {
       return { ...state, phase: "chat", sessions: ev.list, activeSessionId: ev.activeId };
     case "loading":
       return { ...state, loading: true };
+    // Optimistic session switch: the moment the user taps a chat, flip the active id (so
+    // the header title swaps off "New chat" instantly), clear the old log, and show the
+    // loading state — instead of waiting for the server's clear→loadSession→sessions
+    // round-trip, which left the screen on the stale chat with no feedback. The server's
+    // messages/page/sessions then reconcile this.
+    case "__openingSession":
+      return { ...state, activeSessionId: ev.sessionId, loading: true, log: [], typing: false, hasMore: false };
     case "platform":
       return { ...state, cli: ev.cli };
     case "storage":
@@ -589,6 +597,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return;
         }
         raw({ type: "__typing" });
+      }
+      // Tapping a chat: switch the UI to it immediately (title + loading) instead of
+      // waiting for the server's load round-trip, which felt like "nothing happened".
+      if (msg.type === "open") {
+        raw({ type: "__openingSession", sessionId: msg.sessionId });
       }
       // Inject inline model-switch separator into chat log.
       if (msg.type === "model" && msg.model) {

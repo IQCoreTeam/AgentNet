@@ -84,6 +84,15 @@ export function MessageList() {
           {state.hasMore && (
             <div className="py-1 text-center text-xs text-zinc-600">scroll up for older…</div>
           )}
+          {logLen === 0 && state.loading && (
+            <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+              <span
+                className="h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent"
+                style={{ color: "var(--an-green)" }}
+              />
+              <p className="text-sm" style={{ color: "var(--an-fg-mute)" }}>Loading chat…</p>
+            </div>
+          )}
           {logLen === 0 && !state.loading && (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <p className="text-sm text-zinc-600">Send a message to start</p>

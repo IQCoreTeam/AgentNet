@@ -147,8 +147,8 @@ export function Sessions({ onClose, embedded = false }: { onClose: () => void; e
               <div className="mt-1 space-y-0.5">
                 <MenuRow
                   label="Storage"
-                  subtitle={cloudConnected ? `${info?.kind === "gdrive" ? "Google Drive" : "Custom Cloud"}${cloudSync ? ` · ${cloudSync.ok ? "synced" : "sync error"}` : ""}` : "Local only"}
-                  onClick={() => setSettingsMode(cloudConnected ? "connect" : "connect")}
+                  subtitle={cloudConnected ? `${info?.account ?? (info?.kind === "gdrive" ? "Google Drive" : "Custom Cloud")}${cloudSync ? ` · ${cloudSync.ok ? "synced" : "sync error"}` : ""}` : "Local only"}
+                  onClick={() => setSettingsMode("connect")}
                   icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7.5c0-1.4 3.1-2.5 7-2.5s7 1.1 7 2.5S14.9 10 11 10 4 8.9 4 7.5Z" /><path d="M4 7.5v7c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-7" /><path d="M4 11c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5" /></svg>}
                 />
                 <MenuRow

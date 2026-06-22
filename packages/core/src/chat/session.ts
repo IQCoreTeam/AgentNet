@@ -208,6 +208,10 @@ export function createChatSession(
     transport.send({ type: "clear" });
     const id = slot().pendingId;
     if (id) {
+      // Show the loading state while we read the session from storage (can be slow on
+      // mobile/cloud). Without this the UI just cleared to an empty "start a chat" screen
+      // until messages arrived, which read as "nothing happened". `page` clears it.
+      transport.send({ type: "loading" });
       const page = await rt.loadSession(id);
       for (const msg of page.messages) transport.send({ type: "message", msg });
       transport.send({ type: "page", hasMore: page.hasMore, cursor: page.cursor });
