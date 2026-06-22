@@ -30,8 +30,18 @@ export function hasAgentService(): boolean {
   return typeof window.AgentNetShell?.setAgentActive === "function";
 }
 
+// Default ON: an agent task left running when you leave the app keeps going + notifies.
+// Still only promotes the service while a turn is ACTIVE, so idle never holds the process.
+// Off only when the user explicitly turned it off.
 export function backgroundExecEnabled(): boolean {
-  return localStorage.getItem(KEY) === "1";
+  return localStorage.getItem(KEY) !== "0";
+}
+
+// Default-on means the user never taps the toggle, so the one-time battery-exemption prompt
+// (normally fired on enable) wouldn't show. Call this once on launch so a default-on user
+// still gets it. The shell guards against nagging, so repeat calls are safe no-ops.
+export function ensureBackgroundConsent(): void {
+  if (backgroundExecEnabled()) window.AgentNetShell?.onBackgroundEnabled?.();
 }
 
 export function setBackgroundExecEnabled(on: boolean, clientId: string | null): void {

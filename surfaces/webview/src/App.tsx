@@ -10,7 +10,7 @@ import { Sessions } from "./chat/Sessions";
 import { Toast } from "./Toast";
 import { useVisualViewportVars } from "./layoutEffects";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { syncAgentService, notifyApproval } from "./platform/agentService";
+import { syncAgentService, notifyApproval, ensureBackgroundConsent } from "./platform/agentService";
 
 // Phase router:
 //   connecting   → opening SSE stream / sent `ready`, waiting for init|sessions
@@ -29,6 +29,9 @@ export function App() {
   // enabled background exec; demote otherwise. No-op off the Android shell.
   const agentActive = state.typing || state.approvals.length > 0;
   useEffect(() => { syncAgentService(agentActive, getClientId()); }, [agentActive, getClientId]);
+
+  // Default-on background exec: prompt once for battery-optimization exemption on launch.
+  useEffect(() => { ensureBackgroundConsent(); }, []);
 
   // Backgrounded approval → ask the shell to raise a notification. Fires per new top
   // approval; the shell ignores it when the app is foreground.
