@@ -39,6 +39,8 @@ import {
   startCodexLogin,
   markCodexConnected,
   saveCodexApiKey,
+  logoutClaude,
+  logoutCodex,
   type AgentRuntime,
   type CloudStatus,
   type ClaudeLogin,
@@ -376,6 +378,18 @@ function attachAuthHandlers(c: Client) {
           c.send({ type: "codexLoginStatus", status: "error", error: (e as Error).message });
         }
         return;
+      case "logoutEngine": {
+        const engine = m.cli === "codex" ? "codex" : "claude";
+        try {
+          if (engine === "codex") await logoutCodex();
+          else await logoutClaude();
+          c.send({ type: "toast", text: `${engine === "codex" ? "Codex" : "Claude"} signed out.` });
+          await pushCliStatus(c);
+        } catch (e) {
+          c.send({ type: "toast", text: `Sign-out failed: ${(e as Error).message}` });
+        }
+        return;
+      }
       case "setGoogleCredentials":
         if (typeof m.clientId !== "string") return;
         try {

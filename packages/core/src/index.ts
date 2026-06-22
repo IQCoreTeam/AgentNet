@@ -105,6 +105,7 @@ export {
   isClaudeLoggedIn,
   markClaudeConnected,
   isClaudeMarked,
+  logoutClaude,
 } from "./account/claudeAuth.js";
 export type { ClaudeLogin } from "./account/claudeAuth.js";
 export {
@@ -115,6 +116,7 @@ export {
   saveCodexApiKey,
   getCodexApiKey,
   deleteCodexApiKey,
+  logoutCodex,
 } from "./account/codexAuth.js";
 export type { CodexLogin } from "./account/codexAuth.js";
 export {
@@ -163,6 +165,8 @@ export type { ChatTransport, ChatEnv } from "./chat/session.js";
 export { TransportApprovalChannel } from "./chat/approvalChannel.js";
 export { CHAT_MODEL_OPTIONS, findChatModelOption } from "./chat/modelOptions.js";
 export type { ChatModelOption, EngineKey } from "./chat/modelOptions.js";
+export { CHAT_SLASH_COMMANDS } from "./chat/slashCommands.js";
+export type { SlashCommandSpec, SlashEngine } from "./chat/slashCommands.js";
 
 // the chat + onboarding HTML (one webview, transport-shimmed: vscode acquireVsCodeApi
 // or a WebSocket in the browser/Android). Surfaces serve these strings as-is.

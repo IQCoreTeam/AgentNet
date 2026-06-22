@@ -92,6 +92,7 @@ export type ClientMessage =
   | { type: "mode"; mode?: string }
   | { type: "effort"; effort?: string }
   | { type: "send"; text: string; images?: ImageInput[] }
+  | { type: "slashCommand"; command: string; arg?: string }
   | { type: "interrupt" }
   | { type: "loadMore"; cursor: number }
   | { type: "delete"; sessionId: string }
@@ -114,6 +115,7 @@ export type ClientMessage =
   | { type: "startCodexLogin" }
   | { type: "cancelCodexLogin" }
   | { type: "submitCodexApiKey"; key: string }
+  | { type: "logoutEngine"; cli?: Cli }
   | { type: "startGoogleLogin" }
   | { type: "googleAuthCode"; code: string }
   | { type: "cancelGoogleLogin" }
@@ -155,6 +157,18 @@ export type ClientMessage =
 export type ServerMessage =
   | { type: "clear" }
   | { type: "usage"; contextTokens: number }
+  | { type: "notice"; text: string }
+  | {
+      type: "status";
+      status: {
+        cli: Cli;
+        sessionId?: string;
+        model?: string;
+        mode?: string;
+        effort?: string;
+        contextTokens?: number;
+      };
+    }
   | { type: "message"; msg: ChatMessage }
   | { type: "turnEnd" }
   | { type: "page"; hasMore: boolean; cursor: number }

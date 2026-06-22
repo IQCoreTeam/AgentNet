@@ -15,6 +15,7 @@ import { AVATAR_SVG, AVATAR_SCRIPT } from "./avatar.js";
 import { IQ_LOGO_SVG } from "./iqlogo.js";
 import { MD_LIBS } from "./mdLibs.generated.js";
 import { CHAT_MODEL_OPTIONS } from "../modelOptions.js";
+import { CHAT_SLASH_COMMANDS } from "../slashCommands.js";
 
 // marked (md → html) + dompurify (XSS sanitize) inlined into the webview <script>.
 // The webview is an isolated browser context, so we ship the libraries' browser
@@ -35,6 +36,7 @@ function markdownLibs(): string {
 const WAND_SVG = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l7-7"/><path d="M9.5 4.5l2 2"/><path d="M12.5 2v2M14.5 3.5h-2M13 6.2l1 .4M12.6 1.2l.4 1"/></svg>';
 const PAPERCLIP_SVG = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 6.5l-5.6 5.6a2.5 2.5 0 0 1-3.5-3.5L9 3a1.7 1.7 0 0 1 2.4 2.4l-5.4 5.4a0.85 0.85 0 0 1-1.2-1.2l5-5"/></svg>';
 const MODEL_OPTIONS_JSON = JSON.stringify(CHAT_MODEL_OPTIONS);
+const SLASH_COMMANDS_JSON = JSON.stringify(CHAT_SLASH_COMMANDS);
 
 export function chatHtml(): string {
   return /* html */ `<!DOCTYPE html>
@@ -1681,26 +1683,14 @@ export function chatHtml(): string {
   const COLLAPSED = 5;      // sessions shown before "모두 보기(N)"
 
   // ---- slash command autocomplete ----
-  const SLASH_CMDS = [
-    { name: 'new', desc: 'start fresh session', insert: '/new' },
-    { name: 'clear', desc: 'reset conversation context', insert: '/clear' },
-    { name: 'compact', desc: 'compact context, optionally with focus', insert: '/compact ' },
-    { name: 'status', desc: 'show model, mode, tokens, session', insert: '/status' },
-    { name: 'resume', desc: 'refresh resumable sessions', insert: '/resume' },
-    { name: 'diff', desc: 'show working-tree changes', insert: '/diff' },
-    { name: 'permissions', desc: 'show or change permission mode', insert: '/permissions ' },
-    { name: 'init', desc: 'create engine instructions file', insert: '/init' },
-    { name: 'review', desc: 'review changes', insert: '/review' },
-    { name: 'mcp', desc: 'show MCP server status', insert: '/mcp' },
-    { name: 'skills', desc: 'refresh equipped skills', insert: '/skills' },
-    { name: 'cost', desc: 'show usage/status', insert: '/cost' },
-    { name: 'copy', desc: 'copy last reply', insert: '/copy' },
-    { name: 'engine', desc: 'switch engine (claude|codex)', insert: '/engine ' },
-    { name: 'model', desc: 'change model', insert: '/model ' },
-    { name: 'mode', desc: 'change permission mode', insert: '/mode ' },
-    { name: 'effort', desc: 'set reasoning effort', insert: '/effort ' },
-    { name: 'help', desc: 'show help text', insert: '/help' },
-  ];
+  const SLASH_CMDS = ${SLASH_COMMANDS_JSON}.map(function(c) {
+    return Object.assign({}, c, { insert: '/' + c.name + (c.args ? ' ' : '') });
+  });
+  function slashCommandsForCli() {
+    return SLASH_CMDS.filter(function(cmd) {
+      return !cmd.engines || cmd.engines.indexOf(cli) >= 0;
+    });
+  }
   let slashIdx = 0;
   let suppressSlash = false;
   let activeSlashMatches = [];
@@ -1783,7 +1773,7 @@ export function chatHtml(): string {
         return;
       }
       prefix = mainMatch[1].toLowerCase();
-      activeSlashMatches = SLASH_CMDS.filter(function(cmd) {
+      activeSlashMatches = slashCommandsForCli().filter(function(cmd) {
         return cmd.name.toLowerCase().startsWith(prefix);
       });
     }
@@ -1805,8 +1795,8 @@ export function chatHtml(): string {
       const isSel = idx === slashIdx;
       const label = subCmd ? cmd.name : '/' + cmd.name;
       html += '<div class="slashOpt' + (isSel ? ' sel' : '') + '" data-idx="' + idx + '">' +
-                '<span class="cmd">' + label + '</span>' +
-                '<span class="desc">' + cmd.desc + '</span>' +
+                '<span class="cmd">' + escapeHtml(label) + '</span>' +
+                '<span class="desc">' + escapeHtml(cmd.desc || '') + '</span>' +
               '</div>';
     });
     html += '<div class="slashHint">Use ↑↓ to navigate, Tab/Enter to select, Esc to close</div>';
@@ -1872,6 +1862,7 @@ export function chatHtml(): string {
   const modelByCli = { claude: 'default', codex: 'default' };
   const effortByCli = { claude: 'default', codex: 'default' };
   let cli = 'claude';
+  let cliReport = null;
 
   // ---- platform tabs + model picker (chip + popover, mirroring the mode picker) ----
   function currentModel() {
@@ -2012,6 +2003,15 @@ export function chatHtml(): string {
   function selectTab(next) {
     if (next === cli) return;
     setTab(next);
+    const status = cliReport && cliReport[next];
+    if (status === 'missing') {
+      renderNotice((next === 'claude' ? 'Claude' : 'Codex') + ' is not installed.');
+      return;
+    }
+    if (status === 'no-login') {
+      renderNotice((next === 'claude' ? 'Claude' : 'Codex') + ' is not signed in. Type /login to connect it.');
+      return;
+    }
     vscode.postMessage({ type: 'platform', cli });
     vscode.postMessage({ type: 'model', model: currentModel() });
     vscode.postMessage({ type: 'mode', mode: currentMode() });
@@ -2858,6 +2858,23 @@ export function chatHtml(): string {
       const [cmd, ...rest] = text.slice(1).split(' ');
       const arg = rest.join(' ').trim();
       switch (cmd) {
+        case 'login': {
+          const target = (arg === 'claude' || arg === 'codex') ? arg : cli;
+          if (target === 'claude' && arg && arg !== 'claude' && arg !== 'codex') {
+            vscode.postMessage({ type: 'claudeAuthCode', code: arg });
+            renderNotice('Submitted Claude sign-in code.');
+          } else {
+            vscode.postMessage({ type: target === 'claude' ? 'startClaudeLogin' : 'startCodexLogin' });
+            renderNotice('Starting ' + (target === 'claude' ? 'Claude' : 'Codex') + ' sign-in...');
+          }
+          input.value = ''; return;
+        }
+        case 'logout': {
+          const target = (arg === 'claude' || arg === 'codex') ? arg : cli;
+          vscode.postMessage({ type: 'logoutEngine', cli: target });
+          renderNotice('Signing out of ' + (target === 'claude' ? 'Claude' : 'Codex') + '...');
+          input.value = ''; return;
+        }
         case 'new':
           vscode.postMessage({ type: 'new' });
           input.value = ''; return;
@@ -2893,7 +2910,7 @@ export function chatHtml(): string {
           showTyping();
           input.value = ''; return;
         case 'copy': {
-          const last = Array.from(log.querySelectorAll('.bubble.assistant')).pop();
+          const last = Array.from(log.querySelectorAll('.node.assistant .msg')).pop();
           if (last && navigator.clipboard) navigator.clipboard.writeText(last.textContent || '').catch(() => {});
           input.value = ''; return;
         }
@@ -2910,22 +2927,9 @@ export function chatHtml(): string {
           if (arg) { effortByCli[cli] = arg; fillEfforts(); vscode.postMessage({ type: 'effort', effort: arg === 'default' ? undefined : arg }); }
           input.value = ''; return;
         case 'help': {
-          const helpText = [
-            '/new — start fresh session', '/clear — reset conversation context',
-            '/compact [focus] — compact conversation context',
-            '/status — show model, mode, tokens, and session',
-            '/resume — refresh resumable sessions',
-            '/diff — show working-tree changes',
-            '/permissions [mode] — show or change permission mode',
-            '/init — create AGENTS.md for Codex or CLAUDE.md for Claude',
-            '/review [focus] — review changes',
-            '/mcp — show MCP server status',
-            '/skills — refresh equipped skills',
-            '/cost — show usage/status',
-            '/copy — copy last reply', '/engine claude|codex — switch engine',
-            '/model <model> — change model', '/mode <mode> — change permission mode',
-            '/effort low|medium|high|xhigh|max — set reasoning effort',
-          ].join('\\n');
+          const helpText = slashCommandsForCli()
+            .map(function(c) { return '/' + c.name + (c.args ? ' ' + c.args : '') + ' — ' + c.desc; })
+            .join('\\n');
           const pre = document.createElement('pre');
           pre.style.cssText = 'margin:8px 0;padding:8px 12px;background:var(--an-bg-1);border-radius:6px;font-size:0.82em;opacity:0.8';
           pre.textContent = helpText;
@@ -2933,13 +2937,22 @@ export function chatHtml(): string {
           input.value = ''; return;
         }
         default: {
-          const notice = document.createElement('div');
-          notice.style.cssText = 'padding:4px 12px;font-size:0.82em;opacity:0.55';
-          notice.textContent = 'Unknown command: /' + cmd + ' — type /help for the list';
-          log.appendChild(notice); syncWatermark();
+          // Let native Claude/Codex slash commands, custom skills, and MCP prompts run
+          // instead of blocking them in AgentNet's autocomplete layer.
+          vscode.postMessage({ type: 'slashCommand', command: cmd, arg });
+          showTyping();
           input.value = ''; return;
         }
       }
+    }
+    const activeStatus = cliReport && cliReport[cli];
+    if (activeStatus === 'missing') {
+      renderNotice((cli === 'claude' ? 'Claude' : 'Codex') + ' is not installed.');
+      return;
+    }
+    if (activeStatus === 'no-login') {
+      renderNotice((cli === 'claude' ? 'Claude' : 'Codex') + ' is not signed in. Type /login to connect it.');
+      return;
     }
     const images = attached.map((a) => ({ mime: a.mime, dataBase64: a.dataBase64, name: a.name }));
     pendingSentImages = attached.map((a) => a.dataUrl); // painted onto the echoed bubble
@@ -4519,6 +4532,38 @@ export function chatHtml(): string {
       }
     }
     else if (m.type === 'platform') setTab(m.cli); // extension switched CLI (e.g. on session open)
+    else if (m.type === 'cliStatus') {
+      cliReport = { claude: m.claude, codex: m.codex };
+      const status = cliReport[cli];
+      if (status === 'no-login') renderNotice((cli === 'claude' ? 'Claude' : 'Codex') + ' is not signed in. Type /login to connect it.');
+      else if (status === 'missing') renderNotice((cli === 'claude' ? 'Claude' : 'Codex') + ' is not installed.');
+    }
+    else if (m.type === 'claudeLoginUrl') {
+      renderNotice('Claude sign-in opened. If the browser did not open, visit:\\n' + m.url + '\\nAfter approving, paste the returned code with /login <code>.');
+    }
+    else if (m.type === 'claudeLoginStatus') {
+      if (m.status === 'done') {
+        cliReport = Object.assign({}, cliReport || {}, { claude: 'ok' });
+        renderNotice('Claude sign-in complete.');
+        if (cli === 'claude') vscode.postMessage({ type: 'platform', cli: 'claude' });
+      } else {
+        renderNotice('Claude sign-in failed: ' + (m.error || 'Login was not completed.'));
+      }
+    }
+    else if (m.type === 'codexLoginChallenge') {
+      renderNotice('Codex sign-in opened. If the browser did not open, visit:\\n' + m.url + '\\nEnter this one-time code on the page: ' + m.code);
+    }
+    else if (m.type === 'codexLoginStatus') {
+      if (m.status === 'done') {
+        cliReport = Object.assign({}, cliReport || {}, { codex: 'ok' });
+        renderNotice('Codex sign-in complete.');
+        if (cli === 'codex') vscode.postMessage({ type: 'platform', cli: 'codex' });
+      } else {
+        renderNotice('Codex sign-in failed: ' + (m.error || 'Login was not completed.'));
+      }
+    }
+    else if (m.type === 'toast') renderNotice(m.text || '');
+    else if (m.type === 'openUrl' && m.url) window.open(m.url, '_blank', 'noopener,noreferrer');
     else if (m.type === 'storage') { renderStorage(m.info, m.options); renderWalletStorage(); }
     else if (m.type === 'cloudSync') renderCloudSync(m.status);
     else if (m.type === 'wallet') setWallet(m.address);

@@ -246,6 +246,15 @@ describe("chat/session — slash commands", () => {
     expect(handles[0].runSlashCommand).toHaveBeenCalledWith("mcp", undefined);
   });
 
+  it("forwards unknown slash commands to the active engine", async () => {
+    const { handles, fromUI } = harness();
+
+    fromUI({ type: "slashCommand", command: "theme", arg: "dark" });
+    await flush();
+
+    expect(handles[0].runSlashCommand).toHaveBeenCalledWith("theme", "dark");
+  });
+
   it("/init creates CLAUDE.md for Claude and AGENTS.md for Codex", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "agentnet-init-"));
     try {

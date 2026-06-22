@@ -17,7 +17,7 @@
 // onboarding can skip the login screen on next launch; the real auth lives in the CLI.
 
 import { spawn } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { tokenFile, tokensDir, ensureDir } from "../core/paths.js";
 
 // A login session in flight: the spawned `claude auth login` process + the URL we parsed
@@ -112,4 +112,26 @@ export async function isClaudeMarked(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function runClaudeAuthCommand(claudeBin: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let out = "";
+    const p = spawn(claudeBin, args, { stdio: ["ignore", "pipe", "pipe"] });
+    p.stdout.on("data", (d) => (out += d.toString()));
+    p.stderr.on("data", (d) => (out += d.toString()));
+    p.on("error", reject);
+    p.on("exit", (code) => {
+      if (code === 0 || /not logged in|logged out|not authenticated/i.test(out)) {
+        resolve(out);
+      } else {
+        reject(new Error(out.trim() || `claude ${args.join(" ")} exited with code ${code}`));
+      }
+    });
+  });
+}
+
+export async function logoutClaude(claudeBin = "claude"): Promise<void> {
+  await runClaudeAuthCommand(claudeBin, ["auth", "logout"]);
+  await rm(tokenFile("claude"), { force: true });
 }

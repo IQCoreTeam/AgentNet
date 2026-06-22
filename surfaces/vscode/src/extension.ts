@@ -18,6 +18,13 @@ import {
   agentnetFolderLink,
   STORAGE_OPTIONS,
   createChatSession,
+  detectCli,
+  startClaudeLogin,
+  markClaudeConnected,
+  startCodexLogin,
+  markCodexConnected,
+  logoutClaude,
+  logoutCodex,
   marketplaceEnv,
   getSkillShopping,
   setSkillShopping,
@@ -29,6 +36,8 @@ import {
   chatHtml,
   onboardingHtml,
   listCodexModelOptions,
+  type ClaudeLogin,
+  type CodexLogin,
   type StorageConfig,
 } from "@iqlabs-official/agent-sdk";
 import { localWallet, solanaDefaultKeypairPath } from "@iqlabs-official/agent-sdk/account/localWallet";
@@ -44,6 +53,8 @@ let runtime: AgentRuntime | null = null;
 // connect() reports per-write success/failure here (otherwise cloud writes are silent).
 let lastCloudStatus: { ok: boolean; error?: string } | null = null;
 let onCloudStatusChange: (() => void) | null = null;
+let claudeLogin: ClaudeLogin | null = null;
+let codexLogin: CodexLogin | null = null;
 function cloudStatusCb(s: { ok: boolean; error?: string }) {
   lastCloudStatus = s;
   onCloudStatusChange?.();
@@ -83,6 +94,96 @@ async function boot(context: vscode.ExtensionContext) {
 
 function openExternal(url: string) {
   vscode.env.openExternal(vscode.Uri.parse(url));
+}
+
+type WebviewTransport = {
+  send(msg: unknown): unknown;
+  onRecv(cb: (m: any) => void): unknown;
+};
+
+function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
+async function pushCliStatus(transport: WebviewTransport) {
+  const cli = await detectCli();
+  transport.send({ type: "cliStatus", claude: cli.claude, codex: cli.codex });
+}
+
+function attachAuthHandlers(transport: WebviewTransport) {
+  transport.onRecv(async (m: any) => {
+    switch (m?.type) {
+      case "ready":
+      case "getCliStatus":
+        await pushCliStatus(transport);
+        return;
+      case "startClaudeLogin":
+        try {
+          claudeLogin?.cancel();
+          claudeLogin = await startClaudeLogin();
+          openExternal(claudeLogin.url);
+          transport.send({ type: "claudeLoginUrl", url: claudeLogin.url });
+          claudeLogin.done.then(async (ok) => {
+            if (ok) await markClaudeConnected();
+            transport.send({
+              type: "claudeLoginStatus",
+              status: ok ? "done" : "error",
+              error: ok ? undefined : "Login was not completed.",
+            });
+            if (ok) await pushCliStatus(transport);
+            claudeLogin = null;
+          });
+        } catch (e) {
+          transport.send({ type: "claudeLoginStatus", status: "error", error: errorMessage(e) });
+          claudeLogin = null;
+        }
+        return;
+      case "claudeAuthCode":
+        if (typeof m.code === "string") claudeLogin?.submitCode(m.code);
+        return;
+      case "cancelClaudeLogin":
+        claudeLogin?.cancel();
+        claudeLogin = null;
+        return;
+      case "startCodexLogin":
+        try {
+          codexLogin?.cancel();
+          codexLogin = await startCodexLogin();
+          openExternal(codexLogin.url);
+          transport.send({ type: "codexLoginChallenge", url: codexLogin.url, code: codexLogin.code });
+          codexLogin.done.then(async (ok) => {
+            if (ok) await markCodexConnected();
+            transport.send({
+              type: "codexLoginStatus",
+              status: ok ? "done" : "error",
+              error: ok ? undefined : "Login was not completed.",
+            });
+            if (ok) await pushCliStatus(transport);
+            codexLogin = null;
+          });
+        } catch (e) {
+          transport.send({ type: "codexLoginStatus", status: "error", error: errorMessage(e) });
+          codexLogin = null;
+        }
+        return;
+      case "cancelCodexLogin":
+        codexLogin?.cancel();
+        codexLogin = null;
+        return;
+      case "logoutEngine": {
+        const engine = m.cli === "codex" ? "codex" : "claude";
+        try {
+          if (engine === "codex") await logoutCodex();
+          else await logoutClaude();
+          transport.send({ type: "toast", text: `${engine === "codex" ? "Codex" : "Claude"} signed out.` });
+          await pushCliStatus(transport);
+        } catch (e) {
+          transport.send({ type: "toast", text: `Sign-out failed: ${errorMessage(e)}` });
+        }
+        return;
+      }
+    }
+  });
 }
 
 // Onboarding: collect wallet + (optional) storage, build runtime, then swap to chat.
@@ -178,6 +279,7 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
     send: (msg: unknown) => panel.webview.postMessage(msg),
     onRecv: (cb: (m: any) => void) => panel.webview.onDidReceiveMessage(cb),
   };
+  attachAuthHandlers(transport);
 
   // This panel's OWN approval channel — tool approvals from sessions started here
   // dock in THIS panel (it shares this panel's transport). Drained on dispose so a

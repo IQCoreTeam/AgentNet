@@ -324,6 +324,18 @@ function reducer(state: State, ev: Action): State {
       return { ...state, walletAddress: ev.address };
     case "approval":
       return { ...state, approvals: [ev.req, ...state.approvals] };
+    case "notice":
+      return { ...state, toast: ev.text };
+    case "status": {
+      const s = ev.status;
+      const ctx = s.contextTokens === undefined
+        ? ""
+        : `, ctx ${s.contextTokens >= 1000 ? Math.round(s.contextTokens / 1000) + "k" : s.contextTokens}`;
+      return {
+        ...state,
+        toast: `${s.cli}: model ${s.model ?? "default"}, mode ${s.mode ?? "default"}, effort ${s.effort ?? "default"}${ctx}`,
+      };
+    }
     case "toast":
       return { ...state, toast: ev.text };
     // ── market local actions ──

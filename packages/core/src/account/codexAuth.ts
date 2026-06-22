@@ -129,3 +129,26 @@ export async function isCodexMarked(): Promise<boolean> {
     return false;
   }
 }
+
+function runCodexAuthCommand(codexBin: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let out = "";
+    const p = spawn(codexBin, args, { stdio: ["ignore", "pipe", "pipe"] });
+    p.stdout.on("data", (d) => (out += d.toString()));
+    p.stderr.on("data", (d) => (out += d.toString()));
+    p.on("error", reject);
+    p.on("exit", (code) => {
+      if (code === 0 || /not logged in|logged out|no auth|not authenticated/i.test(out)) {
+        resolve(out);
+      } else {
+        reject(new Error(stripAnsi(out).trim() || `codex ${args.join(" ")} exited with code ${code}`));
+      }
+    });
+  });
+}
+
+export async function logoutCodex(codexBin = "codex"): Promise<void> {
+  await deleteCodexApiKey();
+  await runCodexAuthCommand(codexBin, ["logout"]);
+  await rm(tokenFile("codex"), { force: true });
+}

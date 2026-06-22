@@ -4,6 +4,7 @@ import type { Cli, ImageInput } from "../transport/protocol";
 import { AttachIcon } from "../icons";
 import { useElementHeightVariable } from "../layoutEffects";
 import { CHAT_MODEL_OPTIONS } from "@iqlabs-official/agent-sdk/chat/modelOptions";
+import { CHAT_SLASH_COMMANDS } from "@iqlabs-official/agent-sdk/chat/slashCommands";
 
 // The shared model catalog (same one vscode/cli use) — gives versioned chip labels
 // (Opus 4.8, Sonnet 4.6, GPT-5.5 Codex…) + a description, instead of bare aliases.
@@ -35,17 +36,15 @@ const MODES: Record<Cli, { value: string; label: string; title: string }[]> = {
   ],
 };
 
-// Slash commands handled locally in this surface (not forwarded to the agent).
-const SLASH_CMDS = [
-  { name: "new",    desc: "start a fresh session" },
-  { name: "clear",  desc: "clear on-screen log" },
-  { name: "copy",   desc: "copy last reply to clipboard" },
-  { name: "engine", desc: "switch engine — claude|codex" },
-  { name: "model",  desc: "change model" },
-  { name: "mode",   desc: "change permission mode" },
-  { name: "effort", desc: "set reasoning effort" },
-  { name: "help",   desc: "list commands" },
-];
+function slashCommandsForCli(cli: Cli): { name: string; desc: string; insert: string }[] {
+  return CHAT_SLASH_COMMANDS
+    .filter((cmd) => cmd.engines.includes(cli))
+    .map((cmd) => ({
+      name: cmd.name,
+      desc: cmd.desc,
+      insert: "/" + cmd.name + (cmd.args ? " " : ""),
+    }));
+}
 
 // A labelled row of tappable chips — the mobile replacement for a native <select>.
 // One chip is active (accent fill); tapping another picks it. Used for model/effort/mode.
@@ -183,11 +182,7 @@ export function Composer() {
       m = /^\/(\S*)$/.exec(text);
       if (m) {
         const prefix = m[1].toLowerCase();
-        const options = SLASH_CMDS.map(c => ({
-          name: c.name,
-          desc: c.desc,
-          insert: '/' + c.name + (['engine', 'model', 'mode', 'effort'].includes(c.name) ? ' ' : '')
-        }));
+        const options = slashCommandsForCli(state.cli);
         activeMatches = options.filter(opt => opt.name.toLowerCase().startsWith(prefix));
       }
     }
@@ -284,14 +279,25 @@ export function Composer() {
         case "effort":
           if (arg) { setEffort(arg); send({ type: "effort", effort: arg === "default" ? undefined : arg }); }
           setText(""); return;
+        case "login": {
+          const target = arg === "claude" || arg === "codex" ? arg : state.cli;
+          if (target === "claude" && arg && arg !== "claude" && arg !== "codex") send({ type: "claudeAuthCode", code: arg });
+          else send({ type: target === "claude" ? "startClaudeLogin" : "startCodexLogin" });
+          setText(""); return;
+        }
+        case "logout": {
+          const target = arg === "claude" || arg === "codex" ? arg : state.cli;
+          send({ type: "logoutEngine", cli: target });
+          setText(""); return;
+        }
         case "help": {
-          const lines = SLASH_CMDS
+          const lines = slashCommandsForCli(state.cli)
             .map((c) => `/${c.name} — ${c.desc}`).join("\n");
           setSlashNotice(lines);
           setText(""); return;
         }
         default:
-          setSlashNotice(`Unknown command: /${cmd} — type /help for the list`);
+          send({ type: "slashCommand", command: cmd, arg: arg || undefined });
           setText(""); return;
       }
     }

@@ -432,6 +432,10 @@ export function createChatSession(
           transport.send({ type: "notice", text: "Resume: open a session from History." });
           break;
         }
+        if (command) {
+          const h = await ensureHandle();
+          h.runSlashCommand?.(command, arg || undefined);
+        }
         break;
       }
       case "interrupt":
