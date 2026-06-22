@@ -423,7 +423,14 @@ function codexEngine(opts: SpawnOpts): Engine {
     childEnv.OPENAI_API_KEY = opts.apiKey;
   }
   const mcpFlags = opts.codexMcp ? codexMcpFlags(opts.codexMcp) : [];
-  const child = spawn(codexPath, ["app-server", "--stdio", ...mcpFlags], {
+  const codexArgs = ["app-server", "--stdio"];
+  if (childEnv.AGENTNET_CODEX_DISABLE_PLUGINS === "1") {
+    // Android runs Codex under proot. Codex plugin discovery/sync can spend 80s+ walking
+    // the plugin cache before the first model request is sent; keep desktop unchanged.
+    codexArgs.push("--disable", "plugins");
+  }
+  codexArgs.push(...mcpFlags);
+  const child = spawn(codexPath, codexArgs, {
     env: childEnv,
     stdio: ["pipe", "pipe", "pipe"],
   });

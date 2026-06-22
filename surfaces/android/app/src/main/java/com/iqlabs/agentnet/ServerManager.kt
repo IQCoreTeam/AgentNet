@@ -82,6 +82,10 @@ class ServerManager(private val ctx: Context) {
             // so we tell Codex to skip its own sandbox. Desktop never sets this and keeps
             // its real sandbox. spawn.ts reads this and passes it as the Codex sandboxMode.
             "AGENTNET_CODEX_SANDBOX=danger-full-access",
+            // Codex plugin discovery/sync is very file-system heavy under proot and can delay
+            // the first model request by ~90s on Android. Local skills live under .codex/skills;
+            // this only disables the Codex "plugins" feature for the Android app-server.
+            "AGENTNET_CODEX_DISABLE_PLUGINS=1",
             *googleClientIdEnv.toTypedArray(),
             *googleNativeAuthEnv.toTypedArray(),
             "/bin/sh", "-lc", cmd,
