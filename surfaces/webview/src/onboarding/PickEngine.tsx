@@ -9,7 +9,7 @@ import type { EngineStatus } from "../state/store";
 import type { Cli } from "../transport/protocol";
 
 function StatusPill({ status }: { status: EngineStatus | undefined }) {
-  if (status === "ok") return <span className="text-xs text-[#00E673]">● ready</span>;
+  if (status === "ok") return <span className="text-xs text-an-green">● ready</span>;
   if (status === "no-login") return <span className="text-xs text-amber-400">● sign-in needed</span>;
   return <span className="text-xs text-zinc-500">● not installed</span>;
 }
@@ -32,7 +32,7 @@ function EngineCard({
       onClick={onClick}
       disabled={disabled}
       className={`flex w-full items-center justify-between rounded-xl border px-4 py-3.5 text-left transition disabled:opacity-40 ${
-        selected ? "border-[#00E673] bg-zinc-900" : "border-zinc-700 hover:bg-zinc-800/60"
+        selected ? "border-an-green bg-zinc-900" : "border-zinc-700 hover:bg-zinc-800/60"
       }`}
     >
       <span className="flex flex-col gap-1">

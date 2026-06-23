@@ -42,7 +42,7 @@ export function LoginUrlBlock({ url }: { url: string }) {
           href={url}
           target="_blank"
           rel="noreferrer"
-          className="break-all rounded-lg bg-zinc-900 px-3 py-2.5 text-xs leading-relaxed text-[#00E673] ring-1 ring-zinc-800"
+          className="break-all rounded-lg bg-zinc-900 px-3 py-2.5 text-xs leading-relaxed text-an-green ring-1 ring-zinc-800"
         >
           {url}
         </a>

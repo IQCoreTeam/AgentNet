@@ -59,7 +59,7 @@ export function RegisterWorkRepo() {
         onChange={(e) => setRepo(e.target.value)}
         placeholder="owner/name or github.com URL"
         disabled={!hasToken}
-        className="rounded-xl bg-zinc-900 px-3 py-2.5 text-sm text-white outline-none ring-1 ring-zinc-800 focus:ring-[#00E673]/50 font-mono disabled:opacity-50"
+        className="rounded-xl bg-zinc-900 px-3 py-2.5 text-sm text-white outline-none ring-1 ring-zinc-800 focus:ring-an-green/50 font-mono disabled:opacity-50"
       />
 
       <div className="flex flex-col gap-1.5">
@@ -78,7 +78,7 @@ export function RegisterWorkRepo() {
                     checked={!!selected[mint]}
                     onChange={() => toggle(mint)}
                     disabled={!hasToken}
-                    className="accent-[#00E673]"
+                    className="accent-an-green"
                   />
                   <span className="text-sm text-zinc-200 truncate">{name}</span>
                 </label>
@@ -91,7 +91,7 @@ export function RegisterWorkRepo() {
       <button
         onClick={submit}
         disabled={!canSubmit}
-        className="rounded-xl bg-[#00E673] px-3 py-2.5 text-sm font-semibold text-black disabled:opacity-40 disabled:cursor-not-allowed"
+        className="rounded-xl bg-an-green px-3 py-2.5 text-sm font-semibold text-black disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {submitting ? "Registering…" : "Register repo"}
       </button>

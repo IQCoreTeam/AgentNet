@@ -6,33 +6,84 @@
    touch instead of a desktop panel: larger hit targets (--an-tap), calmer
    type, generous padding. Components read these vars so the whole app restyles
    from one place. */
+/* ── Design tokens ──────────────────────────────────────────────────────────
+   Tailwind v4 @theme = single source for the solid palette + the type scale +
+   easings; it generates utilities (bg-an-green, text-body, ease-emphasized...).
+   Derived rgba, radii and motion durations live in :root and alias these so the
+   existing .an-* primitives and inline var() usages keep working from one place.
+   Values validated in plans/design-system.md (do not hand-pick off-scale). */
+@theme {
+  /* solid palette (no raw hex elsewhere — use the bg-/text-/border-/ring- utils) */
+  --color-an-bg-0: #0a0b0d;
+  --color-an-bg-1: #141519;
+  --color-an-bg-2: #1c1e23;
+  --color-an-fg: #ececee;
+  --color-an-fg-dim: #9a9aa3;
+  --color-an-fg-mute: #66666e;
+  --color-an-green: #3ac07a;     /* brand accent — refined, not neon */
+  --color-an-amber: #e0a23a;     /* compaction / warning */
+  --color-an-violet: #a98bff;    /* skill publish accent */
+  --color-an-red: #e5484d;       /* danger / destructive */
+  --color-claude: #e9883a;       /* claude engine accent (orange) */
+  --color-an-on-green: #06140c;  /* text on green fills */
+
+  /* type scale (sp -> rem @16) + line-heights — design-system §3 */
+  --text-caption: 0.75rem;      --text-caption--line-height: 1.333;
+  --text-label: 0.8125rem;      --text-label--line-height: 1.23;
+  --text-body-dense: 0.9375rem; --text-body-dense--line-height: 1.47;
+  --text-body: 1rem;            --text-body--line-height: 1.5;
+  --text-title: 1.25rem;        --text-title--line-height: 1.3;
+  --text-heading: 1.5rem;       --text-heading--line-height: 1.25;
+  --text-display: 1.75rem;      --text-display--line-height: 1.2;
+
+  /* motion easings — design-system §8.2 (generates ease-* utilities) */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-decelerate: cubic-bezier(0, 0, 0, 1);
+  --ease-accelerate: cubic-bezier(0.3, 0, 1, 1);
+  --ease-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --ease-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
+}
+
 :root {
   color-scheme: dark;
 
-  --an-bg-0: #0a0b0d;   /* deepest app surface (page) */
-  --an-bg-1: #141519;   /* raised: header, cards, drawer */
-  --an-bg-2: #1c1e23;   /* highest: inputs, active rows, bubbles */
+  /* surfaces — alias the @theme solids; glass stays a derived literal */
+  --an-bg-0: var(--color-an-bg-0);   /* deepest app surface (page) */
+  --an-bg-1: var(--color-an-bg-1);   /* raised: header, cards, drawer */
+  --an-bg-2: var(--color-an-bg-2);   /* highest: inputs, active rows, bubbles */
   --an-bg-glass: rgba(16, 17, 21, 0.82);
 
-  --an-fg: #ececee;
-  --an-fg-dim: #9a9aa3;   /* secondary text */
-  --an-fg-mute: #66666e;  /* tertiary / placeholder */
+  --an-fg: var(--color-an-fg);
+  --an-fg-dim: var(--color-an-fg-dim);   /* secondary text */
+  --an-fg-mute: var(--color-an-fg-mute); /* tertiary / placeholder */
 
   --an-line: rgba(255, 255, 255, 0.085);
   --an-line-soft: rgba(255, 255, 255, 0.05);
 
-  --an-green: #3ac07a;    /* brand accent — refined, not neon */
+  --an-green: var(--color-an-green);
   --an-green-soft: rgba(58, 192, 122, 0.16);
   --an-green-line: rgba(58, 192, 122, 0.42);
   --an-green-dim: rgba(58, 192, 122, 0.10);
-  --claude: #e9883a;      /* claude engine accent (orange) */
-  --an-amber: #e0a23a;    /* compaction / warning */
-  --an-violet: #a98bff;   /* skill publish accent */
+  --claude: var(--color-claude);
+  --an-amber: var(--color-an-amber);
+  --an-violet: var(--color-an-violet);
+  --an-red: var(--color-an-red);
+  --an-on-green: var(--color-an-on-green);
 
   --an-radius: 16px;
-  --an-radius-sm: 11px;
+  --an-radius-sm: 12px;   /* snapped to M3 shape grid (was 11) */
   --an-radius-pill: 999px;
-  --an-tap: 44px;         /* minimum comfortable touch target */
+  --an-tap: 44px;         /* min touch; new tap targets use 48 (design-system §5) */
+
+  /* motion durations — design-system §8.1 */
+  --dur-1: 50ms;
+  --dur-2: 100ms;   /* press / toggle feedback floor */
+  --dur-3: 150ms;
+  --dur-4: 200ms;   /* small enter / medium exit */
+  --dur-screen: 300ms;  /* default screen / sheet transition */
+  --dur-lg: 400ms;
+  --dur-max: 500ms;     /* upper bound for functional motion */
+  --dur-celebrate: 800ms; /* celebration only (700-1200ms) */
 }
 
 html,
@@ -132,7 +183,7 @@ body {
   width: 100%;
   border-radius: var(--an-radius);
   background: var(--an-green);
-  color: #06140c;
+  color: var(--an-on-green);
   font-size: 0.95rem;
   font-weight: 700;
   transition: filter 0.14s, transform 0.08s;
@@ -155,12 +206,12 @@ body {
   flex: none;
   border-radius: var(--an-radius-pill);
   background: var(--an-green);
-  color: #06140c;
+  color: var(--an-on-green);
   transition: filter 0.14s, transform 0.08s, background 0.14s;
 }
 .an-send:active { transform: scale(0.92); }
 .an-send:disabled { opacity: 0.4; }
-.an-send.is-stop { background: #e5484d; color: #fff; }
+.an-send.is-stop { background: var(--an-red); color: #fff; }
 
 .app-viewport {
   display: flex;

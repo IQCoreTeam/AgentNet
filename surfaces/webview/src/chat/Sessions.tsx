@@ -388,7 +388,7 @@ export function Sessions({ onClose, embedded = false }: { onClose: () => void; e
                     value={customUrl}
                     onChange={(e) => setCustomUrl(e.target.value)}
                     placeholder="https://..."
-                    className="w-full rounded-lg bg-zinc-900 border border-zinc-850 px-2.5 py-2 text-xs text-white outline-none focus:border-[#00E673]/50"
+                    className="w-full rounded-lg bg-zinc-900 border border-zinc-850 px-2.5 py-2 text-xs text-white outline-none focus:border-an-green/50"
                   />
                 </div>
                 <div>
@@ -399,7 +399,7 @@ export function Sessions({ onClose, embedded = false }: { onClose: () => void; e
                     value={customAuth}
                     onChange={(e) => setCustomAuth(e.target.value)}
                     placeholder="Bearer token..."
-                    className="w-full rounded-lg bg-zinc-900 border border-zinc-850 px-2.5 py-2 text-xs text-white outline-none focus:border-[#00E673]/50"
+                    className="w-full rounded-lg bg-zinc-900 border border-zinc-850 px-2.5 py-2 text-xs text-white outline-none focus:border-an-green/50"
                   />
                 </div>
                 <button
@@ -413,7 +413,7 @@ export function Sessions({ onClose, embedded = false }: { onClose: () => void; e
                     });
                     setSettingsMode("list");
                   }}
-                  className="w-full rounded-lg bg-[#00E673] hover:bg-[#00d068] text-xs font-semibold py-2.5 text-black mt-2 active:scale-95 transition disabled:opacity-40"
+                  className="w-full rounded-lg bg-an-green hover:bg-[#00d068] text-xs font-semibold py-2.5 text-black mt-2 active:scale-95 transition disabled:opacity-40"
                 >
                   Connect Storage
                 </button>
@@ -454,7 +454,7 @@ export function Sessions({ onClose, embedded = false }: { onClose: () => void; e
                         setShowManualCode(false);
                         send({ type: "startGoogleLogin" });
                       }}
-                      className="w-full rounded-lg bg-[#00E673] hover:bg-[#00d068] text-xs font-semibold py-2.5 text-black mt-1 active:scale-95 transition disabled:opacity-40"
+                      className="w-full rounded-lg bg-an-green hover:bg-[#00d068] text-xs font-semibold py-2.5 text-black mt-1 active:scale-95 transition disabled:opacity-40"
                     >
                       {busy ? "Starting Login…" : "Sign in to Google Drive"}
                     </button>
@@ -486,7 +486,7 @@ export function Sessions({ onClose, embedded = false }: { onClose: () => void; e
                           href={googleLoginUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="break-all rounded-lg bg-zinc-900 px-2.5 py-2 text-[10px] leading-relaxed text-[#00E673] border border-zinc-850 block text-center"
+                          className="break-all rounded-lg bg-zinc-900 px-2.5 py-2 text-[10px] leading-relaxed text-an-green border border-zinc-850 block text-center"
                         >
                           Open Authorization URL
                         </a>
@@ -513,7 +513,7 @@ export function Sessions({ onClose, embedded = false }: { onClose: () => void; e
                           value={code}
                           onChange={(e) => setCode(e.target.value)}
                           placeholder="Paste URL or code here"
-                          className="w-full rounded bg-zinc-900 border border-zinc-850 px-2.5 py-2 text-xs text-white outline-none focus:border-[#00E673]/50"
+                          className="w-full rounded bg-zinc-900 border border-zinc-850 px-2.5 py-2 text-xs text-white outline-none focus:border-an-green/50"
                         />
                         <button
                           disabled={!code.trim()}
@@ -521,7 +521,7 @@ export function Sessions({ onClose, embedded = false }: { onClose: () => void; e
                             send({ type: "googleAuthCode", code: code.trim() });
                             setCode("");
                           }}
-                          className="w-full rounded-lg bg-[#00E673] hover:bg-[#00d068] text-xs font-semibold py-2.5 text-black mt-1 active:scale-95 transition disabled:opacity-40"
+                          className="w-full rounded-lg bg-an-green hover:bg-[#00d068] text-xs font-semibold py-2.5 text-black mt-1 active:scale-95 transition disabled:opacity-40"
                         >
                           Confirm
                         </button>

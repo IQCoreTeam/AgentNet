@@ -134,14 +134,14 @@ export function ConnectStorage() {
             value={customUrl}
             onChange={(e) => setCustomUrl(e.target.value)}
             placeholder="https://..."
-            className="rounded-xl bg-zinc-900 px-3 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 focus:ring-[#00E673]/50"
+            className="rounded-xl bg-zinc-900 px-3 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 focus:ring-an-green/50"
           />
           <label className="text-xs text-zinc-500 font-semibold uppercase">Auth Header (optional)</label>
           <input
             value={customAuth}
             onChange={(e) => setCustomAuth(e.target.value)}
             placeholder="Bearer token..."
-            className="rounded-xl bg-zinc-900 px-3 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 focus:ring-[#00E673]/50"
+            className="rounded-xl bg-zinc-900 px-3 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 focus:ring-an-green/50"
           />
           <OnboardingButton disabled={!customUrl.trim()} onClick={connectCustom}>
             Connect Storage
@@ -176,7 +176,7 @@ export function ConnectStorage() {
                 value={clientId}
                 onChange={(e) => setClientId(e.target.value)}
                 placeholder="123456789-xxx.apps.googleusercontent.com"
-                className="rounded-xl bg-zinc-900 px-3 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 focus:ring-[#00E673]/50"
+                className="rounded-xl bg-zinc-900 px-3 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 focus:ring-an-green/50"
               />
               {googleCredsError && (
                 <p className="text-center text-sm text-red-400">{googleCredsError}</p>
@@ -226,7 +226,7 @@ export function ConnectStorage() {
                     href={googleLoginUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="break-all rounded-lg bg-zinc-900 px-3 py-2.5 text-xs leading-relaxed text-[#00E673] ring-1 ring-zinc-800"
+                    className="break-all rounded-lg bg-zinc-900 px-3 py-2.5 text-xs leading-relaxed text-an-green ring-1 ring-zinc-800"
                   >
                     {googleLoginUrl}
                   </a>
@@ -238,7 +238,7 @@ export function ConnectStorage() {
                     onChange={(e) => setCode(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && submitGoogleCode()}
                     placeholder="Paste code or redirect URL here"
-                    className="rounded-xl bg-zinc-900 px-3 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 focus:ring-[#00E673]/50"
+                    className="rounded-xl bg-zinc-900 px-3 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 focus:ring-an-green/50"
                   />
                   <OnboardingButton disabled={!code.trim()} onClick={submitGoogleCode}>
                     Confirm

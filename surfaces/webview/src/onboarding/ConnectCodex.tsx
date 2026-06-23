@@ -83,7 +83,7 @@ export function ConnectCodex() {
               <p className="mt-1 text-sm text-zinc-400">
                 2. Enter this one-time code on the page:
               </p>
-              <div className="rounded-xl bg-zinc-900 px-4 py-3 text-center font-mono text-lg font-semibold tracking-widest text-[#00E673] ring-1 ring-zinc-800">
+              <div className="rounded-xl bg-zinc-900 px-4 py-3 text-center font-mono text-lg font-semibold tracking-widest text-an-green ring-1 ring-zinc-800">
                 {codexLoginCode}
               </div>
               <p className="text-center text-xs text-zinc-500">
@@ -103,7 +103,7 @@ export function ConnectCodex() {
             onKeyDown={(e) => e.key === "Enter" && submitApiKey()}
             placeholder="sk-proj-..."
             type="password"
-            className="rounded-xl bg-zinc-900 px-3 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 focus:ring-[#00E673]/50"
+            className="rounded-xl bg-zinc-900 px-3 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 focus:ring-an-green/50"
           />
           <OnboardingButton disabled={busy || !apiKey.trim()} onClick={submitApiKey}>
             {busy ? "Saving…" : "Connect with API Key"}

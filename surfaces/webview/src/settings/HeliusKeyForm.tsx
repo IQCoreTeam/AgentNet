@@ -37,7 +37,7 @@ export function HeliusKeyForm({ onDone }: { onDone?: () => void }) {
         href="https://www.helius.dev/docs/quickstart"
         target="_blank"
         rel="noreferrer"
-        className="text-xs font-medium text-[#00E673] active:text-[#00d068]"
+        className="text-xs font-medium text-an-green active:text-[#00d068]"
       >
         Helius quickstart
       </a>

@@ -53,7 +53,7 @@ export function ConnectClaude() {
             onChange={(e) => setCode(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit()}
             placeholder="Paste code here"
-            className="rounded-xl bg-zinc-900 px-3 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 focus:ring-[#00E673]/50"
+            className="rounded-xl bg-zinc-900 px-3 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 focus:ring-an-green/50"
           />
           <OnboardingButton disabled={!code.trim()} onClick={submit}>
             Confirm

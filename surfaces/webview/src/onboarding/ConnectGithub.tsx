@@ -66,7 +66,7 @@ export function ConnectGithub({ onDone }: Props) {
             onKeyDown={(e) => e.key === "Enter" && save()}
             placeholder="ghp_…"
             type="password"
-            className="rounded-xl bg-zinc-900 px-3 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 focus:ring-[#00E673]/50 font-mono"
+            className="rounded-xl bg-zinc-900 px-3 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 focus:ring-an-green/50 font-mono"
           />
           <OnboardingButton disabled={!token.trim() || saving} onClick={save}>
             {saving ? "Saving…" : "Save Token"}
