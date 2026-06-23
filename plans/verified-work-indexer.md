@@ -14,6 +14,28 @@
 
 ---
 
+## 0. Locked decisions (2026-06-23 discussion)
+
+Two things were decided after the first draft; the sections below are updated to match.
+
+1. **Blog links are decoupled from verified work.** The blog/profile and skill-review
+   surfaces drop the dedicated `gitLink` field. It becomes a generic `link` that simply
+   **embeds** known services (GitHub, Twitter, …) for display. A blog link is *not* a
+   verified-work claim and carries no verification — the two are never the same thing.
+   (Code touch: `AgentProfileView` `GithubCard` → a generic `LinkEmbed`; the
+   `SkillDetailView` "GitHub link" input → a plain link. Display only.)
+
+2. **Verified-work links are stored in the indexer (off-chain), and the indexer verifies
+   them itself before storing.** GitHub data is off-chain, mutable, and cache-like, so the
+   link lives in the `agentnet-nft-indexer` read model (§5), not in the on-chain format.
+   The on-chain Skill NFT / table format stays unchanged. Honest cost: the indexer now
+   *owns* these links (they cannot be rebuilt from chain alone, since GitHub doesn't know
+   which skill was claimed), so the link rows are a **backup target**.
+
+Registration is a separate, deliberate flow (§2), not a side effect of blogging.
+
+---
+
 ## 1. Product thesis
 
 The fastest visible version of the game layer is not a new token economy.
@@ -38,24 +60,29 @@ milestones later, but it should not be the source of truth for raw claims.
 
 ---
 
-## 2. Constraint: do not make the user push AgentNet config
+## 2. Registration & ownership proof (the `.agentnet` marker)
 
-We do **not** want a "prove this repo by committing an AgentNet config file" flow for v1.
-It adds friction and feels invasive.
+Registration is a dedicated, guided flow — **not** a side effect of posting a blog. The
+user opens "register repo" and walks a few buttons:
 
-Instead, verification should happen when the user posts or attaches a repo:
+1. **Add the `.agentnet` marker** — AgentNet uses the user's *local* GitHub token to commit
+   a small `.agentnet` file to the repo. The file names the claiming **wallet** (and may
+   later carry session id / skill mints as a provenance payload). This is a one-time,
+   user-initiated file (like `LICENSE` / `CODEOWNERS`) — not the continuous config-push we
+   rejected earlier.
+2. **Enter the GitHub link** — the repo URL and which Skill NFT(s) it used.
+3. **Verify & store** — the request goes to the indexer, which verifies it (§7) and stores
+   it in the §5 read model.
 
-1. The user is already connected to GitHub in AgentNet.
-2. At attach/post time, AgentNet checks that the GitHub account has ownership/admin rights
-   for the repo.
-3. AgentNet also checks its own session/work logs to support the claim that an AgentNet
-   agent worked on the repo.
-4. The blog/profile can then show the repo as verified work.
+**Why a marker instead of an OAuth account-check:** the marker is a *public, our-side
+re-verifiable* proof of repo control. The indexer confirms it with a single public read,
+holding no secret and no user token. (An account-only check would be a client claim the
+indexer cannot independently re-verify without holding the PAT, which §6 forbids.)
 
-This gives us enough provenance for the first game layer without requiring repo mutation.
-The exact strength of "authorship" verification is intentionally left as a later design
-decision: ownership alone is easy; proving that a specific skill contributed to the repo
-needs session-log support.
+The marker proves **control**, not **authorship**. Proving that a specific skill actually
+contributed needs session-log support and stays a later, "coming soon" strengthening — the
+marker can grow into that provenance payload (session id, skill mints) when the agent writes
+it *in-session* at repo creation.
 
 ---
 
@@ -190,21 +217,26 @@ sequenceDiagram
     actor U as User
     participant APP as AgentNet app
     participant GH as GitHub
-    participant LOG as AgentNet session logs
     participant IDX as agentnet-nft-indexer
-    participant BLOG as Agent blog/profile
 
-    U->>APP: Attach repo to Skill NFT / blog post
-    APP->>GH: Verify GitHub account owns or can administer repo
-    APP->>LOG: Check whether AgentNet worked on this repo/session
-    APP->>IDX: Register verified work link candidate
-    IDX->>IDX: Store link + cached public repo metadata
-    IDX-->>APP: Hydrated skill/repo view
-    APP->>BLOG: Show verified repo card with skill badges
+    U->>APP: Register repo to Skill NFT
+    APP->>GH: Commit .agentnet marker (user's local token, client-side)
+    APP->>IDX: register {repo, skill_mint(s), wallet, signature}
+    IDX->>GH: Public read of .agentnet (no token)
+    IDX->>IDX: marker.wallet == request.wallet && wallet signature ok ?
+    IDX->>IDX: (optional) does wallet hold the skill? (chain scan)
+    IDX->>IDX: store link + cache repo metadata — only if checks pass
+    IDX-->>APP: hydrated skill/repo view
 ```
 
-For v1, the verification can be "verified owner + claimed AgentNet work" rather than
-cryptographic proof of every commit. Stronger provenance can be added later.
+The write path is **trust-minimized, not key-gated**: anyone may call `register`, but the
+indexer only stores a row whose `.agentnet` marker proves repo control and whose signature
+proves the wallet. There is no shared secret, and the user's PAT never reaches the indexer
+(§6) — the marker *write* is client-side with the user's token; the marker *read* is a
+public fetch.
+
+For v1, "verified repo control + claimed skills" is enough; cryptographic per-commit
+authorship stays a later strengthening.
 
 ---
 
