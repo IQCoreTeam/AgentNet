@@ -94,7 +94,37 @@ flowchart TB
 
 ---
 
-## 4. 친숙성 체크 (Jakob's Law — "너무 다르면 헷갈림" 방어)
+## 4. 내비 스타일 — 미니멀하면서 발견성 유지 (올드해 보이지 않게)
+
+> 형 우려("항상 보이는 하단 탭은 옛날 UI 같다") 정면 검토. **결론: 올드한 건 패턴이 아니라 스타일이다.**
+> 떠다니는 반투명 하단바는 2025년 iOS 26·Material 3가 둘 다 미는 방향 = 지금 가장 모던한 형태.
+
+**핵심 통찰 — 패턴 ≠ 스타일.** 하단 탭바 자체는 안 낡았다. iOS 26 "Liquid Glass"와 Material 3 Expressive가 2025에 *떠다니고 반투명한* 하단바로 오히려 강화했다(M3는 드로어를 deprecated). 낡아 보이는 건 2014년식 스타일: 꽉 찬 풀너비·불투명·딱딱한 상단 보더·5개 빽빽한 아이콘. **패턴은 유지하고 스타일만 바꾸면** 발견성과 모던함을 동시에 가진다.
+
+| 올드한 스타일 (피함) | 2024-2025 모던 스타일 (채택) |
+|---|---|
+| 화면 끝에 붙은 풀너비 | 가장자리서 띄운 **floating 캡슐/pill** |
+| 불투명 + 1px 상단 보더 | **반투명 + blur(frosted / Liquid Glass)** · 보더 없음 · 부드러운 그림자 |
+| 5+개 빽빽 동일 아이콘 | **≤4개** · 여유 간격 |
+| 높고 항상 고정 | **낮고** · 콘텐츠에 반응 |
+| 항상 동일 | **스크롤 내리면 최소화 / 올리면 복귀** |
+
+**스크롤 자동 숨김 = 공식 절충안.** 내릴 때(읽는 중) 바가 최소화되고 올릴 때(이동 의도) 즉시 복귀. iOS 26 `tabBarMinimizeBehavior(.onScrollDown)` 기본 제공, Material도 표준 패턴. 우리처럼 **긴 코드 답변을 읽을 때 chrome이 사라졌다가 제스처로 바로 돌아오니** 궁합이 특히 좋다.
+
+**완전 숨김 / 제스처 전용은 "단일 목적 앱"만 가능.** ChatGPT(챗 하나)·Things·BeReal·Arc는 목적지가 적어 chrome 없이 간다. 우리처럼 도메인 4개인 다기능 앱은 — 가장 닮은 **Phantom(지갑+트레이드+탐색)도 보이는 바를 유지**한다. NN/g: 주 내비를 숨기면 발견성·사용률 ~절반. ("탭바는 낡았다"는 건 일부 디자이너의 소수 의견이지 합의가 아님.)
+
+**적용 권장:**
+- **떠다니는 반투명(blur) 캡슐 바** — 가장자리서 띄우고, 둥글게, 보더 없이, 낮게.
+- **스크롤 내릴 때 최소화 / 올릴 때 복귀** (양 플랫폼 네이티브).
+- **4개만 + 라벨** (Market·Collection은 아이콘만으론 안 읽힘 → 라벨 유지).
+- **New chat = FAB**(또는 상단 compose) — 탭 낭비 안 함(Apple·Google: 탭은 이동용이지 액션용 아님).
+- 인접 탭 간 스와이프는 **보조 가속기로** 남겨도 됨(주 내비는 보이는 바).
+
+→ 형이 원하는 "미니멀·모던"(떠다니는 글래스 + 적은 항목 + 읽을 때 사라지는 chrome)을 주면서도 NN/g 발견성 선(주 목적지는 절대 숨기지 않음) 안쪽에 머문다. 진짜 죽여야 할 건 **상단 nav를 햄버거에 숨기는 것**(구글도 그래서 드로어 deprecated). 단, 챗 *내부*의 히스토리 드로어는 ChatGPT/Claude 관습이라 유지 — 그건 전역 내비가 아니라 섹션 내부 보조 내비라 예외.
+
+---
+
+## 5. 친숙성 체크 (Jakob's Law — "너무 다르면 헷갈림" 방어)
 
 | ChatGPT/Claude 관습 | 제안에서 |
 |---|---|
@@ -107,7 +137,7 @@ flowchart TB
 
 ---
 
-## 5. friction → 해소 매핑
+## 6. friction → 해소 매핑
 
 | | 해소 |
 |---|---|
@@ -120,16 +150,18 @@ flowchart TB
 
 ---
 
-## 6. 열린 선택 (형이 정할 것)
+## 7. 열린 선택 (형이 정할 것)
 
 1. **탭 수 4 vs 5:** 지금은 소셜이 곧 프로필(전역 피드 없음)이라 **4탭(Chat·Market·My Skills·Profile)** 권장. 나중에 활동 피드가 생기면 **Community** 5번째 탭 추가.
 2. **My Skills를 별도 탭 vs Profile 안 탭:** 도구 우선 앱(Phantom형)은 분리 권장 → 별도 탭. 단순화 원하면 Profile 안 서브탭으로.
-3. **스와이프 덱 처리:** 완전 제거 vs 인접 탭 간 보조 스와이프로 유지(하단 탭이 주 내비).
-4. **암호화폐 노출 완화 정도:** 지갑/체인/온체인 용어를 Settings·구매 시점으로 미루고 평소엔 "스킬"로만 보일지(권장).
+3. **내비 바 형태(§4):** **떠다니는 반투명 캡슐 + 스크롤 자동숨김**(권장) vs 상단 스와이프 탭(Phantom형) vs 고정 단순 바.
+4. **New chat 위치:** FAB vs 상단 compose vs 드로어 상단(셋 다 친숙성 OK).
+5. **스와이프 덱 처리:** 완전 제거 vs 인접 탭 간 보조 스와이프로 유지(하단 탭이 주 내비).
+6. **암호화폐 노출 완화 정도:** 지갑/체인/온체인 용어를 Settings·구매 시점으로 미루고 평소엔 "스킬"로만 보일지(권장).
 
 ---
 
-## 7. 근거 (sources)
+## 8. 근거 (sources)
 
 **내비/배치 과학**
 - NN/g — Hamburger/Hidden Navigation Hurts UX (숨은 내비: 사용률 86%→57%, 발견율 >20%↓): https://www.nngroup.com/articles/hamburger-menus/
@@ -149,4 +181,11 @@ flowchart TB
 - Phantom — Home/Collectibles/Swap/Activity/Explore (소유=Collectibles, 마켓=Explore 분리): https://help.phantom.com/hc/en-us/articles/46027382248467
 - Duolingo — Learn/Practice/Leaderboard/Quests/Profile (코어=탭1, 소셜=별 탭): https://blog.duolingo.com/new-duolingo-home-screen-design/
 - OpenSea(마켓 우선은 컬렉션을 Profile에 흡수) / web3 온보딩 — 시드구문 단계서 ~60% 이탈 → 임베디드 지갑·점진 노출: https://sequence.xyz/blog/how-to-simplify-user-onboarding-for-a-web3-app
+
+**내비 스타일 · 미니멀 트렌드 (§4)**
+- Apple HIG / WWDC25 — iOS 26 Liquid Glass 탭바(떠다니고 반투명, 스크롤 시 최소화 `tabBarMinimizeBehavior`): https://developer.apple.com/videos/play/wwdc2025/284/ · https://www.donnywals.com/exploring-tab-bars-on-ios-26-with-liquid-glass/
+- 9to5Google — Material 3 Expressive 내비(짧은 flexible 바, 드로어 deprecated, 액션은 floating toolbar로 분리): https://9to5google.com/2025/05/14/material-3-expressive-navigation/
+- Mobbin — Tab Bar 트렌드(floating·translucent·≤5개·라벨 권장): https://mobbin.com/glossary/tab-bar
+- Linear 모바일 리디자인(자체 frosted/Liquid-Glass 탭바) / Phantom 현행(상단 스와이프 탭 + floating "+" FAB + 하단 Search) — 다도메인 앱도 보이는 바 유지: https://linear.app/changelog/2025-10-16-mobile-app-redesign · https://help.phantom.com
+- "완전 숨김/제스처 전용은 단일목적 앱(ChatGPT·Things·BeReal·Arc)만" + NN/g 숨은 내비 비용 재확인(위 §7 NN/g 출처).
 </content>
