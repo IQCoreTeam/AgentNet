@@ -92,16 +92,15 @@ flowchart TB
 
 **좌측 드로어(챗 탭 내부)** — 기존 Sessions 드로어에서 "My Agent"·"Skills" 행을 빼고(탭으로 승격됨) **검색 + Recents + New chat**만 남김 = ChatGPT/Claude와 동일.
 
-**재질(material) 한 줄 — 컴포저·FAB·탭바는 "판떼기"가 아니라 가장자리가 녹는 글래스로.**
-형이 보낸 텔레그램 샷의 포인트: 입력칸·떠다니는 버튼이 *불투명 판(opaque panel)*이 아니라 **뒤 콘텐츠가 흐려지며 fade되어 사라지는** 느낌. 모든 챗앱이 미는 이 효과는 한 기술이 아니라 **세 층의 조합**이고, 각각 정식 명칭이 있다:
+**재질(material) 한 줄 — 컴포저·FAB·탭바는 "판떼기"가 아니라 뒤가 투명하게 fade되는 바로.**
+형이 보낸 텔레그램 샷의 포인트: 입력칸·떠다니는 버튼이 *불투명 판(opaque panel)*이 아니라 **배경이 투명하고, 바 근처로 올라온 콘텐츠가 점점 사라지는(fade)** 느낌. 유리블러(글래스) 아님 — 그냥 **투명 + 페이드**다. 이 효과의 정식 명칭:
 
 | 용어 | 무엇 | 구현 키워드 |
 |---|---|---|
-| **Frosted glass / Glassmorphism** (반투명 블러 재질) | 뒤가 비치되 흐릿한 유리질. iOS 26 "Liquid Glass"가 이걸 OS 표준으로 끌어올림 | iOS `UIVisualEffectView`/`.ultraThinMaterial`, CSS `backdrop-filter: blur()`, RN `expo-blur`/`BlurView` |
-| **Progressive blur / Variable blur** (가변·점진 블러) ★진짜 핵심 | 블러 세기를 그라데이션으로 0→max 램프 → **경계선(하드 엣지) 없이** 콘텐츠가 바 안으로 녹아 들어감. "판떼기 안 보임"의 직접 원인 | 블러 레이어에 알파 그라데이션 mask: `mask-image: linear-gradient(transparent→opaque)` (Figma "progressive blur" 그 효과) |
-| **Gradient scrim / edge fade** (그라데이션 스크림) | 바 바로 위 콘텐츠의 불투명도를 점점 낮춰, 텍스트가 바 밑으로 자연스럽게 사라지게 (가독성·대비 확보) | 블러 위에 배경색→투명 선형 그라데이션 오버레이 |
+| **Gradient fade / fade-out mask** (그라데이션 페이드 / 페이드 마스크) ★핵심 | 콘텐츠 자체의 불투명도를 바 쪽으로 갈수록 1→0으로 떨어뜨려, **하드 엣지 없이** 메시지가 바 밑으로 녹아 사라지게 | 스크롤 콘텐츠에 알파 그라데이션 마스크: `mask-image: linear-gradient(to top, transparent, black)` (RN은 `MaskedView` + `expo-linear-gradient`) |
+| **Edge fade / scroll fade** (엣지 페이드) | 위 효과를 가리키는 더 일반적인 이름. 스크롤 영역의 위/아래 가장자리에서 콘텐츠가 페이드 | 동일 (컨테이너 가장자리 마스크) |
 
-→ 텔레그램·iOS 컨트롤센터·Apple Music이 쓰는 게 정확히 이 조합 = **frosted glass + progressive blur + 하단 gradient scrim**. 우리도 **챗 컴포저 · New chat FAB · 떠다니는 캡슐 탭바** 셋 다 이 한 가지 재질로 통일하면 "떠 있는데 판때기 아님"이 완성된다. (블러 재질이 2025 트렌드인 근거는 §4·§8 "Liquid Glass" 항목과 동일 — 여기선 그 재질을 *어떻게* 칠하는지의 명칭을 박아둔 것.)
+→ 바 자체 배경은 **투명**(또는 거의 투명), 그 뒤로 지나가는 콘텐츠를 마스크로 페이드시키는 게 핵심. 텔레그램·iMessage가 입력칸 위에서 쓰는 게 정확히 이거다. 우리도 **챗 컴포저 · New chat FAB · 떠다니는 캡슐 탭바** 셋 다 이 페이드 마스크로 통일하면 "떠 있는데 판때기 아님"이 완성된다.
 
 ---
 
