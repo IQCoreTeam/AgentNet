@@ -110,3 +110,34 @@ export function AttachIcon(props: IconProps) {
     </svg>
   );
 }
+
+// Chat bubble — tab: Chat (the core loop).
+export function ChatIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M20.5 11.5a7.5 7 0 0 1-7.5 7 8 8 0 0 1-3.4-.75L4.5 19l1.1-3.7A6.9 6.9 0 0 1 4.5 11.5 7.5 7 0 0 1 12 4.5a7.5 7 0 0 1 8.5 7Z" />
+    </svg>
+  );
+}
+
+// Shopping bag — tab: Market (browse / buy).
+export function MarketIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M6.2 8h11.6l-1 10.4A1.7 1.7 0 0 1 15.1 20H8.9a1.7 1.7 0 0 1-1.7-1.6L6.2 8Z" />
+      <path d="M9 8V6.6a3 3 0 0 1 6 0V8" />
+    </svg>
+  );
+}
+
+// 2x2 grid — tab: My Skills (the owned collection).
+export function CollectionIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <rect x="4" y="4" width="7" height="7" rx="1.6" />
+      <rect x="13" y="4" width="7" height="7" rx="1.6" />
+      <rect x="4" y="13" width="7" height="7" rx="1.6" />
+      <rect x="13" y="13" width="7" height="7" rx="1.6" />
+    </svg>
+  );
+}

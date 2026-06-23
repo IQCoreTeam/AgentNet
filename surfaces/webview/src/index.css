@@ -113,6 +113,17 @@ body {
   border-bottom: 1px solid var(--an-line);
 }
 
+/* Floating glass capsule tab bar (design-system §4, screen-rearrangement §9):
+   frosted + blur material so it reads as "floating, not a panel". */
+.an-tabbar {
+  background: var(--an-bg-glass);
+  backdrop-filter: saturate(1.4) blur(18px);
+  -webkit-backdrop-filter: saturate(1.4) blur(18px);
+  border: 1px solid var(--an-line);
+  border-radius: var(--an-radius-pill);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.4);
+}
+
 /* Pill buttons — the extension's signature control, enlarged for touch. */
 .an-pill {
   display: inline-flex;
