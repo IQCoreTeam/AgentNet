@@ -64,6 +64,8 @@ import {
   getNetwork,
   saveGithubToken,
   maskedGithubToken,
+  loadGithubToken,
+  registerVerifiedWork,
 } from "@iqlabs-official/agent-sdk";
 
 const PORT = Number(process.env.AGENTNET_PORT ?? 4317);
@@ -711,6 +713,28 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
     if (m?.type === "getGithubStatus") {
       const masked = await maskedGithubToken();
       c.send({ type: "githubStatus", hasToken: !!masked, masked: masked ?? undefined });
+      return;
+    }
+    // Register a repo as verified work: push the public .agentnet marker with the
+    // user's GitHub token, then register repo<->skill with the indexer. Token +
+    // wallet live here on the host, never in the webview.
+    if (m?.type === "registerWorkRepo") {
+      const repo = typeof m.repo === "string" ? m.repo : "";
+      const skillMints = Array.isArray(m.skillMints) ? m.skillMints.filter((s: unknown) => typeof s === "string") : [];
+      try {
+        if (!walletAddress) throw new Error("Connect a wallet first.");
+        const stored = await loadGithubToken();
+        if (!stored?.token) throw new Error("Add a GitHub token first.");
+        const { count, repo: full } = await registerVerifiedWork({
+          token: stored.token,
+          repo,
+          skillMints,
+          walletAddress,
+        });
+        c.send({ type: "workRepoRegistered", ok: true, count, repo: full });
+      } catch (e) {
+        c.send({ type: "workRepoRegistered", ok: false, error: e instanceof Error ? e.message : "Registration failed." });
+      }
       return;
     }
   });

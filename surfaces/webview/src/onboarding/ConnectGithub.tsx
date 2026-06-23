@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { useStore } from "../state/store";
 import { OnboardingShell, OnboardingButton } from "./OnboardingShell";
+import { openExternalUrl } from "../platform/openExternalUrl";
+
+// Pre-fills GitHub's new-token page with the repo scope (write to your repos —
+// needed to commit the .agentnet marker) + a description, so a user creates the
+// right token in one tap instead of hunting for scopes.
+const TOKEN_URL = "https://github.com/settings/tokens/new?scopes=repo&description=AgentNet";
 
 interface Props {
   onDone: () => void;
@@ -48,9 +54,12 @@ export function ConnectGithub({ onDone }: Props) {
         <div className="flex flex-col gap-3">
           <p className="text-xs text-zinc-400 leading-relaxed">
             Create a{" "}
-            <span className="text-zinc-200 font-medium">Personal Access Token</span> at GitHub with{" "}
-            <span className="text-zinc-200">repo</span> scope and paste it below.
+            <span className="text-zinc-200 font-medium">Personal Access Token</span> (the{" "}
+            <span className="text-zinc-200">repo</span> scope is pre-selected), then paste it below.
           </p>
+          <OnboardingButton variant="outline" onClick={() => openExternalUrl(TOKEN_URL)}>
+            Create token on GitHub →
+          </OnboardingButton>
           <input
             value={token}
             onChange={(e) => setToken(e.target.value)}

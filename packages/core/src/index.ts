@@ -49,6 +49,7 @@ export type { PostNoteInput, ReadNotesOptions, PostAgentNoteInput } from "./note
 // RPC resolution (issue #23): a registered Helius key wins over env over the default
 export { resolveRpcUrl, saveHeliusKey, loadHeliusKey, hasDasRpc, heliusUrl, maskedHeliusKey, saveGithubToken, loadGithubToken, maskedGithubToken } from "./core/rpc.js";
 export { getNetwork, NETWORK } from "./core/seed.js";
+export { registerVerifiedWork, parseRepo as parseGithubRepo } from "./core/verifiedWork.js";
 export type { Network } from "./core/seed.js";
 // the marketplace UI<->host message contract (shared by every surface's UI)
 export type { SkillCard, SkillDetail, MarketRequest, MarketEvent, MarketMessage, RpcStatus, AgentProfile } from "./chat/marketMessages.js";

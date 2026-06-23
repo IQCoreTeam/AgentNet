@@ -6,6 +6,7 @@ import { openExternalUrl } from "../platform/openExternalUrl";
 import { useAutoOpenExternalUrl } from "../platform/useAutoOpenExternalUrl";
 import { HeliusKeyForm } from "../settings/HeliusKeyForm";
 import { ConnectGithub } from "../onboarding/ConnectGithub";
+import { RegisterWorkRepo } from "../onboarding/RegisterWorkRepo";
 import { hasAgentService, backgroundExecEnabled, setBackgroundExecEnabled } from "../platform/agentService";
 
 // Chat list drawer — the mobile answer to vscode's multi-panel "new tab": instead of
@@ -41,7 +42,7 @@ export function Sessions({ onClose, embedded = false }: { onClose: () => void; e
   const { state, send, openMarket, openMarketAgents, getClientId, notify } = useStore();
   const { storage, cloudSync, googleLoginUrl, googleLoginError } = state;
 
-  const [settingsMode, setSettingsMode] = useState<"list" | "connect" | "gdrive" | "custom" | "helius" | "github">("list");
+  const [settingsMode, setSettingsMode] = useState<"list" | "configure" | "connect" | "gdrive" | "custom" | "helius" | "github">("list");
   const [customUrl, setCustomUrl] = useState("");
   const [customAuth, setCustomAuth] = useState("");
   const [code, setCode] = useState("");
@@ -143,66 +144,12 @@ export function Sessions({ onClose, embedded = false }: { onClose: () => void; e
                 }}
                 icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M7 5.5h8l2 3.5-6 7.5L5 9l2-3.5Z" /><path d="M5 9h12M9 5.5 8 9l3 7.5L14 9l-1-3.5" /></svg>}
               />
-            </div>
-
-            <div className="mt-5">
-              <div className="px-2 text-[0.68rem] font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--an-fg-mute)" }}>
-                Configure
-              </div>
-              <div className="mt-1 space-y-0.5">
-                <MenuRow
-                  label="Storage"
-                  subtitle={cloudConnected ? `${info?.account ?? (info?.kind === "gdrive" ? "Google Drive" : "Custom Cloud")}${cloudSync ? ` · ${cloudSync.ok ? "synced" : "sync error"}` : ""}` : "Local only"}
-                  onClick={() => setSettingsMode("connect")}
-                  icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7.5c0-1.4 3.1-2.5 7-2.5s7 1.1 7 2.5S14.9 10 11 10 4 8.9 4 7.5Z" /><path d="M4 7.5v7c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-7" /><path d="M4 11c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5" /></svg>}
-                />
-                <MenuRow
-                  label="Market RPC"
-                  subtitle={state.rpcStatus?.hasKey ? `${state.rpcStatus.network} · ${state.rpcStatus.masked}` : "Helius key recommended"}
-                  onClick={() => setSettingsMode("helius")}
-                  icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4v3M11 15v3M4 11h3M15 11h3" /><path d="m6.5 6.5 2.1 2.1M13.4 13.4l2.1 2.1M15.5 6.5l-2.1 2.1M8.6 13.4l-2.1 2.1" /><circle cx="11" cy="11" r="2.6" /></svg>}
-                />
-                <MenuRow
-                  label="GitHub"
-                  subtitle={state.githubStatus?.hasToken ? `connected · ${state.githubStatus.masked ?? "token set"}` : "Private repo access"}
-                  onClick={() => { send({ type: "getGithubStatus" }); setSettingsMode("github"); }}
-                  icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 16.5c-3 .9-3-1.5-4.2-1.8M15 19v-3.1c0-.8-.3-1.4-.8-1.8 2.6-.3 5.3-1.3 5.3-5.7 0-1.3-.4-2.3-1.2-3.2.1-.3.5-1.6-.1-3.1 0 0-1-.3-3.3 1.2a11.5 11.5 0 0 0-6 0C6.6 1.8 5.6 2.1 5.6 2.1c-.6 1.5-.2 2.8-.1 3.1-.8.9-1.2 2-1.2 3.2 0 4.4 2.7 5.4 5.3 5.7-.4.4-.7.9-.8 1.6V19" /></svg>}
-                />
-                {/* Android shell only: keep the agent running (and notify on approvals)
-                    while the app is backgrounded — but ONLY while a task is active. Off =
-                    idle process is reclaimed. Turning OFF mid-turn is foreground-only: the
-                    current turn keeps running while the app is open, it just won't survive
-                    backgrounding. (#53) */}
-                {hasAgentService() && (
-                  <>
-                    <button
-                      onClick={() => {
-                        const v = !bgExec;
-                        setBgExec(v);
-                        setBackgroundExecEnabled(v, getClientId());
-                        if (!v && state.typing) notify("Background off — task keeps running while the app is open.");
-                      }}
-                      className="flex w-full items-center gap-3.5 rounded-2xl px-2.5 py-3 text-left transition active:bg-[color:var(--an-bg-2)]"
-                    >
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center" style={{ color: bgExec ? "var(--an-green)" : "var(--an-fg-dim)" }}>
-                        <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="M11 7v4l2.5 2" /></svg>
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-[1.12rem] font-semibold leading-tight" style={{ color: "var(--an-fg)" }}>Background execution</span>
-                        <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>{bgExec ? "Runs in the background only while a task is active" : "Agent stops when you leave the app"}</span>
-                      </span>
-                      <span className="relative h-[1.35rem] w-[2.4rem] shrink-0 rounded-full transition" style={{ background: bgExec ? "var(--an-green)" : "var(--an-bg-2)" }}>
-                        <span className="absolute top-[0.15rem] h-[1.05rem] w-[1.05rem] rounded-full bg-white transition-all" style={{ left: bgExec ? "1.2rem" : "0.15rem" }} />
-                      </span>
-                    </button>
-                    {bgExec && (
-                      <p className="px-2.5 pb-1 text-[0.68rem] leading-snug" style={{ color: "var(--an-fg-mute)" }}>
-                        Uses more battery while a task runs in the background. No task = nothing runs.
-                      </p>
-                    )}
-                  </>
-                )}
-              </div>
+              <MenuRow
+                label="Configure"
+                subtitle="Storage, RPC, GitHub, wallet"
+                onClick={() => setSettingsMode("configure")}
+                icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>}
+              />
             </div>
 
             <div className="mt-5 flex min-h-0 flex-1 flex-col">
@@ -263,18 +210,84 @@ export function Sessions({ onClose, embedded = false }: { onClose: () => void; e
               </div>
             </div>
 
+          </>
+        ) : settingsMode === "configure" ? (
+          <div className="flex h-full flex-col">
+            <div className="mb-3 flex items-center justify-between px-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Configure</span>
+              <button onClick={() => setSettingsMode("list")} className="text-xs text-zinc-400 hover:text-zinc-200">Back</button>
+            </div>
+            <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
+              <MenuRow
+                label="Storage"
+                subtitle={cloudConnected ? `${info?.account ?? (info?.kind === "gdrive" ? "Google Drive" : "Custom Cloud")}${cloudSync ? ` · ${cloudSync.ok ? "synced" : "sync error"}` : ""}` : "Local only"}
+                onClick={() => setSettingsMode("connect")}
+                icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7.5c0-1.4 3.1-2.5 7-2.5s7 1.1 7 2.5S14.9 10 11 10 4 8.9 4 7.5Z" /><path d="M4 7.5v7c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-7" /><path d="M4 11c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5" /></svg>}
+              />
+              <MenuRow
+                label="Market RPC"
+                subtitle={state.rpcStatus?.hasKey ? `${state.rpcStatus.network} · ${state.rpcStatus.masked}` : "Helius key recommended"}
+                onClick={() => setSettingsMode("helius")}
+                icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4v3M11 15v3M4 11h3M15 11h3" /><path d="m6.5 6.5 2.1 2.1M13.4 13.4l2.1 2.1M15.5 6.5l-2.1 2.1M8.6 13.4l-2.1 2.1" /><circle cx="11" cy="11" r="2.6" /></svg>}
+              />
+              <MenuRow
+                label="GitHub"
+                subtitle={state.githubStatus?.hasToken ? `connected · ${state.githubStatus.masked ?? "token set"}` : "Private repo access"}
+                onClick={() => { send({ type: "getGithubStatus" }); setSettingsMode("github"); }}
+                icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 16.5c-3 .9-3-1.5-4.2-1.8M15 19v-3.1c0-.8-.3-1.4-.8-1.8 2.6-.3 5.3-1.3 5.3-5.7 0-1.3-.4-2.3-1.2-3.2.1-.3.5-1.6-.1-3.1 0 0-1-.3-3.3 1.2a11.5 11.5 0 0 0-6 0C6.6 1.8 5.6 2.1 5.6 2.1c-.6 1.5-.2 2.8-.1 3.1-.8.9-1.2 2-1.2 3.2 0 4.4 2.7 5.4 5.3 5.7-.4.4-.7.9-.8 1.6V19" /></svg>}
+              />
+              {/* Android shell only: keep the agent running (and notify on approvals)
+                  while the app is backgrounded — but ONLY while a task is active. Off =
+                  idle process is reclaimed. Turning OFF mid-turn is foreground-only: the
+                  current turn keeps running while the app is open, it just won't survive
+                  backgrounding. (#53) */}
+              {hasAgentService() && (
+                <>
+                  <button
+                    onClick={() => {
+                      const v = !bgExec;
+                      setBgExec(v);
+                      setBackgroundExecEnabled(v, getClientId());
+                      if (!v && state.typing) notify("Background off — task keeps running while the app is open.");
+                    }}
+                    className="flex w-full items-center gap-3.5 rounded-2xl px-2.5 py-3 text-left transition active:bg-[color:var(--an-bg-2)]"
+                  >
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center" style={{ color: bgExec ? "var(--an-green)" : "var(--an-fg-dim)" }}>
+                      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="M11 7v4l2.5 2" /></svg>
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[1.12rem] font-semibold leading-tight" style={{ color: "var(--an-fg)" }}>Background execution</span>
+                      <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>{bgExec ? "Runs in the background only while a task is active" : "Agent stops when you leave the app"}</span>
+                    </span>
+                    <span className="relative h-[1.35rem] w-[2.4rem] shrink-0 rounded-full transition" style={{ background: bgExec ? "var(--an-green)" : "var(--an-bg-2)" }}>
+                      <span className="absolute top-[0.15rem] h-[1.05rem] w-[1.05rem] rounded-full bg-white transition-all" style={{ left: bgExec ? "1.2rem" : "0.15rem" }} />
+                    </span>
+                  </button>
+                  {bgExec && (
+                    <p className="px-2.5 pb-1 text-[0.68rem] leading-snug" style={{ color: "var(--an-fg-mute)" }}>
+                      Uses more battery while a task runs in the background. No task = nothing runs.
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
             <button
               onClick={() => {
                 forgetAndroidWallet(); // clear the Keystore creds so we don't silently reconnect
                 send({ type: "disconnectWallet" });
                 onClose();
               }}
-              className="mt-3 self-start px-2 text-[0.76rem] font-medium"
-              style={{ color: "var(--an-fg-mute)" }}
+              className="mt-2 flex w-full items-center gap-3.5 rounded-2xl px-2.5 py-3 text-left transition active:bg-red-500/10"
             >
-              Disconnect wallet
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center" style={{ color: "#f87171" }}>
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 4.5H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2.5" /><path d="M14 15l3-4-3-4M17 11H8.5" /></svg>
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[1.12rem] font-semibold leading-tight" style={{ color: "#f87171" }}>Disconnect wallet</span>
+                <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>Clears the saved session on this device</span>
+              </span>
             </button>
-          </>
+          </div>
         ) : settingsMode === "helius" ? (
           <div className="flex flex-col h-full">
             <div className="mb-4 flex items-center justify-between border-b border-zinc-900 pb-2">
@@ -282,7 +295,7 @@ export function Sessions({ onClose, embedded = false }: { onClose: () => void; e
                 Market RPC
               </span>
               <button
-                onClick={() => setSettingsMode("list")}
+                onClick={() => setSettingsMode("configure")}
                 className="text-xs text-zinc-400 hover:text-zinc-200"
               >
                 Back
@@ -299,14 +312,15 @@ export function Sessions({ onClose, embedded = false }: { onClose: () => void; e
                 GitHub
               </span>
               <button
-                onClick={() => setSettingsMode("list")}
+                onClick={() => setSettingsMode("configure")}
                 className="text-xs text-zinc-400 hover:text-zinc-200"
               >
                 Back
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto flex flex-col gap-4">
               <ConnectGithub onDone={() => setSettingsMode("list")} />
+              <RegisterWorkRepo />
             </div>
           </div>
         ) : settingsMode === "connect" ? (
@@ -345,7 +359,7 @@ export function Sessions({ onClose, embedded = false }: { onClose: () => void; e
               </div>
             </div>
             <button
-              onClick={() => setSettingsMode("list")}
+              onClick={() => setSettingsMode("configure")}
               className="w-full rounded-lg bg-zinc-800 hover:bg-zinc-700 py-2.5 text-xs text-zinc-200"
             >
               Cancel

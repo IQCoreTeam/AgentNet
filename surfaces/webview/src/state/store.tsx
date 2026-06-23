@@ -99,6 +99,7 @@ export interface State {
   agentProfile: AgentProfile | null;
   agentsLoading: boolean;
   githubStatus: { hasToken: boolean; masked?: string } | null;
+  workRepoResult: { ok: boolean; count?: number; repo?: string; error?: string; at: number } | null;
   modeByCli: Record<Cli, string>;
 }
 
@@ -148,6 +149,7 @@ const initialState: State = {
   agentProfile: null,
   agentsLoading: false,
   githubStatus: null,
+  workRepoResult: null,
   modeByCli: {
     claude: "acceptEdits",
     codex: "auto",
@@ -432,6 +434,14 @@ function reducer(state: State, ev: Action): State {
       return { ...state, publishResult: ev };
     case "postNoteResult":
       return { ...state, toast: ev.ok ? "Comment posted." : `Comment failed: ${ev.error ?? "unknown"}` };
+    case "workRepoRegistered":
+      return {
+        ...state,
+        workRepoResult: { ok: ev.ok, count: ev.count, repo: ev.repo, error: ev.error, at: Date.now() },
+        toast: ev.ok
+          ? `Registered ${ev.repo ?? "repo"} as verified work.`
+          : `Register failed: ${ev.error ?? "unknown"}`,
+      };
     case "agents":
       return { ...state, agents: ev.agents as Reputation[], agentsLoading: false };
     case "agentProfile":
