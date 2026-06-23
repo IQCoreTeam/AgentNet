@@ -58,9 +58,11 @@ class WalletBridge(
         if (id.isEmpty()) return
         val creds = vault.load()
         if (creds == null) {
+            Log.i(TAG, "restore: no cached wallet (NoCached) → SPA falls back to manual connect")
             pushError(id, "No saved wallet on this device.", "NoCached")
             return
         }
+        Log.i(TAG, "restore: silent reconnect from vault")
         pushSuccess(id, creds.first, creds.second)
     }
 

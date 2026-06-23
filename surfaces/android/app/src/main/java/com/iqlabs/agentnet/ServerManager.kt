@@ -3,6 +3,7 @@ package com.iqlabs.agentnet
 import android.content.Context
 import android.util.Log
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
@@ -166,8 +167,44 @@ class ServerManager(private val ctx: Context) {
     }
 
     fun stop() {
-        process?.destroy()
+        val proc = process ?: return
         process = null
+        // process.destroy() only SIGKILLs the DIRECT child (the host sh that exec'd into
+        // proot). proot's guest `node` is a separate child — under SIGKILL proot never runs
+        // its --kill-on-exit cleanup, so node ORPHANS (reparents to init) and keeps LISTENing
+        // on 127.0.0.1:PORT. The next start() (a warm restart after the user backed out but
+        // the app process survived) then dies with EADDRINUSE and the app talks to a zombie
+        // server — the "doesn't recognize me" after a back/reopen. (force-stop avoided this by
+        // killing the whole UID at once.) We can't group-kill: app/proot/node all share the
+        // Zygote process group (PGID == zygote), so `kill -- -pgid` would take down our own
+        // app. Instead walk /proc for every descendant of THIS app process (proot → node →
+        // agent CLIs are our only forked subtree) and SIGKILL each — all same-UID, so allowed.
+        val self = android.os.Process.myPid()
+        val tree = descendantTree(self).filter { it != self }
+        for (pid in tree) runCatching { android.os.Process.killProcess(pid) } // SIGKILL
+        Log.i(TAG, "[server] stop() killed guest tree: $tree")
+        proc.destroy() // backstop for the direct child
+    }
+
+    // BFS /proc for `root` and every descendant. /proc/<pid>/stat is "pid (comm) state ppid …";
+    // comm can hold spaces/parens, so read ppid from after the last ") ". Snapshotting the
+    // whole table once and walking it in memory avoids races as processes exit underfoot.
+    private fun descendantTree(root: Int): List<Int> {
+        val ppidOf = HashMap<Int, Int>()
+        File("/proc").listFiles()?.forEach { d ->
+            val pid = d.name.toIntOrNull() ?: return@forEach
+            val stat = runCatching { File(d, "stat").readText() }.getOrNull() ?: return@forEach
+            val ppid = stat.substringAfterLast(") ").split(" ").getOrNull(1)?.toIntOrNull()
+                ?: return@forEach
+            ppidOf[pid] = ppid
+        }
+        val out = mutableListOf(root)
+        var i = 0
+        while (i < out.size) {
+            val parent = out[i++]
+            for ((pid, ppid) in ppidOf) if (ppid == parent && pid !in out) out.add(pid)
+        }
+        return out
     }
 
     // Poll http://127.0.0.1:PORT/onboarding until it answers (server up) or we time out.

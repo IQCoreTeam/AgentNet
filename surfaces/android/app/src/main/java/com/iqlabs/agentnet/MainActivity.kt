@@ -284,6 +284,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        // Only a real close (back button / finish(), isFinishing=true) reaches here and tears
+        // down the server. Backgrounding (HOME, the recents/edge-swipe gesture) is onStop with
+        // isFinishing=false and NO onDestroy — the server stays alive and the WebView resumes
+        // untouched. server.stop() kills the whole proot→node guest tree (see ServerManager).
         if (::googleTokenServer.isInitialized) googleTokenServer.stop()
         stopService(Intent(this, ServerService::class.java)) // no orphaned foreground notif
         server.stop()
