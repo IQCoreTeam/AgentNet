@@ -187,5 +187,122 @@ flowchart TB
 - 9to5Google — Material 3 Expressive 내비(짧은 flexible 바, 드로어 deprecated, 액션은 floating toolbar로 분리): https://9to5google.com/2025/05/14/material-3-expressive-navigation/
 - Mobbin — Tab Bar 트렌드(floating·translucent·≤5개·라벨 권장): https://mobbin.com/glossary/tab-bar
 - Linear 모바일 리디자인(자체 frosted/Liquid-Glass 탭바) / Phantom 현행(상단 스와이프 탭 + floating "+" FAB + 하단 Search) — 다도메인 앱도 보이는 바 유지: https://linear.app/changelog/2025-10-16-mobile-app-redesign · https://help.phantom.com
-- "완전 숨김/제스처 전용은 단일목적 앱(ChatGPT·Things·BeReal·Arc)만" + NN/g 숨은 내비 비용 재확인(위 §7 NN/g 출처).
+- "완전 숨김/제스처 전용은 단일목적 앱(ChatGPT·Things·BeReal·Arc)만" + NN/g 숨은 내비 비용 재확인(위 §8 내비/배치 과학 NN/g 출처).
+
+---
+
+## 9. 확정 설계 (selected layout)
+
+**확정 (2026-06-23, §7 선택):**
+- 탭: **4탭** — 💬 Chat · 🛒 Market · 🎒 My Skills · 👤 Profile
+- 내비 바: **떠다니는 반투명 캡슐 + 스크롤 자동숨김** (4개 + 라벨)
+- New chat: **우하단 FAB**
+- 온체인 노출: **평소 '스킬'로만, 지갑/체인/SOL은 Settings·구매 시점으로**
+
+### 9.1 글로벌 셸
+
+```
+떠다니는 캡슐 바(항상 4탭, 스크롤↓ 최소화 / 스크롤↑ 복귀):
+   ╭──────────────────────────╮
+   │ 💬     🛒     🎒     👤 │
+   │Chat  Market  Skills  Me  │
+   ╰──────────────────────────╯
+- 기본 랜딩 = Chat 탭
+- 인접 탭 스와이프는 보조 가속기(주 내비는 캡슐 바)
+```
+
+### 9.2 탭별 와이어프레임
+
+**① Chat (홈)**
+```
+┌────────────────────────────┐
+│ ☰  AgentNet · C3EP…ekrH     │  헤더: 메뉴 · 제목 · 지갑
+│        (메시지 스트림)      │
+│                       ╭───╮ │  New chat FAB
+│                       │ + │ │
+│                       ╰───╯ │
+│ ┌────────────────────────┐ │
+│ │[Claude·Codex] ⚙ Auto   │ │  컴포저: 엔진탭+모델/모드
+│ │ 메시지…        📎 🎤 ▶ │ │
+│ └────────────────────────┘ │
+│  ╭ 💬   🛒   🎒   👤 ╮     │
+└────────────────────────────┘
+☰ → 좌측 드로어: 🔍 검색 · Recents(세션 열기/삭제)   ← 드로어는 히스토리 전용으로 축소
+```
+
+**② Market (둘러보기·획득)**
+```
+┌────────────────────────────┐
+│ Market           🔍  [+ 발행]│
+│ [Skills][Workflows][Agents] │  ← 내부 탭에서 'Owned' 제거
+│ ┌────┐┌────┐┌────┐          │
+│ │카드││카드││카드│  …       │  스킬 카드 그리드
+│ └────┘└────┘└────┘          │
+│  → SkillDetail (구매/댓글)   │
+│  Agents → AgentProfile(타인) │
+│  ╭ 💬   🛒   🎒   👤 ╮      │
+└────────────────────────────┘
+가격은 '스킬 가격', 온체인 용어/서명은 구매 확인 단계에서만
+```
+
+**③ My Skills (내 컬렉션)**
+```
+┌────────────────────────────┐
+│ My Skills          보유 12  │
+│ ┌────┐┌────┐┌────┐          │
+│ │장착││장착││해제│  …       │  소유 스킬 = 단일 홈
+│ └────┘└────┘└────┘          │  (기존 Market 'Owned' + 챗 'Skills' 버튼 통합)
+│  → SkillDetail (제거/재장착/댓글)
+│  ╭ 💬   🛒   🎒   👤 ╮      │
+└────────────────────────────┘
+※ 추후 Skill-Dex(실루엣·세트 완성도)가 들어올 자리
+```
+
+**④ Profile (My Agent = 정체성·명성)**
+```
+┌────────────────────────────┐
+│ 👤 내 에이전트        ⚙ 설정 │
+│ 통계: Created · Owned · Holders
+│ ★ verified: N repos · ★stars │  ← verified-work '표시'를 여기로(신규 노출)
+│ ── Blog (self-note) ───────  │
+│ ── 받은 Comments ─────────   │
+│ 내가 만든 스킬 그리드        │
+│  ╭ 💬   🛒   🎒   👤 ╮      │
+└────────────────────────────┘
+⚙ 설정(중첩): 스토리지·동기화 · Market RPC · GitHub 토큰 · 백그라운드 · 지갑/연결해제
+   → 지갑/체인/백업 등 크립토는 전부 여기 아래(평소 화면엔 안 보임)
+```
+
+### 9.3 현재 → 신규 매핑 (기존 화면이 어디로)
+
+| 기존 위치 | 신규 위치 |
+|---|---|
+| 3카드 스와이프 덱(드로어·챗·마켓) | **떠다니는 4탭 캡슐 바** |
+| 드로어 "My Agent" | **Profile 탭** |
+| 드로어 "Skills" (→마켓) | **Market 탭** |
+| 드로어 "Configure" | **Profile → ⚙ 설정**(중첩) |
+| 드로어 Recents + (신규) 검색 | **Chat 탭 ☰ 드로어** (히스토리 전용) |
+| 챗 헤더 "Skills" 버튼(→소유) | **My Skills 탭** |
+| 챗 헤더 "Markets" 알약 | 제거(탭으로 대체) |
+| Market "Owned" 탭 | **My Skills 탭** |
+| Market Skills/Workflows/Agents/+Publish | **Market 탭** 그대로 |
+| AgentProfileView(본인) | **Profile 탭** |
+| AgentProfileView(타인) | Market → Agents → (그대로) |
+| verified-work 등록(Configure→GitHub) | 등록은 ⚙ 설정 유지 · **표시는 Profile + 스킬 카드(신규)** |
+
+### 9.4 구체 변경 목록 (구현 관점)
+
+- **셸/내비:** `ChatDeck`(3카드 스와이프)를 떠다니는 4탭 캡슐 바 + 탭 라우팅으로 교체. 스크롤 자동숨김. 인접 탭 스와이프는 보조로 유지 가능.
+- **드로어(`Sessions.tsx`):** "My Agent"·"Skills"·"Configure" 행 제거 → 검색 + Recents만. (Configure 서브메뉴 로직은 Profile 설정으로 이전.)
+- **Chat 헤더(`ChatScreen.tsx`):** "Skills" 버튼·"Markets" 알약 제거. New chat **FAB** 추가.
+- **Market(`MarketScreen.tsx`):** 내부 탭에서 "Owned" 제거(→ My Skills 탭으로). 나머지 유지.
+- **My Skills(신규 탭):** 기존 owned 스킬 뷰 + (챗 owned 진입점) 통합한 컬렉션 화면.
+- **Profile(신규 탭):** `AgentProfileView`(self) 승격 + ⚙ 설정(기존 Configure) 중첩 + **verified 뱃지 표시**.
+- **verified 표시:** Profile + `SkillCardTile`에 "used in N repos · ★stars" 뱃지(인덱서 데이터 소비 — 표시 로직 신규).
+- **크립토 카피:** 평소 화면 'NFT/지갑/체인/SOL' → '스킬/보유/가격'. 온체인 용어·서명은 구매 확인 & ⚙ 설정에서만.
+
+### 9.5 이유없는 불편 → 이 설계에서 해소 확인
+
+F1 숨은 내비→캡슐 4탭 / F2 컬렉션 산재→My Skills 단일 / F3 'Skills' 라벨 충돌→Market vs My Skills 분리 / F4 중복 진입→탭 단일화 / F5 정체성 마켓 경유→Profile 탭 / F6 verified 매몰→Profile·카드에 표시. (전부 §6 매핑과 일치.)
+
 </content>
