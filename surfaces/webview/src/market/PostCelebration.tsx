@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { haptics } from "../haptics";
 
 // Terminal-style success popup: an electric flicker in (synced with a sharp haptic zap),
 // holds briefly, then gets "absorbed" - shrinks toward a point and fades. No emoji, no
@@ -9,7 +10,7 @@ export function PostCelebration({ label, onDone }: { label: string; onDone: () =
 
   useEffect(() => {
     // Electric "zap": rapid stutter pulses + a final longer buzz, in step with the flicker.
-    try { navigator.vibrate?.([40, 30, 40, 30, 40, 30, 220]); } catch { /* unsupported on this WebView */ }
+    haptics.celebrate();
     const exit = setTimeout(() => setPhase("out"), 1150);
     const done = setTimeout(onDone, 1450);
     return () => { clearTimeout(exit); clearTimeout(done); };
