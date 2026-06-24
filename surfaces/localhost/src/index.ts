@@ -451,16 +451,19 @@ function attachMarketHandlers(c: Client) {
     }
     return mktPromise;
   }
-  // Fetch the wallet's owned NFT skills (names + slug->mint maps) and push them to the UI.
-  // names come from the LOCAL skills dir, so it only reflects what loadOwnedSkills() has
-  // installed — call this AFTER a sync to show freshly pulled skills.
+  // Push the wallet's owned NFT skills to the UI, read straight from CHAIN holdings
+  // (ownedSkillCards — the same source the agent profile uses), NOT the local skills dir.
+  // This is what makes My Skills show bought NFTs immediately, before/without a local
+  // install. `cards` carries the rich cards (name + description) for the grid; names/mints
+  // stay for the owned-badges + RegisterWorkRepo, which key off them.
   async function emitOwnedSkills(mkt: Awaited<ReturnType<typeof getMarket>>) {
-    const names = await mkt.ownedNftSkills();
-    const [mints, disposedMints] = await Promise.all([
-      mkt.ownedSkillMints().catch(() => ({})),
+    const [cards, disposedMints] = await Promise.all([
+      mkt.ownedSkillCards().catch(() => []),
       mkt.disposedSkillMints().catch(() => ({})),
     ]);
-    c.send({ type: "ownedSkills", names, mints, disposedMints });
+    const names = cards.map((card) => card.name);
+    const mints = Object.fromEntries(cards.map((card) => [card.name, card.id]));
+    c.send({ type: "ownedSkills", names, mints, disposedMints, cards });
   }
   // `quiet` = expected transient (no wallet yet): answer reads with empty results and
   // skip every toast, so the market just shows clean empty states until the wallet lands.

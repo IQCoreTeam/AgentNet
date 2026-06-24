@@ -357,6 +357,27 @@ export async function marketplaceEnv(wallet: Wallet) {
       }
     },
 
+    // The wallet's owned NFT skills read straight from CHAIN (its Token-2022 holdings),
+    // hydrated to cards — the same source the agent profile's `ownedSkills` uses, NOT the
+    // local skills dir. ownedNftSkills() above is "what's installed here"; this is "what the
+    // wallet actually holds on-chain", so My Skills shows bought NFTs even before they've
+    // been installed locally. DAS-free + indexer-independent (getTokenAccountsByOwner + one
+    // batched getMultipleAccounts via heldSkillCreators); the catalog hydrates names, and a
+    // mint the indexer never cataloged falls back to its own on-chain metadata.
+    async ownedSkillCards(): Promise<SkillCard[]> {
+      const [all, holdings] = await Promise.all([
+        runSearch("").catch(() => [] as Skill[]),
+        heldSkillCreators(wallet.address).catch(() => new Map<string, string>()),
+      ]);
+      const byId = new Map(all.map((s) => [s.id, s]));
+      return Promise.all([...holdings.keys()].map(async (mint) => {
+        const inCatalog = byId.get(mint);
+        if (inCatalog) return toCard(inCatalog);
+        const md = await readSkillMintMetadata(conn, mint).catch(() => null);
+        return { id: mint, type: "skill", name: md?.name || mint, description: md?.description } as SkillCard;
+      }));
+    },
+
     // issue #35: agent directory ranked by totalSupply. The indexer now enumerates
     // items via the gate program (authority-independent), so its creator ranking is
     // complete — no client-side augmentation needed. das is the fallback when the

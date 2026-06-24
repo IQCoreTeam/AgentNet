@@ -206,7 +206,7 @@ export type ServerMessage =
   | { type: "buyResult"; skillId: string; ok: boolean; slug?: string; error?: string }
   | { type: "disposeResult"; skillId: string; ok: boolean; slug?: string; error?: string }
   | { type: "reEquipResult"; skillId: string; ok: boolean; slug?: string; error?: string }
-  | { type: "ownedSkills"; names: string[]; mints?: Record<string, string>; disposedMints?: Record<string, string> }
+  | { type: "ownedSkills"; names: string[]; mints?: Record<string, string>; disposedMints?: Record<string, string>; cards?: import("@iqlabs-official/agent-sdk").SkillCard[] }
   | { type: "balance"; lamports: number | null }
   | { type: "skillActive"; name: string }
   | { type: "rpcStatus"; status: import("@iqlabs-official/agent-sdk").RpcStatus }

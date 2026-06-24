@@ -113,8 +113,10 @@ export type MarketEvent =
   | { type: "disposeResult"; skillId: string; ok: boolean; slug?: string; error?: string }
   | { type: "reEquipResult"; skillId: string; ok: boolean; slug?: string; error?: string }
   // installed skill names (panel fill) + slug->mint for bought NFTs (reuse market detail) +
-  // disposedMints = slug->mint for un-pinned skills (UI greys them, offers a free Re-equip)
-  | { type: "ownedSkills"; names: string[]; mints?: Record<string, string>; disposedMints?: Record<string, string> }
+  // disposedMints = slug->mint for un-pinned skills (UI greys them, offers a free Re-equip).
+  // cards = the wallet's on-chain owned skill cards (My Skills), present when the host read
+  // holdings from chain (ownedSkillCards); absent on the names-only emits (chat panel/buy).
+  | { type: "ownedSkills"; names: string[]; mints?: Record<string, string>; disposedMints?: Record<string, string>; cards?: SkillCard[] }
   | { type: "balance"; lamports: number | null } // wallet SOL balance (null = read failed)
   | { type: "skillActive"; name: string } // a skill fired -> "Casting <name>" cue
   | { type: "rpcStatus"; status: RpcStatus } // DAS-ready? which source? (issue #23)

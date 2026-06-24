@@ -109,15 +109,20 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
   }
 
   const resultByName = new Map((state.marketResults ?? []).map((card) => [card.name, card]));
-  const ownedCards: SkillCard[] = state.marketOwned.map((name) => {
-    const found = resultByName.get(name);
-    if (found) return found;
-    return {
-      id: state.marketOwnedMints[name] ?? name,
-      name,
-      description: "Owned skill",
-    } as SkillCard;
-  });
+  // My Skills = the wallet's on-chain owned skill cards (read from holdings, like the agent
+  // profile). Fall back to the name-derived placeholders only if the chain cards haven't
+  // arrived yet, so the grid still shows something during the first fetch.
+  const ownedCards: SkillCard[] = state.marketOwnedCards.length > 0
+    ? state.marketOwnedCards
+    : state.marketOwned.map((name) => {
+        const found = resultByName.get(name);
+        if (found) return found;
+        return {
+          id: state.marketOwnedMints[name] ?? name,
+          name,
+          description: "Owned skill",
+        } as SkillCard;
+      });
 
   const isSkills = tab === "skills";
   const balanceSol = state.marketBalance != null ? (state.marketBalance / 1_000_000_000).toFixed(3) : null;

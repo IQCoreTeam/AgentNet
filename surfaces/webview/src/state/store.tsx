@@ -55,6 +55,7 @@ export interface State {
   marketDetail: SkillDetail | null;
   marketOwned: string[];
   marketOwnedMints: Record<string, string>;
+  marketOwnedCards: SkillCard[]; // wallet's on-chain owned skill cards (My Skills grid)
   marketDisposed: Record<string, string>;
   marketBalance: number | null;
   rpcStatus: RpcStatus | null;
@@ -138,6 +139,7 @@ const initialState: State = {
   marketDetail: null,
   marketOwned: [],
   marketOwnedMints: {},
+  marketOwnedCards: [],
   marketDisposed: {},
   marketBalance: null,
   rpcStatus: null,
@@ -435,6 +437,9 @@ function reducer(state: State, ev: Action): State {
         ...state,
         marketOwned: Array.isArray(ev.names) ? ev.names : [],
         marketOwnedMints: ev.mints ?? {},
+        // Only chain-sourced emits carry `cards`; keep the existing grid on a names-only
+        // emit (chat panel / post-buy refresh) instead of blanking My Skills.
+        marketOwnedCards: ev.cards ?? state.marketOwnedCards,
         marketDisposed: ev.disposedMints ?? {},
       };
     case "balance":
