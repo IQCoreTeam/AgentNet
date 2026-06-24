@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { SkillCardTile } from "./SkillCardTile";
 import { SkillDetailView } from "./SkillDetailView";
@@ -8,6 +8,7 @@ import { AgentProfileView } from "./AgentProfileView";
 import { BuyCelebration } from "./BuyCelebration";
 import type { SkillCard } from "../transport/protocol";
 import { HeliusSetupPanel } from "../settings/HeliusKeyForm";
+import { SkillDetailSkeleton, AgentProfileSkeleton, MarketListSkeleton } from "./Skeletons";
 
 type MarketView = "browse" | "publish" | "helius" | "agents";
 export type ShellTab = "market" | "skills" | "profile";
@@ -21,10 +22,17 @@ export type ShellTab = "market" | "skills" | "profile";
 export function MarketScreen({ tab }: { tab: ShellTab }) {
   const { state, send, setMarketTab, setMarketQuery, marketSearching, clearMarketDetail, clearAgentProfile } = useStore();
   const [view, setView] = useState<MarketView>(tab === "profile" ? "agents" : "browse");
+  // Tracks a tapped card whose detail is still loading, so we can show a skeleton in the
+  // gap between the tap and `marketDetail` arriving (there's no store-level loading flag).
+  const [pendingMint, setPendingMint] = useState<string | null>(null);
+  // Skills tab has no store-level loading flag, so show a skeleton briefly on entry (until
+  // owned skills arrive or a short timeout) instead of flashing "No owned skills yet".
+  const [ownedLoading, setOwnedLoading] = useState(tab === "skills");
 
   // Each tab drives the machine to its root + refreshes data. Clearing detail/profile
   // first stops one tab's open detail or self-profile leaking into another tab.
   useEffect(() => {
+    setPendingMint(null);
     clearMarketDetail();
     clearAgentProfile();
     send({ type: "ownedSkills" });
@@ -45,6 +53,25 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
     if (state.agentProfile) setView("agents");
   }, [state.agentProfile]);
 
+  // Detail arrived (or was cleared) — drop the skeleton's pending state.
+  useEffect(() => {
+    if (state.marketDetail) setPendingMint(null);
+  }, [state.marketDetail]);
+
+  // Skills tab: skeleton on entry until the ownedSkills response lands (marketOwned gets a
+  // new array ref, even when empty) so it never flashes "No owned skills" before the data.
+  const ownedAtArm = useRef(state.marketOwned);
+  useEffect(() => {
+    if (tab !== "skills") return;
+    ownedAtArm.current = state.marketOwned;
+    setOwnedLoading(true);
+    const t = setTimeout(() => setOwnedLoading(false), 4000); // fallback if no response comes
+    return () => clearTimeout(t);
+  }, [tab]);
+  useEffect(() => {
+    if (state.marketOwned !== ownedAtArm.current) setOwnedLoading(false);
+  }, [state.marketOwned]);
+
   function runSearch(q: string, t?: "skill" | "workflow") {
     marketSearching();
     send({ type: "searchSkills", query: q, kind: t ?? state.marketTab });
@@ -54,6 +81,7 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
     runSearch(state.marketQuery, t);
   }
   function handleOpenCard(card: SkillCard) {
+    setPendingMint(card.id);
     send({ type: "getSkillDetail", mint: card.id });
   }
 
@@ -72,6 +100,11 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
     );
   }
 
+  // A skill was tapped and its detail is still loading — show the skeleton in the gap.
+  if (pendingMint && !state.marketDetail) {
+    return <SkillDetailSkeleton onBack={() => setPendingMint(null)} />;
+  }
+
   // Agent profile (self on Profile tab, or a tapped agent on Market tab)
   if (state.agentProfile) {
     return (
@@ -79,7 +112,7 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
         <AgentProfileView
           profile={state.agentProfile}
           onBack={() => clearAgentProfile()}
-          onOpenSkill={(card) => send({ type: "getSkillDetail", mint: card.id })}
+          onOpenSkill={handleOpenCard}
         />
       </div>
     );
@@ -87,11 +120,7 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
 
   // Profile tab still loading the wallet's own agent
   if (tab === "profile") {
-    return (
-      <div className="flex h-full items-center justify-center bg-zinc-950 text-sm text-zinc-600">
-        Loading your agent…
-      </div>
-    );
+    return <AgentProfileSkeleton />;
   }
 
   // Publish form (market tab)
@@ -216,9 +245,11 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
       )}
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="flex-1 overflow-y-auto px-3 an-tabbar-inset">
         {isSkills ? (
-          state.marketOwned.length === 0 ? (
+          ownedLoading && state.marketOwned.length === 0 ? (
+            <MarketListSkeleton />
+          ) : state.marketOwned.length === 0 ? (
             <div className="py-8 text-center text-sm text-zinc-600">
               No owned skills yet. Browse the Market to get one.
             </div>
@@ -240,29 +271,28 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
           <AgentDirectory />
         ) : (
           <>
-            {state.marketSearching && (
-              <div className="py-8 text-center text-sm text-zinc-600">Searching…</div>
-            )}
-            {state.marketSearchError && (
+            {state.marketSearchError ? (
               <div className="py-6 text-center text-sm text-red-400">{state.marketSearchError}</div>
-            )}
-            {!state.marketSearching && state.marketResults?.length === 0 && (
+            ) : state.marketSearching || state.marketResults == null ? (
+              <MarketListSkeleton />
+            ) : state.marketResults.length === 0 ? (
               <div className="py-8 text-center text-sm text-zinc-600">
                 No {state.marketTab}s found.{!state.rpcStatus?.hasKey && " Add a Helius key for better results."}
               </div>
+            ) : (
+              <div className="space-y-2 pt-1">
+                {state.marketResults.map((card) => (
+                  <SkillCardTile
+                    key={card.id}
+                    card={card}
+                    owned={state.marketOwned.includes(card.name)}
+                    disposed={Object.values(state.marketDisposed).includes(card.id)}
+                    firing={state.firingSkill === card.name}
+                    onOpen={handleOpenCard}
+                  />
+                ))}
+              </div>
             )}
-            <div className="space-y-2 pt-1">
-              {state.marketResults?.map((card) => (
-                <SkillCardTile
-                  key={card.id}
-                  card={card}
-                  owned={state.marketOwned.includes(card.name)}
-                  disposed={Object.values(state.marketDisposed).includes(card.id)}
-                  firing={state.firingSkill === card.name}
-                  onOpen={handleOpenCard}
-                />
-              ))}
-            </div>
           </>
         )}
       </div>

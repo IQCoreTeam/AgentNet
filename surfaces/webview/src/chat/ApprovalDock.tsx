@@ -31,11 +31,15 @@ export function ApprovalDock() {
     }
   }
 
+  // A question (AskUserQuestion) needs room for its options + the Send button; the plain
+  // yes/no approvals stay compact. Without the taller cap the question card clipped and the
+  // Send button was unreachable (couldn't select or submit).
+  const hasQuestion = state.approvals.some((a) => a.kind === "question" && (a.questions?.length ?? 0) > 0);
   return (
     <div
       ref={rootRef}
       className={`flex flex-col gap-2 overflow-y-auto px-3 pt-2 ${state.approvals.length === 0 ? "hidden" : ""}`}
-      style={{ maxHeight: "min(13rem, max(7rem, calc(var(--vvh, 100dvh) * 0.32)))" }}
+      style={{ maxHeight: hasQuestion ? "calc(var(--vvh, 100dvh) * 0.62)" : "min(13rem, max(7rem, calc(var(--vvh, 100dvh) * 0.32)))" }}
     >
       {state.approvals.map((req) =>
         req.kind === "question" && req.questions?.length ? (
@@ -101,7 +105,7 @@ function QuestionCard({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-emerald-700/50 bg-emerald-950/20 text-sm">
+    <div className="overflow-hidden rounded-xl border border-emerald-700/50 bg-emerald-950/95 text-sm">
       {questions.map((q, qi) => (
         <div key={qi} className="border-b border-emerald-700/20 px-3 py-2.5 last:border-b-0">
           {q.header && (
@@ -159,7 +163,7 @@ function QuestionCard({
           )}
         </div>
       ))}
-      <div className="px-3 py-2">
+      <div className="sticky bottom-0 bg-emerald-950 px-3 py-2">
         <button
           disabled={!allAnswered}
           onClick={submit}
@@ -206,7 +210,8 @@ function ApprovalCard({
   }, [isPlan]);
 
   const borderColor = isDanger ? "border-red-700/60" : "border-emerald-700/50";
-  const bgColor = isDanger ? "bg-red-950/20" : "bg-emerald-950/30";
+  // Near-opaque (composer-glass level) so chat content doesn't show through the card.
+  const bgColor = isDanger ? "bg-red-950/95" : "bg-emerald-950/95";
 
   return (
     <div ref={cardRef} tabIndex={-1} className={`overflow-hidden rounded-lg border ${borderColor} ${bgColor} text-sm outline-none`}>

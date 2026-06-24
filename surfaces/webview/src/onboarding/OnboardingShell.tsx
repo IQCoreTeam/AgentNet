@@ -3,7 +3,7 @@
 // screen's action card — on the dark surface, so both steps feel like one flow.
 
 import type { ReactNode } from "react";
-import { IqLogo } from "./IqLogo";
+import agentnetWordmark from "../assets/agentnet.png";
 
 export function OnboardingShell({
   title,
@@ -26,10 +26,11 @@ export function OnboardingShell({
         <div className="relative flex items-center justify-center">
           {/* soft brand halo behind the mark — quiet depth, not a glow gimmick */}
           <div
-            className="absolute h-28 w-28 rounded-full blur-2xl"
+            className="absolute h-16 w-52 rounded-full blur-2xl"
             style={{ background: "var(--an-green-dim)" }}
           />
-          <IqLogo className="relative h-12 w-auto" fill="var(--an-green)" />
+          {/* Agentnet wordmark (wide single-line lockup) */}
+          <img src={agentnetWordmark} alt="AgentNet" className="relative h-11 w-auto max-w-[80%]" />
         </div>
         <div className="text-center">
           <h1 className="text-2xl font-semibold tracking-tight" style={{ color: "var(--an-fg)" }}>{title}</h1>

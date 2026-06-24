@@ -51,6 +51,30 @@ function StarIcon({ className }: { className?: string }) {
   );
 }
 
+// One verified-work repo row: owner/name, linked-skill count, cached star count, opens the
+// repo. Shared by the profile's top-5 list and the "show all" modal.
+function VerifiedRepoRow({ repo }: { repo: NonNullable<AgentProfile["verifiedRepos"]>[number] }) {
+  return (
+    <a
+      href={safeExternalUrl(repo.url) ?? repo.url}
+      target="_blank"
+      rel="noreferrer"
+      className="flex items-center justify-between rounded-xl border px-3 py-2.5 active:opacity-80"
+      style={{ background: "var(--an-bg-1)", borderColor: "var(--an-line)" }}
+    >
+      <div className="min-w-0">
+        <p className="truncate font-mono text-xs" style={{ color: "var(--an-fg)" }}>{repo.owner}/{repo.name}</p>
+        <p className="text-[10px]" style={{ color: "var(--an-fg-mute)" }}>
+          {repo.skillMints.length} skill{repo.skillMints.length !== 1 ? "s" : ""} linked
+        </p>
+      </div>
+      <span className="ml-2 inline-flex shrink-0 items-center gap-1 text-xs" style={{ color: "var(--an-fg-dim)" }}>
+        <StarIcon className="h-3.5 w-3.5" /> {repo.stars}
+      </span>
+    </a>
+  );
+}
+
 // One reusable note editor for both the blog modal (self) and the inline comment box
 // (holders). Keeps its own draft; the parent owns the actual postAgentNote + success.
 function NoteComposer({
@@ -198,6 +222,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   const [composeMode, setComposeMode] = useState<null | "blog" | "repo">(null);
   const [posting, setPosting] = useState(false);
   const [celebrate, setCelebrate] = useState<{ label: string } | null>(null);
+  const [showAllRepos, setShowAllRepos] = useState(false);
   const awaitingPost = useRef(false);
   const lastToast = useRef(state.toast);
   const lastRepoAt = useRef(state.workRepoResult?.at ?? 0);
@@ -272,6 +297,8 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   const allSkills = [...(profile.createdSkills ?? [])];
   const verifiedRepos = profile.verifiedRepos ?? [];
   const repoStars = verifiedRepos.reduce((sum, r) => sum + (r.stars ?? 0), 0);
+  const sortedRepos = [...verifiedRepos].sort((a, b) => (b.stars ?? 0) - (a.stars ?? 0));
+  const showBuyAll = !profile.self && allSkills.length > 0;
   const blogNotes = (profile.notes ?? []).filter((n) => n.isSelfNote);
   const comments = (profile.notes ?? []).filter((n) => !n.isSelfNote);
   const canPost = profile.self || profile.canComment;
@@ -329,7 +356,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
         <span className="font-mono text-sm truncate" style={{ color: "var(--an-fg-dim)" }}>{shortWallet(profile.wallet)}</span>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-4">
+      <div className={`flex-1 overflow-y-auto p-3 space-y-4 ${showBuyAll ? "" : "an-tabbar-inset"}`}>
         {/* Identity hero */}
         <div
           className="flex items-center gap-3 rounded-2xl border p-3"
@@ -403,27 +430,19 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
               </span>
             </div>
             <div className="space-y-2">
-              {verifiedRepos.map((r) => (
-                <a
-                  key={`${r.owner}/${r.name}`}
-                  href={safeExternalUrl(r.url) ?? r.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center justify-between rounded-xl border px-3 py-2.5 active:opacity-80"
-                  style={{ background: "var(--an-bg-1)", borderColor: "var(--an-line)" }}
-                >
-                  <div className="min-w-0">
-                    <p className="truncate font-mono text-xs" style={{ color: "var(--an-fg)" }}>{r.owner}/{r.name}</p>
-                    <p className="text-[10px]" style={{ color: "var(--an-fg-mute)" }}>
-                      {r.skillMints.length} skill{r.skillMints.length !== 1 ? "s" : ""} linked
-                    </p>
-                  </div>
-                  <span className="ml-2 inline-flex shrink-0 items-center gap-1 text-xs" style={{ color: "var(--an-fg-dim)" }}>
-                    <StarIcon className="h-3.5 w-3.5" /> {r.stars}
-                  </span>
-                </a>
+              {sortedRepos.slice(0, 5).map((r) => (
+                <VerifiedRepoRow key={`${r.owner}/${r.name}`} repo={r} />
               ))}
             </div>
+            {sortedRepos.length > 5 && (
+              <button
+                onClick={() => setShowAllRepos(true)}
+                className="mt-2 w-full rounded-xl border py-2 text-xs font-medium"
+                style={{ background: "var(--an-bg-1)", borderColor: "var(--an-line)", color: "var(--an-fg-dim)" }}
+              >
+                Show all {sortedRepos.length}
+              </button>
+            )}
           </div>
         )}
 
@@ -542,8 +561,8 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
       </div>
 
       {/* Buy all footer */}
-      {!profile.self && allSkills.length > 0 && (
-        <div className="shrink-0 border-t border-zinc-800 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      {showBuyAll && (
+        <div className="shrink-0 border-t border-zinc-800 p-3 an-tabbar-inset">
           <button
             onClick={handleBuyAll}
             disabled={buyingAll}
@@ -564,7 +583,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
               onClick={() => setFabOpen(false)}
             />
           )}
-          <div className="absolute bottom-5 right-5 z-40 flex flex-col items-end gap-3">
+          <div className="absolute right-5 z-40 flex flex-col items-end gap-3" style={{ bottom: "calc(var(--tabbar-height, 0px) + 1.25rem)" }}>
             {fabOpen && (
               <>
                 <button
@@ -609,6 +628,16 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
       {composeMode === "repo" && (
         <Modal title="Register GitHub work" onClose={() => setComposeMode(null)}>
           {state.githubStatus?.hasToken ? <RegisterWorkRepo /> : <GithubTokenForm />}
+        </Modal>
+      )}
+
+      {showAllRepos && (
+        <Modal title="Verified work" onClose={() => setShowAllRepos(false)}>
+          <div className="space-y-2">
+            {sortedRepos.map((r) => (
+              <VerifiedRepoRow key={`${r.owner}/${r.name}`} repo={r} />
+            ))}
+          </div>
         </Modal>
       )}
 

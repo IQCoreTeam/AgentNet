@@ -1,5 +1,6 @@
 import { useStore } from "./state/store";
 import { ConnectWallet } from "./onboarding/ConnectWallet";
+import { Splash } from "./onboarding/Splash";
 import { ConnectStorage } from "./onboarding/ConnectStorage";
 import { PickEngine } from "./onboarding/PickEngine";
 import { ConnectClaude } from "./onboarding/ConnectClaude";
@@ -45,7 +46,7 @@ export function App() {
   return (
     <>
       <div className="app-viewport">
-        {state.phase === "connecting" && <Connecting />}
+        {state.phase === "connecting" && <Splash />}
         {state.phase === "onboarding" && <ConnectWallet />}
         {state.phase === "storageSelect" && <ConnectStorage />}
         {state.phase === "engineSelect" && <PickEngine />}
@@ -233,7 +234,7 @@ function TabShell() {
 // by three live copies at once. Bottom inset clears the floating tab bar.
 function MarketPage({ marketTab, active }: { marketTab: "skills" | "profile" | "market"; active: boolean }) {
   return (
-    <div className="an-page" style={{ paddingBottom: "var(--tabbar-height, 0px)" }}>
+    <div className="an-page">
       {active ? (
         <MarketScreen tab={marketTab} />
       ) : (
@@ -248,12 +249,4 @@ function MarketPage({ marketTab, active }: { marketTab: "skills" | "profile" | "
 function isInteractiveTarget(target: EventTarget | null) {
   if (!(target instanceof Element)) return false;
   return !!target.closest("button, a, input, textarea, select, [role='button'], [data-no-swipe]");
-}
-
-function Connecting() {
-  return (
-    <div className="flex h-full items-center justify-center text-sm text-zinc-500">
-      connecting…
-    </div>
-  );
 }

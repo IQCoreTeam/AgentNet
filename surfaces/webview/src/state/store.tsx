@@ -241,18 +241,13 @@ function reducer(state: State, ev: Action): State {
     case "__setToast":
       return { ...state, toast: ev.text };
     case "__selectEngine": {
-      if (!state.cliReport) {
-        return { ...state, toast: "Checking engine sign-in. Try again in a moment." };
-      }
+      // No "not installed" / "checking sign-in" alerts: just route. Report not in yet ->
+      // wait (PickEngine re-fires when it arrives). ok -> chat; otherwise (no-login or
+      // missing) -> the engine's own auth screen handles sign-in / install.
+      if (!state.cliReport) return state;
       const status = state.cliReport[ev.cli];
-      const name = ev.cli === "claude" ? "Claude" : "Codex";
-      if (status === "missing") {
-        return { ...state, toast: `${name} is not installed. Install it first.` };
-      }
-      if (status === "no-login") {
-        return { ...state, cli: ev.cli, phase: ev.cli === "claude" ? "claudeAuth" : "codexAuth" };
-      }
-      return { ...state, cli: ev.cli, phase: "chat" };
+      if (status === "ok") return { ...state, cli: ev.cli, phase: "chat" };
+      return { ...state, cli: ev.cli, phase: ev.cli === "claude" ? "claudeAuth" : "codexAuth" };
     }
     case "init":
       // `init` means this SSE client is attached to onboarding, not chat. If the server
@@ -277,7 +272,7 @@ function reducer(state: State, ev: Action): State {
         return { ...state, cliReport: { claude: ev.claude, codex: ev.codex }, phase: state.cli === "claude" ? "claudeAuth" : "codexAuth" };
       }
       if (state.phase === "chat" && ev[state.cli] === "missing") {
-        return { ...state, cliReport: { claude: ev.claude, codex: ev.codex }, phase: "engineSelect", toast: `${state.cli === "claude" ? "Claude" : "Codex"} is not installed. Choose another engine.` };
+        return { ...state, cliReport: { claude: ev.claude, codex: ev.codex }, phase: "engineSelect" };
       }
       return { ...state, cliReport: { claude: ev.claude, codex: ev.codex } };
     case "__finishStorage":

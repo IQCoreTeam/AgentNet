@@ -1,6 +1,23 @@
-import { useState, useEffect, useRef, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
+import { useState, useEffect, useRef, type ReactNode, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { useStore } from "../state/store";
 import { IqLogo, AgentIcon } from "../icons";
+import { useOnline } from "../layoutEffects";
+import agentnetWordmark from "../assets/agentnet.png";
+
+// wifi-off mark for the offline states (no emoji; inline SVG per the design rules).
+function WifiOffIcon({ className, style }: { className?: string; style?: CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m2 2 20 20" />
+      <path d="M8.5 16.4a5 5 0 0 1 6.3-.6" />
+      <path d="M5 12.9a10 10 0 0 1 5.2-2.7" />
+      <path d="M19 12.9a10 10 0 0 0-2-1.5" />
+      <path d="M2 8.8a15 15 0 0 1 4.2-2.6" />
+      <path d="M22 8.8a15 15 0 0 0-11.3-3.8" />
+      <path d="M12 20h.01" />
+    </svg>
+  );
+}
 import { forgetAndroidWallet } from "../onboarding/androidWallet";
 import { openExternalUrl } from "../platform/openExternalUrl";
 import { useAutoOpenExternalUrl } from "../platform/useAutoOpenExternalUrl";
@@ -41,6 +58,7 @@ function MenuRow({ icon, label, subtitle, onClick, accent = false }: {
 export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: () => void; embedded?: boolean; onOpenAgent?: () => void }) {
   const { state, send, getClientId, notify } = useStore();
   const { storage, cloudSync, googleLoginUrl, googleLoginError } = state;
+  const online = useOnline();
 
   const [settingsMode, setSettingsMode] = useState<"list" | "configure" | "connect" | "gdrive" | "custom" | "helius" | "github">("list");
   const [customUrl, setCustomUrl] = useState("");
@@ -117,11 +135,9 @@ export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: 
         {settingsMode === "list" ? (
           <>
             <div className="mb-3 flex items-center justify-between px-1">
-              <div className="flex items-center gap-2.5">
-                <IqLogo className="h-9 w-9 shrink-0" style={{ color: "var(--an-green)" }} />
-                <div className="text-[1.18rem] font-semibold leading-none" style={{ color: "var(--an-fg)" }}>
-                  AgentNet
-                </div>
+              <div className="flex items-center gap-2">
+                <IqLogo className="h-7 w-7 shrink-0" style={{ color: "var(--an-green)" }} />
+                <img src={agentnetWordmark} alt="AgentNet" className="h-6 w-auto" />
               </div>
               <button
                 onClick={onClose}
@@ -162,15 +178,33 @@ export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: 
                 </span>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto pr-1" style={{ touchAction: "pan-y" }}>
-                {!state.sessionsSynced && (
+                {/* Offline, but some chats are cached: a calm band, then the saved list. */}
+                {!online && state.sessions.length > 0 && (
+                  <div
+                    className="mb-2 flex items-center gap-2 rounded-xl px-3 py-2"
+                    style={{ background: "var(--an-bg-2)", border: "1px solid var(--an-line)" }}
+                  >
+                    <WifiOffIcon className="h-4 w-4 shrink-0" />
+                    <span className="text-[0.78rem]" style={{ color: "var(--an-fg-dim)" }}>Offline · showing saved chats</span>
+                  </div>
+                )}
+                {/* Offline with nothing cached: a minimal centered state, not an endless spinner. */}
+                {!online && state.sessions.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center gap-3 px-4 py-12 text-center" style={{ color: "var(--an-fg-mute)" }}>
+                    <WifiOffIcon className="h-8 w-8" style={{ opacity: 0.6 }} />
+                    <div>
+                      <p className="text-[0.95rem]" style={{ color: "var(--an-fg-dim)" }}>You're offline</p>
+                      <p className="mt-1 text-[0.75rem]">Recent chats sync when you reconnect.</p>
+                    </div>
+                  </div>
+                ) : online && !state.sessionsSynced ? (
                   <p className="flex items-center gap-2 px-2 py-5 text-[0.95rem]" style={{ color: "var(--an-fg-mute)" }}>
                     <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
                     syncing…
                   </p>
-                )}
-                {state.sessionsSynced && state.sessions.length === 0 && (
+                ) : online && state.sessionsSynced && state.sessions.length === 0 ? (
                   <p className="px-2 py-5 text-[0.95rem]" style={{ color: "var(--an-fg-mute)" }}>No chats yet.</p>
-                )}
+                ) : null}
                 {state.sessions.map((s) => {
                   const active = s.sessionId === state.activeSessionId;
                   return (

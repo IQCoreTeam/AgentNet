@@ -1,21 +1,31 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { AgentIcon } from "../icons";
+import { MarketListSkeleton } from "./Skeletons";
 
 export function AgentDirectory() {
   const { state, send, loadingAgents } = useStore();
+  // Show the skeleton until the first load finishes, so the empty "No agents found" can't
+  // flash on the first frame (before loadingAgents() flips the flag in the effect below).
+  const [everLoaded, setEverLoaded] = useState(false);
+  const wasLoading = useRef(false);
 
   useEffect(() => {
     loadingAgents();
     send({ type: "listAgents" });
   }, []);
 
+  useEffect(() => {
+    if (state.agentsLoading) wasLoading.current = true;
+    else if (wasLoading.current) setEverLoaded(true);
+  }, [state.agentsLoading]);
+
   function openProfile(wallet: string) {
     send({ type: "getAgentProfile", wallet });
   }
 
-  if (state.agentsLoading) {
-    return <div className="py-12 text-center text-sm text-zinc-600">Loading agents…</div>;
+  if (state.agentsLoading || !everLoaded) {
+    return <MarketListSkeleton />;
   }
 
   if (state.agents.length === 0) {

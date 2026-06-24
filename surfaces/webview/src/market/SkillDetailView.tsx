@@ -134,7 +134,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
       </div>
 
       {owned && (
-        <div className="shrink-0 border-t border-red-900/40 bg-gradient-to-t from-red-950/30 to-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="shrink-0 border-t border-red-900/40 bg-gradient-to-t from-red-950/30 to-transparent p-3 an-tabbar-inset">
           <button
             onClick={() => send({ type: "disposeSkill", skillId: card.id })}
             className="w-full rounded-xl border border-red-500/30 bg-red-950/20 py-3 text-sm font-semibold text-red-400 active:bg-red-900/30"
@@ -145,7 +145,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
       )}
 
       {!owned && disposed && (
-        <div className="shrink-0 border-t border-green-800/40 bg-gradient-to-t from-green-900/30 to-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="shrink-0 border-t border-green-800/40 bg-gradient-to-t from-green-900/30 to-transparent p-3 an-tabbar-inset">
           <button
             onClick={() => send({ type: "reEquipSkill", skillId: card.id })}
             className="w-full rounded-xl bg-green-600 py-3 text-sm font-semibold text-white active:bg-green-500"
@@ -156,7 +156,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
       )}
 
       {!owned && !disposed && (
-        <div className="shrink-0 border-t border-amber-700/40 bg-gradient-to-t from-amber-900/30 to-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="shrink-0 border-t border-amber-700/40 bg-gradient-to-t from-amber-900/30 to-transparent p-3 an-tabbar-inset">
           <button
             onClick={handleBuy}
             disabled={buying}

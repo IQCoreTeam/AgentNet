@@ -174,7 +174,7 @@ export function PublishForm({ onBack }: Props) {
         </Field>
       </div>
 
-      <div className="shrink-0 border-t border-purple-800/40 bg-gradient-to-t from-purple-900/30 to-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="shrink-0 border-t border-purple-800/40 bg-gradient-to-t from-purple-900/30 to-transparent p-3 an-tabbar-inset">
         <button
           onClick={handleSubmit}
           disabled={submitting || !name.trim() || !text.trim()}

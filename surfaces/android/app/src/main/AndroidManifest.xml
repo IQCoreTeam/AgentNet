@@ -10,6 +10,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- VIBRATE: haptic feedback for the WebView (navigator.vibrate) - drawer/nav ticks and
+         the success celebration buzz. Without it the WebView's Vibration API is a no-op. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- POST_NOTIFICATIONS (Android 13+): the backgrounded-approval alert (#53). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- RECORD_AUDIO: the composer's mic button (voice input) goes through the WebView's

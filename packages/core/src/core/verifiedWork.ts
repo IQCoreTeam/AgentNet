@@ -23,6 +23,16 @@ export function buildMarker(walletAddress: string): string {
   ].join("\n");
 }
 
+/** Read the `wallet:` value out of a `.agentnet` marker body (same shape the indexer
+ *  parses). Returns the address or null. */
+function markerWallet(content: string): string | null {
+  for (const line of content.split(/\r?\n/)) {
+    const m = /^\s*wallet:\s*(\S+)\s*$/.exec(line);
+    if (m) return m[1];
+  }
+  return null;
+}
+
 /** "owner/name" or a github.com URL -> { owner, name }, or null. */
 export function parseRepo(input: string): { owner: string; name: string } | null {
   let s = (input || "").trim();
@@ -44,15 +54,22 @@ function ghHeaders(token: string): Record<string, string> {
   };
 }
 
-/** Commit `.agentnet` (the public wallet marker) to the repo's default branch via
- *  the GitHub Contents API. Idempotent — updates the file if it already exists.
- *  Throws a human-readable error (no write access, repo missing, ...). */
-export async function pushMarker(token: string, owner: string, name: string, walletAddress: string): Promise<void> {
+/** Step 1 of registration: ensure `.agentnet` on the repo's default branch names this
+ *  wallet. If the marker is already present AND already names this wallet, we SKIP the
+ *  commit and go straight to the indexer check (no needless commit). We only PUT when the
+ *  marker is missing or names a different/old wallet. Returns whether a commit happened.
+ *  Throws a human-readable error (no access, repo missing, can't write, ...). */
+export async function pushMarker(token: string, owner: string, name: string, walletAddress: string): Promise<{ committed: boolean }> {
   const url = `${GH_API}/repos/${owner}/${name}/contents/${MARKER_PATH}`;
   let sha: string | undefined;
   const head = await fetch(url, { headers: ghHeaders(token) });
   if (head.ok) {
-    sha = ((await head.json()) as { sha?: string }).sha;
+    const data = (await head.json()) as { sha?: string; content?: string };
+    sha = data.sha;
+    // Already registered with this wallet -> nothing to add, proceed to the check.
+    if (data.content && markerWallet(Buffer.from(data.content, "base64").toString("utf8")) === walletAddress) {
+      return { committed: false };
+    }
   } else if (head.status !== 404) {
     throw new Error(`Can't read ${owner}/${name} (HTTP ${head.status}). Check the GitHub token has access.`);
   }
@@ -72,6 +89,7 @@ export async function pushMarker(token: string, owner: string, name: string, wal
     const body = await res.text().catch(() => "");
     throw new Error(`GitHub commit failed (HTTP ${res.status}). ${body.slice(0, 140)}`);
   }
+  return { committed: true };
 }
 
 /** POST the repo<->skill link to the indexer. The indexer re-reads the marker
@@ -98,12 +116,14 @@ export async function registerVerifiedWork(opts: {
   repo: string;
   skillMints: string[];
   walletAddress: string;
-}): Promise<{ count: number; repo: string }> {
+}): Promise<{ count: number; repo: string; markerAdded: boolean }> {
   const parsed = parseRepo(opts.repo);
   if (!parsed) throw new Error("Enter a repo as owner/name or a github.com URL.");
   if (opts.skillMints.length === 0) throw new Error("Pick at least one skill this repo used.");
-  await pushMarker(opts.token, parsed.owner, parsed.name, opts.walletAddress);
+  // Step 1: add the marker (skipped automatically if already present for this wallet).
+  const { committed } = await pushMarker(opts.token, parsed.owner, parsed.name, opts.walletAddress);
+  // Step 2: register with the indexer (it re-reads the marker to verify).
   const repo = `${parsed.owner}/${parsed.name}`;
   const { count } = await registerWorkLink(repo, opts.skillMints, opts.walletAddress);
-  return { count, repo };
+  return { count, repo, markerAdded: committed };
 }

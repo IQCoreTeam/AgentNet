@@ -258,7 +258,7 @@ body {
 }
 .an-send:active { transform: scale(0.92); }
 .an-send:disabled { opacity: 0.4; }
-.an-send.is-stop { background: var(--an-red); color: #fff; }
+.an-send.is-stop { background: var(--an-fg); color: var(--an-bg-0); }
 
 .app-viewport {
   display: flex;
@@ -324,6 +324,13 @@ body {
    between tabs instead of being swallowed (the chat scroller sets this inline already). */
 .an-pager-track .overflow-y-auto {
   touch-action: pan-y;
+}
+
+/* Bottom inset so a screen's content (or its sticky footer button) scrolls clear of the
+   floating tab bar while still passing BEHIND its glass — the chat-style look on every
+   page. Applied to the bottom-most scroll area or footer of each market/agent screen. */
+.an-tabbar-inset {
+  padding-bottom: calc(var(--tabbar-height, 0px) + max(0.75rem, env(safe-area-inset-bottom)));
 }
 
 /* Floating chat controls: messages continue behind this layer; the controls themselves
