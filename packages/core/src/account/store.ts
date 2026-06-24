@@ -133,6 +133,13 @@ export class SessionStore {
     state.count += 1;
   }
 
+  async recordMeta(meta: Omit<CanonicalSession, "messages">): Promise<void> {
+    const key = await this.getKey();
+    const state = await this.currentPage(meta.sessionId);
+    const pk = pageKey(meta.sessionId, state.page);
+    await this.write(pk, await encodeRecord(key, metaRecord(meta)));
+  }
+
   async remove(sessionId: string): Promise<void> {
     this.cur.delete(sessionId);
     for (const k of await this.storage.list()) {
@@ -231,7 +238,7 @@ export class SessionStore {
         // unreadable session never hides all the readable ones.
         try {
           const s = await this.loadPage(sessionId, page);
-          return s ? { sessionId, title: s.title, cli: s.cli, ts: s.ts } : null;
+          return s ? { sessionId, title: s.title, cli: s.cli, ts: s.ts, lastDevice: s.lastDevice } : null;
         } catch {
           return null; // undecryptable (foreign key / corrupt), omit from the list
         }

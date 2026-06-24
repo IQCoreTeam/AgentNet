@@ -60,9 +60,15 @@ export async function prepareResume(
   cwd: string,
   canonicalId: string,
   ephemeral?: boolean,
-): Promise<string> {
+): Promise<{
+  nativeId: string;
+  lastDevice?: { id: string; label: string };
+  title?: string;
+  hasMessages: boolean;
+}> {
   const canon = await store.load(canonicalId);
   const messages = replayable(canon?.messages ?? []);
+  const hasMessages = messages.length > 0;
 
   // The canonical id IS the native id for the cli that birthed the session.
   const birthCli = canon?.cli;
@@ -80,5 +86,10 @@ export async function prepareResume(
   } else {
     await injectCodex({ threadId: resolvedId, cwd, messages });
   }
-  return resolvedId;
+  return {
+    nativeId: resolvedId,
+    lastDevice: canon?.lastDevice,
+    title: canon?.title,
+    hasMessages,
+  };
 }

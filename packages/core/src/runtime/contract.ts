@@ -169,6 +169,7 @@ export interface SessionMeta {
   title: string; // derived (e.g. first user line)
   cli: "claude" | "codex";
   ts: number; // last updated
+  lastDevice?: { id: string; label: string };
 }
 
 // what gets encrypted to storage (CLI-neutral, so codex↔claude + cross-device)
@@ -178,4 +179,5 @@ export interface CanonicalSession {
   title: string;
   messages: ChatMessage[];
   ts: number;
+  lastDevice?: { id: string; label: string };
 }

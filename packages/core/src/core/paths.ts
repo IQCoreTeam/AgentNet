@@ -49,6 +49,11 @@ export function cliMapFile(): string {
   return join(rootDir(), "cli-map.json");
 }
 
+/** Device identity file. Local, never synced. */
+export function deviceFile(): string {
+  return join(rootDir(), "device.json");
+}
+
 // ── the CLIs' own homes (we inject native session files INTO these) ──
 // Cross-CLI resume rewrites a canonical session into claude/codex's native
 // jsonl at the exact path that CLI reads, so `--resume` continues it.
