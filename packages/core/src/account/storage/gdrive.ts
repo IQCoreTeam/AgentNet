@@ -27,6 +27,20 @@ function name(sessionId: string): string {
   return `${sessionId}${EXT}`;
 }
 
+// Drive file ids are stable for the lifetime of a file. Cache them per wallet+page key so
+// list()->get() and scroll-up pagination do not pay an extra files?q=name... lookup before
+// every media download.
+const fileIdCache = new Map<string, string>();
+function fileCacheKey(walletAddress: string, sessionId: string): string {
+  return `${walletAddress}/${sessionId}`;
+}
+function cacheFileId(walletAddress: string, sessionId: string, id: string): void {
+  fileIdCache.set(fileCacheKey(walletAddress, sessionId), id);
+}
+function forgetFileId(walletAddress: string, sessionId: string): void {
+  fileIdCache.delete(fileCacheKey(walletAddress, sessionId));
+}
+
 // Find a folder by name under `parent` (or root), creating it if absent. Returns
 // its id. Cached per-process so we don't re-resolve the folder every call.
 const folderCache = new Map<string, string>();
@@ -104,12 +118,21 @@ export async function agentnetFolderLink(walletAddress: string): Promise<string 
 
 // Find the Drive file id for a sessionId inside the wallet's sessions folder.
 async function findId(walletAddress: string, sessionId: string): Promise<string | null> {
+  const cached = fileIdCache.get(fileCacheKey(walletAddress, sessionId));
+  if (cached) return cached;
+
   const folder = await sessionsFolder(walletAddress);
   const q = encodeURIComponent(`name='${name(sessionId)}' and '${folder}' in parents and trashed=false`);
-  const res = await fetch(`${FILES}?q=${q}&fields=files(id)`, { headers: await auth() });
+  const t0 = Date.now();
+  const hdr = await auth(); // token is cached after the first call; timed separately below
+  const t1 = Date.now();
+  const res = await fetch(`${FILES}?q=${q}&fields=files(id)`, { headers: hdr });
   if (!res.ok) throw new Error(`drive list failed: ${res.status}`);
   const data = (await res.json()) as { files: { id: string }[] };
-  return data.files[0]?.id ?? null;
+  console.error(`[perf] drive find ${sessionId.slice(0, 8)} auth=${t1 - t0}ms query=${Date.now() - t1}ms`);
+  const id = data.files[0]?.id ?? null;
+  if (id) cacheFileId(walletAddress, sessionId, id);
+  return id;
 }
 
 export function gdriveStorage(walletAddress: string): StorageAdapter {
@@ -130,7 +153,7 @@ export function gdriveStorage(walletAddress: string): StorageAdapter {
         const boundary = "agentnet" + Math.random().toString(36).slice(2);
         const meta = JSON.stringify({ name: name(sessionId), parents: [folder] });
         const body = buildMultipart(boundary, meta, blob);
-        const res = await fetch(`${UPLOAD}?uploadType=multipart`, {
+        const res = await fetch(`${UPLOAD}?uploadType=multipart&fields=id`, {
           method: "POST",
           headers: {
             ...(await auth()),
@@ -139,28 +162,43 @@ export function gdriveStorage(walletAddress: string): StorageAdapter {
           body: Buffer.from(body),
         });
         if (!res.ok) throw new Error(`drive create failed: ${res.status}`);
+        const created = (await res.json()) as { id?: string };
+        if (created.id) cacheFileId(walletAddress, sessionId, created.id);
       }
     },
 
     async get(sessionId) {
       const id = await findId(walletAddress, sessionId);
       if (!id) return null;
+      const t0 = Date.now();
       const res = await fetch(`${FILES}/${id}?alt=media`, { headers: await auth() });
-      if (res.status === 404) return null;
+      if (res.status === 404) {
+        forgetFileId(walletAddress, sessionId);
+        return null;
+      }
       if (!res.ok) throw new Error(`drive get failed: ${res.status}`);
-      return new Uint8Array(await res.arrayBuffer());
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      console.error(`[perf] drive get ${sessionId.slice(0, 8)} media=${Date.now() - t0}ms ${bytes.length}B`);
+      return bytes;
     },
 
     async list() {
       const folder = await sessionsFolder(walletAddress);
       const q = encodeURIComponent(`'${folder}' in parents and trashed=false`);
-      const url = `${FILES}?q=${q}&fields=files(name)&pageSize=1000`;
+      const url = `${FILES}?q=${q}&fields=files(id,name)&pageSize=1000`;
+      const t0 = Date.now();
       const res = await fetch(url, { headers: await auth() });
       if (!res.ok) throw new Error(`drive list failed: ${res.status}`);
-      const data = (await res.json()) as { files: { name: string }[] };
-      return data.files
-        .filter((f) => f.name.endsWith(EXT))
-        .map((f) => f.name.slice(0, -EXT.length));
+      const data = (await res.json()) as { files: { id: string; name: string }[] };
+      const names: string[] = [];
+      for (const f of data.files) {
+        if (!f.name.endsWith(EXT)) continue;
+        const sessionId = f.name.slice(0, -EXT.length);
+        names.push(sessionId);
+        cacheFileId(walletAddress, sessionId, f.id);
+      }
+      console.error(`[perf] drive list ${Date.now() - t0}ms n=${names.length}`);
+      return names;
     },
 
     async remove(sessionId) {
@@ -168,6 +206,7 @@ export function gdriveStorage(walletAddress: string): StorageAdapter {
       if (!id) return; // already gone
       const res = await fetch(`${FILES}/${id}`, { method: "DELETE", headers: await auth() });
       if (!res.ok && res.status !== 404) throw new Error(`drive remove failed: ${res.status}`);
+      forgetFileId(walletAddress, sessionId);
     },
   };
 }

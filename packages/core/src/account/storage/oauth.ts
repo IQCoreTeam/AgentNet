@@ -314,17 +314,58 @@ async function exchangeCode(code: string, verifier: string, redirect: string): P
   });
 }
 
+// In-process cache for the NATIVE (Android) access token. The native provider does a
+// blocking Google Play Services authorize() IPC across the proot<->Android boundary on
+// every call, and getAccessToken() runs once per Drive request. A single listSessions
+// (1 + 2N Drive calls) used to fire 1 + 2N of those IPCs, serially. Desktop already caches
+// its token by expiry (below); mirror that for the native path. Short TTL so a near-expiry
+// token from GMS isn't served stale (GMS refreshes proactively, so a fresh fetch always has
+// far more than this left); long enough to collapse one list/load burst into ONE token IPC.
+// In-flight sharing also dedupes the concurrent burst (parallel listMine) into one fetch.
+let nativeToken: { value: string; at: number } | null = null;
+let nativeTokenInflight: Promise<string> | null = null;
+const NATIVE_TOKEN_TTL_MS = 60_000;
+let nativeTokenHits = 0;
+
+// Drop the cached native token (e.g. after a 401 or a Google disconnect) so the next call
+// re-fetches from the provider instead of serving a stale token for up to the TTL.
+export function clearNativeTokenCache(): void {
+  nativeToken = null;
+  nativeTokenInflight = null;
+}
+
+async function nativeAccessToken(nativeUrl: string): Promise<string> {
+  if (nativeToken && Date.now() - nativeToken.at < NATIVE_TOKEN_TTL_MS) {
+    nativeTokenHits++;
+    return nativeToken.value;
+  }
+  if (nativeTokenInflight) {
+    nativeTokenHits++;
+    return nativeTokenInflight;
+  }
+  nativeTokenInflight = (async () => {
+    const t0 = Date.now();
+    try {
+      const data = await nativeGoogleJson(nativeUrl);
+      const token = data.access_token ?? data.accessToken;
+      if (typeof token !== "string" || !token) {
+        throw new Error("native Google auth did not return an access token");
+      }
+      nativeToken = { value: token, at: Date.now() };
+      console.error(`[perf] gtoken MISS ${Date.now() - t0}ms (served ${nativeTokenHits} cached since last miss)`);
+      nativeTokenHits = 0;
+      return token;
+    } finally {
+      nativeTokenInflight = null;
+    }
+  })();
+  return nativeTokenInflight;
+}
+
 // Valid access token, refreshing if expired. Throws if not logged in.
 export async function getAccessToken(): Promise<string> {
   const nativeUrl = googleAccessTokenUrl();
-  if (nativeUrl) {
-    const data = await nativeGoogleJson(nativeUrl);
-    const token = data.access_token ?? data.accessToken;
-    if (typeof token !== "string" || !token) {
-      throw new Error("native Google auth did not return an access token");
-    }
-    return token;
-  }
+  if (nativeUrl) return nativeAccessToken(nativeUrl);
 
   const tok = await loadToken();
   if (!tok) throw new Error("not signed in to Google — run googleLogin first");

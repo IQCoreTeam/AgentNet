@@ -169,7 +169,17 @@ export class SessionStore {
   // The page at `cursor` (older). Returns its messages + cursor to the one before.
   async loadOlder(sessionId: string, cursor: number): Promise<PageResult> {
     if (cursor < 0) return { messages: [], hasMore: false, cursor: null };
-    const s = await this.loadPage(sessionId, cursor);
+    // Inline get + decode (instead of loadPage) so the "loading older..." scroll-up cost is
+    // timed per leg, exactly like loadLatest; each older page is its own Drive round-trip.
+    const t0 = Date.now();
+    const blob = await this.storage.get(pageKey(sessionId, cursor));
+    const t1 = Date.now();
+    const s = blob ? await decodeLog(await this.getKey(), blob) : null;
+    const t2 = Date.now();
+    console.error(
+      `[perf] loadOlder ${sessionId.slice(0, 8)} page=${cursor} ` +
+      `get=${t1 - t0}ms(${blob?.length ?? 0}B) decode=${t2 - t1}ms msgs=${s?.messages.length ?? 0}`,
+    );
     return { messages: s?.messages ?? [], hasMore: cursor > 0, cursor: cursor > 0 ? cursor - 1 : null };
   }
 
@@ -190,6 +200,7 @@ export class SessionStore {
 
   // One entry per session; meta read from the newest page only (cheap).
   async listMine(): Promise<SessionMeta[]> {
+    const t0 = Date.now();
     const latestPage = new Map<string, number>();
     for (const key of await this.storage.list()) {
       const p = parsePageKey(key);
@@ -197,18 +208,29 @@ export class SessionStore {
       const prev = latestPage.get(p.sessionId);
       if (prev === undefined || p.page > prev) latestPage.set(p.sessionId, p.page);
     }
-    const metas: SessionMeta[] = [];
-    for (const [sessionId, page] of latestPage) {
-      // A page encrypted with a DIFFERENT wallet key (e.g. after reconnecting a
-      // new keypair) can't be decrypted — skip it instead of failing the whole
-      // list, so one unreadable session never hides all the readable ones.
-      try {
-        const s = await this.loadPage(sessionId, page);
-        if (s) metas.push({ sessionId, title: s.title, cli: s.cli, ts: s.ts });
-      } catch {
-        /* undecryptable (foreign key / corrupt) — omit from the list */
-      }
-    }
-    return metas.sort((a, b) => b.ts - a.ts);
+    const tList = Date.now();
+    // Read every session's newest page IN PARALLEL. On a cloud tier (Drive) each loadPage
+    // is a network round-trip (download + decrypt); doing them serially made the chat-list
+    // sync at app start cost 1 + N sequential round-trips (visibly slow on mobile/Drive).
+    // Promise.all overlaps them so the wall-clock is ~the slowest single page, not the sum.
+    const metas = await Promise.all(
+      [...latestPage].map(async ([sessionId, page]) => {
+        // A page encrypted with a DIFFERENT wallet key (e.g. after reconnecting a new
+        // keypair) can't be decrypted; skip it instead of failing the whole list, so one
+        // unreadable session never hides all the readable ones.
+        try {
+          const s = await this.loadPage(sessionId, page);
+          return s ? { sessionId, title: s.title, cli: s.cli, ts: s.ts } : null;
+        } catch {
+          return null; // undecryptable (foreign key / corrupt), omit from the list
+        }
+      }),
+    );
+    const out = metas.filter((m): m is SessionMeta => m !== null).sort((a, b) => b.ts - a.ts);
+    console.error(
+      `[perf] listMine sessions=${latestPage.size} kept=${out.length} ` +
+      `list=${tList - t0}ms pages=${Date.now() - tList}ms total=${Date.now() - t0}ms`,
+    );
+    return out;
   }
 }
