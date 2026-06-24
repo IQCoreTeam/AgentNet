@@ -207,14 +207,30 @@ export function createChatSession(
   async function repaint() {
     transport.send({ type: "clear" });
     const id = slot().pendingId;
-    if (id) {
-      // Show the loading state while we read the session from storage (can be slow on
-      // mobile/cloud). Without this the UI just cleared to an empty "start a chat" screen
-      // until messages arrived, which read as "nothing happened". `page` clears it.
-      transport.send({ type: "loading" });
-      const page = await rt.loadSession(id);
-      for (const msg of page.messages) transport.send({ type: "message", msg });
-      transport.send({ type: "page", hasMore: page.hasMore, cursor: page.cursor });
+    if (!id) return;
+    // Show the loading state while we read the session from storage (can be slow on
+    // mobile/cloud). Without this the UI just cleared to an empty "start a chat" screen
+    // until messages arrived, which read as "nothing happened". `page` clears it.
+    transport.send({ type: "loading" });
+    // A storage read can fail transiently on mobile (Drive token refresh, a stale cached
+    // file id, proot IO contention). We MUST still emit `page` even on failure: the UI
+    // optimistically flips to a spinner the instant a chat is tapped, and ONLY `page`
+    // clears it. If loadSession threw, this handler aborted before `page` and the tab
+    // hung on a spinner until another session was opened (which re-pumps the queue) —
+    // exactly the "sometimes a chat won't load, but loads after I poke around" symptom.
+    // One retry covers the transient case; a hard failure releases with an empty page so
+    // a re-tap can recover.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const page = await rt.loadSession(id);
+        for (const msg of page.messages) transport.send({ type: "message", msg });
+        transport.send({ type: "page", hasMore: page.hasMore, cursor: page.cursor });
+        return;
+      } catch (err) {
+        if (attempt === 0) continue;
+        console.error(`[session] loadSession failed for ${String(id).slice(0, 8)}:`, err);
+        transport.send({ type: "page", hasMore: false, cursor: 0 });
+      }
     }
   }
 

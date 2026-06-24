@@ -316,7 +316,20 @@ function reducer(state: State, ev: Action): State {
         cursor: ev.cursor,
       };
     case "sessions":
-      return { ...state, phase: "chat", sessions: ev.list, sessionsSynced: true, activeSessionId: ev.activeId };
+      // Only ADOPT the server's activeId when the UI has no selection yet. pushSessions()
+      // runs after every open and its listMine can take 2-3s on mobile; if the user taps
+      // another chat during that window, the late `sessions` frame would otherwise stomp
+      // activeSessionId back to the PREVIOUS chat — the "tap chat 2, get chat 1, tap again
+      // to finally get 2" off-by-one. The optimistic __openingSession owns the active id;
+      // the server's id is only needed to restore one on a fresh load (or after __newChat,
+      // which clears the selection).
+      return {
+        ...state,
+        phase: "chat",
+        sessions: ev.list,
+        sessionsSynced: true,
+        activeSessionId: state.activeSessionId ?? ev.activeId,
+      };
     case "loading":
       return { ...state, loading: true };
     // Optimistic session switch: the moment the user taps a chat, flip the active id (so
