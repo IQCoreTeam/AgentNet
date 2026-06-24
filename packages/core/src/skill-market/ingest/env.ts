@@ -23,7 +23,7 @@ import { claudeSkillsDir } from "../../core/paths.js";
 import { classifySkills, readSkillManifest } from "../registry.js";
 import { resolveRpcUrl } from "../../core/rpc.js";
 import { init as initChain } from "../../core/chain.js";
-import type { AgentProfile, SkillCard, SkillDetail } from "../../chat/marketMessages.js";
+import type { AgentProfile, SkillCard, SkillDetail, VerifiedRepo } from "../../chat/marketMessages.js";
 import type { Skill } from "../../core/types.js";
 import { readNotes, postNote as corePostNote, readAgentNotes, postAgentNote as corePostAgentNote } from "../../notes/notes.js";
 import { getSkillsCollectionMint, getWorkflowsCollectionMint, getIndexerUrl } from "../../core/seed.js";
@@ -51,6 +51,34 @@ function toCard(s: Skill): SkillCard {
 // traits already filled. dasSource stays as a last-ditch fallback if the indexer is
 // down. Override the URL with AGENTNET_INDEXER_URL.
 const INDEXER_URL = getIndexerUrl();
+
+// Verified work for a wallet. The indexer serves one row per (repo, skill) link, so a repo
+// backing N skills comes back N times; group by repo id, collect the skill mints, keep the
+// cached stars/forks. Best-effort: any failure yields [] so the profile still loads.
+async function fetchVerifiedRepos(wallet: string): Promise<VerifiedRepo[]> {
+  const res = await fetch(`${INDEXER_URL}/work-links?wallet=${encodeURIComponent(wallet)}`);
+  if (!res.ok) return [];
+  const data = (await res.json()) as {
+    links?: Array<{ github_repo_id: string; repo_owner: string; repo_name: string; repo_url: string; stars: number; forks: number; skill_mint: string }>;
+  };
+  const byRepo = new Map<string, VerifiedRepo>();
+  for (const l of data.links ?? []) {
+    const found = byRepo.get(l.github_repo_id);
+    if (found) {
+      if (l.skill_mint && !found.skillMints.includes(l.skill_mint)) found.skillMints.push(l.skill_mint);
+    } else {
+      byRepo.set(l.github_repo_id, {
+        owner: l.repo_owner,
+        name: l.repo_name,
+        url: l.repo_url,
+        stars: l.stars ?? 0,
+        forks: l.forks ?? 0,
+        skillMints: l.skill_mint ? [l.skill_mint] : [],
+      });
+    }
+  }
+  return [...byRepo.values()];
+}
 
 function collectionIdFor(type?: "skill" | "workflow"): Promise<string | null> {
   const id = type === "workflow" ? getWorkflowsCollectionMint() : getSkillsCollectionMint();
@@ -404,7 +432,7 @@ export async function marketplaceEnv(wallet: Wallet) {
       // catch on the catalog: a fetch failure must NOT reject the whole profile
       // (otherwise the UI hangs on "Loading…"); degrade to empty created/owned lists.
       const all = await runSearch("").catch(() => [] as Skill[]);
-      const [reputation, notes, holdings] = await Promise.all([
+      const [reputation, notes, holdings, verifiedRepos] = await Promise.all([
         getReputation(conn, agentWallet, source, all).catch(() => ({
           wallet: agentWallet, skillsPublished: 0, totalSupply: 0, notesReceived: 0, updatedAt: Date.now(),
         })),
@@ -414,6 +442,9 @@ export async function marketplaceEnv(wallet: Wallet) {
         // Gives both the owned-mints (keys) and, for created-skills, the on-chain creator
         // that the catalog under-reports (see below).
         heldSkillCreators(agentWallet).catch(() => new Map<string, string>()),
+        // Verified GitHub work + cached stars from the indexer (Phase 1.5). Best-effort:
+        // a failure yields [] so the profile still renders without the section.
+        fetchVerifiedRepos(agentWallet).catch(() => [] as VerifiedRepo[]),
       ]);
 
       const byId = new Map(all.map((s) => [s.id, s]));
@@ -455,6 +486,7 @@ export async function marketplaceEnv(wallet: Wallet) {
         ownedSkills: ownedSkillCards,
         notes,
         canComment,
+        verifiedRepos,
       };
     },
 

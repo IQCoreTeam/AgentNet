@@ -30,6 +30,18 @@ export interface SkillCard {
   requiredSkills?: string[]; // workflows only: prerequisite skill mint ids
 }
 
+/** A GitHub repo the agent registered as verified work, with the indexer's cached star
+ *  count. One entry per repo even when it backs several skills. Served by the indexer
+ *  (GET /work-links?wallet=); the summed stars act as a reputation score in the UI. */
+export interface VerifiedRepo {
+  owner: string;
+  name: string;
+  url: string;
+  stars: number;
+  forks: number;
+  skillMints: string[]; // the agent's skills this repo is linked to
+}
+
 /** Full agent profile payload sent to the UI on getAgentProfile. */
 export interface AgentProfile {
   wallet: string;
@@ -42,6 +54,9 @@ export interface AgentProfile {
   // agent created (same on-chain gate as postAgentNote). The UI shows the comment box
   // either way (disabled with a hint when false) so the action is always discoverable.
   canComment: boolean;
+  // Registered GitHub work + cached stars (Phase 1.5). Optional: an older host that does
+  // not fetch work-links omits it and the UI simply hides the section.
+  verifiedRepos?: VerifiedRepo[];
 }
 
 /** A full detail payload for one item: its card, the on-chain body (skillText, read

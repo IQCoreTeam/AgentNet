@@ -1,9 +1,12 @@
-import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { parseGithubLink, safeExternalUrl } from "@iqlabs-official/agent-sdk/links/github.js";
 import { useStore } from "../state/store";
 import type { AgentProfile, SkillCard } from "../transport/protocol";
 import { AgentIcon } from "../icons";
 import { walletAvatarSvg } from "./walletAvatar";
+import { PostCelebration } from "./PostCelebration";
+import { RegisterWorkRepo } from "../onboarding/RegisterWorkRepo";
 
 function CopyIcon({ className }: { className?: string }) {
   return (
@@ -14,6 +17,171 @@ function CopyIcon({ className }: { className?: string }) {
   );
 }
 
+function PenIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+
+function RepoIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" />
+    </svg>
+  );
+}
+
+function PlusIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+function StarIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 2.5l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.8 6.2 20.9l1.1-6.5L2.6 9.8l6.5-.9L12 2.5Z" />
+    </svg>
+  );
+}
+
+// One reusable note editor for both the blog modal (self) and the inline comment box
+// (holders). Keeps its own draft; the parent owns the actual postAgentNote + success.
+function NoteComposer({
+  placeholder,
+  submitLabel,
+  posting,
+  disabled,
+  onSubmit,
+}: {
+  placeholder: string;
+  submitLabel: string;
+  posting?: boolean;
+  disabled?: boolean;
+  onSubmit: (text: string, gitLink?: string) => void;
+}) {
+  const [text, setText] = useState("");
+  const [link, setLink] = useState("");
+  const busy = posting || disabled;
+  function submit() {
+    if (!text.trim() || busy) return;
+    onSubmit(text.trim(), link.trim() || undefined);
+    setText("");
+    setLink("");
+  }
+  return (
+    <div className="space-y-2">
+      <textarea
+        className="w-full resize-none rounded-xl p-2.5 text-sm focus:outline-none"
+        style={{ background: "var(--an-bg-2)", border: "1px solid var(--an-line)", color: "var(--an-fg)" }}
+        rows={3}
+        placeholder={placeholder}
+        value={text}
+        disabled={busy}
+        onChange={(e) => setText(e.target.value)}
+      />
+      <input
+        className="w-full rounded-xl px-2.5 py-2 text-sm focus:outline-none"
+        style={{ background: "var(--an-bg-2)", border: "1px solid var(--an-line)", color: "var(--an-fg-dim)" }}
+        placeholder="GitHub link (optional)"
+        value={link}
+        disabled={busy}
+        onChange={(e) => setLink(e.target.value)}
+      />
+      <button
+        onClick={submit}
+        disabled={!text.trim() || busy}
+        className="w-full rounded-xl py-2.5 text-sm font-semibold disabled:opacity-40"
+        style={{ background: "var(--an-green)", color: "var(--an-on-green)" }}
+      >
+        {posting ? "Posting..." : submitLabel}
+      </button>
+    </div>
+  );
+}
+
+// Bottom-sheet modal portaled to <body> so it escapes the app's swipe transforms and the
+// bottom nav (a `position: fixed` inside a transformed ancestor mis-anchors and overflows).
+// Fixed header + scrollable body, capped at 85vh. Tokens only.
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  return createPortal(
+    <div className="fixed inset-0 z-[55] flex items-end justify-center sm:items-center">
+      <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.6)" }} onClick={onClose} aria-hidden="true" />
+      <div
+        className="relative flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-2xl border sm:max-w-md sm:rounded-2xl"
+        style={{ background: "var(--an-bg-1)", borderColor: "var(--an-line)" }}
+      >
+        <div className="flex shrink-0 items-center justify-between border-b px-4 py-3" style={{ borderColor: "var(--an-line)" }}>
+          <h2 className="text-sm font-semibold" style={{ color: "var(--an-fg)" }}>{title}</h2>
+          <button onClick={onClose} aria-label="Close" className="-mr-1 p-1" style={{ color: "var(--an-fg-mute)" }}>
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="overflow-y-auto p-4" style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}>
+          {children}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// Compact GitHub-token prompt for the repo modal (no token yet). Replaces embedding the
+// full onboarding ConnectGithub/OnboardingShell, which is a full-screen layout that
+// overflowed inside a sheet. Once saved, githubStatus flips and RegisterWorkRepo shows.
+function GithubTokenForm() {
+  const { send } = useStore();
+  const [token, setToken] = useState("");
+  const [saving, setSaving] = useState(false);
+  function save() {
+    if (!token.trim()) return;
+    setSaving(true);
+    send({ type: "submitGithubToken", token: token.trim() });
+    setTimeout(() => setSaving(false), 1200);
+  }
+  return (
+    <div className="space-y-2.5">
+      <p className="text-xs leading-relaxed" style={{ color: "var(--an-fg-dim)" }}>
+        Add a GitHub token (repo scope) to register your work. We commit a public
+        <span className="font-mono" style={{ color: "var(--an-fg)" }}> .agentnet </span>
+        marker (your wallet address only) to prove ownership.
+      </p>
+      <a
+        href="https://github.com/settings/tokens/new?scopes=repo&description=AgentNet"
+        target="_blank"
+        rel="noreferrer"
+        className="block text-xs font-medium"
+        style={{ color: "var(--an-green)" }}
+      >
+        Create a token on GitHub
+      </a>
+      <input
+        value={token}
+        onChange={(e) => setToken(e.target.value)}
+        placeholder="ghp_..."
+        className="w-full rounded-xl px-2.5 py-2.5 font-mono text-sm focus:outline-none"
+        style={{ background: "var(--an-bg-2)", border: "1px solid var(--an-line)", color: "var(--an-fg)" }}
+      />
+      <button
+        onClick={save}
+        disabled={!token.trim() || saving}
+        className="w-full rounded-xl py-2.5 text-sm font-semibold disabled:opacity-40"
+        style={{ background: "var(--an-green)", color: "var(--an-on-green)" }}
+      >
+        {saving ? "Saving..." : "Save token"}
+      </button>
+    </div>
+  );
+}
+
 interface Props {
   profile: AgentProfile;
   onBack: () => void;
@@ -21,13 +189,18 @@ interface Props {
 }
 
 export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
-  const { send } = useStore();
-  const [noteText, setNoteText] = useState("");
+  const { state, send } = useStore();
   const [buyingAll, setBuyingAll] = useState(false);
-  const [noteGitLink, setNoteGitLink] = useState("");
   const blogDrag = useRef({ active: false, moved: false, startX: 0, startLeft: 0 });
   const [copied, setCopied] = useState(false);
   const avatar = useMemo(() => walletAvatarSvg(profile.wallet), [profile.wallet]);
+  const [fabOpen, setFabOpen] = useState(false);
+  const [composeMode, setComposeMode] = useState<null | "blog" | "repo">(null);
+  const [posting, setPosting] = useState(false);
+  const [celebrate, setCelebrate] = useState<{ label: string } | null>(null);
+  const awaitingPost = useRef(false);
+  const lastToast = useRef(state.toast);
+  const lastRepoAt = useRef(state.workRepoResult?.at ?? 0);
 
   function handleBuyAll() {
     setBuyingAll(true);
@@ -35,17 +208,56 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
     setTimeout(() => setBuyingAll(false), 8000);
   }
 
-  function handleNote() {
-    if (!noteText.trim() || (!profile.self && !profile.canComment)) return;
-    send({
-      type: "postAgentNote",
-      agentWallet: profile.wallet,
-      text: noteText.trim(),
-      gitLink: noteGitLink.trim() || undefined,
-    });
-    setNoteText("");
-    setNoteGitLink("");
+  // Post a blog entry (self) or a comment (holder). Success is detected via the store's
+  // "Note posted." toast (see below), which then fires the celebration + haptic.
+  function submitNote(text: string, gitLink?: string) {
+    if (!text.trim() || (!profile.self && !profile.canComment)) return;
+    awaitingPost.current = true;
+    setPosting(true);
+    send({ type: "postAgentNote", agentWallet: profile.wallet, text: text.trim(), gitLink });
   }
+
+  // Blog/comment success: the reducer sets toast "Note posted." on agentNoteResult.ok.
+  useEffect(() => {
+    if (state.toast === lastToast.current) return;
+    lastToast.current = state.toast;
+    if (!awaitingPost.current) return;
+    if (state.toast === "Note posted.") {
+      awaitingPost.current = false;
+      setPosting(false);
+      setComposeMode(null);
+      setCelebrate({ label: "Posted to AgentNet" });
+    } else if (typeof state.toast === "string" && state.toast.startsWith("Note failed")) {
+      awaitingPost.current = false;
+      setPosting(false);
+    }
+  }, [state.toast]);
+
+  // Verified-repo registration success: the modal's step view shows the result; here we
+  // just buzz, then after a beat refresh the profile (so the new repo + stars appear) and
+  // close the modal. No celebration overlay - that would be a second success alert.
+  useEffect(() => {
+    const r = state.workRepoResult;
+    if (!r || r.at === lastRepoAt.current) return;
+    lastRepoAt.current = r.at;
+    if (r.ok) {
+      // Let the modal's steps flip to checks, then close it and pop the success as a
+      // SEPARATE centered celebration popup (it vibrates on mount) + refresh so the new
+      // repo and stars show on the profile.
+      const t = setTimeout(() => {
+        setComposeMode(null);
+        setCelebrate({ label: `Registered ${r.repo ?? "your repo"}` });
+        send({ type: "getAgentProfile", wallet: profile.wallet });
+      }, 900);
+      return () => clearTimeout(t);
+    }
+  }, [state.workRepoResult]);
+
+  // Fetch GitHub status when the repo modal opens so it can switch from the token prompt
+  // to the repo picker once a token exists.
+  useEffect(() => {
+    if (composeMode === "repo") send({ type: "getGithubStatus" });
+  }, [composeMode]);
 
   function copyWallet() {
     try {
@@ -58,11 +270,11 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   }
 
   const allSkills = [...(profile.createdSkills ?? [])];
+  const verifiedRepos = profile.verifiedRepos ?? [];
+  const repoStars = verifiedRepos.reduce((sum, r) => sum + (r.stars ?? 0), 0);
   const blogNotes = (profile.notes ?? []).filter((n) => n.isSelfNote);
   const comments = (profile.notes ?? []).filter((n) => !n.isSelfNote);
   const canPost = profile.self || profile.canComment;
-  const composeTitle = profile.self ? "Post to blog" : "Write a comment";
-  const composePlaceholder = profile.self ? "Write a blog post or update..." : "Share your experience with this agent...";
 
   function shortWallet(wallet?: string) {
     return wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : "?";
@@ -108,7 +320,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-full" style={{ background: "var(--an-bg-0)" }}>
+    <div className="relative flex flex-col h-full" style={{ background: "var(--an-bg-0)" }}>
       <header
         className="flex items-center gap-2 border-b px-3 py-2 shrink-0"
         style={{ borderColor: "var(--an-line)", background: "var(--an-bg-1)" }}
@@ -140,6 +352,14 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                   you
                 </span>
               )}
+              {repoStars > 0 && (
+                <span
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                  style={{ background: "var(--an-green-dim)", color: "var(--an-green)", border: "1px solid var(--an-green-line)" }}
+                >
+                  <StarIcon className="h-2.5 w-2.5" /> {repoStars}
+                </span>
+              )}
             </div>
             <button
               onClick={copyWallet}
@@ -169,6 +389,43 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
             </div>
           ))}
         </div>
+
+        {/* Verified work - registered GitHub repos + cached stars (summed = reputation score) */}
+        {verifiedRepos.length > 0 && (
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>Verified work</p>
+              <span
+                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                style={{ background: "var(--an-green-dim)", border: "1px solid var(--an-green-line)", color: "var(--an-green)" }}
+              >
+                <StarIcon className="h-3 w-3" /> {repoStars}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {verifiedRepos.map((r) => (
+                <a
+                  key={`${r.owner}/${r.name}`}
+                  href={safeExternalUrl(r.url) ?? r.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-between rounded-xl border px-3 py-2.5 active:opacity-80"
+                  style={{ background: "var(--an-bg-1)", borderColor: "var(--an-line)" }}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-mono text-xs" style={{ color: "var(--an-fg)" }}>{r.owner}/{r.name}</p>
+                    <p className="text-[10px]" style={{ color: "var(--an-fg-mute)" }}>
+                      {r.skillMints.length} skill{r.skillMints.length !== 1 ? "s" : ""} linked
+                    </p>
+                  </div>
+                  <span className="ml-2 inline-flex shrink-0 items-center gap-1 text-xs" style={{ color: "var(--an-fg-dim)" }}>
+                    <StarIcon className="h-3.5 w-3.5" /> {r.stars}
+                  </span>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Skills grid */}
         {allSkills.length > 0 && (
@@ -261,35 +518,27 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
           </div>
         )}
 
-        {/* Compose */}
-        <div className="space-y-1.5">
-          <p className="text-[11px] text-zinc-500 uppercase tracking-wide">{composeTitle}</p>
-          {!canPost && (
-            <p className="rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-[10px] text-zinc-500">Own at least one of this agent's skills to comment.</p>
-          )}
-          <textarea
-            className="w-full rounded-lg bg-zinc-900 border border-zinc-800 p-2 text-xs text-zinc-200 resize-none focus:outline-none focus:border-green-500/50"
-            rows={2}
-            placeholder={composePlaceholder}
-            value={noteText}
-            disabled={!canPost}
-            onChange={(e) => setNoteText(e.target.value)}
-          />
-          <input
-            className="w-full rounded-lg bg-zinc-900 border border-zinc-800 px-2 py-1.5 text-xs text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-blue-500/50"
-            placeholder="GitHub link (optional)"
-            value={noteGitLink}
-            disabled={!canPost}
-            onChange={(e) => setNoteGitLink(e.target.value)}
-          />
-          <button
-            onClick={handleNote}
-            disabled={!noteText.trim() || !canPost}
-            className="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 disabled:opacity-40 active:bg-zinc-700"
-          >
-            {profile.self ? "Post" : "Comment"}
-          </button>
-        </div>
+        {/* Comment composer - holders only. Self writes blog posts via the FAB instead. */}
+        {!profile.self && (
+          <div className="space-y-1.5">
+            <p className="text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>Write a comment</p>
+            {canPost ? (
+              <NoteComposer
+                placeholder="Share your experience with this agent..."
+                submitLabel="Comment"
+                posting={posting}
+                onSubmit={submitNote}
+              />
+            ) : (
+              <p
+                className="rounded-xl px-2.5 py-2 text-[11px]"
+                style={{ background: "var(--an-bg-1)", border: "1px solid var(--an-line)", color: "var(--an-fg-mute)" }}
+              >
+                Hold a skill to comment.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Buy all footer */}
@@ -300,10 +549,70 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
             disabled={buyingAll}
             className="w-full rounded-xl bg-green-600 py-3 text-sm font-semibold text-white active:bg-green-500 disabled:opacity-50"
           >
-            {buyingAll ? "Buying…" : `Buy all ${allSkills.length} skill${allSkills.length !== 1 ? "s" : ""}`}
+            {buyingAll ? "Buying..." : `Buy all ${allSkills.length} skill${allSkills.length !== 1 ? "s" : ""}`}
           </button>
         </div>
       )}
+
+      {/* Compose FAB (self): write a blog post or register verified GitHub work */}
+      {profile.self && (
+        <>
+          {fabOpen && (
+            <button
+              className="fixed inset-0 z-30 cursor-default"
+              aria-label="Close menu"
+              onClick={() => setFabOpen(false)}
+            />
+          )}
+          <div className="absolute bottom-5 right-5 z-40 flex flex-col items-end gap-3">
+            {fabOpen && (
+              <>
+                <button
+                  onClick={() => { setFabOpen(false); setComposeMode("repo"); }}
+                  className="flex items-center gap-3 rounded-full pl-5 pr-6 text-sm font-semibold shadow-lg"
+                  style={{ minHeight: 52, background: "var(--an-bg-1)", border: "1px solid var(--an-line)", color: "var(--an-fg)" }}
+                >
+                  <RepoIcon className="h-5 w-5" /> Register GitHub work
+                </button>
+                <button
+                  onClick={() => { setFabOpen(false); setComposeMode("blog"); }}
+                  className="flex items-center gap-3 rounded-full pl-5 pr-6 text-sm font-semibold shadow-lg"
+                  style={{ minHeight: 52, background: "var(--an-bg-1)", border: "1px solid var(--an-line)", color: "var(--an-fg)" }}
+                >
+                  <PenIcon className="h-5 w-5" /> Write blog
+                </button>
+              </>
+            )}
+            <button
+              onClick={() => setFabOpen((o) => !o)}
+              aria-label="Create"
+              className="flex h-16 w-16 items-center justify-center rounded-full shadow-xl"
+              style={{ background: "var(--an-green)", color: "var(--an-on-green)", transform: fabOpen ? "rotate(45deg)" : "none", transition: "transform 150ms" }}
+            >
+              <PlusIcon className="h-7 w-7" />
+            </button>
+          </div>
+        </>
+      )}
+
+      {composeMode === "blog" && (
+        <Modal title="Write a blog post" onClose={() => setComposeMode(null)}>
+          <NoteComposer
+            placeholder="Write a blog post or update..."
+            submitLabel="Post to AgentNet"
+            posting={posting}
+            onSubmit={submitNote}
+          />
+        </Modal>
+      )}
+
+      {composeMode === "repo" && (
+        <Modal title="Register GitHub work" onClose={() => setComposeMode(null)}>
+          {state.githubStatus?.hasToken ? <RegisterWorkRepo /> : <GithubTokenForm />}
+        </Modal>
+      )}
+
+      {celebrate && <PostCelebration label={celebrate.label} onDone={() => setCelebrate(null)} />}
     </div>
   );
 }

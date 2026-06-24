@@ -453,12 +453,11 @@ function reducer(state: State, ev: Action): State {
     case "postNoteResult":
       return { ...state, toast: ev.ok ? "Comment posted." : `Comment failed: ${ev.error ?? "unknown"}` };
     case "workRepoRegistered":
+      // No toast here: the register modal owns the success/failure messaging (step view +
+      // celebration), so a global toast would be a second, redundant alert.
       return {
         ...state,
         workRepoResult: { ok: ev.ok, count: ev.count, repo: ev.repo, error: ev.error, at: Date.now() },
-        toast: ev.ok
-          ? `Registered ${ev.repo ?? "repo"} as verified work.`
-          : `Register failed: ${ev.error ?? "unknown"}`,
       };
     case "agents":
       return { ...state, agents: ev.agents as Reputation[], agentsLoading: false };

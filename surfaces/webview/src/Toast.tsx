@@ -18,7 +18,7 @@ export function Toast() {
         bottom: "calc(var(--composer-height, 0px) + var(--approval-dock-height, 0px) + max(0.75rem, env(safe-area-inset-bottom)))",
       }}
     >
-      <div className="rounded-lg bg-zinc-800 px-4 py-2 text-sm text-zinc-100 shadow-lg">
+      <div className="max-w-[92%] break-words rounded-lg bg-zinc-800 px-4 py-2 text-center text-sm text-zinc-100 shadow-lg">
         {state.toast}
       </div>
     </div>
