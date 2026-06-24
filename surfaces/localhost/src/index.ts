@@ -420,6 +420,11 @@ function attachAuthHandlers(c: Client) {
 // but they should still work when the active SSE client is in onboarding/storage setup.
 function attachMarketHandlers(c: Client) {
   let mktPromise: ReturnType<typeof marketplaceEnv> | null = null;
+  // One-time per market session: have we pulled the wallet's owned NFT skills from chain
+  // and installed them locally yet? vscode does this at chat "ready" via env.loadOwnedSkills;
+  // localhost has no such env wiring, so we drive it from the first owned-skills read below.
+  // Reset whenever the market is torn down (wallet / RPC change) so the new wallet re-syncs.
+  let ownedSynced = false;
   function withMarketTimeout<T>(task: Promise<T>, message: string) {
     let timer: ReturnType<typeof setTimeout> | null = null;
     return Promise.race([
@@ -440,10 +445,22 @@ function attachMarketHandlers(c: Client) {
         "Marketplace initialization timed out. Add a Helius key in Market RPC settings, then retry.",
       ).catch((e) => {
         mktPromise = null;
+        ownedSynced = false;
         throw e;
       });
     }
     return mktPromise;
+  }
+  // Fetch the wallet's owned NFT skills (names + slug->mint maps) and push them to the UI.
+  // names come from the LOCAL skills dir, so it only reflects what loadOwnedSkills() has
+  // installed — call this AFTER a sync to show freshly pulled skills.
+  async function emitOwnedSkills(mkt: Awaited<ReturnType<typeof getMarket>>) {
+    const names = await mkt.ownedNftSkills();
+    const [mints, disposedMints] = await Promise.all([
+      mkt.ownedSkillMints().catch(() => ({})),
+      mkt.disposedSkillMints().catch(() => ({})),
+    ]);
+    c.send({ type: "ownedSkills", names, mints, disposedMints });
   }
   // `quiet` = expected transient (no wallet yet): answer reads with empty results and
   // skip every toast, so the market just shows clean empty states until the wallet lands.
@@ -496,6 +513,7 @@ function attachMarketHandlers(c: Client) {
         if (typeof m.key === "string" && m.key.trim()) {
           await saveHeliusKey(m.key.trim());
           mktPromise = null;
+          ownedSynced = false;
           const masked = await maskedHeliusKey();
           c.send({ type: "rpcStatus", status: { dasReady: await hasDasRpc(), hasKey: !!masked, masked, network: getNetwork() } });
           c.send({ type: "toast", text: "Helius key saved." });
@@ -505,6 +523,7 @@ function attachMarketHandlers(c: Client) {
       case "useDefaultRpc": {
         await saveHeliusKey("");
         mktPromise = null;
+        ownedSynced = false;
         c.send({ type: "rpcStatus", status: { dasReady: false, hasKey: false, masked: null, network: getNetwork() } });
         return;
       }
@@ -553,14 +572,18 @@ function attachMarketHandlers(c: Client) {
       }
       case "ownedSkills": {
         try {
-          // mkt.ownedNftSkills returns a string[] — send it as `names`, not spread
-          // (`...arr` would make {0:..,1:..}, dropping `names` and crashing the reducer).
-          const names = await mkt.ownedNftSkills();
-          const [mints, disposedMints] = await Promise.all([
-            mkt.ownedSkillMints().catch(() => ({})),
-            mkt.disposedSkillMints().catch(() => ({})),
-          ]);
-          c.send({ type: "ownedSkills", names, mints, disposedMints });
+          // First touch this market session: pull the wallet's owned NFT skills from chain
+          // and install them locally, so bought NFTs actually appear on mobile (the names
+          // below are read from the LOCAL skills dir, which is empty on a fresh device until
+          // this runs). Done in the background — don't block the first paint on a chain
+          // round-trip; re-emit the list once the install lands. On failure, allow a retry.
+          if (!ownedSynced) {
+            ownedSynced = true;
+            void mkt.loadOwnedSkills()
+              .then(() => emitOwnedSkills(mkt))
+              .catch(() => { ownedSynced = false; });
+          }
+          await emitOwnedSkills(mkt);
         } catch (e) {
           c.send({ type: "toast", text: "Failed to load owned skills: " + (e as Error).message });
         }
