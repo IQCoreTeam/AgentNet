@@ -37,6 +37,37 @@ export function useVisualViewportVars() {
   }, []);
 }
 
+// Flag the on-screen keyboard so chrome (the bottom tab bar) hides while typing and
+// returns when the field blurs. We can't rely on a visualViewport height delta: this
+// Android WebView uses adjustResize, so the window itself shrinks above the keyboard and
+// the delta stays ~0. Tracking focus of an editable element is the reliable signal.
+export function useKeyboardChrome() {
+  useEffect(() => {
+    const root = document.documentElement;
+    const isEditable = (el: EventTarget | null) => {
+      if (!(el instanceof HTMLElement)) return false;
+      if (el.isContentEditable) return true;
+      if (el instanceof HTMLTextAreaElement) return true;
+      if (el instanceof HTMLInputElement) {
+        return !["button", "checkbox", "radio", "file", "submit", "reset", "range", "color"].includes(el.type);
+      }
+      return false;
+    };
+    const sync = () => {
+      if (isEditable(document.activeElement)) root.setAttribute("data-keyboard", "open");
+      else root.removeAttribute("data-keyboard");
+    };
+    document.addEventListener("focusin", sync);
+    document.addEventListener("focusout", sync);
+    sync();
+    return () => {
+      document.removeEventListener("focusin", sync);
+      document.removeEventListener("focusout", sync);
+      root.removeAttribute("data-keyboard");
+    };
+  }, []);
+}
+
 export function useElementHeightVariable(ref: { current: HTMLElement | null }, variableName: string) {
   useEffect(() => {
     const root = document.documentElement;

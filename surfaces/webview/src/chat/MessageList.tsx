@@ -34,6 +34,7 @@ export function MessageList() {
   const prevHeight = useRef(0);
   const loadingOlder = useRef(false);
   const [showPill, setShowPill] = useState(false);
+  const [unseen, setUnseen] = useState(false);
   const [olderLoading, setOlderLoading] = useState(false);
   const logLen = state.log.length;
   const turns = groupTurns(state.log);
@@ -44,6 +45,7 @@ export function MessageList() {
     el.scrollTop = el.scrollHeight;
     stickToBottom.current = true;
     setShowPill(false);
+    setUnseen(false);
   }
 
   function onScroll() {
@@ -52,6 +54,7 @@ export function MessageList() {
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
     stickToBottom.current = atBottom;
     setShowPill(!atBottom);
+    if (atBottom) setUnseen(false);
     if (el.scrollTop < 100 && state.hasMore && !loadingOlder.current) {
       loadingOlder.current = true;
       setOlderLoading(true);
@@ -81,18 +84,36 @@ export function MessageList() {
     loadingOlder.current = false;
   }, [state.cursor, state.hasMore]);
 
-  // Only yank to bottom on stream update if the user hasn't scrolled away.
+  // Only yank to bottom on stream update if the user hasn't scrolled away; if they HAVE
+  // scrolled away and the AGENT adds new content at the bottom, light the jump button.
+  // Keyed on the LAST message's signature so loading OLDER pages (which prepend at the
+  // top, leaving the last message unchanged) never falsely activates it.
+  const lastSig = useRef("");
   useEffect(() => {
     const el = scrollRef.current;
+    const last = state.log[logLen - 1];
+    const sig = last ? `${last.role}:${last.text.length}` : "";
+    const changed = sig !== lastSig.current;
+    lastSig.current = sig;
     if (el && stickToBottom.current) el.scrollTop = el.scrollHeight;
-  }, [state.log[logLen - 1]?.text]);
+    else if (changed && (last?.role === "assistant" || last?.role === "thinking")) setUnseen(true);
+  }, [state.log[logLen - 1]?.text, logLen]);
+
+  // The active engine tints the send + jump-to-latest controls (claude = orange, codex
+  // = green) so the chrome matches the platform you're talking to.
+  const engineAccent = state.cli === "claude" ? "var(--claude)" : "var(--an-green)";
 
   return (
     <div className="relative min-w-0 flex-1 overflow-hidden">
       {/* Empty / loading state, centered in the whole chat viewport (both axes) rather than
           pinned near the top — an absolute overlay so it ignores scroll-area padding. */}
       {logLen === 0 && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-6 px-3 text-center">
+        // Centered in the space ABOVE the composer + tab bar (bottom padding offsets the
+        // chrome), so the logo reads as visually centered rather than sitting too low.
+        <div
+          className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-6 px-3 text-center"
+          style={{ paddingBottom: "max(0px, calc(var(--chat-float-height, 0px) + var(--tabbar-height, 0px) - 3rem))" }}
+        >
           {state.loading ? (
             <>
               <span
@@ -102,21 +123,26 @@ export function MessageList() {
               <p className="text-sm" style={{ color: "var(--an-fg-mute)" }}>Loading chat…</p>
             </>
           ) : (
-            <>
-              <IqLogo className="h-24 w-24" style={{ color: "var(--an-fg-mute)", opacity: 0.55 }} />
-              <p className="text-sm text-zinc-600">Send a message to start</p>
-            </>
+            <IqLogo className="h-32 w-32" style={{ color: "var(--an-fg-mute)", opacity: 0.55 }} />
           )}
         </div>
       )}
-      <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto px-3 py-3" style={{ touchAction: "pan-y" }}>
+      <div ref={scrollRef} onScroll={onScroll} className="an-message-scroll h-full overflow-y-auto px-3 pb-3 pt-0" style={{ touchAction: "pan-y" }}>
         <div className="mx-auto flex min-w-0 max-w-2xl flex-col">
+          {/* In-flow above the first turn: scrolling up past the sticky head reveals it,
+              and its padding gives the top breathing room (inside the content, so it
+              scrolls away — the sticky head sits flush once you scroll down). */}
           {state.hasMore && (
-            <div className="flex items-center justify-center gap-2 py-1 text-center text-xs text-zinc-600">
-              {olderLoading && (
-                <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              )}
-              {olderLoading ? "loading older…" : "scroll up for older…"}
+            <div className="flex justify-center pb-3 pt-3">
+              <span
+                className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs"
+                style={{ background: "var(--an-bg-2)", border: "1px solid var(--an-line)", color: "var(--an-fg-dim)" }}
+              >
+                {olderLoading && (
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                )}
+                {olderLoading ? "loading older…" : "scroll up for older…"}
+              </span>
             </div>
           )}
           {turns.map((turn) => (
@@ -158,12 +184,18 @@ export function MessageList() {
           )}
         </div>
       </div>
+      {/* Jump-to-latest: a round arrow button that sits just above the composer (never
+          over it). Goes active (green) when new messages arrived while scrolled away. */}
       {showPill && (
         <button
           onClick={scrollToLatest}
-          className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-zinc-700/90 px-3 py-1.5 text-xs text-zinc-200 shadow-lg backdrop-blur-sm active:bg-zinc-600"
+          aria-label="Scroll to latest"
+          className={`an-jump-latest ${unseen ? "is-unseen" : ""}`}
+          style={unseen ? { color: engineAccent, borderColor: engineAccent } : undefined}
         >
-          ↓ latest
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 3v11M4.5 9.5L9 14l4.5-4.5" />
+          </svg>
         </button>
       )}
     </div>

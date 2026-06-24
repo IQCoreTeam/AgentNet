@@ -224,6 +224,7 @@ type LocalAction =
   | { type: "__clearFiringSkill" }
   | { type: "__setToast"; text: string }
   | { type: "__openingSession"; sessionId: string }
+  | { type: "__newChat" }
   | { type: "__clearCelebrate" };
 type Action = ServerMessage | LocalAction;
 
@@ -328,6 +329,18 @@ function reducer(state: State, ev: Action): State {
     // messages/page/sessions then reconcile this.
     case "__openingSession":
       return { ...state, activeSessionId: ev.sessionId, loading: true, log: [], typing: false, hasMore: false };
+    case "__newChat":
+      return {
+        ...state,
+        activeSessionId: undefined,
+        log: [],
+        approvals: [],
+        typing: false,
+        loading: false,
+        hasMore: false,
+        cursor: 0,
+        contextTokens: undefined,
+      };
     case "platform":
       return { ...state, cli: ev.cli };
     case "storage":
@@ -635,6 +648,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // waiting for the server's load round-trip, which felt like "nothing happened".
       if (msg.type === "open") {
         raw({ type: "__openingSession", sessionId: msg.sessionId });
+      }
+      // New chat should feel instant. The server still owns the canonical session, but
+      // clearing locally avoids a dead tap while mobile storage/session repaint catches up.
+      if (msg.type === "new") {
+        raw({ type: "__newChat" });
       }
       // Inject inline model-switch separator into chat log.
       if (msg.type === "model" && msg.model) {

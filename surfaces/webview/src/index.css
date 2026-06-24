@@ -51,7 +51,7 @@
   --an-bg-0: var(--color-an-bg-0);   /* deepest app surface (page) */
   --an-bg-1: var(--color-an-bg-1);   /* raised: header, cards, drawer */
   --an-bg-2: var(--color-an-bg-2);   /* highest: inputs, active rows, bubbles */
-  --an-bg-glass: rgba(16, 17, 21, 0.82);
+  --an-bg-glass: rgba(16, 17, 21, 0.96);
 
   --an-fg: var(--color-an-fg);
   --an-fg-dim: var(--color-an-fg-dim);   /* secondary text */
@@ -116,12 +116,48 @@ body {
 /* Floating glass capsule tab bar (design-system §4, screen-rearrangement §9):
    frosted + blur material so it reads as "floating, not a panel". */
 .an-tabbar {
-  background: var(--an-bg-glass);
-  backdrop-filter: saturate(1.4) blur(18px);
-  -webkit-backdrop-filter: saturate(1.4) blur(18px);
-  border: 1px solid var(--an-line);
-  border-radius: var(--an-radius-pill);
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.4);
+  --an-tab-w: 4.25rem;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--an-bg-1) 94%, transparent);
+  backdrop-filter: saturate(1.4) blur(40px);
+  -webkit-backdrop-filter: saturate(1.4) blur(40px);
+  border: 1px solid color-mix(in srgb, var(--an-fg) 14%, transparent);
+  /* Rounded-rect (not a full pill) so the outer curve is concentric with the inner
+     active pill — otherwise round-outside / square-inside read as mismatched. */
+  border-radius: 1.3rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+.an-tabbar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  /* a single soft top highlight reads as glass; no neon halo (looked dated). */
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 46%);
+}
+.an-tab {
+  position: relative;
+  min-height: 48px;
+  transition: background var(--dur-3) var(--ease-standard), color var(--dur-3) var(--ease-standard), transform var(--dur-2) var(--ease-standard);
+}
+.an-tab:active { transform: scale(0.96); }
+/* The sliding active pill (one tab wide); its transform tracks the page-swipe position.
+   Dark fill + thin white outline (the New chat pill's material), a soft rounded rect that
+   frames the icon+label rather than a tight ring. */
+.an-tab-indicator {
+  position: absolute;
+  left: 0.375rem;
+  top: 0.3rem;
+  bottom: 0.3rem;
+  z-index: 0;
+  border-radius: 0.9rem;
+  background: color-mix(in srgb, var(--an-fg) 7%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--an-fg) 18%, transparent);
+  pointer-events: none;
+  transition: transform var(--dur-2) var(--ease-standard);
 }
 
 /* Pill buttons — the extension's signature control, enlarged for touch. */
@@ -232,6 +268,238 @@ body {
   overflow: hidden;
 }
 
+/* ── 4-tab shell (App.tsx TabShell) ───────────────────────────────────────── */
+.an-shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: var(--vvh, 100dvh);
+  width: 100%;
+  overflow: hidden;
+  background: var(--an-bg-0);
+}
+/* Float the tab bar OVER the panels (not docked) so chat scrolls behind its glass
+   instead of ending at a black band. Panels fill the full shell height. */
+.an-tabbar-shell {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 25;
+  pointer-events: none;
+}
+.an-tabbar-shell > * { pointer-events: auto; }
+/* The active screen fills this; the docked tab bar sits below it (no overlap). */
+.an-shell-panels {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.an-panel {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+
+/* Horizontal pager: a 400%-wide track of four full-width pages. The track translates
+   by -idx*25% (+ live drag) so swiping left/right pages between Chat/Skills/Agent/Market.
+   touch-action pan-y lets vertical scroll happen natively; horizontal is JS-driven. */
+.an-pager-track {
+  display: flex;
+  height: 100%;
+  width: 400%;
+  will-change: transform;
+  touch-action: pan-y;
+}
+.an-page {
+  position: relative;
+  width: 25%;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+/* Free horizontal swipes from the pages' vertical scrollers so a left/right drag pages
+   between tabs instead of being swallowed (the chat scroller sets this inline already). */
+.an-pager-track .overflow-y-auto {
+  touch-action: pan-y;
+}
+
+/* Floating chat controls: messages continue behind this layer; the controls themselves
+   are translucent glass so the chat remains visible underneath. */
+/* The controls layer floats over the log. No solid scrim: messages stay visible
+   and scroll *behind* the translucent composer (the modern floating-input look).
+   A faint bottom fade only keeps text from clashing with the very edge. */
+.an-chat-float {
+  position: absolute;
+  inset-inline: 0;
+  bottom: var(--tabbar-height, 0px);
+  z-index: 28;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--an-bg-0) 22%, transparent),
+    transparent 70%
+  );
+}
+.an-chat-float > * { pointer-events: auto; }
+.an-message-scroll {
+  padding-bottom: calc(var(--chat-float-height, 0px) + var(--tabbar-height, 0px) + 16px);
+}
+.an-composer-float {
+  padding-bottom: 10px;
+  background: transparent;
+}
+/* The composer BAND stays transparent (chat shows through the surrounding area), but the
+   input box and engine pill are their OWN frosted-glass surfaces: heavy blur + mostly
+   opaque so text behind them is not legible (translucent-everywhere read as cluttered). */
+.an-composer-glass,
+.an-composer-input {
+  background: color-mix(in srgb, var(--an-bg-1) 95%, transparent);
+  backdrop-filter: saturate(1.4) blur(40px);
+  -webkit-backdrop-filter: saturate(1.4) blur(40px);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.32);
+}
+.an-composer-input {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.36);
+}
+
+/* Jump-to-latest button: floats just above the composer (offset by its measured height),
+   VS Code style round arrow. Neutral by default; green + glow when there are unseen msgs. */
+.an-jump-latest {
+  position: absolute;
+  right: 14px;
+  bottom: calc(var(--composer-input-height, 52px) + var(--tabbar-height, 0px) + 18px);
+  z-index: 29;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  width: 38px;
+  border-radius: 9999px;
+  color: var(--an-fg-dim);
+  background: color-mix(in srgb, var(--an-bg-2) 86%, transparent);
+  border: 1px solid var(--an-line);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.36);
+  transition: color var(--dur-2) var(--ease-standard), border-color var(--dur-2) var(--ease-standard), box-shadow var(--dur-2) var(--ease-standard);
+}
+.an-jump-latest:active { transform: scale(0.94); }
+.an-jump-latest.is-unseen {
+  color: var(--an-green);
+  border-color: var(--an-green-line);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.36), 0 0 16px var(--an-green-dim);
+}
+
+/* Hide the bottom tab bar while the keyboard is open so the composer owns the
+   space above it (and never stacks composer + tabs together). The composer drops
+   to the very bottom (above the keyboard) regardless of the bar's last height. */
+html[data-keyboard="open"] .an-tabbar-shell { display: none; }
+html[data-keyboard="open"] .an-chat-float { bottom: 0; }
+
+/* Chat-history drawer, ChatGPT/Claude push-reveal style: the menu sits UNDERNEATH,
+   and the whole app surface slides right + scales down into a rounded card to reveal
+   it (instead of an overlay sliding on top). Swipe tracking drives the transform live. */
+.an-drawer-base {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  background: var(--an-bg-1);
+  overflow: hidden;
+  touch-action: pan-y;
+}
+.an-app-surface {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--an-bg-0);
+  transform-origin: center center;
+  will-change: transform;
+  transition: transform var(--dur-screen) var(--ease-emphasized-decelerate),
+              box-shadow var(--dur-screen) var(--ease-emphasized-decelerate);
+}
+.an-app-surface.is-open {
+  box-shadow: -16px 0 44px rgba(0, 0, 0, 0.5);
+}
+/* Tap-catcher over the receded card while the drawer is open: dims it and closes on tap.
+   Above the in-card chrome (tab bar / composer) so a tap anywhere on the card closes. */
+.an-surface-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+}
+
+/* Floating "New chat" pill, bottom-center of the drawer (ChatGPT/Claude convention).
+   A light, high-contrast capsule so it reads as the primary action over the dark list. */
+.an-newchat-pill {
+  position: absolute;
+  right: 1.1rem;
+  bottom: max(1.5rem, calc(env(safe-area-inset-bottom) + 0.5rem));
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.6rem 1.15rem;
+  border-radius: var(--an-radius-pill);
+  background: var(--an-bg-1);
+  color: var(--an-fg);
+  border: 1px solid color-mix(in srgb, var(--an-fg) 38%, transparent);
+  font-weight: 600;
+  font-size: 0.92rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  transition: transform var(--dur-2) var(--ease-standard);
+}
+.an-newchat-pill:active { transform: scale(0.96); }
+
+/* Long-press context menu for a chat row (replaces the per-row delete x). */
+.an-chatmenu-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.5);
+}
+.an-chatmenu {
+  width: 100%;
+  max-width: 18rem;
+  border-radius: 1.1rem;
+  background: var(--an-bg-2);
+  border: 1px solid var(--an-line);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+.an-chatmenu-title {
+  padding: 0.85rem 1rem 0.6rem;
+  font-size: 0.78rem;
+  line-height: 1.3;
+  color: var(--an-fg-mute);
+  border-bottom: 1px solid var(--an-line);
+}
+.an-chatmenu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  padding: 0.95rem 1rem;
+  text-align: left;
+  font-size: 1rem;
+  font-weight: 500;
+}
+.an-chatmenu-item:active { background: rgba(255, 255, 255, 0.06); }
+.an-chatmenu-item.danger { color: #f87171; }
+
 .an-deck {
   height: var(--vvh, 100dvh);
   width: 100%;
@@ -276,7 +544,7 @@ body {
   align-items: flex-start;
   gap: 8px;
   padding: 10px 4px 10px 2px;
-  background: color-mix(in srgb, var(--an-bg-0) 86%, transparent);
+  background: color-mix(in srgb, var(--an-bg-0) 97%, transparent);
   border-bottom: 1px solid var(--an-line-soft);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);

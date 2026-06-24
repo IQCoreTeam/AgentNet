@@ -4,12 +4,15 @@ import { MessageList } from "./MessageList";
 import { ApprovalDock } from "./ApprovalDock";
 import { Composer } from "./Composer";
 import { SkillIcon } from "../icons";
+import { useElementHeightVariable } from "../layoutEffects";
 
 // Chat shell: header (sessions toggle + wallet) over the scrolling log, with the approval
 // dock + composer pinned at the bottom. Uses --vvh (visual viewport height) so the layout
 // shrinks above the on-screen keyboard instead of being covered by it.
 export function ChatScreen({ onOpenDrawer }: { onOpenDrawer: () => void }) {
-  const { state, openMarket, openOwnedSkills, clearFiringSkill } = useStore();
+  const { state, clearFiringSkill } = useStore();
+  const controlsRef = useRef<HTMLDivElement>(null);
+  useElementHeightVariable(controlsRef, "--chat-float-height");
   // Clear the firing skill glow after the dwell time
   const firingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -28,7 +31,7 @@ export function ChatScreen({ onOpenDrawer }: { onOpenDrawer: () => void }) {
   const activeTitle =
     state.sessions.find((s) => s.sessionId === state.activeSessionId)?.title || "New chat";
   return (
-    <div className="flex flex-col" style={{ height: "var(--vvh, 100dvh)", background: "var(--an-bg-0)" }}>
+    <div className="relative flex flex-col" style={{ height: "100%", background: "var(--an-bg-0)" }}>
       <header
         className="an-header sticky top-0 z-30 flex items-center gap-1 px-2"
         style={{ paddingTop: "max(0.25rem, env(safe-area-inset-top))", paddingBottom: "0.25rem" }}
@@ -58,17 +61,6 @@ export function ChatScreen({ onOpenDrawer }: { onOpenDrawer: () => void }) {
               <SkillIcon className="h-3.5 w-3.5" /> {state.firingSkill}
             </span>
           )}
-          <button
-            onClick={openOwnedSkills}
-            className="an-iconbtn shrink-0"
-            title="Owned skills"
-            aria-label="Owned skills"
-          >
-            <SkillIcon className="h-5 w-5" />
-          </button>
-          <button onClick={openMarket} className="an-pill an-pill-accent shrink-0">
-            Markets
-          </button>
         </div>
       </header>
 
@@ -79,8 +71,10 @@ export function ChatScreen({ onOpenDrawer }: { onOpenDrawer: () => void }) {
       )}
 
       <MessageList />
-      <ApprovalDock />
-      <Composer />
+      <div ref={controlsRef} className="an-chat-float">
+        <ApprovalDock />
+        <Composer />
+      </div>
     </div>
   );
 }

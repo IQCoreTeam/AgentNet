@@ -9,43 +9,55 @@ import { BuyCelebration } from "./BuyCelebration";
 import type { SkillCard } from "../transport/protocol";
 import { HeliusSetupPanel } from "../settings/HeliusKeyForm";
 
-type MarketView = "browse" | "publish" | "helius" | "agents" | "owned";
+type MarketView = "browse" | "publish" | "helius" | "agents";
+export type ShellTab = "market" | "skills" | "profile";
 
-export function MarketScreen() {
-  const { state, send, closeMarket, setMarketTab, setMarketQuery, marketSearching, clearMarketDetail, clearAgentProfile } = useStore();
-  const [view, setView] = useState<MarketView>(state.marketInitialView);
+// One "market machine" serving three of the four shell tabs (screen-rearrangement §9):
+//   market  -> browse skills/workflows + agents directory + publish
+//   skills  -> the owned collection (My Skills)
+//   profile -> the connected wallet's own agent profile (My Agent)
+// Owned is no longer an internal tab (it is the Skills tab) and there is no back-to-chat
+// button (the bottom tab bar owns navigation).
+export function MarketScreen({ tab }: { tab: ShellTab }) {
+  const { state, send, setMarketTab, setMarketQuery, marketSearching, clearMarketDetail, clearAgentProfile } = useStore();
+  const [view, setView] = useState<MarketView>(tab === "profile" ? "agents" : "browse");
 
-  // On open: refresh owned skills/RPC state and honor the entry point that opened the card.
+  // Each tab drives the machine to its root + refreshes data. Clearing detail/profile
+  // first stops one tab's open detail or self-profile leaking into another tab.
   useEffect(() => {
-    if (!state.marketOpen) return;
-    setView(state.marketInitialView);
+    clearMarketDetail();
+    clearAgentProfile();
     send({ type: "ownedSkills" });
     send({ type: "getRpcStatus" });
     send({ type: "getBalance" });
-    marketSearching();
-    send({ type: "searchSkills", query: "", kind: state.marketTab });
-  }, [state.marketOpen, state.marketInitialView]);
+    if (tab === "profile") {
+      setView("agents");
+      if (state.walletAddress) send({ type: "getAgentProfile", wallet: state.walletAddress });
+    } else if (tab === "market") {
+      setView("browse");
+      marketSearching();
+      send({ type: "searchSkills", query: "", kind: state.marketTab });
+    }
+  }, [tab]);
 
-  // When agent profile loads, switch to agents view to show it
+  // When a profile loads (self on the Profile tab, or a tapped agent on the Market tab) show it.
   useEffect(() => {
     if (state.agentProfile) setView("agents");
   }, [state.agentProfile]);
 
-  function runSearch(q: string, tab?: "skill" | "workflow") {
+  function runSearch(q: string, t?: "skill" | "workflow") {
     marketSearching();
-    send({ type: "searchSkills", query: q, kind: tab ?? state.marketTab });
+    send({ type: "searchSkills", query: q, kind: t ?? state.marketTab });
   }
-
-  function handleTabChange(tab: "skill" | "workflow") {
-    setMarketTab(tab);
-    runSearch(state.marketQuery, tab);
+  function handleTabChange(t: "skill" | "workflow") {
+    setMarketTab(t);
+    runSearch(state.marketQuery, t);
   }
-
   function handleOpenCard(card: SkillCard) {
     send({ type: "getSkillDetail", mint: card.id });
   }
 
-  // Detail view
+  // Skill detail (reachable from any tab)
   if (state.marketDetail) {
     return (
       <div className="flex flex-col h-full bg-zinc-950">
@@ -60,13 +72,40 @@ export function MarketScreen() {
     );
   }
 
-  // Publish form
+  // Agent profile (self on Profile tab, or a tapped agent on Market tab)
+  if (state.agentProfile) {
+    return (
+      <div className="flex flex-col h-full bg-zinc-950">
+        <AgentProfileView
+          profile={state.agentProfile}
+          onBack={() => clearAgentProfile()}
+          onOpenSkill={(card) => send({ type: "getSkillDetail", mint: card.id })}
+        />
+      </div>
+    );
+  }
+
+  // Profile tab still loading the wallet's own agent
+  if (tab === "profile") {
+    return (
+      <div className="flex h-full items-center justify-center bg-zinc-950 text-sm text-zinc-600">
+        Loading your agent…
+      </div>
+    );
+  }
+
+  // Publish form (market tab)
   if (view === "publish") {
     return (
       <div className="flex flex-col h-full bg-zinc-950">
         <PublishForm onBack={() => setView("browse")} />
       </div>
     );
+  }
+
+  // Helius key setup (market tab)
+  if (view === "helius") {
+    return <HeliusSetupPanel onBack={() => setView("browse")} />;
   }
 
   const resultByName = new Map((state.marketResults ?? []).map((card) => [card.name, card]));
@@ -80,48 +119,30 @@ export function MarketScreen() {
     } as SkillCard;
   });
 
-  // Agent profile
-  if (view === "agents" && state.agentProfile) {
-    return (
-      <div className="flex flex-col h-full bg-zinc-950">
-        <AgentProfileView
-          profile={state.agentProfile}
-          onBack={() => clearAgentProfile()}
-          onOpenSkill={(card) => send({ type: "getSkillDetail", mint: card.id })}
-        />
-      </div>
-    );
-  }
-
-  // Helius key setup
-  if (view === "helius") {
-    return <HeliusSetupPanel onBack={() => setView("browse")} />;
-  }
-
+  const isSkills = tab === "skills";
   const balanceSol = state.marketBalance != null ? (state.marketBalance / 1_000_000_000).toFixed(3) : null;
 
   return (
-    <div className="flex flex-col h-full bg-zinc-950" style={{ height: "var(--vvh, 100dvh)" }}>
-      {/* Header */}
+    <div className="flex flex-col h-full bg-zinc-950">
+      {/* Header (no back-to-chat button — the bottom tab bar owns top-level nav) */}
       <header
         className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2 shrink-0"
         style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))" }}
       >
-        <button onClick={closeMarket} className="shrink-0 text-zinc-400 active:text-zinc-200 px-1 text-lg">←</button>
-        <span className="font-semibold text-sm">{view === "owned" ? "Owned skills" : "Markets"}</span>
-        {balanceSol && (
-          <span className="ml-auto text-xs text-zinc-500 font-mono">{balanceSol} SOL</span>
+        <span className="font-semibold text-sm">{isSkills ? "My Skills" : "Market"}</span>
+        {balanceSol && <span className="ml-auto text-xs text-zinc-500 font-mono">{balanceSol} SOL</span>}
+        {!isSkills && (
+          <button
+            onClick={() => setView("publish")}
+            className={`${balanceSol ? "" : "ml-auto"} shrink-0 text-xs text-green-400 border border-green-700/50 rounded-lg px-2 py-1 active:bg-green-900/30`}
+          >
+            + Publish
+          </button>
         )}
-        <button
-          onClick={() => setView("publish")}
-          className="shrink-0 text-xs text-green-400 border border-green-700/50 rounded-lg px-2 py-1 active:bg-green-900/30"
-        >
-          + Publish
-        </button>
       </header>
 
-      {/* RPC status nudge */}
-      {state.rpcStatus && !state.rpcStatus.hasKey && (
+      {/* RPC status nudge (market only) */}
+      {!isSkills && state.rpcStatus && !state.rpcStatus.hasKey && (
         <button
           onClick={() => setView("helius")}
           className="mx-3 mt-2 shrink-0 flex items-center gap-2 rounded-lg border border-amber-700/40 bg-amber-900/20 px-3 py-2 text-xs text-amber-400 active:bg-amber-900/40"
@@ -130,7 +151,7 @@ export function MarketScreen() {
           <span>›</span>
         </button>
       )}
-      {state.rpcStatus?.hasKey && (
+      {!isSkills && state.rpcStatus?.hasKey && (
         <div className="mx-3 mt-2 shrink-0 flex items-center gap-1.5 rounded-lg border border-green-800/40 bg-green-900/10 px-3 py-1.5 text-[11px] text-green-500">
           <span>●</span>
           <span>{state.rpcStatus.network} · {state.rpcStatus.masked}</span>
@@ -138,92 +159,80 @@ export function MarketScreen() {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex gap-0 border-b border-zinc-800 px-3 mt-2 shrink-0">
-        {(["skill", "workflow"] as const).map((tab) => (
+      {/* Browse tabs (market only): skill / workflow / agents — Owned moved to the Skills tab */}
+      {!isSkills && (
+        <div className="flex gap-0 border-b border-zinc-800 px-3 mt-2 shrink-0">
+          {(["skill", "workflow"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => { setView("browse"); handleTabChange(t); }}
+              className={[
+                "px-4 py-2 text-sm capitalize border-b-2 transition-colors",
+                view === "browse" && state.marketTab === t
+                  ? "border-green-500 text-green-400"
+                  : "border-transparent text-zinc-500 active:text-zinc-300",
+              ].join(" ")}
+            >
+              {t}s
+            </button>
+          ))}
           <button
-            key={tab}
-            onClick={() => { setView("browse"); handleTabChange(tab); }}
+            onClick={() => setView("agents")}
             className={[
-              "px-4 py-2 text-sm capitalize border-b-2 transition-colors",
-              view === "browse" && state.marketTab === tab
+              "px-4 py-2 text-sm border-b-2 transition-colors",
+              view === "agents"
                 ? "border-green-500 text-green-400"
                 : "border-transparent text-zinc-500 active:text-zinc-300",
             ].join(" ")}
           >
-            {tab}s
+            Agents
           </button>
-        ))}
-        <button
-          onClick={() => setView("owned")}
-          className={[
-            "px-4 py-2 text-sm border-b-2 transition-colors",
-            view === "owned"
-              ? "border-green-500 text-green-400"
-              : "border-transparent text-zinc-500 active:text-zinc-300",
-          ].join(" ")}
-        >
-          Owned
-        </button>
-        <button
-          onClick={() => setView("agents")}
-          className={[
-            "px-4 py-2 text-sm border-b-2 transition-colors",
-            view === "agents"
-              ? "border-green-500 text-green-400"
-              : "border-transparent text-zinc-500 active:text-zinc-300",
-          ].join(" ")}
-        >
-          Agents
-        </button>
-      </div>
+        </div>
+      )}
 
-      {/* Search */}
-      <div className="px-3 py-2 shrink-0">
-        <form
-          onSubmit={(e) => { e.preventDefault(); runSearch(state.marketQuery); }}
-          className="flex gap-2"
-        >
-          <input
-            className="flex-1 rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-green-500/50"
-            placeholder={`Search ${state.marketTab}s…`}
-            value={state.marketQuery}
-            onChange={(e) => setMarketQuery(e.target.value)}
-          />
-          <button
-            type="submit"
-            className="rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-300 active:bg-zinc-700"
+      {/* Search (market browse only) */}
+      {!isSkills && view !== "agents" && (
+        <div className="px-3 py-2 shrink-0">
+          <form
+            onSubmit={(e) => { e.preventDefault(); runSearch(state.marketQuery); }}
+            className="flex gap-2"
           >
-            Search
-          </button>
-        </form>
-      </div>
+            <input
+              className="flex-1 rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-green-500/50"
+              placeholder={`Search ${state.marketTab}s…`}
+              value={state.marketQuery}
+              onChange={(e) => setMarketQuery(e.target.value)}
+            />
+            <button type="submit" className="rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-300 active:bg-zinc-700">
+              Search
+            </button>
+          </form>
+        </div>
+      )}
 
-      {/* Results / Agent directory */}
+      {/* Body */}
       <div className="flex-1 overflow-y-auto px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        {view === "agents" ? (
+        {isSkills ? (
+          state.marketOwned.length === 0 ? (
+            <div className="py-8 text-center text-sm text-zinc-600">
+              No owned skills yet. Browse the Market to get one.
+            </div>
+          ) : (
+            <div className="space-y-2 pt-1">
+              {ownedCards.map((card) => (
+                <SkillCardTile
+                  key={card.id}
+                  card={card}
+                  owned
+                  disposed={Object.values(state.marketDisposed).includes(card.id)}
+                  firing={state.firingSkill === card.name}
+                  onOpen={handleOpenCard}
+                />
+              ))}
+            </div>
+          )
+        ) : view === "agents" ? (
           <AgentDirectory />
-        ) : view === "owned" ? (
-          <>
-            {state.marketOwned.length === 0 ? (
-              <div className="py-8 text-center text-sm text-zinc-600">
-                No owned skills yet. Browse Markets to buy one.
-              </div>
-            ) : (
-              <div className="space-y-2 pt-1">
-                {ownedCards.map((card) => (
-                  <SkillCardTile
-                    key={card.id}
-                    card={card}
-                    owned
-                    disposed={Object.values(state.marketDisposed).includes(card.id)}
-                    firing={state.firingSkill === card.name}
-                    onOpen={handleOpenCard}
-                  />
-                ))}
-              </div>
-            )}
-          </>
         ) : (
           <>
             {state.marketSearching && (

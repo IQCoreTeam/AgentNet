@@ -120,6 +120,7 @@ export function Composer() {
   const [attached, setAttached] = useState<(ImageInput & { dataUrl: string })[]>([]);
   const [slashNotice, setSlashNotice] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const inputBoxRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const composingRef = useRef(false);
@@ -129,6 +130,8 @@ export function Composer() {
   const [slashIdx, setSlashIdx] = useState(0);
   const [suppressSlash, setSuppressSlash] = useState(false);
   useElementHeightVariable(rootRef, "--composer-height");
+  // Just the input box height — lets the jump-to-latest button sit right above it.
+  useElementHeightVariable(inputBoxRef, "--composer-input-height");
 
   // Derived state: active slash matches
   let activeMatches: { name: string; desc: string; insert: string }[] = [];
@@ -344,13 +347,12 @@ export function Composer() {
   return (
     <div
       ref={rootRef}
-      className="px-2.5 pt-2"
-      style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))", borderTop: "1px solid var(--an-line)", background: "var(--an-bg-0)" }}
+      className="an-composer-float px-2.5 pt-2"
     >
       {/* engine segmented control + a single "controls" disclosure (model/effort/mode
           live in the popover so the bar stays clean on a phone) */}
       <div className="relative mb-2 flex items-center gap-1.5 text-xs">
-        <div className="flex items-center gap-1 rounded-full p-0.5" style={{ background: "var(--an-bg-2)", height: "34px" }}>
+        <div className="flex items-center gap-1 rounded-full p-0.5 an-composer-glass" style={{ height: "34px", border: "1px solid var(--an-line)" }}>
           {(["claude", "codex"] as Cli[]).map((c) => {
             const on = state.cli === c;
             const accent = c === "claude" ? "var(--claude)" : "var(--an-green)";
@@ -359,7 +361,7 @@ export function Composer() {
                 key={c}
                 onClick={() => selectEngine(c)}
                 className="flex h-full items-center rounded-full px-3.5 font-semibold capitalize transition"
-                style={on ? { background: accent, color: "#0a0b0d" } : { color: "var(--an-fg-mute)" }}
+                style={on ? { background: accent, color: "var(--an-bg-0)" } : { color: "var(--an-fg-mute)" }}
               >
                 {c}
               </button>
@@ -368,7 +370,7 @@ export function Composer() {
         </div>
         <button
           onClick={() => setControlsOpen((o) => !o)}
-          className="an-pill shrink-0"
+          className="an-pill an-composer-glass shrink-0"
           style={{ height: "34px" }}
           aria-label="Model and mode settings"
           aria-expanded={controlsOpen}
@@ -450,8 +452,9 @@ export function Composer() {
       )}
 
       <div
-        className={`relative flex items-center gap-1.5 px-2 py-1.5 ${frozen ? "opacity-60" : ""}`}
-        style={{ background: "var(--an-bg-2)", border: `1px solid color-mix(in srgb, ${engineAccent} 30%, var(--an-line))`, borderRadius: "var(--an-radius)" }}
+        ref={inputBoxRef}
+        className={`an-composer-input relative flex items-center gap-1.5 px-2 py-1.5 ${frozen ? "opacity-60" : ""}`}
+        style={{ border: `1px solid color-mix(in srgb, ${engineAccent} 30%, var(--an-line))`, borderRadius: "var(--an-radius)" }}
         onDragOver={(e) => { e.preventDefault(); }}
         onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files) void addFiles(e.dataTransfer.files); }}
       >
@@ -572,7 +575,9 @@ export function Composer() {
                 ? `Queued (${queueCount}) — agent will pick up next…`
                 : busy
                   ? `Message ${state.cli}… (queues while busy · Esc to stop)`
-                  : `Message ${state.cli}… (Enter · paste image)`
+                  : state.log.length === 0
+                    ? "Send a message to start"
+                    : `Message ${state.cli}`
           }
           className="min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-[16px] leading-relaxed outline-none [overflow-wrap:anywhere] disabled:cursor-not-allowed"
           style={{ maxHeight: "min(10rem, max(4rem, calc(var(--vvh, 100dvh) * 0.28)))" }}
@@ -599,6 +604,7 @@ export function Composer() {
           onClick={busy ? interrupt : submit}
           disabled={!busy && frozen}
           className={`an-send shrink-0 self-end mb-px ${busy ? "is-stop" : ""}`}
+          style={busy ? undefined : { background: engineAccent, color: "var(--an-bg-0)" }}
           aria-label={busy ? "Stop" : "Send"}
           title={busy ? "Stop" : "Send"}
         >
