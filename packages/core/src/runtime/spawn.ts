@@ -111,8 +111,29 @@ export interface SpawnOpts {
   codexMcp?: { name: string; command: string; args: string[] };
   stream?: boolean; // emit partial assistant deltas (claude includePartialMessages)
   apiKey?: string; // Stage 1 Codex API Key
+  githubToken?: string; // configured GitHub PAT, injected into the agent's git env (see gitCredentialEnv)
   ephemeral?: boolean; // If true, disable tools / auto-deny approvals
   effort?: "low" | "medium" | "high" | "xhigh" | "max";
+}
+
+// Environment that lets the AGENT's git authenticate to GitHub with the user's configured
+// token, WITHOUT touching their global git config. GH_TOKEN/GITHUB_TOKEN cover the gh CLI and
+// scripts; the GIT_CONFIG_* trio registers a github.com-only credential helper that supplies
+// the token on demand (so `git clone/push https://github.com/...` of a private repo works and
+// the token is never baked into remote URLs). Everything here is process-scoped to the agent.
+// Public clones are unaffected (git only consults the helper after a 401). Returns {} if no token.
+function gitCredentialEnv(token?: string): Record<string, string> {
+  if (!token) return {};
+  // Append after any GIT_CONFIG_* the parent env already set, so we don't clobber them.
+  const base = Number(process.env.GIT_CONFIG_COUNT) || 0;
+  return {
+    GH_TOKEN: token,
+    GITHUB_TOKEN: token,
+    GIT_CONFIG_COUNT: String(base + 1),
+    [`GIT_CONFIG_KEY_${base}`]: "credential.https://github.com.helper",
+    // Reads the token from GH_TOKEN (set above) rather than baking it into the config value.
+    [`GIT_CONFIG_VALUE_${base}`]: `!f() { test "$1" = get && printf 'username=x-access-token\\npassword=%s\\n' "$GH_TOKEN"; }; f`,
+  };
 }
 
 // claude permission modes: how aggressively tools run without a per-call gate.
@@ -326,6 +347,9 @@ function claudeEngine(opts: SpawnOpts): Engine {
       ...(opts.mcpServers ? { mcpServers: opts.mcpServers as never } : {}),
       ...(opts.allowedTools ? { allowedTools: opts.allowedTools } : {}),
       ...(opts.enabledSkills?.length ? { skills: opts.enabledSkills } : {}),
+      // Give the agent's git the configured GitHub token. The SDK `env` REPLACES the
+      // subprocess environment, so spread process.env to keep PATH / ANTHROPIC creds / etc.
+      ...(opts.githubToken ? { env: { ...process.env, ...gitCredentialEnv(opts.githubToken) } } : {}),
       // NOTE: settingSources is deliberately omitted — the SDK then loads ALL sources
       // (user/project/local), which is what lets skills in the user dir (~/.claude/skills,
       // where owned NFTs + the passive workflow are installed) be discovered. Passing
@@ -418,7 +442,7 @@ function codexEngine(opts: SpawnOpts): Engine {
   // AGENTNET_CODEX_SANDBOX=danger-full-access so Codex skips its own sandbox and relies on
   // proot + the app sandbox + our approval gate. Desktop leaves it unset → Codex's default.
   const sandbox = process.env.AGENTNET_CODEX_SANDBOX || undefined;
-  const childEnv = { ...process.env };
+  const childEnv = { ...process.env, ...gitCredentialEnv(opts.githubToken) };
   if (opts.apiKey) {
     childEnv.OPENAI_API_KEY = opts.apiKey;
   }

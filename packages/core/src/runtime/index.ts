@@ -12,7 +12,7 @@ import { MemorySync, updateSkillsSection } from "../memory/index.js";
 import { getSkillShopping } from "../account/login.js";
 import { setSkillShoppingActive } from "../skill-market/passive.js";
 import { createAgentSdkMcpServer, newVerifyGuard, agentNetAllowedTools, AGENTNET_MCP_SERVER } from "../skill-market/index.js";
-import { resolveRpcUrl, hasDasRpc } from "../core/rpc.js";
+import { resolveRpcUrl, hasDasRpc, loadGithubToken } from "../core/rpc.js";
 import { getCodexApiKey } from "../account/codexAuth.js";
 import type { ApprovalChannel } from "./approval/channel.js";
 import type {
@@ -124,7 +124,11 @@ export function createRuntime(
       // per-session approval channel (each panel passes its own) wins; fall back to
       // the runtime-level default channel.
       const apiKey = opts.apiKey || (opts.cli === "codex" ? (await getCodexApiKey().catch(() => undefined)) ?? undefined : undefined);
-      const cli = spawnCli({ ...opts, sessionId: nativeId, approval: opts.approval ?? approval, apiKey, enabledSkills, ...passive });
+      // Hand the configured GitHub token to the agent so its git can clone/push private repos
+      // (e.g. on mobile, where the proot guest has no credentials). spawn.ts turns it into a
+      // github.com-scoped, process-scoped credential helper — the user's global git is untouched.
+      const githubToken = (await loadGithubToken().catch(() => null))?.token || undefined;
+      const cli = spawnCli({ ...opts, sessionId: nativeId, approval: opts.approval ?? approval, apiKey, githubToken, enabledSkills, ...passive });
 
       // Storage key stays the CANONICAL id while resuming; the cli's emitted (native)
       // id must NOT overwrite it, or appended turns land in the wrong log.
