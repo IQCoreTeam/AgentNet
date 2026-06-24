@@ -322,10 +322,10 @@ function ApprovalCard({
       <div className="flex flex-wrap gap-2 border-t border-emerald-700/40 px-3 py-2">
         {isPlan ? (
           <>
-            <button autoFocus onClick={() => onDecide("once")} className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white">
+            <button autoFocus onClick={() => onDecide("once")} className="rounded bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white">
               Approve plan
             </button>
-            <button onClick={() => { if (req.plan) savePlan(req.plan); onDecide("deny"); }} className="rounded bg-red-900/60 px-3 py-1 text-xs text-red-200">
+            <button onClick={() => { if (req.plan) savePlan(req.plan); onDecide("deny"); }} className="rounded bg-red-900/60 px-4 py-2.5 text-sm text-red-200">
               Keep planning
             </button>
             <span className="ml-auto text-[10px] text-zinc-600 self-center select-none">
@@ -337,25 +337,25 @@ function ApprovalCard({
             <button
               autoFocus
               onClick={() => onDecide("once", { updatedInput: { ...(req.input ?? {}), command: editedCmd } })}
-              className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white"
+              className="rounded bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white"
             >
               Approve edited
             </button>
-            <button onClick={() => setEditMode(false)} className="rounded bg-zinc-700 px-3 py-1 text-xs text-zinc-200">
+            <button onClick={() => setEditMode(false)} className="rounded bg-zinc-700 px-4 py-2.5 text-sm text-zinc-200">
               Cancel
             </button>
           </>
         ) : (
           <>
-            <button autoFocus onClick={() => onDecide("once")} className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white">
+            <button autoFocus onClick={() => onDecide("once")} className="rounded bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white">
               Approve
             </button>
-            <button onClick={() => onDecide("always")} className="rounded bg-emerald-800 px-3 py-1 text-xs text-emerald-100">
+            <button onClick={() => onDecide("always")} className="rounded bg-emerald-800 px-4 py-2.5 text-sm text-emerald-100">
               Always
             </button>
             <button
               onClick={() => { setShowReason((s) => !s); }}
-              className="rounded bg-red-900/60 px-3 py-1 text-xs text-red-200"
+              className="rounded bg-red-900/60 px-4 py-2.5 text-sm text-red-200"
             >
               Deny…
             </button>

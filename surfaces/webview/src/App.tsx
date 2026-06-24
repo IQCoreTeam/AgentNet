@@ -40,7 +40,10 @@ export function App() {
   // approval; the shell ignores it when the app is foreground.
   const topApproval = state.approvals[0];
   useEffect(() => {
-    if (topApproval) notifyApproval(topApproval.id, topApproval.title, getClientId());
+    if (!topApproval) return;
+    // The code/diff/plan body so the notification can show what's being approved.
+    const body = topApproval.command || topApproval.plan || topApproval.diff || topApproval.file || "";
+    notifyApproval(topApproval.id, topApproval.title, getClientId(), body);
   }, [topApproval?.id, topApproval?.title, getClientId]);
 
   return (

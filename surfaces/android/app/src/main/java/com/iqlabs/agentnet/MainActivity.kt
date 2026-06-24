@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.graphics.drawable.Icon
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -284,7 +285,7 @@ class MainActivity : AppCompatActivity() {
     // A turn needs approval. If the app is foreground the WebView already shows it, so we
     // only raise a notification when backgrounded. Tapping reopens the chat; the Approve /
     // Reject actions POST an approvalDecision to /rpc (same as the in-app buttons).
-    fun requestApproval(id: String, title: String, clientId: String) {
+    fun requestApproval(id: String, title: String, clientId: String, body: String) {
         if (inForeground) return
         val mgr = getSystemService(NotificationManager::class.java) ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -302,12 +303,18 @@ class MainActivity : AppCompatActivity() {
         } else {
             @Suppress("DEPRECATION") Notification.Builder(this)
         }
+        // Expanded view shows the title + the code/diff/plan being approved, so the user can
+        // read what they're allowing without opening the app. Cap it so a huge diff stays sane.
+        val code = if (body.length > 1200) body.take(1200) + "\n…" else body
+        val expanded = if (code.isNotBlank()) "$title\n\n$code" else title
         mgr.notify(
             APPROVAL_NOTIF_ID,
             builder
                 .setContentTitle("Approval needed")
                 .setContentText(title)
-                .setSmallIcon(android.R.drawable.stat_sys_warning)
+                .setStyle(Notification.BigTextStyle().bigText(expanded))
+                .setSmallIcon(R.drawable.iq_logo_green)
+                .setLargeIcon(Icon.createWithResource(this, R.drawable.iq_logo_green))
                 .setContentIntent(tap)
                 .setAutoCancel(true)
                 .addAction(android.R.drawable.ic_menu_revert, "Reject", approvalAction("reject", id, clientId, 2))

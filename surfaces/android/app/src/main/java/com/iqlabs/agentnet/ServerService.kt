@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.IBinder
 
@@ -70,9 +71,10 @@ class ServerService : Service() {
         )
 
         return builder
-            .setContentTitle("AgentNet is working")
-            .setContentText("An agent task is running in the background")
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setContentTitle("AgentNet is running")
+            .setContentText("Your agent is working in the background.")
+            .setSmallIcon(R.drawable.iq_logo_green)
+            .setLargeIcon(Icon.createWithResource(this, R.drawable.iq_logo_green))
             .setOngoing(true)
             .setContentIntent(open)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stop)

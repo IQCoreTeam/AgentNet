@@ -15,7 +15,7 @@ declare global {
       setAgentActive?(active: boolean, clientId: string): void;
       // Raise an approval notification (shell no-ops it when foreground). Its Approve/
       // Reject actions POST an approvalDecision to /rpc?client=<clientId>.
-      requestApproval?(id: string, title: string, clientId: string): void;
+      requestApproval?(id: string, title: string, clientId: string, body: string): void;
       // First time the user enables background exec: prompt for battery-optimization
       // exemption so Android doesn't reap a long task. Guarded native-side against nagging.
       onBackgroundEnabled?(): void;
@@ -58,6 +58,6 @@ export function syncAgentService(active: boolean, clientId: string | null): void
 
 // Ask the shell to surface a pending approval (it decides notify-vs-ignore by its own
 // foreground state).
-export function notifyApproval(id: string, title: string, clientId: string | null): void {
-  window.AgentNetShell?.requestApproval?.(id, title, clientId ?? "");
+export function notifyApproval(id: string, title: string, clientId: string | null, body?: string): void {
+  window.AgentNetShell?.requestApproval?.(id, title, clientId ?? "", body ?? "");
 }
