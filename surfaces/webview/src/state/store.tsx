@@ -301,11 +301,11 @@ function reducer(state: State, ev: Action): State {
     case "usage":
       return { ...state, contextTokens: ev.contextTokens };
     case "clear":
-      return { ...state, log: [], approvals: [], typing: false, loading: false, contextTokens: undefined };
+      return { ...state, log: [], approvals: [], typing: false, loading: false, contextTokens: undefined, firingSkill: null };
     case "message":
       return { ...state, log: appendMessage(state.log, ev.msg) };
     case "turnEnd":
-      return { ...state, typing: false };
+      return { ...state, typing: false, firingSkill: null };
     case "page":
       return { ...state, hasMore: ev.hasMore, cursor: ev.cursor, loading: false };
     case "older":
@@ -325,7 +325,7 @@ function reducer(state: State, ev: Action): State {
     // round-trip, which left the screen on the stale chat with no feedback. The server's
     // messages/page/sessions then reconcile this.
     case "__openingSession":
-      return { ...state, activeSessionId: ev.sessionId, loading: true, log: [], typing: false, hasMore: false };
+      return { ...state, activeSessionId: ev.sessionId, loading: true, log: [], typing: false, hasMore: false, firingSkill: null };
     case "__newChat":
       return {
         ...state,
@@ -337,6 +337,7 @@ function reducer(state: State, ev: Action): State {
         hasMore: false,
         cursor: 0,
         contextTokens: undefined,
+        firingSkill: null,
       };
     case "platform":
       return { ...state, cli: ev.cli };

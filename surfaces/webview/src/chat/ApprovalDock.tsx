@@ -220,9 +220,15 @@ function ApprovalCard({
     return () => window.removeEventListener("keydown", onKey);
   }, [isPlan]);
 
+  const didVibrate = useRef(false);
   // Medium haptic when the forge card appears (parity with the casting cue).
   useEffect(() => {
-    if (isForge) haptics.forge();
+    if (isForge && !didVibrate.current) {
+      haptics.forge();
+      didVibrate.current = true;
+    } else if (!isForge) {
+      didVibrate.current = false;
+    }
   }, [isForge]);
 
   const borderColor = isDanger ? "border-red-700/60" : isForge ? "border-[var(--an-violet)]/55" : "border-emerald-700/50";

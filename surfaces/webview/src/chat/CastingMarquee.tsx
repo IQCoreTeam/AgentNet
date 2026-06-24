@@ -7,13 +7,19 @@ import { SkillIcon } from "../icons";
 // state.firingSkill is set; ChatScreen clears it on turn end.
 const VERBS = ["Casting", "Channeling", "Wielding", "Invoking"];
 let pick = 0; // module-level so the verb advances on each new firing, like vscode
+let lastProcessedSkill: string | null = null; // prevents double-increment in React StrictMode
 
 export function CastingMarquee({ skill }: { skill: string | null }) {
   const [verb, setVerb] = useState(VERBS[0]);
 
   // Advance the verb each time a NEW skill starts firing (not on every render).
   useEffect(() => {
-    if (skill) setVerb(VERBS[pick++ % VERBS.length]);
+    if (skill && skill !== lastProcessedSkill) {
+      setVerb(VERBS[pick++ % VERBS.length]);
+      lastProcessedSkill = skill;
+    } else if (!skill) {
+      lastProcessedSkill = null;
+    }
   }, [skill]);
 
   if (!skill) return null;

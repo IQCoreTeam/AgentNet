@@ -244,7 +244,3 @@ function MarketPage({ marketTab, active }: { marketTab: "skills" | "profile" | "
   );
 }
 
-function isInteractiveTarget(target: EventTarget | null) {
-  if (!(target instanceof Element)) return false;
-  return !!target.closest("button, a, input, textarea, select, [role='button'], [data-no-swipe]");
-}
