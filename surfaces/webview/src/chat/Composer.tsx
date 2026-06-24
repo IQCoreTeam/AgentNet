@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
+import { enqueueLiveImages } from "./liveImages";
 import type { Cli, ImageInput } from "../transport/protocol";
 import { AttachIcon } from "../icons";
 import { useElementHeightVariable } from "../layoutEffects";
@@ -108,7 +109,9 @@ export function Composer() {
       for (let i = 0; i < e.results.length; i++) s += e.results[i][0].transcript;
       setText(base + s);
     };
-    rec.onend = () => { setRecording(false); recognitionRef.current = null; taRef.current?.focus(); };
+    // No taRef.focus() here: focusing the textarea flips html[data-keyboard=open], which hides
+    // the bottom tab bar — dictation shouldn't trigger keyboard chrome. Text lands without it.
+    rec.onend = () => { setRecording(false); recognitionRef.current = null; };
     rec.onerror = () => { setRecording(false); recognitionRef.current = null; };
     recognitionRef.current = rec;
     setRecording(true);
@@ -223,6 +226,18 @@ export function Composer() {
     return () => document.removeEventListener("click", handleOutsideClick);
   }, [showMenu]);
 
+  // Sniff the real image type from the first bytes. Android's photo picker hands the WebView
+  // File objects with a blank MIME (file.type === ""), so trusting it would drop every pick
+  // and reject every send. We detect the type from magic bytes instead.
+  function sniffImageMime(bytes: Uint8Array): string | null {
+    if (bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return "image/png";
+    if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+    if (bytes.length >= 4 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return "image/gif";
+    if (bytes.length >= 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
+      && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return "image/webp";
+    return null;
+  }
+
   function encodeFile(file: File): Promise<ImageInput & { dataUrl: string }> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -230,7 +245,16 @@ export function Composer() {
         const dataUrl = reader.result as string;
         const comma = dataUrl.indexOf(",");
         if (comma < 0) { reject(new Error("bad dataUrl")); return; }
-        resolve({ mime: file.type || "image/png", dataBase64: dataUrl.slice(comma + 1), name: file.name, dataUrl });
+        const dataBase64 = dataUrl.slice(comma + 1);
+        // Decode the head (~18 bytes from 24 base64 chars) to identify the format.
+        const head = atob(dataBase64.slice(0, 24));
+        const bytes = new Uint8Array(head.length);
+        for (let i = 0; i < head.length; i++) bytes[i] = head.charCodeAt(i);
+        const mime = file.type && file.type.startsWith("image/") ? file.type : sniffImageMime(bytes);
+        if (!mime) { reject(new Error("not an image")); return; }
+        // Rebuild the dataUrl with the resolved mime so the thumbnail renders even when the
+        // browser left it blank (data:;base64 won't display).
+        resolve({ mime, dataBase64, name: file.name || "image", dataUrl: `data:${mime};base64,${dataBase64}` });
       };
       reader.onerror = reject;
       reader.readAsDataURL(file);
@@ -238,8 +262,12 @@ export function Composer() {
   }
 
   async function addFiles(files: FileList | File[]) {
-    const arr = Array.from(files).filter((f) => f.type.startsWith("image/"));
-    const encoded = await Promise.all(arr.map(encodeFile));
+    // Don't pre-filter on file.type (blank from the Android picker). Encode everything and let
+    // encodeFile sniff the real type, dropping anything that isn't a supported image.
+    const encoded = (await Promise.all(
+      Array.from(files).map((f) => encodeFile(f).catch(() => null)),
+    )).filter((x): x is ImageInput & { dataUrl: string } => x !== null);
+    if (!encoded.length) return;
     setAttached((a) => [...a, ...encoded]);
     requestAnimationFrame(() => taRef.current?.scrollIntoView({ block: "nearest" }));
   }
@@ -306,6 +334,9 @@ export function Composer() {
     }
 
     const images = attached.map(({ mime, dataBase64, name }) => ({ mime, dataBase64, name }));
+    // Hand the previews to the live cache before clearing: the chat log only keeps a count,
+    // so this in-memory copy is what renders thumbnails for this turn while it's on screen.
+    if (attached.length) enqueueLiveImages(attached.map((a) => a.dataUrl));
     send({ type: "send", text: t, images: images.length ? images : undefined });
     setText("");
     setAttached([]);

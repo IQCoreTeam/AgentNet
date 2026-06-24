@@ -2,7 +2,44 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { Message } from "./Message";
 import { IqLogo } from "../icons";
+import { associateLiveImages, liveImagesFor, subscribeLiveImages, syncLiveSession } from "./liveImages";
 import type { ChatMessage } from "../transport/protocol";
+
+// Thumbnails for the images a user attached to a turn. The bytes live only in memory (the
+// chat log keeps just a count), so when they're present we show real previews that open
+// full-screen on tap; after a reload we fall back to a muted chip noting how many there were.
+function ImageStrip({ ts, count, onOpen }: { ts?: number; count: number; onOpen: (url: string) => void }) {
+  const urls = liveImagesFor(ts);
+  if (urls && urls.length) {
+    return (
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {urls.map((u, i) => (
+          <button
+            key={i}
+            type="button"
+            onClick={() => onOpen(u)}
+            className="block h-16 w-16 overflow-hidden rounded-lg border"
+            style={{ borderColor: "var(--an-line)" }}
+            aria-label="View image"
+          >
+            <img src={u} alt="" className="h-full w-full object-cover" />
+          </button>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div
+      className="mt-1.5 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px]"
+      style={{ background: "var(--an-bg-2)", border: "1px solid var(--an-line)", color: "var(--an-fg-mute)" }}
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" />
+      </svg>
+      {count}
+    </div>
+  );
+}
 
 function groupTurns(log: ChatMessage[]): Array<{ user: ChatMessage | null; items: ChatMessage[]; key: number }> {
   const turns: Array<{ user: ChatMessage | null; items: ChatMessage[]; key: number }> = [];
@@ -36,8 +73,20 @@ export function MessageList() {
   const [showPill, setShowPill] = useState(false);
   const [unseen, setUnseen] = useState(false);
   const [olderLoading, setOlderLoading] = useState(false);
+  const [zoom, setZoom] = useState<string | null>(null);
+  const [, bumpImages] = useState(0);
   const logLen = state.log.length;
   const turns = groupTurns(state.log);
+
+  // Live image thumbnails: re-render when a send gets paired to its echoed message, drop the
+  // cache when the visible session changes, and pair queued sends to user turns as they land.
+  useEffect(() => subscribeLiveImages(() => bumpImages((v) => v + 1)), []);
+  useEffect(() => { syncLiveSession(state.activeSessionId ?? ""); }, [state.activeSessionId]);
+  useEffect(() => {
+    for (const m of state.log) {
+      if (m.role === "user" && m.imageCount && m.ts != null) associateLiveImages(m.ts);
+    }
+  }, [state.log]);
 
   function scrollToLatest() {
     const el = scrollRef.current;
@@ -150,11 +199,19 @@ export function MessageList() {
               {turn.user && (
                 <div className="an-turn-head">
                   <span className="an-turn-marker">&gt;</span>
-                  <div className="an-turn-text">
-                    {turn.user.text}
-                    {turn.user._pending && (
-                      <span className="ml-2 inline-block animate-pulse text-[10px]" style={{ color: "var(--an-fg-mute)" }}>sending</span>
-                    )}
+                  {/* Wrapper splits the clamped text from the thumbnails: .an-turn-text uses
+                      -webkit-line-clamp + overflow:hidden, which would otherwise clip the
+                      images. Keeping the strip a sibling lets it show under the sticky prompt. */}
+                  <div className="min-w-0 flex-1">
+                    <div className="an-turn-text">
+                      {turn.user.text}
+                      {turn.user._pending && (
+                        <span className="ml-2 inline-block animate-pulse text-[10px]" style={{ color: "var(--an-fg-mute)" }}>sending</span>
+                      )}
+                    </div>
+                    {turn.user.imageCount ? (
+                      <ImageStrip ts={turn.user.ts} count={turn.user.imageCount} onOpen={setZoom} />
+                    ) : null}
                   </div>
                 </div>
               )}
@@ -197,6 +254,18 @@ export function MessageList() {
             <path d="M9 3v11M4.5 9.5L9 14l4.5-4.5" />
           </svg>
         </button>
+      )}
+      {/* Full-screen image viewer: tap a thumbnail to open, tap anywhere to dismiss. */}
+      {zoom && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.9)" }}
+          onClick={() => setZoom(null)}
+          role="dialog"
+          aria-label="Image preview"
+        >
+          <img src={zoom} alt="" className="max-h-[92vh] max-w-[94vw] object-contain" />
+        </div>
       )}
     </div>
   );

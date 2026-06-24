@@ -66,6 +66,46 @@ class MainActivity : AppCompatActivity() {
     private lateinit var googleDriveAuth: GoogleDriveAuth
     private lateinit var googleTokenServer: GoogleDriveTokenServer
 
+    // <input type="file"> in the web composer. A WebView opens no picker on its own, so the
+    // attach button did nothing until now — we launch the system document picker and hand the
+    // chosen URIs back to the page. The callback MUST be answered (even with null on cancel)
+    // or the <input> stays wedged and won't fire again.
+    private var fileChooserCallback: android.webkit.ValueCallback<Array<Uri>>? = null
+    private val fileChooserLauncher: ActivityResultLauncher<Intent> = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        // Parse the picked URIs ourselves. WebView's FileChooserParams.parseResult only reads
+        // intent.getData(); it ignores clipData. But with EXTRA_ALLOW_MULTIPLE (set because the
+        // <input> has `multiple`), the photo picker returns even a single pick in clipData, so
+        // parseResult yields null and the page sees no file. Read clipData first, then data.
+        val d = result.data
+        val uris: Array<Uri>? = if (result.resultCode == android.app.Activity.RESULT_OK && d != null) {
+            val clip = d.clipData
+            when {
+                clip != null && clip.itemCount > 0 -> Array(clip.itemCount) { clip.getItemAt(it).uri }
+                d.data != null -> arrayOf(d.data!!)
+                else -> null
+            }
+        } else {
+            null
+        }
+        Log.i(TAG, "file chooser code=${result.resultCode} uris=${uris?.size ?: -1} first=${uris?.firstOrNull()}")
+        fileChooserCallback?.onReceiveValue(uris)
+        fileChooserCallback = null
+    }
+
+    // Mic button (voice input). The WebView only asks for the mic via onPermissionRequest
+    // AFTER Android grants RECORD_AUDIO to the app, so we hold the pending web request, ask
+    // the OS, then grant or deny it once the user answers the system prompt.
+    private var pendingMicRequest: android.webkit.PermissionRequest? = null
+    private val micPermissionLauncher: ActivityResultLauncher<String> = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val req = pendingMicRequest ?: return@registerForActivityResult
+        pendingMicRequest = null
+        if (granted) req.grant(req.resources) else req.deny()
+    }
+
     // ActivityResultSender registers an activity-result callback in its constructor, which
     // must happen before the activity reaches STARTED — so build it as a field, not lazily.
     private val activityResultSender = ActivityResultSender(this)
@@ -117,6 +157,59 @@ class MainActivity : AppCompatActivity() {
                 // only client-side log window) was invisible. Keep it visible in logcat.
                 Log.i(TAG, "[web] ${m.sourceId()}:${m.lineNumber()} ${m.message()}")
                 return true
+            }
+
+            // The composer's attach button taps a hidden <input type="file">. A WebView won't
+            // surface a picker by itself. We deliberately do NOT use params.createIntent()
+            // (ACTION_GET_CONTENT): on Android 13+ that routes to the system photo picker, whose
+            // content://media/picker/... URIs expose metadata but FAIL to stream bytes inside the
+            // WebView renderer (FileReader fires a ProgressEvent error). ACTION_OPEN_DOCUMENT goes
+            // through SAF/DocumentsUI instead, returning openable URIs the WebView reads reliably.
+            override fun onShowFileChooser(
+                view: WebView?,
+                callback: android.webkit.ValueCallback<Array<Uri>>,
+                params: FileChooserParams,
+            ): Boolean {
+                fileChooserCallback?.onReceiveValue(null) // drop any stale picker so it can't wedge
+                fileChooserCallback = callback
+                val accept = params.acceptTypes?.filter { it.isNotBlank() } ?: emptyList()
+                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = accept.singleOrNull() ?: "*/*"
+                    if (accept.size > 1) putExtra(Intent.EXTRA_MIME_TYPES, accept.toTypedArray())
+                    if (params.mode == FileChooserParams.MODE_OPEN_MULTIPLE) {
+                        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                    }
+                }
+                return runCatching {
+                    fileChooserLauncher.launch(intent)
+                    true
+                }.getOrElse {
+                    Log.w(TAG, "file chooser launch failed", it)
+                    fileChooserCallback = null
+                    false
+                }
+            }
+
+            // The composer's mic button asks the WebView for audio capture. Grant it once the
+            // app holds RECORD_AUDIO; otherwise request that runtime permission first and grant
+            // the held web request from the permission-result callback above.
+            override fun onPermissionRequest(request: android.webkit.PermissionRequest) {
+                val wantsAudio = request.resources.any {
+                    it == android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE
+                }
+                runOnUiThread {
+                    if (!wantsAudio) {
+                        request.deny()
+                    } else if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                        == PackageManager.PERMISSION_GRANTED
+                    ) {
+                        request.grant(arrayOf(android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE))
+                    } else {
+                        pendingMicRequest = request
+                        micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                }
             }
         }
 

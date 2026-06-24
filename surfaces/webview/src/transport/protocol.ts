@@ -27,6 +27,8 @@ export interface ChatMessage {
     file?: string;
     diff?: string;
   };
+  ts?: number;        // server-assigned turn timestamp; used to key live image thumbnails
+  imageCount?: number; // role:"user" — how many images were attached (the bytes aren't stored)
   _pending?: true; // local-only: queued user message shown optimistically, replaced on server echo
 }
 

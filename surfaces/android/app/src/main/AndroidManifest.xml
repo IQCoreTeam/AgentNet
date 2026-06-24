@@ -12,6 +12,14 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- POST_NOTIFICATIONS (Android 13+): the backgrounded-approval alert (#53). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- RECORD_AUDIO: the composer's mic button (voice input) goes through the WebView's
+         speech/getUserMedia, which the OS gates behind this runtime permission. File attach
+         needs no permission: it uses the system picker (ACTION_GET_CONTENT / SAF), which
+         grants per-file URI access without a storage permission. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- MODIFY_AUDIO_SETTINGS: install-time permission the WebView's audio capture path wants
+         alongside RECORD_AUDIO (logcat warns without it). Keeps the mic route clean. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <application
         android:allowBackup="false"
