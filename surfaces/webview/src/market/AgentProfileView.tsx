@@ -1,8 +1,18 @@
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { parseGithubLink, safeExternalUrl } from "@iqlabs-official/agent-sdk/links/github.js";
 import { useStore } from "../state/store";
 import type { AgentProfile, SkillCard } from "../transport/protocol";
 import { AgentIcon } from "../icons";
+import { walletAvatarSvg } from "./walletAvatar";
+
+function CopyIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="9" y="9" width="13" height="13" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
 
 interface Props {
   profile: AgentProfile;
@@ -16,6 +26,8 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   const [buyingAll, setBuyingAll] = useState(false);
   const [noteGitLink, setNoteGitLink] = useState("");
   const blogDrag = useRef({ active: false, moved: false, startX: 0, startLeft: 0 });
+  const [copied, setCopied] = useState(false);
+  const avatar = useMemo(() => walletAvatarSvg(profile.wallet), [profile.wallet]);
 
   function handleBuyAll() {
     setBuyingAll(true);
@@ -33,6 +45,16 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
     });
     setNoteText("");
     setNoteGitLink("");
+  }
+
+  function copyWallet() {
+    try {
+      navigator.clipboard?.writeText(profile.wallet);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch {
+      // clipboard may be unavailable in the webview; ignore
+    }
   }
 
   const allSkills = [...(profile.createdSkills ?? [])];
@@ -86,34 +108,66 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <header className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2 shrink-0">
-        <button onClick={onBack} className="text-zinc-400 active:text-zinc-200 px-1 text-lg">←</button>
-        <span className="font-mono text-sm truncate">
-          {profile.wallet.slice(0, 6)}…{profile.wallet.slice(-4)}
-        </span>
-        {profile.self && (
-          <span className="ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-blue-900/60 text-blue-400">you</span>
-        )}
+    <div className="flex flex-col h-full" style={{ background: "var(--an-bg-0)" }}>
+      <header
+        className="flex items-center gap-2 border-b px-3 py-2 shrink-0"
+        style={{ borderColor: "var(--an-line)", background: "var(--an-bg-1)" }}
+      >
+        <button onClick={onBack} aria-label="Back" className="px-1 text-lg" style={{ color: "var(--an-fg-dim)" }}>←</button>
+        <span className="font-mono text-sm truncate" style={{ color: "var(--an-fg-dim)" }}>{shortWallet(profile.wallet)}</span>
       </header>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
-        {/* Stats row */}
-        <div className="flex gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-center">
-          <div className="flex-1">
-            <p className="text-lg font-semibold text-zinc-200">{profile.createdSkills?.length ?? 0}</p>
-            <p className="text-[10px] text-zinc-500 uppercase">Created</p>
+        {/* Identity hero */}
+        <div
+          className="flex items-center gap-3 rounded-2xl border p-3"
+          style={{ background: "var(--an-bg-1)", borderColor: "var(--an-line)" }}
+        >
+          <div
+            className="shrink-0 overflow-hidden rounded-2xl border"
+            style={{ width: 60, height: 60, background: "var(--an-bg-2)", borderColor: "var(--an-line)" }}
+            aria-hidden="true"
+            dangerouslySetInnerHTML={{ __html: avatar }}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="truncate font-mono text-sm" style={{ color: "var(--an-fg)" }}>{shortWallet(profile.wallet)}</span>
+              {profile.self && (
+                <span
+                  className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                  style={{ background: "var(--an-green-dim)", color: "var(--an-green)", border: "1px solid var(--an-green-line)" }}
+                >
+                  you
+                </span>
+              )}
+            </div>
+            <button
+              onClick={copyWallet}
+              className="mt-1 inline-flex items-center gap-1 text-[11px]"
+              style={{ color: "var(--an-fg-mute)" }}
+            >
+              <CopyIcon className="h-3 w-3" />
+              {copied ? "Copied" : "Copy address"}
+            </button>
           </div>
-          <div className="w-px bg-zinc-800" />
-          <div className="flex-1">
-            <p className="text-lg font-semibold text-zinc-200">{profile.ownedSkills?.length ?? 0}</p>
-            <p className="text-[10px] text-zinc-500 uppercase">Owned</p>
-          </div>
-          <div className="w-px bg-zinc-800" />
-          <div className="flex-1">
-            <p className="text-lg font-semibold text-zinc-200">{profile.reputation?.totalSupply ?? 0}</p>
-            <p className="text-[10px] text-zinc-500 uppercase">Holders</p>
-          </div>
+        </div>
+
+        {/* Stat plaques */}
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { n: profile.createdSkills?.length ?? 0, label: "Created" },
+            { n: profile.ownedSkills?.length ?? 0, label: "Owned" },
+            { n: profile.reputation?.totalSupply ?? 0, label: "Copies" },
+          ].map((s) => (
+            <div
+              key={s.label}
+              className="rounded-xl border p-3 text-center"
+              style={{ background: "var(--an-bg-1)", borderColor: "var(--an-line)" }}
+            >
+              <p className="text-xl font-semibold" style={{ color: "var(--an-fg)" }}>{s.n}</p>
+              <p className="mt-0.5 text-[10px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>{s.label}</p>
+            </div>
+          ))}
         </div>
 
         {/* Skills grid */}
