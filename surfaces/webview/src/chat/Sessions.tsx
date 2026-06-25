@@ -3,6 +3,7 @@ import { useStore } from "../state/store";
 import { IqLogo, AgentIcon } from "../icons";
 import { useOnline } from "../layoutEffects";
 import agentnetWordmark from "../assets/agentnet.png";
+import { haptics } from "../haptics";
 
 // wifi-off mark for the offline states (no emoji; inline SVG per the design rules).
 function WifiOffIcon({ className, style }: { className?: string; style?: CSSProperties }) {
@@ -85,7 +86,7 @@ export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: 
     pressTimer.current = window.setTimeout(() => {
       pressFired.current = true;
       pressTimer.current = null;
-      try { navigator.vibrate?.(15); } catch { /* unsupported on this WebView */ }
+      haptics.longPress();
       setMenuFor({ id: s.sessionId, title: s.title || "(untitled)" });
     }, 480);
   }

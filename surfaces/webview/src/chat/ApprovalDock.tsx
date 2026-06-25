@@ -7,6 +7,7 @@ import type {
 import { useStore } from "../state/store";
 import { SkillIcon } from "../icons";
 import { useElementHeightVariable } from "../layoutEffects";
+import { haptics } from "../haptics";
 
 // Pending tool approvals, docked just above the composer (newest first). Most are a
 // yes/no permission (bash/edit/…). Two are different:
@@ -185,6 +186,16 @@ function ApprovalCard({
 }) {
   const isPlan = req.kind === "plan";
   const isDanger = req.risk === "danger";
+  // ONLY the skill-publish approval gets the violet "forge" treatment (parity with the
+  // vscode webview): twinkling stars + a name/description/price body. Every other
+  // approval stays the green card.
+  const isForge = /publish_skill/.test(req.tool || "") || /publish_skill/.test(req.title || "");
+  const forgeName = (req.input?.name as string) || "new skill";
+  const forgeDesc = req.input?.description as string | undefined;
+  const forgePrice = (() => {
+    const p = req.input?.priceSol;
+    return p == null ? "0.1 SOL" : String(p) === "0" ? "free" : `${p} SOL`;
+  })();
   const [editMode, setEditMode] = useState(false);
   const [editedCmd, setEditedCmd] = useState(req.command ?? "");
   const [showReason, setShowReason] = useState(false);
@@ -209,19 +220,35 @@ function ApprovalCard({
     return () => window.removeEventListener("keydown", onKey);
   }, [isPlan]);
 
-  const borderColor = isDanger ? "border-red-700/60" : "border-emerald-700/50";
+  const didVibrate = useRef(false);
+  // Medium haptic when the forge card appears (parity with the casting cue).
+  useEffect(() => {
+    if (isForge && !didVibrate.current) {
+      haptics.forge();
+      didVibrate.current = true;
+    } else if (!isForge) {
+      didVibrate.current = false;
+    }
+  }, [isForge]);
+
+  const borderColor = isDanger ? "border-red-700/60" : isForge ? "border-[var(--an-violet)]/55" : "border-emerald-700/50";
   // Near-opaque (composer-glass level) so chat content doesn't show through the card.
   const bgColor = isDanger ? "bg-red-950/95" : "bg-emerald-950/95";
 
   return (
-    <div ref={cardRef} tabIndex={-1} className={`overflow-hidden rounded-lg border ${borderColor} ${bgColor} text-sm outline-none`}>
+    <div
+      ref={cardRef}
+      tabIndex={-1}
+      className={`relative overflow-hidden rounded-lg border ${borderColor} ${bgColor} text-sm outline-none ${isForge ? "skill-forge" : ""}`}
+    >
+      {isForge && <ForgeStars />}
       {/* header */}
-      <div className="flex items-center gap-2 px-3 py-1.5">
+      <div className="relative z-10 flex items-center gap-2 px-3 py-1.5">
         {isDanger && (
           <span className="font-bold text-red-400">⚠ DANGER</span>
         )}
-        <span className="inline-flex items-center font-mono text-emerald-400">
-          {isPlan ? (
+        <span className="inline-flex items-center font-mono" style={{ color: isForge ? "var(--an-violet)" : undefined }}>
+          {isPlan || isForge ? (
             <SkillIcon className="h-4 w-4" />
           ) : req.kind === "bash" ? (
             "$"
@@ -231,7 +258,7 @@ function ApprovalCard({
             "✎"
           )}
         </span>
-        <span className="truncate font-medium">{req.title || req.tool}</span>
+        <span className="truncate font-medium">{isForge ? `Forge skill: ${forgeName}` : req.title || req.tool}</span>
         <span className="ml-auto text-xs text-zinc-500">{req.cli}</span>
         {/* bash: edit toggle */}
         {req.kind === "bash" && req.command && (
@@ -271,6 +298,14 @@ function ApprovalCard({
       )}
       {req.file && !req.diff && (
         <div className="px-3 pb-2 font-mono text-xs text-zinc-300">{req.file}</div>
+      )}
+      {isForge && (
+        // What is being forged: name + description + price, so the approval is meaningful.
+        <div className="relative z-10 px-3 pb-2">
+          <div className="text-[0.95rem] font-semibold text-zinc-100">{forgeName}</div>
+          {forgeDesc && <div className="mt-0.5 text-xs leading-snug text-zinc-300/85">{forgeDesc}</div>}
+          <div className="mt-1.5 text-[0.7rem] text-zinc-400">mint a soulbound NFT · price {forgePrice}</div>
+        </div>
       )}
       {req.diff && (
         <pre
@@ -325,8 +360,9 @@ function ApprovalCard({
       )}
 
       {/* action buttons — equal width, single row; primary action filled, the rest ghost
-          (outline) so the card reads cleanly and the main choice stands out. */}
-      <div className="flex gap-2 border-t border-emerald-700/40 px-3 py-2">
+          (outline) so the card reads cleanly and the main choice stands out. z-10 keeps them
+          above the skill-effect overlay. */}
+      <div className="relative z-10 flex gap-2 border-t border-emerald-700/40 px-3 py-2">
         {isPlan ? (
           <>
             <button autoFocus onClick={() => onDecide("once")} className="flex-1 whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold [color:var(--an-bg-0)] active:bg-emerald-500">
@@ -366,6 +402,43 @@ function ApprovalCard({
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// A handful of slow violet twinkles scattered over the forge card. Positions/timing are
+// randomized once on mount so each forge card looks a little different (parity with the
+// vscode forgeStars). Decorative, never intercepts taps.
+function ForgeStars() {
+  const stars = useRef(
+    Array.from({ length: 6 }, () => ({
+      left: 8 + Math.random() * 84,
+      top: 12 + Math.random() * 70,
+      dur: 3.2 + Math.random() * 2.4,
+      delay: Math.random() * 3,
+      size: 7 + Math.random() * 5,
+    })),
+  );
+  return (
+    <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+      {stars.current.map((s, i) => (
+        <svg
+          key={i}
+          viewBox="0 0 24 24"
+          fill="var(--an-violet)"
+          className="forge-star absolute"
+          style={{
+            left: `${s.left}%`,
+            top: `${s.top}%`,
+            width: `${s.size}px`,
+            height: `${s.size}px`,
+            animationDuration: `${s.dur}s`,
+            animationDelay: `${s.delay}s`,
+          }}
+        >
+          <path d="M12 2 14.4 9.6 22 12 14.4 14.4 12 22 9.6 14.4 2 12 9.6 9.6Z" />
+        </svg>
+      ))}
     </div>
   );
 }

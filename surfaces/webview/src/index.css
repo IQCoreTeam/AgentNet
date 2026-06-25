@@ -744,6 +744,30 @@ html[data-keyboard="open"] .an-chat-float { bottom: 0; }
 .buy-particle { animation: buy-particle 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 .buy-pop      { animation: buy-pop 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 
+/* In-chat casting marquee — breathing green aura + a soft slide-in (ported from the
+   vscode flashSkill marquee). */
+@keyframes casting-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.casting-marquee {
+  background: var(--an-green-dim);
+  border: 1px solid var(--an-green-line);
+  animation: casting-in 180ms ease-out, skill-breath 1.4s ease-in-out infinite;
+}
+
+/* Forge (publish_skill) approval card — a slow violet glow + twinkling stars. */
+@keyframes forge-glow {
+  0%, 100% { box-shadow: 0 0 10px 1px rgba(169, 139, 255, 0.16); }
+  50%      { box-shadow: 0 0 22px 4px rgba(169, 139, 255, 0.34); }
+}
+@keyframes forge-twinkle {
+  0%, 100% { opacity: 0; transform: scale(0.6); }
+  50%      { opacity: 0.9; transform: scale(1); }
+}
+.skill-forge { animation: forge-glow 3.2s ease-in-out infinite; }
+.forge-star  { animation-name: forge-twinkle; animation-iteration-count: infinite; animation-timing-function: ease-in-out; }
+
 /* Assistant typing indicator — dots rise and brighten in a soft wave (replaces the flat
    triple opacity-pulse, which read as static). */
 @keyframes an-typing {

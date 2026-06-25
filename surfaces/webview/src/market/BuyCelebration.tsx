@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useStore } from "../state/store";
 import { SkillIcon } from "../icons";
+import { haptics } from "../haptics";
 
 const PARTICLE_COUNT = 5;
 
@@ -8,6 +9,7 @@ export function BuyCelebration() {
   const { clearCelebrate } = useStore();
 
   useEffect(() => {
+    haptics.celebrate();
     const t = setTimeout(clearCelebrate, 1600);
     return () => clearTimeout(t);
   }, []);

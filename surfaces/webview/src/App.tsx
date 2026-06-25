@@ -13,6 +13,7 @@ import { Toast } from "./Toast";
 import { useVisualViewportVars, useKeyboardChrome } from "./layoutEffects";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { syncAgentService, notifyApproval, ensureBackgroundConsent } from "./platform/agentService";
+import { haptics } from "./haptics";
 
 // Phase router:
 //   connecting   → opening SSE stream / sent `ready`, waiting for init|sessions
@@ -83,11 +84,8 @@ function TabShell() {
   const drawerWidth = Math.min(vw * 0.86, 352);
 
   // Light haptic when the chat slides back into place (closing) — never on opening.
-  function haptic(ms: number) {
-    try { navigator.vibrate?.(ms); } catch { /* unsupported on this WebView */ }
-  }
   function changeDrawer(open: boolean) {
-    if (drawerOpen && !open) haptic(12);
+    if (drawerOpen && !open) haptics.tap();
     setDrawerOpen(open);
   }
 
@@ -249,7 +247,3 @@ function MarketPage({ marketTab, active }: { marketTab: "skills" | "profile" | "
   );
 }
 
-function isInteractiveTarget(target: EventTarget | null) {
-  if (!(target instanceof Element)) return false;
-  return !!target.closest("button, a, input, textarea, select, [role='button'], [data-no-swipe]");
-}

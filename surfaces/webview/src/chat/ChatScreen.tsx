@@ -3,8 +3,10 @@ import { useStore } from "../state/store";
 import { MessageList } from "./MessageList";
 import { ApprovalDock } from "./ApprovalDock";
 import { Composer } from "./Composer";
+import { CastingMarquee } from "./CastingMarquee";
 import { SkillIcon } from "../icons";
 import { useElementHeightVariable } from "../layoutEffects";
+import { haptics } from "../haptics";
 
 // Chat shell: header (sessions toggle + wallet) over the scrolling log, with the approval
 // dock + composer pinned at the bottom. Uses --vvh (visual viewport height) so the layout
@@ -15,12 +17,19 @@ export function ChatScreen({ onOpenDrawer }: { onOpenDrawer: () => void }) {
   useElementHeightVariable(controlsRef, "--chat-float-height");
   // Clear the firing skill glow after the dwell time
   const firingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastVibratedSkill = useRef<string | null>(null);
   useEffect(() => {
-    if (state.firingSkill) {
+    if (state.firingSkill && state.firingSkill !== lastVibratedSkill.current) {
+      haptics.castStart(); // light double tap as the skill starts casting
+      lastVibratedSkill.current = state.firingSkill;
       if (firingTimer.current) clearTimeout(firingTimer.current);
+      // dwell scales with name length (matches the vscode marquee), capped at 4s
+      const dwell = Math.min(4000, 1600 + state.firingSkill.length * 35);
       firingTimer.current = setTimeout(() => {
         clearFiringSkill();
-      }, 1400);
+      }, dwell);
+    } else if (!state.firingSkill) {
+      lastVibratedSkill.current = null;
     }
     return () => { if (firingTimer.current) clearTimeout(firingTimer.current); };
   }, [state.firingSkill, clearFiringSkill]);
@@ -72,6 +81,7 @@ export function ChatScreen({ onOpenDrawer }: { onOpenDrawer: () => void }) {
 
       <MessageList />
       <div ref={controlsRef} className="an-chat-float">
+        <CastingMarquee skill={state.firingSkill} />
         <ApprovalDock />
         <Composer />
       </div>
