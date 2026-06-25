@@ -527,7 +527,12 @@ export function createChatSession(
       }
       case "buySkill": {
         const req = m as Extract<MarketRequest, { type: "buySkill" }>;
-        const res = env.buySkill ? await env.buySkill(req.skillId, req.creatorWallet) : { ok: false, error: "buy unavailable" };
+        // Another handler may own buys on this surface (e.g. the localhost market handler).
+        // POST fans out to every recv, so emitting a "buy unavailable" result here when we
+        // lack the capability would race the real handler's success with a phantom failure.
+        // Stay silent instead — the capable handler answers.
+        if (!env.buySkill) break;
+        const res = await env.buySkill(req.skillId, req.creatorWallet);
         sendMarket({ type: "buyResult", skillId: req.skillId, ...res });
         if (res.ok) {
           await env.loadOwnedSkills?.(); // re-sync the whole owned set after the buy
@@ -537,14 +542,16 @@ export function createChatSession(
       }
       case "disposeSkill": {
         const req = m as Extract<MarketRequest, { type: "disposeSkill" }>;
-        const res = env.disposeSkill ? await env.disposeSkill(req.skillId) : { ok: false, error: "dispose unavailable" };
+        if (!env.disposeSkill) break; // another handler owns this on some surfaces — don't emit a phantom failure
+        const res = await env.disposeSkill(req.skillId);
         sendMarket({ type: "disposeResult", skillId: req.skillId, ...res });
         if (res.ok) sendMarket(await ownedSkillsMsg(env)); // re-sync so the panel drops it
         break;
       }
       case "reEquipSkill": {
         const req = m as Extract<MarketRequest, { type: "reEquipSkill" }>;
-        const res = env.reEquipSkill ? await env.reEquipSkill(req.skillId) : { ok: false, error: "re-equip unavailable" };
+        if (!env.reEquipSkill) break; // another handler owns this on some surfaces — don't emit a phantom failure
+        const res = await env.reEquipSkill(req.skillId);
         sendMarket({ type: "reEquipResult", skillId: req.skillId, ...res });
         if (res.ok) sendMarket(await ownedSkillsMsg(env)); // re-sync so the panel shows it
         break;
@@ -570,9 +577,8 @@ export function createChatSession(
       // issue #34: human posts a comment on a skill from the detail view
       case "postNote": {
         const req = m as Extract<MarketRequest, { type: "postNote" }>;
-        const res = env.postNote
-          ? await env.postNote(req.skillId, req.skillType, req.text, req.gitLink)
-          : { ok: false, error: "comments unavailable" };
+        if (!env.postNote) break; // another handler owns this on some surfaces — don't emit a phantom failure
+        const res = await env.postNote(req.skillId, req.skillType, req.text, req.gitLink);
         sendMarket({ type: "postNoteResult", skillId: req.skillId, ok: res.ok, error: res.error });
         if (res.ok && res.notes) {
           sendMarket({ type: "notes", skillId: req.skillId, notes: res.notes });
@@ -605,9 +611,8 @@ export function createChatSession(
       // issue #35: buy all skills from an agent (not-yet-owned, capped at 25)
       case "buyAllSkills": {
         const req = m as Extract<MarketRequest, { type: "buyAllSkills" }>;
-        const res = env.buyAllSkills
-          ? await env.buyAllSkills(req.wallet)
-          : { ok: false, bought: 0, failed: 0, error: "buy unavailable" };
+        if (!env.buyAllSkills) break; // another handler owns this on some surfaces — don't emit a phantom failure
+        const res = await env.buyAllSkills(req.wallet);
         sendMarket({ type: "buyAllResult", wallet: req.wallet, ...res });
         if (res.ok && res.bought > 0) {
           await env.loadOwnedSkills?.();
@@ -618,9 +623,8 @@ export function createChatSession(
       // issue #35: post self-note (blog) or comment on an agent's profile
       case "postAgentNote": {
         const req = m as Extract<MarketRequest, { type: "postAgentNote" }>;
-        const res = env.postAgentNote
-          ? await env.postAgentNote(req.agentWallet, req.text, req.gitLink)
-          : { ok: false, error: "agent notes unavailable" };
+        if (!env.postAgentNote) break; // another handler owns this on some surfaces — don't emit a phantom failure
+        const res = await env.postAgentNote(req.agentWallet, req.text, req.gitLink);
         sendMarket({ type: "agentNoteResult", agentWallet: req.agentWallet, ok: res.ok, error: res.ok ? undefined : (res as { ok: false; error?: string }).error });
         if (res.ok && env.getAgentProfile) {
           // re-push refreshed profile so blog updates without a manual reload
@@ -632,9 +636,8 @@ export function createChatSession(
       // make-skill: publish a new skill from the UI
       case "publishSkill": {
         const req = m as Extract<MarketRequest, { type: "publishSkill" }>;
-        const res = env.publishSkill
-          ? await env.publishSkill(req)
-          : { ok: false, error: "publishing unavailable" };
+        if (!env.publishSkill) break; // another handler owns this on some surfaces — don't emit a phantom failure
+        const res = await env.publishSkill(req);
         sendMarket({ type: "publishResult", ok: res.ok, mint: res.mint, error: res.error });
         if (res.ok) {
           // a fresh skill is owned by its creator — refresh owned + the market list
