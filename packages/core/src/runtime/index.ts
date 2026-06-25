@@ -11,6 +11,7 @@ import { prepareResume } from "./inject/index.js";
 import { getDeviceProfile, buildDeviceNotice } from "../core/device.js";
 import { MemorySync, updateSkillsSection } from "../memory/index.js";
 import { setSkillShoppingActive } from "../skill-market/passive.js";
+import { setMakeSkillActive } from "../skill-market/makeSkill.js";
 import { createAgentSdkMcpServer, newVerifyGuard, agentNetAllowedTools, AGENTNET_MCP_SERVER } from "../skill-market/index.js";
 import { resolveRpcUrl, hasDasRpc, loadGithubToken } from "../core/rpc.js";
 import { getCodexApiKey } from "../account/codexAuth.js";
@@ -46,11 +47,15 @@ async function buildPassiveSpawn(
   // a DAS RPC key; this only removes the on/off gate.)
   const on = true;
 
-  // Ensure the bundled skill is present in the scanned skills dirs (both engines).
+  // Ensure the bundled skills are present in the scanned skills dirs (both engines):
+  // skill-shopping (the BUY flow) and make-skill (the PUBLISH flow). Both are built-in,
+  // description-driven (passive) skills — the agent reaches for either via progressive
+  // disclosure. The costly steps (buy/publish mint) are still gated in code (PROMPT_BEFORE_USE).
   try {
     await setSkillShoppingActive(on);
+    await setMakeSkillActive(on);
   } catch (e) {
-    console.warn("[skill-shopping] install failed:", e);
+    console.warn("[bundled-skills] install failed:", e);
   }
 
   // Codex (Phase 1): a separate `node <entry>` stdio MCP server, read-only. Needs the
