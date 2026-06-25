@@ -109,6 +109,7 @@ export function useChat(
         }),
       );
       h.onUsage((n, win) => { setContextTokens(n); if (win !== undefined) setContextWindow(win); });
+      h.onCompact(() => setContextTokens(undefined));
       h.onSkill((name) => setFiringSkill(name));
       h.onTurnEnd(() => {
         // a fresh session reveals its canonical id now — adopt it so resume/switch work.

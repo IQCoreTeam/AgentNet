@@ -499,6 +499,25 @@ export function Chat({
         } else setNotice("usage: /resume <id-prefix> (see /sessions)");
         return;
       }
+      case "context": {
+        const win = chat.contextWindow ?? (chat.cli === "codex" ? 256_000 : 200_000);
+        if (chat.contextTokens === undefined) {
+          setNotice(`Context: 0 / ${win.toLocaleString()} tokens — send a message to measure usage.`);
+          return;
+        }
+        const used = chat.contextTokens;
+        const free = Math.max(0, win - used);
+        const pct = Math.round((used / win) * 100);
+        const threshold = Math.max(0, win - 33_000);
+        const tpct = Math.round((threshold / win) * 100);
+        setNotice(
+          `Context window (${chat.cli})\n` +
+          `  used    ${used.toLocaleString()} / ${win.toLocaleString()} (${pct}%)\n` +
+          `  free    ${free.toLocaleString()}\n` +
+          `  auto-compact at ~${threshold.toLocaleString()} (${tpct}%)`
+        );
+        return;
+      }
       case "wallet":
         setNotice(`wallet ${address}`);
         return;
@@ -571,7 +590,7 @@ export function Chat({
         startBtwQuery(arg.trim());
         return;
       case "help":
-        setNotice("/new /sessions /resume /more /compact /clear /copy /models /engine /effort /account /settings /wallet /storage /btw <question> /iq /quit · !cmd shell · Esc cancels · Ctrl+A/E/W/U edit");
+        setNotice("/new /sessions /resume /more /compact /clear /copy /models /engine /effort /context /account /settings /wallet /storage /btw <question> /iq /quit · !cmd shell · Esc cancels · Ctrl+A/E/W/U edit");
         return;
       default:
         setNotice(`unknown command: /${cmd} (try /help)`);

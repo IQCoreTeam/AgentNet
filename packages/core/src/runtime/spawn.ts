@@ -640,6 +640,7 @@ function codexEngine(opts: SpawnOpts): Engine {
       // history was condensed to reclaim context — fire the compaction cue. The following
       // tokenUsage/updated (or next turn) reports the reclaimed occupancy.
       cb.emitCompact();
+      cb.emitMsg({ role: "summary", text: "[conversation compacted]", ts: Date.now() });
     } else if (msg.method === "turn/completed") {
       if (params?.usage) {
         const usage = params.usage;
