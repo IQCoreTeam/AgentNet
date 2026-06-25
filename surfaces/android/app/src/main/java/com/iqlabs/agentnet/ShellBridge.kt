@@ -25,8 +25,8 @@ class ShellBridge(private val activity: MainActivity) {
 
     // #53: a turn is waiting on approval → raise a notification if the app is backgrounded.
     @JavascriptInterface
-    fun requestApproval(id: String, title: String, clientId: String) {
-        activity.runOnUiThread { runCatching { activity.requestApproval(id, title, clientId) } }
+    fun requestApproval(id: String, title: String, clientId: String, body: String) {
+        activity.runOnUiThread { runCatching { activity.requestApproval(id, title, clientId, body) } }
     }
 
     // #53: user just enabled background execution → prompt for battery-opt exemption (once).

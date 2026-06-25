@@ -150,20 +150,31 @@ export class SessionStore {
   // Newest page + cursor to the page before it.
   async loadLatest(sessionId: string): Promise<PageResult> {
     const t0 = Date.now();
-    const last = await this.lastPageIndex(sessionId);
+    let idx = await this.lastPageIndex(sessionId);
     const t1 = Date.now();
-    if (last < 0) return { messages: [], hasMore: false, cursor: null };
+    if (idx < 0) return { messages: [], hasMore: false, cursor: null };
     // Inline get + decode (instead of loadPage) so we can time each leg separately:
     // get = storage read (local fs vs Drive download), decode = decrypt+parse the blob.
-    const blob = await this.storage.get(pageKey(sessionId, last));
+    let blob = await this.storage.get(pageKey(sessionId, idx));
     const t2 = Date.now();
-    const decoded = blob ? await decodeLog(await this.getKey(), blob) : null;
+    let decoded = blob ? await decodeLog(await this.getKey(), blob) : null;
+    // Walk back over EMPTY trailing pages. appendMessage writes a new page's meta line
+    // BEFORE its first message on rollover, so a page can exist with just meta (decodes to
+    // zero messages) when a session rolled over but no message landed there yet, or a write
+    // was interrupted. Returning that verbatim painted a BLANK chat that only filled on a
+    // manual scroll-up or reopen — the "this chat won't load" bug. Land on the newest page
+    // that actually has messages.
+    while ((decoded?.messages.length ?? 0) === 0 && idx > 0) {
+      idx -= 1;
+      blob = await this.storage.get(pageKey(sessionId, idx));
+      decoded = blob ? await decodeLog(await this.getKey(), blob) : null;
+    }
     const t3 = Date.now();
     console.error(
-      `[perf] loadLatest ${sessionId.slice(0, 8)} page=${last} discover=${t1 - t0}ms(${this.lastTier}) ` +
+      `[perf] loadLatest ${sessionId.slice(0, 8)} page=${idx} discover=${t1 - t0}ms(${this.lastTier}) ` +
       `get=${t2 - t1}ms(${blob?.length ?? 0}B) decode=${t3 - t2}ms msgs=${decoded?.messages.length ?? 0}`,
     );
-    return { messages: decoded?.messages ?? [], hasMore: last > 0, cursor: last > 0 ? last - 1 : null };
+    return { messages: decoded?.messages ?? [], hasMore: idx > 0, cursor: idx > 0 ? idx - 1 : null };
   }
 
   // The page at `cursor` (older). Returns its messages + cursor to the one before.
