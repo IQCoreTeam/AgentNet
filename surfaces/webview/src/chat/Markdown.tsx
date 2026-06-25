@@ -12,6 +12,9 @@ export function Markdown({ text }: { text: string }) {
   useEffect(() => {
     if (!ref.current) return;
     const cleanups: (() => void)[] = [];
+    ref.current.querySelectorAll<HTMLElement>("pre, table").forEach((el) => {
+      el.setAttribute("data-no-swipe", "");
+    });
     ref.current.querySelectorAll<HTMLPreElement>("pre").forEach((pre) => {
       if (pre.querySelector(".copy-btn")) return;
       const btn = document.createElement("button");
