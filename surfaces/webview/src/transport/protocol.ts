@@ -137,6 +137,7 @@ export type ClientMessage =
   | { type: "listAgents" }
   | { type: "getAgentProfile"; wallet: string }
   | { type: "buyAllSkills"; wallet: string }
+  | { type: "buyRequiredSkills"; items: { skillId: string; creatorWallet?: string }[] }
   | { type: "postNote"; skillId: string; skillType?: "skill" | "workflow"; text: string; gitLink?: string }
   | { type: "postAgentNote"; agentWallet: string; text: string; gitLink?: string }
   | {
@@ -219,7 +220,7 @@ export type ServerMessage =
   | { type: "buyAllResult"; wallet: string; ok: boolean; bought: number; failed: number; error?: string }
   | { type: "agentNoteResult"; agentWallet: string; ok: boolean; error?: string }
   | { type: "publishResult"; ok: boolean; mint?: string; error?: string }
-  | { type: "publishProgress"; phase: "store" | "mint" | "list"; signed: number; percent?: number }
+  | { type: "publishProgress"; phase: "store" | "mint" | "list"; signed: number; percent?: number; kind: "skill" | "workflow" }
   | { type: "githubStatus"; hasToken: boolean; masked?: string }
   | { type: "workRepoRegistered"; ok: boolean; count?: number; repo?: string; error?: string }
   | { type: "signTransaction"; id: string; tx: string };

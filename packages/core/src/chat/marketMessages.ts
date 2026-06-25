@@ -103,6 +103,8 @@ export type MarketRequest =
   | { type: "listAgents" }
   | { type: "getAgentProfile"; wallet: string }
   | { type: "buyAllSkills"; wallet: string }
+  // buy a specific set of skills in one go (e.g. a workflow's required skills)
+  | { type: "buyRequiredSkills"; items: { skillId: string; creatorWallet?: string }[] }
   | { type: "postAgentNote"; agentWallet: string; text: string; gitLink?: string }
   // publish a skill from the UI (make-skill). priceSol is the human SOL amount as a
   // string ("0.1"); the host converts to lamports. image is optional — an http URL
@@ -146,6 +148,6 @@ export type MarketEvent =
   // make-skill: result of a UI publish. mint = the new skill's mint address on success.
   | { type: "publishResult"; ok: boolean; mint?: string; error?: string }
   // live publish progress (per wallet signature) while a chat/agent publish runs.
-  | { type: "publishProgress"; phase: "store" | "mint" | "list"; signed: number; percent?: number };
+  | { type: "publishProgress"; phase: "store" | "mint" | "list"; signed: number; percent?: number; kind: "skill" | "workflow" };
 
 export type MarketMessage = MarketRequest | MarketEvent;

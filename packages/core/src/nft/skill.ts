@@ -36,11 +36,13 @@ export interface PublishProgress {
   phase: "store" | "mint" | "list";
   signed: number; // cumulative wallet signatures so far
   percent?: number; // 0..100 within the store (code-in) phase
+  kind: "skill" | "workflow"; // colors the gauge/celebration (skill = violet, workflow = amber)
 }
 
 // Count every wallet signature by wrapping signTransaction. Keypair signers sign locally
-// with no prompt, so they pass through untouched (no progress is meaningful there).
-function trackSignatures(signer: SignerInput, onSign: () => void): SignerInput {
+// with no prompt, so they pass through untouched (no progress is meaningful there). Shared
+// with publishWorkflow so both publish flows report signatures identically.
+export function trackSignatures(signer: SignerInput, onSign: () => void): SignerInput {
   const ws = signer as Partial<WalletSigner>;
   if (typeof ws.signTransaction !== "function" || "secretKey" in (signer as object)) {
     return signer;
@@ -104,7 +106,7 @@ export async function publishSkill(
   let phase: PublishProgress["phase"] = "store";
   let signed = 0;
   const tx = onProgress
-    ? trackSignatures(signer, () => { signed += 1; onProgress({ phase, signed }); })
+    ? trackSignatures(signer, () => { signed += 1; onProgress({ phase, signed, kind: "skill" }); })
     : signer;
 
   await ensureDbRoot(tx);
@@ -129,7 +131,7 @@ export async function publishSkill(
     skillJson,
     `${input.name}.json`,
     "application/json",
-    onProgress ? (percent) => onProgress({ phase: "store", signed, percent }) : undefined,
+    onProgress ? (percent) => onProgress({ phase: "store", signed, percent, kind: "skill" }) : undefined,
   );
 
   // Pre-generate the mint → derive the gate PDA that will own the mint authority.
@@ -144,7 +146,7 @@ export async function publishSkill(
   const collectionMint = new PublicKey(collectionStr);
 
   phase = "mint";
-  if (onProgress) onProgress({ phase, signed });
+  if (onProgress) onProgress({ phase, signed, kind: "skill" });
   await createSkillMint(conn, tx, {
     name: input.name,
     symbol: input.name.substring(0, 8).toUpperCase(),
@@ -168,7 +170,7 @@ export async function publishSkill(
     group: collectionMint, // skills collection — publish_item enrolls the mint
   });
   phase = "list";
-  if (onProgress) onProgress({ phase, signed });
+  if (onProgress) onProgress({ phase, signed, kind: "skill" });
   await sendTx(conn, tx, [ataIx, ix]);
 
   return skillMint.toBase58();
@@ -178,6 +180,9 @@ export interface BuySkillInput {
   skillId: string; // skill mint address
   buyerWallet: string; // wallet buying the skill
   creatorWallet: string; // paid the price (read from the item config on-chain)
+  // workflows only: prerequisite skill mints IN CONFIG ORDER. buy_item verifies the buyer
+  // holds each (their ATA is passed as a remaining account). Empty/omitted = a plain skill.
+  requiredSkills?: string[];
 }
 
 /**
@@ -207,7 +212,9 @@ export async function buySkill(
       buyer,
       creator: new PublicKey(input.creatorWallet),
       itemMint: skillMint,
-      requiredSkills: [], // skills have no gate
+      // A workflow gates on its required skills: pass their mints (config order) so the
+      // program can check the buyer's ATAs. A plain skill has none → empty.
+      requiredSkills: (input.requiredSkills ?? []).map((m) => new PublicKey(m)),
     }),
   );
   return sendTx(conn, signer, ixs);

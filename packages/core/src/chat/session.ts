@@ -620,6 +620,23 @@ export function createChatSession(
         }
         break;
       }
+      // Buy a specific set (a workflow's required skills) in one tap. Reuses env.buySkill
+      // per item and reports a single aggregate buyAllResult (one toast, not N).
+      case "buyRequiredSkills": {
+        const req = m as Extract<MarketRequest, { type: "buyRequiredSkills" }>;
+        if (!env.buySkill) break; // capable handler answers; stay silent otherwise
+        let bought = 0, failed = 0;
+        for (const item of req.items) {
+          const r = await env.buySkill(item.skillId, item.creatorWallet);
+          if (r.ok) bought++; else failed++;
+        }
+        sendMarket({ type: "buyAllResult", wallet: "", ok: failed === 0, bought, failed });
+        if (bought > 0) {
+          await env.loadOwnedSkills?.();
+          sendMarket(await ownedSkillsMsg(env));
+        }
+        break;
+      }
       // issue #35: post self-note (blog) or comment on an agent's profile
       case "postAgentNote": {
         const req = m as Extract<MarketRequest, { type: "postAgentNote" }>;

@@ -2,48 +2,52 @@ import { useEffect, useState } from "react";
 import { useStore } from "../state/store";
 import { ImageIcon, SkillIcon } from "../icons";
 
-// The on-chain stages publish walks through, in order. Each is at least one wallet
-// signature; "store" may be many (the body chunks). Used to render the forge gauge.
-const PUBLISH_PHASES = [
-  { key: "store", label: "Storing skill on-chain" },
-  { key: "mint", label: "Minting the NFT" },
-  { key: "list", label: "Listing for sale" },
-] as const;
+// Per-kind tint: skills forge violet, workflows forge amber (matches their card colors).
+const PUBLISH_THEME = {
+  skill: { noun: "skill", head: "text-purple-200", border: "border-purple-800/40", wash: "from-purple-900/25", icon: "text-purple-300", on: "bg-purple-400", onText: "text-purple-300", bar: "from-purple-500 to-purple-300", label: "text-purple-200" },
+  workflow: { noun: "workflow", head: "text-amber-200", border: "border-amber-700/40", wash: "from-amber-900/25", icon: "text-amber-300", on: "bg-amber-400", onText: "text-amber-300", bar: "from-amber-500 to-amber-300", label: "text-amber-200" },
+} as const;
 
-function PublishProgressView({ progress }: { progress: { phase: "store" | "mint" | "list"; signed: number; percent?: number } | null }) {
-  const idx = progress ? Math.max(0, PUBLISH_PHASES.findIndex((p) => p.key === progress.phase)) : 0;
+function PublishProgressView({ progress }: { progress: { phase: "store" | "mint" | "list"; signed: number; percent?: number; kind: "skill" | "workflow" } | null }) {
+  const t = PUBLISH_THEME[progress?.kind ?? "skill"];
+  const phases = [
+    { key: "store", label: `Storing ${t.noun} on-chain` },
+    { key: "mint", label: "Minting the NFT" },
+    { key: "list", label: "Listing for sale" },
+  ] as const;
+  const idx = progress ? Math.max(0, phases.findIndex((p) => p.key === progress.phase)) : 0;
   // Completed phases + the code-in sub-percent of the store phase fill the gauge.
   const sub = progress?.phase === "store" && progress.percent != null ? progress.percent / 100 : idx > 0 ? 1 : 0;
-  const overall = Math.min(100, Math.round(((idx + sub) / PUBLISH_PHASES.length) * 100));
+  const overall = Math.min(100, Math.round(((idx + sub) / phases.length) * 100));
   const signed = progress?.signed ?? 0;
 
   return (
     <div className="flex flex-col h-full">
-      <header className="flex items-center gap-2 border-b border-purple-800/40 px-3 py-2 shrink-0">
-        <span className="font-medium text-sm text-purple-200">Forging your skill</span>
+      <header className={`flex items-center gap-2 border-b ${t.border} px-3 py-2 shrink-0`}>
+        <span className={`font-medium text-sm ${t.head}`}>Forging your {t.noun}</span>
       </header>
-      <div className="flex-1 flex flex-col items-center justify-center gap-5 p-6 text-center bg-gradient-to-b from-purple-900/25 to-transparent">
-        <SkillIcon className="h-12 w-12 text-purple-300 publish-forge-pulse" />
+      <div className={`flex-1 flex flex-col items-center justify-center gap-5 p-6 text-center bg-gradient-to-b ${t.wash} to-transparent`}>
+        <SkillIcon className={`h-12 w-12 ${t.icon} publish-forge-pulse`} />
 
         <div className="w-full max-w-xs space-y-3">
           {/* Phase steps */}
           <div className="flex items-center justify-between gap-1">
-            {PUBLISH_PHASES.map((p, i) => (
+            {phases.map((p, i) => (
               <div key={p.key} className="flex-1 flex flex-col items-center gap-1">
                 <div
-                  className={`h-1.5 w-full rounded-full ${i < idx ? "bg-purple-400" : i === idx ? "bg-purple-400 publish-forge-pulse" : "bg-zinc-700"}`}
+                  className={`h-1.5 w-full rounded-full ${i < idx ? t.on : i === idx ? `${t.on} publish-forge-pulse` : "bg-zinc-700"}`}
                 />
-                <span className={`text-[10px] ${i === idx ? "text-purple-300" : "text-zinc-600"}`}>{i + 1}/{PUBLISH_PHASES.length}</span>
+                <span className={`text-[10px] ${i === idx ? t.onText : "text-zinc-600"}`}>{i + 1}/{phases.length}</span>
               </div>
             ))}
           </div>
 
           {/* Gauge */}
           <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-800">
-            <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-purple-300 transition-[width] duration-300" style={{ width: `${overall}%` }} />
+            <div className={`h-full rounded-full bg-gradient-to-r ${t.bar} transition-[width] duration-300`} style={{ width: `${overall}%` }} />
           </div>
 
-          <p className="text-sm text-purple-200 font-medium">{PUBLISH_PHASES[idx].label}</p>
+          <p className={`text-sm font-medium ${t.label}`}>{phases[idx].label}</p>
           <p className="text-xs text-zinc-500">
             {signed > 0 ? `${signed} signature${signed === 1 ? "" : "s"} approved` : "Waiting for the first signature…"}
           </p>

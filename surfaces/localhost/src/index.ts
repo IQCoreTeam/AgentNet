@@ -494,6 +494,9 @@ function attachMarketHandlers(c: Client) {
       case "buyAllSkills":
         c.send({ type: "buyAllResult", wallet: m.wallet ?? "", ok: false, bought: 0, failed: 0, error: message });
         return;
+      case "buyRequiredSkills":
+        c.send({ type: "buyAllResult", wallet: "", ok: false, bought: 0, failed: 0, error: message });
+        return;
       case "postNote":
         c.send({ type: "postNoteResult", skillId: m.skillId ?? "", ok: false, error: message });
         return;
@@ -603,7 +606,7 @@ function attachMarketHandlers(c: Client) {
         try {
           const r = await mkt.publishSkill(
             { name: m.name, description: m.description, text: m.text, category: m.category, hashtags: m.hashtags, priceSol: m.priceSol, image: m.image },
-            (p) => c.send({ type: "publishProgress", phase: p.phase, signed: p.signed, percent: p.percent }),
+            (p) => c.send({ type: "publishProgress", phase: p.phase, signed: p.signed, percent: p.percent, kind: p.kind }),
           );
           c.send({ type: "publishResult", ...r });
         } catch (e) {
@@ -649,6 +652,20 @@ function attachMarketHandlers(c: Client) {
         } catch (e) {
           c.send({ type: "buyAllResult", wallet: m.wallet, ok: false, bought: 0, failed: 0, error: (e as Error).message });
         }
+        return;
+      }
+      // Buy a specific set (a workflow's required skills) in one tap — buy each, then
+      // refresh owned so the detail's "owned" badges update before the workflow buy.
+      case "buyRequiredSkills": {
+        let bought = 0, failed = 0;
+        for (const item of m.items) {
+          try {
+            const r = await mkt.buySkill(item.skillId, item.creatorWallet);
+            if (r.ok) bought++; else failed++;
+          } catch { failed++; }
+        }
+        c.send({ type: "buyAllResult", wallet: "", ok: failed === 0, bought, failed });
+        if (bought > 0) await mkt.loadOwnedSkills().then(() => emitOwnedSkills(mkt)).catch(() => {});
         return;
       }
       case "postAgentNote": {

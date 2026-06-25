@@ -421,7 +421,7 @@ export async function handleToolCall(
         hashtags: args?.hashtags as string[] | undefined,
         price: lamports,
         image: args?.image as string | undefined,
-      }, (p) => emit({ type: "publishProgress", phase: p.phase, signed: p.signed, percent: p.percent }));
+      }, (p) => emit({ type: "publishProgress", phase: p.phase, signed: p.signed, percent: p.percent, kind: p.kind }));
       emit({ type: "publishResult", ok: true, mint });
       return { content: [{ type: "text", text: `Published skill "${skillName}" — mint: ${mint}` }] };
     } catch (err: any) {

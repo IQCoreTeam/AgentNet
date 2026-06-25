@@ -49,12 +49,28 @@ export class SkillSync {
     const slug = skillSlug(meta, skillMint);
     const dir = join(skillsDir(cli), slug);
     await ensureDir(dir);
-    await writeFile(join(dir, "SKILL.md"), toSkillMd(meta, skillMint));
+    // A workflow (requiredSkills non-empty) names its constituent skills in the SKILL.md so
+    // the agent knows it orchestrates them; a plain skill skips this entirely (no RPC cost).
+    const reqNames = await this.requiredSkillNames(meta.requiredSkills);
+    await writeFile(join(dir, "SKILL.md"), toSkillMd(meta, skillMint, reqNames));
     // Record origin: this slug came from an NFT (its mint). The SKILL.md itself can't say
     // so — the registry is what lets a surface badge it as bought vs bundled vs local.
     // Best-effort (recordNftSkill swallows its own errors) so it never blocks the install.
     await recordNftSkill(slug, skillMint);
     return slug;
+  }
+
+  /** Resolve a workflow's required-skill mints to display names for its SKILL.md note.
+   *  Best-effort per mint (a name we can't read falls back to a short mint id), and a
+   *  no-op for plain skills (no required skills → undefined, so toSkillMd stays unchanged). */
+  private async requiredSkillNames(reqs: string[] | undefined): Promise<string[] | undefined> {
+    if (!reqs || reqs.length === 0) return undefined;
+    return Promise.all(
+      reqs.map(async (m) => {
+        const md = await readSkillMintMetadata(this.conn, m).catch(() => null);
+        return md?.name || `skill ${m.slice(0, 8)}`;
+      }),
+    );
   }
 
   /** Install a bought skill into BOTH runtimes' skills dirs (the buyer may use either). */
@@ -79,7 +95,11 @@ export class SkillSync {
     creatorWallet: string,
   ): Promise<{ txSig: string; slug: string | null }> {
     const buyerWallet = await signerAddress(signer);
-    const txSig = await buySkill(this.conn, signer, { skillId, buyerWallet, creatorWallet });
+    // A workflow gates on required skills: buy_item needs the buyer's ATA for each, passed
+    // in the config's order. Read them from the mint metadata (publish order = config order).
+    // A plain skill has none, so this is a no-op gate there.
+    const requiredSkills = (await readSkillMintMetadata(this.conn, skillId).catch(() => null))?.requiredSkills;
+    const txSig = await buySkill(this.conn, signer, { skillId, buyerWallet, creatorWallet, requiredSkills });
     // The buyer now holds a new skill token — drop the cached holdings so the comment
     // gate (heldSkillMints) sees it immediately instead of after the TTL.
     invalidateHeldMints(buyerWallet);

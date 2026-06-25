@@ -15,24 +15,26 @@ export function ChatScreen({ onOpenDrawer }: { onOpenDrawer: () => void }) {
   const { state, clearFiringSkill } = useStore();
   const controlsRef = useRef<HTMLDivElement>(null);
   useElementHeightVariable(controlsRef, "--chat-float-height");
-  // Clear the firing skill glow after the dwell time
+  // Clear the whole casting strip after the dwell time. The timer resets on each new cast,
+  // so a workflow + its chained skills stay up together, then fade once nothing new fires.
   const firingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastVibratedSkill = useRef<string | null>(null);
+  const lastFiring = state.firingSkills[state.firingSkills.length - 1]?.name ?? null;
   useEffect(() => {
-    if (state.firingSkill && state.firingSkill !== lastVibratedSkill.current) {
-      haptics.castStart(); // light double tap as the skill starts casting
-      lastVibratedSkill.current = state.firingSkill;
+    if (lastFiring && lastFiring !== lastVibratedSkill.current) {
+      haptics.castStart(); // light double tap as a new skill starts casting
+      lastVibratedSkill.current = lastFiring;
       if (firingTimer.current) clearTimeout(firingTimer.current);
       // dwell scales with name length (matches the vscode marquee), capped at 4s
-      const dwell = Math.min(4000, 1600 + state.firingSkill.length * 35);
+      const dwell = Math.min(4000, 1600 + lastFiring.length * 35);
       firingTimer.current = setTimeout(() => {
         clearFiringSkill();
       }, dwell);
-    } else if (!state.firingSkill) {
+    } else if (!lastFiring) {
       lastVibratedSkill.current = null;
     }
     return () => { if (firingTimer.current) clearTimeout(firingTimer.current); };
-  }, [state.firingSkill, clearFiringSkill]);
+  }, [lastFiring, clearFiringSkill]);
 
   const addr = state.walletAddress;
   // The header title is the active chat's name (vscode shows it per-panel; here there's
@@ -65,9 +67,12 @@ export function ChatScreen({ onOpenDrawer }: { onOpenDrawer: () => void }) {
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <StatusBadge waitingApproval={state.approvals.length > 0} working={state.typing} />
-          {state.firingSkill && (
-            <span className="inline-flex items-center gap-1 text-xs animate-pulse skill-firing-badge" style={{ color: "var(--an-green)" }}>
-              <SkillIcon className="h-3.5 w-3.5" /> {state.firingSkill}
+          {lastFiring && (
+            <span
+              className="inline-flex items-center gap-1 text-xs animate-pulse skill-firing-badge"
+              style={{ color: state.firingSkills[state.firingSkills.length - 1]?.kind === "workflow" ? "var(--an-amber)" : "var(--an-violet)" }}
+            >
+              <SkillIcon className="h-3.5 w-3.5" /> {lastFiring}
             </span>
           )}
         </div>
@@ -81,7 +86,7 @@ export function ChatScreen({ onOpenDrawer }: { onOpenDrawer: () => void }) {
 
       <MessageList />
       <div ref={controlsRef} className="an-chat-float">
-        <CastingMarquee skill={state.firingSkill} />
+        <CastingMarquee skills={state.firingSkills} />
         <ApprovalDock />
         <Composer />
       </div>

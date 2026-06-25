@@ -45,6 +45,10 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
       marketSearching();
       send({ type: "searchSkills", query: "", kind: state.marketTab });
     }
+    // Clear the shared detail/profile when LEAVING this tab so the next tab's MarketScreen
+    // mounts clean — otherwise its first frame shows the previous tab's open detail/profile
+    // (the "stacked menu flashes the old screen" bug, same root as the chat off-by-one).
+    return () => { clearMarketDetail(); clearAgentProfile(); setPendingMint(null); };
   }, [tab]);
 
   // When a profile loads (self on the Profile tab, or a tapped agent on the Market tab) show it.
@@ -261,7 +265,7 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
                   card={card}
                   owned
                   disposed={Object.values(state.marketDisposed).includes(card.id)}
-                  firing={state.firingSkill === card.name}
+                  firing={state.firingSkills.some((f) => f.name === card.name)}
                   onOpen={handleOpenCard}
                 />
               ))}
@@ -287,7 +291,7 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
                     card={card}
                     owned={state.marketOwned.includes(card.name)}
                     disposed={Object.values(state.marketDisposed).includes(card.id)}
-                    firing={state.firingSkill === card.name}
+                    firing={state.firingSkills.some((f) => f.name === card.name)}
                     onOpen={handleOpenCard}
                   />
                 ))}

@@ -288,7 +288,7 @@ export async function marketplaceEnv(wallet: Wallet) {
             category: input.category,
             hashtags: input.hashtags,
             price: lamports,
-          });
+          }, onProgress);
           return { ok: true, mint };
         }
         const mint = await corePublishSkill(conn, wallet, {

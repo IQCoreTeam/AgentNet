@@ -61,8 +61,13 @@ export interface State {
   rpcStatus: RpcStatus | null;
   publishResult: { ok: boolean; mint?: string; error?: string } | null;
   // Live publish progress while a multi-signature publish runs (web wallet); null when idle.
-  publishProgress: { phase: "store" | "mint" | "list"; signed: number; percent?: number } | null;
-  firingSkill: string | null; // currently casting skill name (god-mode glow)
+  publishProgress: { phase: "store" | "mint" | "list"; signed: number; percent?: number; kind: "skill" | "workflow" } | null;
+  // Kind of the in-flight/just-finished publish — outlives publishProgress so the success
+  // celebration can tint to match (skill = violet, workflow = amber). Cleared with the result.
+  publishKind: "skill" | "workflow" | null;
+  // Skills/workflows currently casting (god-mode glow). A list, not one, so a workflow and
+  // the skills it chains can stack; each is tinted by kind (workflow = amber, skill = violet).
+  firingSkills: { name: string; kind: "skill" | "workflow" }[];
   walletAddress: string | null;
   cli: Cli;
   googleLoginUrl: string | null;
@@ -149,7 +154,8 @@ const initialState: State = {
   rpcStatus: null,
   publishResult: null,
   publishProgress: null,
-  firingSkill: null,
+  publishKind: null,
+  firingSkills: [],
   currentModel: undefined,
   queuePending: 0,
   agents: [],
@@ -306,11 +312,11 @@ function reducer(state: State, ev: Action): State {
     case "usage":
       return { ...state, contextTokens: ev.contextTokens };
     case "clear":
-      return { ...state, log: [], approvals: [], typing: false, loading: false, contextTokens: undefined, firingSkill: null };
+      return { ...state, log: [], approvals: [], typing: false, loading: false, contextTokens: undefined, firingSkills: [] };
     case "message":
       return { ...state, log: appendMessage(state.log, ev.msg) };
     case "turnEnd":
-      return { ...state, typing: false, firingSkill: null };
+      return { ...state, typing: false, firingSkills: [] };
     case "page":
       return { ...state, hasMore: ev.hasMore, cursor: ev.cursor, loading: false };
     case "older":
@@ -343,7 +349,7 @@ function reducer(state: State, ev: Action): State {
     // round-trip, which left the screen on the stale chat with no feedback. The server's
     // messages/page/sessions then reconcile this.
     case "__openingSession":
-      return { ...state, activeSessionId: ev.sessionId, loading: true, log: [], typing: false, hasMore: false, firingSkill: null };
+      return { ...state, activeSessionId: ev.sessionId, loading: true, log: [], typing: false, hasMore: false, firingSkills: [] };
     case "__newChat":
       return {
         ...state,
@@ -355,7 +361,7 @@ function reducer(state: State, ev: Action): State {
         hasMore: false,
         cursor: 0,
         contextTokens: undefined,
-        firingSkill: null,
+        firingSkills: [],
       };
     case "platform":
       return { ...state, cli: ev.cli };
@@ -401,7 +407,7 @@ function reducer(state: State, ev: Action): State {
     case "__clearMarketDetail":
       return { ...state, marketDetail: null };
     case "__clearPublishResult":
-      return { ...state, publishResult: null, publishProgress: null };
+      return { ...state, publishResult: null, publishProgress: null, publishKind: null };
     case "__modelChange":
       return {
         ...state,
@@ -461,12 +467,22 @@ function reducer(state: State, ev: Action): State {
       return { ...state, marketBalance: ev.lamports };
     case "rpcStatus":
       return { ...state, rpcStatus: ev.status };
-    case "skillActive":
-      return { ...state, firingSkill: ev.name };
+    case "skillActive": {
+      // The cast name is the SKILL.md slug; a workflow we own (its card carries `type`)
+      // slugifies to the same — so match owned cards to tint workflow casts amber, skills
+      // violet. Default skill (violet) when unknown (bundled skills, not-yet-loaded cards).
+      const slugify = (s: string) =>
+        (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
+      const card = state.marketOwnedCards.find((c) => c.name === ev.name || slugify(c.name) === ev.name);
+      const kind: "skill" | "workflow" = card?.type === "workflow" ? "workflow" : "skill";
+      // Stack distinct casts (workflow + the skills it chains); cap so the strip stays short.
+      const rest = state.firingSkills.filter((f) => f.name !== ev.name);
+      return { ...state, firingSkills: [...rest, { name: ev.name, kind }].slice(-5) };
+    }
     case "publishResult":
       return { ...state, publishResult: ev, publishProgress: null };
     case "publishProgress":
-      return { ...state, publishProgress: { phase: ev.phase, signed: ev.signed, percent: ev.percent } };
+      return { ...state, publishProgress: { phase: ev.phase, signed: ev.signed, percent: ev.percent, kind: ev.kind }, publishKind: ev.kind };
     case "postNoteResult":
       return { ...state, toast: ev.ok ? "Comment posted." : `Comment failed: ${ev.error ?? "unknown"}` };
     case "workRepoRegistered":
@@ -481,7 +497,15 @@ function reducer(state: State, ev: Action): State {
     case "agentProfile":
       return { ...state, agentProfile: ev.profile };
     case "buyAllResult":
-      return { ...state, toast: ev.ok ? `Bought ${ev.bought} skills from agent.` : `Buy-all failed: ${ev.error ?? "unknown"}` };
+      return {
+        ...state,
+        toast: ev.bought > 0
+          ? `Bought ${ev.bought} skill${ev.bought === 1 ? "" : "s"}${ev.failed > 0 ? ` (${ev.failed} failed)` : ""}.`
+          : `Buy failed: ${ev.error ?? "nothing purchased"}`,
+        // Fire the same purchase card as a single buy when anything landed.
+        buyCelebrate: ev.bought > 0 ? true : state.buyCelebrate,
+        buyCelebrateLabel: ev.bought > 0 ? `${ev.bought} skill${ev.bought === 1 ? "" : "s"}` : state.buyCelebrateLabel,
+      };
     case "agentNoteResult":
       return { ...state, toast: ev.ok ? "Note posted." : `Note failed: ${ev.error ?? "unknown"}` };
     case "notes":
@@ -501,7 +525,7 @@ function reducer(state: State, ev: Action): State {
         },
       };
     case "__clearFiringSkill":
-      return { ...state, firingSkill: null };
+      return { ...state, firingSkills: [] };
     case "__clearCelebrate":
       return { ...state, buyCelebrate: false, buyCelebrateLabel: null };
     default:

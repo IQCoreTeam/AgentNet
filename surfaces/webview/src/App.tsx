@@ -76,7 +76,7 @@ export function App() {
       </div>
       <Toast />
       {state.buyCelebrate && <BuyCelebration />}
-      {publishCelebrate && <PublishCelebration onDone={() => setPublishCelebrate(false)} />}
+      {publishCelebrate && <PublishCelebration kind={state.publishKind ?? "skill"} onDone={() => setPublishCelebrate(false)} />}
     </>
   );
 }

@@ -70,6 +70,9 @@ export interface SkillMintMetadata {
   category?: string;
   hashtags?: string[];
   skillText?: string; // the SKILL.md body
+  // workflows only: prerequisite skill mints, IN PUBLISH ORDER (= the on-chain config's
+  // required_skills order). buy_item needs these to pass the buyer's skill ATAs.
+  requiredSkills?: string[];
 }
 
 /** The standard NFT JSON shape stored via code-in (skill-nft-json.md §2). */
@@ -293,7 +296,11 @@ export async function readSkillMintMetadata(
     if (!data) return base;
     const json = JSON.parse(data) as SkillJson;
     const { category, hashtags } = traitsFromAttributes(json.attributes);
-    return { ...base, description: json.description, category, hashtags, skillText: json.skillText };
+    // requiredSkill traits, in array order (publish order = on-chain config order).
+    const requiredSkills = Array.isArray(json.attributes)
+      ? json.attributes.filter((a) => a.trait_type === "requiredSkill").map((a) => a.value)
+      : [];
+    return { ...base, description: json.description, category, hashtags, skillText: json.skillText, requiredSkills: requiredSkills.length ? requiredSkills : undefined };
   } catch {
     return base; // uri unresolvable or payload not the expected JSON
   }

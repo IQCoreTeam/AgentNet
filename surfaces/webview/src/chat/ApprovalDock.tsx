@@ -186,10 +186,14 @@ function ApprovalCard({
 }) {
   const isPlan = req.kind === "plan";
   const isDanger = req.risk === "danger";
-  // ONLY the skill-publish approval gets the violet "forge" treatment (parity with the
-  // vscode webview): twinkling stars + a name/description/price body. Every other
-  // approval stays the green card.
-  const isForge = /publish_skill/.test(req.tool || "") || /publish_skill/.test(req.title || "");
+  // Skill MARKET approvals get the "forge" treatment (twinkling stars + glow). Publishing
+  // (make) glows violet with a name/description/price body; buying glows gold (the collectible
+  // accent) so acquiring a skill feels like opening a treasure. Every other approval stays green.
+  const isPublish = /publish_skill/.test(req.tool || "") || /publish_skill/.test(req.title || "");
+  const isBuy = /buy_skill/.test(req.tool || "") || /buy_skill/.test(req.title || "");
+  const isForge = isPublish || isBuy;
+  const forgeAccent = isBuy ? "var(--an-amber)" : "var(--an-violet)";
+  const buyName = req.input?.name as string | undefined;
   const forgeName = (req.input?.name as string) || "new skill";
   const forgeDesc = req.input?.description as string | undefined;
   const forgePrice = (() => {
@@ -231,7 +235,7 @@ function ApprovalCard({
     }
   }, [isForge]);
 
-  const borderColor = isDanger ? "border-red-700/60" : isForge ? "border-[var(--an-violet)]/55" : "border-emerald-700/50";
+  const borderColor = isDanger ? "border-red-700/60" : isForge ? "" : "border-emerald-700/50";
   // Near-opaque (composer-glass level) so chat content doesn't show through the card.
   const bgColor = isDanger ? "bg-red-950/95" : "bg-emerald-950/95";
 
@@ -239,15 +243,16 @@ function ApprovalCard({
     <div
       ref={cardRef}
       tabIndex={-1}
-      className={`relative overflow-hidden rounded-lg border ${borderColor} ${bgColor} text-sm outline-none ${isForge ? "skill-forge" : ""}`}
+      className={`relative overflow-hidden rounded-lg border ${borderColor} ${bgColor} text-sm outline-none ${isForge ? "skill-forge" : ""} ${isBuy ? "is-buy" : ""}`}
+      style={isForge ? { borderColor: `color-mix(in srgb, ${forgeAccent} 55%, transparent)` } : undefined}
     >
-      {isForge && <ForgeStars />}
+      {isForge && <ForgeStars accent={forgeAccent} />}
       {/* header */}
       <div className="relative z-10 flex items-center gap-2 px-3 py-1.5">
         {isDanger && (
           <span className="font-bold text-red-400">⚠ DANGER</span>
         )}
-        <span className="inline-flex items-center font-mono" style={{ color: isForge ? "var(--an-violet)" : undefined }}>
+        <span className="inline-flex items-center font-mono" style={{ color: isForge ? forgeAccent : undefined }}>
           {isPlan || isForge ? (
             <SkillIcon className="h-4 w-4" />
           ) : req.kind === "bash" ? (
@@ -258,7 +263,7 @@ function ApprovalCard({
             "✎"
           )}
         </span>
-        <span className="truncate font-medium">{isForge ? `Forge skill: ${forgeName}` : req.title || req.tool}</span>
+        <span className="truncate font-medium">{isPublish ? `Forge skill: ${forgeName}` : isBuy ? `Buy skill${buyName ? `: ${buyName}` : ""}` : req.title || req.tool}</span>
         <span className="ml-auto text-xs text-zinc-500">{req.cli}</span>
         {/* bash: edit toggle */}
         {req.kind === "bash" && req.command && (
@@ -299,8 +304,9 @@ function ApprovalCard({
       {req.file && !req.diff && (
         <div className="px-3 pb-2 font-mono text-xs text-zinc-300">{req.file}</div>
       )}
-      {isForge && (
+      {isPublish && (
         // What is being forged: name + description + price, so the approval is meaningful.
+        // (Buy has no such input — its command line already names the skill.)
         <div className="relative z-10 px-3 pb-2">
           <div className="text-[0.95rem] font-semibold text-zinc-100">{forgeName}</div>
           {forgeDesc && <div className="mt-0.5 text-xs leading-snug text-zinc-300/85">{forgeDesc}</div>}
@@ -409,7 +415,7 @@ function ApprovalCard({
 // A handful of slow violet twinkles scattered over the forge card. Positions/timing are
 // randomized once on mount so each forge card looks a little different (parity with the
 // vscode forgeStars). Decorative, never intercepts taps.
-function ForgeStars() {
+function ForgeStars({ accent = "var(--an-violet)" }: { accent?: string }) {
   const stars = useRef(
     Array.from({ length: 6 }, () => ({
       left: 8 + Math.random() * 84,
@@ -425,7 +431,7 @@ function ForgeStars() {
         <svg
           key={i}
           viewBox="0 0 24 24"
-          fill="var(--an-violet)"
+          fill={accent}
           className="forge-star absolute"
           style={{
             left: `${s.left}%`,

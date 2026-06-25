@@ -1,37 +1,43 @@
-import { useEffect, useState } from "react";
 import { SkillIcon } from "../icons";
 
-// In-chat casting marquee — ported from the vscode webview's flashSkill(): a green,
-// breathing glow bar that names the firing skill with a verb that ROTATES across
-// firings (Casting / Channeling / Wielding / Invoking). Shown above the composer while
-// state.firingSkill is set; ChatScreen clears it on turn end.
+// In-chat casting strip — ported from the vscode webview's flashSkill(): a breathing glow
+// bar that names each firing skill/workflow with a verb that ROTATES across firings
+// (Casting / Channeling / Wielding / Invoking). One row per active cast, so a workflow and
+// the skills it chains stack together; each row is tinted by kind (workflow = amber/gold,
+// skill = violet). ChatScreen clears the list on turn end.
+type Firing = { name: string; kind: "skill" | "workflow" };
+
 const VERBS = ["Casting", "Channeling", "Wielding", "Invoking"];
-let pick = 0; // module-level so the verb advances on each new firing, like vscode
-let lastProcessedSkill: string | null = null; // prevents double-increment in React StrictMode
+// Stable verb per skill name so a row keeps its verb while others join/leave. Module-level
+// so the rotation advances across firings (parity with the vscode marquee).
+const verbByName = new Map<string, string>();
+let pick = 0;
+function verbFor(name: string): string {
+  let v = verbByName.get(name);
+  if (!v) {
+    v = VERBS[pick++ % VERBS.length];
+    verbByName.set(name, v);
+  }
+  return v;
+}
 
-export function CastingMarquee({ skill }: { skill: string | null }) {
-  const [verb, setVerb] = useState(VERBS[0]);
-
-  // Advance the verb each time a NEW skill starts firing (not on every render).
-  useEffect(() => {
-    if (skill && skill !== lastProcessedSkill) {
-      setVerb(VERBS[pick++ % VERBS.length]);
-      lastProcessedSkill = skill;
-    } else if (!skill) {
-      lastProcessedSkill = null;
-    }
-  }, [skill]);
-
-  if (!skill) return null;
+export function CastingMarquee({ skills }: { skills: Firing[] }) {
+  if (!skills.length) return null;
   return (
-    <div className="px-3 pt-2">
-      <div className="casting-marquee flex items-center gap-2 rounded-xl px-3 py-2">
-        <SkillIcon className="h-4 w-4 shrink-0" style={{ color: "var(--an-green)" }} />
-        <span className="text-sm" style={{ color: "var(--an-green)" }}>
-          <span className="font-semibold">{verb}</span>{" "}
-          <span className="font-mono" style={{ color: "var(--an-fg)" }}>{skill}</span>
-        </span>
-      </div>
+    <div className="flex flex-col gap-1.5 px-3 pt-2">
+      {skills.map((s) => {
+        const accent = s.kind === "workflow" ? "var(--an-amber)" : "var(--an-violet)";
+        const cls = s.kind === "workflow" ? "is-workflow" : "is-skill";
+        return (
+          <div key={s.name} className={`casting-marquee ${cls} flex items-center gap-2 rounded-xl px-3 py-2`}>
+            <SkillIcon className="h-4 w-4 shrink-0" style={{ color: accent }} />
+            <span className="text-sm" style={{ color: accent }}>
+              <span className="font-semibold">{verbFor(s.name)}</span>{" "}
+              <span className="font-mono" style={{ color: "var(--an-fg)" }}>{s.name}</span>
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

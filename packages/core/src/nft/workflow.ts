@@ -14,6 +14,7 @@ import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
 
 import { codeIn, signerAddress, ensureDbRoot } from "../core/chain.js";
 import { getWorkflowsCollectionMint } from "../core/seed.js";
+import { trackSignatures, type PublishProgress } from "./skill.js";
 import { createSkillMint } from "./token2022.js";
 import { checkWorkflowFormat, FormatError } from "./checkFormat.js";
 import {
@@ -41,13 +42,22 @@ export async function publishWorkflow(
   conn: Connection,
   signer: SignerInput,
   input: PublishWorkflowInput,
+  onProgress?: (p: PublishProgress) => void,
 ): Promise<string> {
   const format = checkWorkflowFormat(input.text);
   if (!format.ok) {
     throw new FormatError(format.errors);
   }
 
-  await ensureDbRoot(signer);
+  // Same signature-counting gauge as publishSkill, tagged "workflow" so the UI tints it
+  // amber instead of violet. `phase` is updated before each on-chain stage.
+  let phase: PublishProgress["phase"] = "store";
+  let signed = 0;
+  const tx = onProgress
+    ? trackSignatures(signer, () => { signed += 1; onProgress({ phase, signed, kind: "workflow" }); })
+    : signer;
+
+  await ensureDbRoot(tx);
 
   // code-in the standard NFT JSON (skill-nft-json.md §2, §4b): same shape as a
   // skill — category once, each hashtag a repeated "skill" trait — plus one
@@ -63,7 +73,14 @@ export async function publishWorkflow(
     attributes,
     skillText: input.text,
   });
-  const workflowTxid = await codeIn(signer, workflowJson, `${input.name}.json`, "application/json");
+  phase = "store";
+  const workflowTxid = await codeIn(
+    tx,
+    workflowJson,
+    `${input.name}.json`,
+    "application/json",
+    onProgress ? (percent) => onProgress({ phase: "store", signed, percent, kind: "workflow" }) : undefined,
+  );
 
   // Pre-generate the mint so we know its address → derive the gate PDA that will
   // OWN the mint authority. Only the gate program can then mint this workflow.
@@ -77,7 +94,9 @@ export async function publishWorkflow(
   if (!collectionStr) throw new Error("Workflows collection mint is not configured");
   const collectionMint = new PublicKey(collectionStr);
 
-  await createSkillMint(conn, signer, {
+  phase = "mint";
+  if (onProgress) onProgress({ phase, signed, kind: "workflow" });
+  await createSkillMint(conn, tx, {
     name: input.name,
     symbol: input.name.substring(0, 8).toUpperCase(),
     uri: workflowTxid, // points at the JSON above (traits live there, not on the mint)
@@ -89,7 +108,7 @@ export async function publishWorkflow(
   // Register the prerequisites on-chain (config PDA) AND self-mint the first copy
   // to the creator (supply 0 -> 1), so its ATA must exist first. The program
   // verifies each required skill is an official-collection member, no duplicates.
-  const creator = new PublicKey(await signerAddress(signer));
+  const creator = new PublicKey(await signerAddress(tx));
   const creatorAta = getAssociatedTokenAddressSync(workflowMint, creator, false, TOKEN_2022_PROGRAM_ID);
   const ataIx = createAssociatedTokenAccountInstruction(creator, creatorAta, creator, workflowMint, TOKEN_2022_PROGRAM_ID);
   const ix = publishItemIx({
@@ -99,7 +118,9 @@ export async function publishWorkflow(
     price: input.price ?? 0n,
     group: collectionMint, // workflows collection — publish_item enrolls the mint
   });
-  await sendTx(conn, signer, [ataIx, ix]);
+  phase = "list";
+  if (onProgress) onProgress({ phase, signed, kind: "workflow" });
+  await sendTx(conn, tx, [ataIx, ix]);
 
   return workflowMint.toBase58();
 }

@@ -759,11 +759,29 @@ html[data-keyboard="open"] .an-chat-float { bottom: 0; }
   to   { opacity: 1; transform: translateY(0); }
 }
 .casting-marquee {
-  /* Opaque surface (was --an-green-dim at 10%, so chat showed through); keep a green tint
-     and let skill-breath supply the glow. */
+  /* Opaque surface (was --an-green-dim at 10%, so chat showed through). Tinted per kind:
+     a skill casts violet, a workflow casts amber/gold (the collectible accent). */
   background: color-mix(in srgb, var(--an-bg-1) 85%, var(--an-green));
   border: 1px solid var(--an-green-line);
   animation: casting-in 180ms ease-out, skill-breath 1.4s ease-in-out infinite;
+}
+.casting-marquee.is-skill {
+  background: color-mix(in srgb, var(--an-bg-1) 85%, var(--an-violet));
+  border-color: color-mix(in srgb, var(--an-violet) 42%, transparent);
+  animation: casting-in 180ms ease-out, casting-breath-violet 1.4s ease-in-out infinite;
+}
+.casting-marquee.is-workflow {
+  background: color-mix(in srgb, var(--an-bg-1) 85%, var(--an-amber));
+  border-color: color-mix(in srgb, var(--an-amber) 42%, transparent);
+  animation: casting-in 180ms ease-out, casting-breath-amber 1.4s ease-in-out infinite;
+}
+@keyframes casting-breath-violet {
+  0%, 100% { box-shadow: 0 0 8px 2px rgba(169, 139, 255, 0.16); }
+  50%      { box-shadow: 0 0 22px 6px rgba(169, 139, 255, 0.42); }
+}
+@keyframes casting-breath-amber {
+  0%, 100% { box-shadow: 0 0 8px 2px rgba(224, 162, 58, 0.16); }
+  50%      { box-shadow: 0 0 22px 6px rgba(224, 162, 58, 0.42); }
 }
 
 /* Forge (publish_skill) approval card — a slow violet glow + twinkling stars. */
@@ -777,6 +795,13 @@ html[data-keyboard="open"] .an-chat-float { bottom: 0; }
 }
 .skill-forge { animation: forge-glow 3.2s ease-in-out infinite; }
 .forge-star  { animation-name: forge-twinkle; animation-iteration-count: infinite; animation-timing-function: ease-in-out; }
+
+/* gold variant of the forge glow, for the BUY approval (the collectible accent) */
+@keyframes forge-glow-amber {
+  0%, 100% { box-shadow: 0 0 10px 1px rgba(224, 162, 58, 0.16); }
+  50%      { box-shadow: 0 0 22px 4px rgba(224, 162, 58, 0.34); }
+}
+.skill-forge.is-buy { animation: forge-glow-amber 3.2s ease-in-out infinite; }
 
 /* Assistant typing indicator — dots rise and brighten in a soft wave (replaces the flat
    triple opacity-pulse, which read as static). */

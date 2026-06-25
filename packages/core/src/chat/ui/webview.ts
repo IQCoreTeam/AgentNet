@@ -35,6 +35,9 @@ function markdownLibs(): string {
 // as SVG instead of an emoji so it matches the UI weight and themes cleanly.
 const WAND_SVG = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l7-7"/><path d="M9.5 4.5l2 2"/><path d="M12.5 2v2M14.5 3.5h-2M13 6.2l1 .4M12.6 1.2l.4 1"/></svg>';
 const PAPERCLIP_SVG = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 6.5l-5.6 5.6a2.5 2.5 0 0 1-3.5-3.5L9 3a1.7 1.7 0 0 1 2.4 2.4l-5.4 5.4a0.85 0.85 0 0 1-1.2-1.2l5-5"/></svg>';
+// A stacked-layers glyph — the workflow affordance (a workflow composes several skills),
+// distinct from the single-skill wand so workflows read as "crafted/composite" at a glance.
+const LAYERS_SVG = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.8l5.8 3L8 7.8 2.2 4.8 8 1.8z"/><path d="M2.2 8L8 11l5.8-3"/><path d="M2.2 11.2L8 14.2l5.8-3"/></svg>';
 const MODEL_OPTIONS_JSON = JSON.stringify(CHAT_MODEL_OPTIONS);
 const SLASH_COMMANDS_JSON = JSON.stringify(CHAT_SLASH_COMMANDS);
 
@@ -461,6 +464,22 @@ export function chatHtml(): string {
     0%,100% { transform: scale(0.6); opacity:0; }
     50%     { transform: scale(1);   opacity:0.55; }
   }
+  /* gold variant of the forge, for the BUY approval — same shape, amber accent (collectible) */
+  .approvalCard.skillForge.buyForge {
+    border-color: color-mix(in srgb, var(--an-amber) 42%, transparent);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--an-amber) 12%, transparent), transparent 64%),
+      var(--vscode-editor-background, #15161c);
+    animation: forgeGlowBuy 4.5s ease-in-out infinite;
+  }
+  @keyframes forgeGlowBuy {
+    0%,100% { box-shadow: 0 4px 18px rgba(0,0,0,0.30), 0 0 0 1px color-mix(in srgb, var(--an-amber) 18%, transparent); }
+    50%     { box-shadow: 0 4px 22px rgba(0,0,0,0.30), 0 0 14px -4px color-mix(in srgb, var(--an-amber) 42%, transparent); }
+  }
+  .approvalCard.skillForge.buyForge .apk { color: var(--an-amber); }
+  .approvalCard.skillForge.buyForge .forgeStars .st { color: var(--an-amber); }
+  .approvalCard.skillForge.buyForge .apBody,
+  .approvalCard.skillForge.buyForge .apActions { border-top-color: color-mix(in srgb, var(--an-amber) 22%, transparent); }
   @media (prefers-reduced-motion: reduce) {
     .approvalCard.skillForge { animation: none; }
     .forgeStars { display:none; }
@@ -683,6 +702,19 @@ export function chatHtml(): string {
   /* a card body is clickable (opens detail); the Buy button stops propagation */
   .mktCard .mc-main { cursor: pointer; }
   .mktCard .mc-main:hover .mc-name { color: var(--an-green); }
+  /* Workflow cards read as "crafted/composite": gold frame + gold icon tile + a WORKFLOW
+     badge with the count of skills it chains — matching the mobile collectible language. */
+  .mktCard.workflow { border-color: #c8922e; background: linear-gradient(135deg, var(--an-bg), color-mix(in srgb, #e0a23a 7%, var(--an-bg))); }
+  .mktCard.workflow .mc-img { background: color-mix(in srgb, #e0a23a 18%, transparent); }
+  .mktCard.workflow .mc-img .wand { color: #e0a23a; }
+  .mktCard.workflow .mc-name:hover, .mktCard.workflow .mc-main:hover .mc-name { color: #e0a23a; }
+  .mc-wf { display: inline-flex; align-items: center; gap: 4px; font-size: 0.62em; font-weight: 700;
+           letter-spacing: 0.05em; text-transform: uppercase; color: #e0a23a;
+           background: color-mix(in srgb, #e0a23a 14%, transparent); border: 1px solid #c8922e55;
+           border-radius: 999px; padding: 1px 7px; margin-bottom: 3px; width: fit-content; }
+  #mktDetailBody .dt-img.workflow { background: color-mix(in srgb, #e0a23a 18%, transparent); }
+  #mktDetailBody .dt-img.workflow .wand { color: #e0a23a; }
+  #mktDetailBody .dt-kind.workflow { color: #e0a23a; opacity: 1; }
   /* Skills / Workflows segmented tabs */
   .mktTabs { display: inline-flex; gap: 2px; padding: 2px; margin-bottom: 12px;
              background: var(--an-bg); border: 1px solid var(--an-line); border-radius: 999px; }
@@ -2334,11 +2366,16 @@ export function chatHtml(): string {
   function renderApproval(req) {
     const card = document.createElement('div');
     card.className = 'approvalCard';
-    // ONLY the skill-publish approval gets the "forge" treatment — a violet-tinted card
-    // with a soft glow + a few slow twinkles. Every other approval stays the green card.
+    // Skill MARKET approvals get the "forge" treatment — a tinted card with a soft glow +
+    // a few slow twinkles. Publishing (make) glows violet; buying glows gold (the collectible
+    // accent), so acquiring a skill feels like opening a treasure. Every other approval stays
+    // the green card.
     const isPublish = /publish_skill/.test(req.tool || '') || /publish_skill/.test(req.title || '');
-    if (isPublish) {
+    const isBuy = /buy_skill/.test(req.tool || '') || /buy_skill/.test(req.title || '');
+    const isForge = isPublish || isBuy;
+    if (isForge) {
       card.classList.add('skillForge');
+      if (isBuy) card.classList.add('buyForge'); // gold variant
       const stars = document.createElement('div'); stars.className = 'forgeStars';
       for (let i = 0; i < 6; i++) {
         const s = document.createElement('span'); s.className = 'st'; s.innerHTML = '<svg class="anic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2 14.4 9.6 22 12 14.4 14.4 12 22 9.6 14.4 2 12 9.6 9.6Z"/></svg>';
@@ -2464,14 +2501,16 @@ export function chatHtml(): string {
     const glyphEl = document.createElement('span'); glyphEl.className = 'apk';
     var skSvg = '<svg class="anic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2 14.4 9.6 22 12 14.4 14.4 12 22 9.6 14.4 2 12 9.6 9.6Z"/></svg>';
     var rdSvg = '<svg class="anic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h7l5 5v13H6Z"/><path d="M13 3v5h5"/><path d="M9 13h6M9 16.5h6"/></svg>';
-    glyphEl.innerHTML = req.kind === 'bash' ? '$' : req.kind === 'read' ? rdSvg : isPlan ? skSvg : isPublish ? skSvg : '✎';
+    glyphEl.innerHTML = req.kind === 'bash' ? '$' : req.kind === 'read' ? rdSvg : isPlan ? skSvg : isForge ? skSvg : '✎';
     head.appendChild(glyphEl);
     if (isDanger) {
       const warn = document.createElement('span'); warn.style.cssText = 'color:var(--vscode-errorForeground,#f44);font-weight:700;margin-right:4px';
       warn.innerHTML = '<svg class="anic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 21 19.5H3L12 3.5Z"/><path d="M12 10v4"/><path d="M12 17h.01"/></svg> DANGER ·'; head.appendChild(warn);
     }
     const ttl = document.createElement('span'); ttl.className = 'apTitle';
-    ttl.textContent = isPublish ? ('Forge skill: ' + ((req.input && req.input.name) || 'new skill')) : (req.title || req.tool);
+    ttl.textContent = isPublish ? ('Forge skill: ' + ((req.input && req.input.name) || 'new skill'))
+      : isBuy ? ('Buy skill' + ((req.input && req.input.name) ? (': ' + req.input.name) : ''))
+      : (req.title || req.tool);
     head.appendChild(ttl);
     const tag = document.createElement('span'); tag.className = 'apTag'; tag.textContent = req.cli;
     head.appendChild(tag);
@@ -3916,11 +3955,12 @@ export function chatHtml(): string {
     currentDetail = { id: c.id, type: c.type };
     mktDetailBody.innerHTML = '';
     // head: icon + name + kind
+    const isWf = c.type === 'workflow';
     const head = document.createElement('div'); head.className = 'dt-head';
-    const img = document.createElement('div'); img.className = 'dt-img';
-    img.innerHTML = '<span class="wand">' + ${JSON.stringify(IQ_LOGO_SVG)} + '</span>';
+    const img = document.createElement('div'); img.className = isWf ? 'dt-img workflow' : 'dt-img';
+    img.innerHTML = '<span class="wand">' + (isWf ? ${JSON.stringify(LAYERS_SVG)} : ${JSON.stringify(IQ_LOGO_SVG)}) + '</span>';
     const htxt = document.createElement('div');
-    const kind = document.createElement('div'); kind.className = 'dt-kind'; kind.textContent = (c.type || 'skill');
+    const kind = document.createElement('div'); kind.className = isWf ? 'dt-kind workflow' : 'dt-kind'; kind.textContent = (c.type || 'skill');
     const nm = document.createElement('div'); nm.className = 'dt-name'; nm.textContent = c.name || c.id || '';
     htxt.appendChild(kind); htxt.appendChild(nm);
     head.appendChild(img); head.appendChild(htxt);
@@ -4002,10 +4042,18 @@ export function chatHtml(): string {
     }
     for (const r of results) {
       const owned = ownedSkills.indexOf(r.name) >= 0;
-      const card = document.createElement('div'); card.className = 'mktCard';
+      const isWf = r.type === 'workflow';
+      const wfCount = (r.requiredSkills || []).length;
+      const card = document.createElement('div'); card.className = isWf ? 'mktCard workflow' : 'mktCard';
       const img = document.createElement('div'); img.className = 'mc-img';
-      img.innerHTML = '<span class="wand">' + ${JSON.stringify(IQ_LOGO_SVG)} + '</span>';
+      // workflow = stacked-layers glyph (composite); skill = the IQ wand.
+      img.innerHTML = '<span class="wand">' + (isWf ? ${JSON.stringify(LAYERS_SVG)} : ${JSON.stringify(IQ_LOGO_SVG)}) + '</span>';
       const main = document.createElement('div'); main.className = 'mc-main';
+      if (isWf) {
+        const badge = document.createElement('span'); badge.className = 'mc-wf';
+        badge.textContent = wfCount ? ('Workflow \\u00b7 ' + wfCount + ' skills') : 'Workflow';
+        main.appendChild(badge);
+      }
       const nm = document.createElement('div'); nm.className = 'mc-name'; nm.textContent = r.name || r.id;
       const ds = document.createElement('div'); ds.className = 'mc-desc'; ds.textContent = r.description || '';
       main.appendChild(nm); main.appendChild(ds);

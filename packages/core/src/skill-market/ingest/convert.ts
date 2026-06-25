@@ -58,21 +58,48 @@ function normalizeFrontmatter(body: string): string {
 }
 
 /**
+ * A workflow's SKILL.md must tell the agent it ISN'T a plain skill: it's a composite
+ * that orchestrates the skills it was built from (the buy gate guarantees those skills
+ * are owned, so they're installed as their own SKILL.md entries too). Without this note
+ * a workflow reads as just another skill and the agent never chains its parts. Appended
+ * to the body (loaded on demand) so it's there whether or not the publisher authored
+ * their own frontmatter. `names` are the constituent skills' display names (caller
+ * resolves them; falls back to short mint ids).
+ */
+function workflowNote(names: string[]): string {
+  return [
+    "",
+    "## Workflow",
+    "This is a workflow, not a single skill: it combines the skills below, which you already",
+    "have installed. Use them together to carry out the task this workflow is for.",
+    "",
+    ...names.map((n) => `- ${n}`),
+    "",
+  ].join("\n");
+}
+
+/**
  * Render an NFT skill's metadata to SKILL.md text. Required frontmatter (`name`,
  * `description`) is always present; `category` becomes a single trait line and each
  * hashtag a repeated one (the same standard attributes shape we store on-chain). If
  * the body already carries frontmatter, it's returned untouched (the publisher owns
  * the full SKILL.md). `name`/`description` fall back so the file is always valid.
+ *
+ * `requiredSkillNames` (non-empty ⇒ this mint is a workflow) appends a Workflow note and
+ * labels the description so the agent both lists it as a workflow and knows what it chains.
  */
-export function toSkillMd(meta: SkillMintMetadata, mint: string): string {
+export function toSkillMd(meta: SkillMintMetadata, mint: string, requiredSkillNames?: string[]): string {
+  const isWorkflow = !!(requiredSkillNames && requiredSkillNames.length);
+  const note = isWorkflow ? workflowNote(requiredSkillNames!) : "";
   const body = (meta.skillText ?? "").trim();
-  if (hasFrontmatter(body)) return `${normalizeFrontmatter(body)}\n`;
+  if (hasFrontmatter(body)) return `${normalizeFrontmatter(body)}${note}\n`;
 
   const name = skillSlug(meta, mint);
-  const description = meta.description || meta.name || name;
+  const baseDesc = meta.description || meta.name || name;
+  const description = isWorkflow ? `Workflow combining ${requiredSkillNames!.length} skills. ${baseDesc}` : baseDesc;
   const lines = [`name: ${name}`, `description: ${yamlScalar(description)}`];
   if (meta.category) lines.push(`category: ${yamlScalar(meta.category)}`);
   for (const tag of meta.hashtags ?? []) lines.push(`skill: ${yamlScalar(tag)}`);
 
-  return `---\n${lines.join("\n")}\n---\n\n${body || `# ${meta.name || name}`}\n`;
+  return `---\n${lines.join("\n")}\n---\n\n${body || `# ${meta.name || name}`}${note}\n`;
 }
