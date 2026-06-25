@@ -10,7 +10,6 @@ import { SessionStore } from "../account/store.js";
 import { prepareResume } from "./inject/index.js";
 import { getDeviceProfile, buildDeviceNotice } from "../core/device.js";
 import { MemorySync, updateSkillsSection } from "../memory/index.js";
-import { getSkillShopping } from "../account/login.js";
 import { setSkillShoppingActive } from "../skill-market/passive.js";
 import { createAgentSdkMcpServer, newVerifyGuard, agentNetAllowedTools, AGENTNET_MCP_SERVER } from "../skill-market/index.js";
 import { resolveRpcUrl, hasDasRpc, loadGithubToken } from "../core/rpc.js";
@@ -41,16 +40,18 @@ async function buildPassiveSpawn(
   cli: "claude" | "codex",
   wallet: Wallet,
 ): Promise<{ mcpServers?: Record<string, unknown>; allowedTools?: string[]; codexMcp?: { name: string; command: string; args: string[] } }> {
-  const on = await getSkillShopping().catch(() => true);
+  // Skill-shopping is a BUILT-IN now: always on and hidden from the UI toggle. Every spawn
+  // (re)installs the bundled skill so a fresh install on ANY surface (mobile/cli/vscode) has
+  // it by default — no user opt-in. (The marketplace MCP tools below still require Claude +
+  // a DAS RPC key; this only removes the on/off gate.)
+  const on = true;
 
-  // Move the bundled skill into / out of the scanned skills dirs (both engines).
+  // Ensure the bundled skill is present in the scanned skills dirs (both engines).
   try {
     await setSkillShoppingActive(on);
   } catch (e) {
-    console.warn("[skill-shopping] toggle install failed:", e);
+    console.warn("[skill-shopping] install failed:", e);
   }
-
-  if (!on) return {};
 
   // Codex (Phase 1): a separate `node <entry>` stdio MCP server, read-only. Needs the
   // surface to have bundled the entry (AGENTNET_MCP_STDIO) AND a readable catalog (DAS).
@@ -63,13 +64,10 @@ async function buildPassiveSpawn(
     return { codexMcp: { name: AGENTNET_MCP_SERVER, command: "node", args: [entry] } };
   }
 
-  // Claude + ON: wire the marketplace MCP tools (search → verify → buy) with a per-spawn
-  // verify guard. Use the SAME RPC resolution as the rest of the app (resolveRpcUrl: a
-  // stored Helius key — probed for liveness — beats env beats the public default), so a key
-  // set in the UI powers the agent's tools too, not just env vars. Still gate on hasDasRpc:
-  // without a key or explicit env RPC the catalog read (search_skills) is empty, so leave
-  // the tools off rather than wire a market the agent can't read.
-  if (!(await hasDasRpc())) return {};
+  // Claude: wire the marketplace MCP tools (search → verify → buy). NO Helius-key gate —
+  // search_skills falls back to the INDEXER when no key is set (the catalog is readable
+  // without DAS; see its handler), and verify/buy/publish use `conn` (resolveRpcUrl, which
+  // falls back to the public RPC) directly. A stored Helius key still upgrades search to DAS.
   const conn = new Connection(await resolveRpcUrl(), "confirmed");
   const server = createAgentSdkMcpServer(conn, wallet, wallet.address, newVerifyGuard());
   return { mcpServers: { [AGENTNET_MCP_SERVER]: server }, allowedTools: agentNetAllowedTools() };

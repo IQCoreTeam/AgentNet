@@ -30,7 +30,9 @@ import { publishSkill } from "../nft/skill.js";
 import { readSkillText } from "../nft/token2022.js";
 import { SkillSync } from "./ingest/index.js";
 import { postNote, postAgentNote } from "../notes/notes.js";
-import { getSkillsCollectionMint, getWorkflowsCollectionMint } from "../core/seed.js";
+import { getSkillsCollectionMint, getWorkflowsCollectionMint, getIndexerUrl } from "../core/seed.js";
+import { indexerSource } from "../core/skillSource.js";
+import { loadHeliusKey } from "../core/rpc.js";
 import { signerAddress } from "../core/chain.js";
 import { scanSkillText } from "./scan.js";
 import { VERIFY_RUBRIC } from "./rubric.js";
@@ -273,7 +275,14 @@ export async function handleToolCall(
     const keyword = args?.keyword as string | undefined;
     const category = args?.category as string | undefined;
     const typeFilter = args?.type as "skill" | "workflow" | undefined;
-    const skills = await searchSkills(conn, { filters: { keyword, category, type: typeFilter } });
+    // Helius key present → keep the DAS path (search.ts default source). No key → read the
+    // catalog from the INDEXER, which needs no DAS key, so search works out of the box.
+    // (verify/buy/publish don't scan the catalog — they use `conn` directly.)
+    let source;
+    if (!(await loadHeliusKey())) {
+      try { source = indexerSource(getIndexerUrl()); } catch { source = undefined; }
+    }
+    const skills = await searchSkills(conn, { filters: { keyword, category, type: typeFilter }, source });
     if (skills.length === 0) return { content: [{ type: "text", text: "No matching skills found." }] };
     const formatted = skills
       .map((s) => `- ID: ${s.id}\n  Name: ${s.name}\n  Type: ${s.type ?? "skill"}\n  Category: ${s.category}\n  Creator: ${s.creator}\n  Description: ${s.description}`)

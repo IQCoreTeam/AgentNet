@@ -751,7 +751,9 @@ html[data-keyboard="open"] .an-chat-float { bottom: 0; }
   to   { opacity: 1; transform: translateY(0); }
 }
 .casting-marquee {
-  background: var(--an-green-dim);
+  /* Opaque surface (was --an-green-dim at 10%, so chat showed through); keep a green tint
+     and let skill-breath supply the glow. */
+  background: color-mix(in srgb, var(--an-bg-1) 85%, var(--an-green));
   border: 1px solid var(--an-green-line);
   animation: casting-in 180ms ease-out, skill-breath 1.4s ease-in-out infinite;
 }
