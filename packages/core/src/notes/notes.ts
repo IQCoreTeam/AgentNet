@@ -29,17 +29,22 @@ interface StoredNote {
   id: string;
   author: string;
   text: string;
+  title?: string;
   gitLink?: string;
+  image?: string;
   timestamp: number;
   meta?: Record<string, unknown>;
 }
 
-/** Build the trimmed row + a collision-resistant id (author:ts:nonce). */
+/** Build the trimmed row + a collision-resistant id (author:ts:nonce). Optional fields
+ *  (title/gitLink/image/meta) are only written when present, so old + new rows coexist. */
 function buildNote(
   author: string,
   text: string,
   gitLink?: string,
   meta?: Record<string, unknown>,
+  title?: string,
+  image?: string,
 ): StoredNote {
   const nonce = Math.random().toString(36).slice(2, 8);
   const row: StoredNote = {
@@ -48,7 +53,9 @@ function buildNote(
     text,
     timestamp: Date.now(),
   };
+  if (title !== undefined) row.title = title;
   if (gitLink !== undefined) row.gitLink = gitLink;
+  if (image !== undefined) row.image = image;
   if (meta !== undefined) row.meta = meta;
   return row;
 }
@@ -68,7 +75,9 @@ export interface PostNoteInput {
   collectionId: string; // umbrella collection mint (skills / workflows / …)
   skillId: string; // item NFT mint address (= the table subject, under the collection)
   text: string;
+  title?: string;
   gitLink?: string;
+  image?: string;
   meta?: Record<string, unknown>;
 }
 
@@ -104,7 +113,7 @@ export async function postNote(
   }
 
   const hint = reviewsHint(input.collectionId, input.skillId);
-  const note = buildNote(author, input.text, input.gitLink, input.meta);
+  const note = buildNote(author, input.text, input.gitLink, input.meta, input.title, input.image);
 
   // Open table (no native gate — see the Token-2022 incompatibility above).
   await ensureTable(signer, hint, REVIEW_COLUMNS, "id");
@@ -131,7 +140,9 @@ export async function readNotes(
 export interface PostAgentNoteInput {
   agentWallet: string; // subject — the agent's wallet (the reviews:agent:[agentWallet] table key)
   text: string;
+  title?: string;
   gitLink?: string;
+  image?: string;
   meta?: Record<string, unknown>;
   /** Skill source to enumerate the agent's skills for the comment gate. */
   source?: SkillSource;
@@ -180,7 +191,7 @@ export async function postAgentNote(
   }
 
   const hint = reviewsAgentHint(input.agentWallet);
-  const note = buildNote(author, input.text, input.gitLink, input.meta);
+  const note = buildNote(author, input.text, input.gitLink, input.meta, input.title, input.image);
 
   // Open table (no native gate — see the module header).
   await ensureTable(signer, hint, REVIEW_COLUMNS, "id");

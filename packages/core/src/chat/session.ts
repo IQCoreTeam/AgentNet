@@ -71,7 +71,7 @@ export interface ChatEnv {
   listAgents?(): Promise<import("./marketMessages.js").Reputation[]>;
   getAgentProfile?(wallet: string): Promise<import("./marketMessages.js").AgentProfile>;
   buyAllSkills?(wallet: string): Promise<{ ok: boolean; bought: number; failed: number; error?: string }>;
-  postAgentNote?(agentWallet: string, text: string, gitLink?: string): Promise<{ ok: boolean; notes?: import("./marketMessages.js").Note[]; error?: string }>;
+  postAgentNote?(agentWallet: string, text: string, gitLink?: string, title?: string, image?: string): Promise<{ ok: boolean; notes?: import("./marketMessages.js").Note[]; error?: string }>;
   solBalance?(): Promise<number | null>; // wallet's native SOL balance (lamports), for the UI funds display
   // make-skill: publish a new skill from the UI. priceSol is the human SOL string; the
   // host converts to lamports and calls core publishSkill. Returns the new mint on success.
@@ -641,7 +641,7 @@ export function createChatSession(
       case "postAgentNote": {
         const req = m as Extract<MarketRequest, { type: "postAgentNote" }>;
         if (!env.postAgentNote) break; // another handler owns this on some surfaces — don't emit a phantom failure
-        const res = await env.postAgentNote(req.agentWallet, req.text, req.gitLink);
+        const res = await env.postAgentNote(req.agentWallet, req.text, req.gitLink, req.title, req.image);
         sendMarket({ type: "agentNoteResult", agentWallet: req.agentWallet, ok: res.ok, error: res.ok ? undefined : (res as { ok: false; error?: string }).error });
         if (res.ok && env.getAgentProfile) {
           // re-push refreshed profile so blog updates without a manual reload

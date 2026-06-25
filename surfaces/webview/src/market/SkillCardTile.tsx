@@ -1,5 +1,6 @@
 import type { SkillCard } from "../transport/protocol";
 import { SkillIcon, CollectionIcon } from "../icons";
+import { mediaUrl } from "./mediaUrl";
 
 interface Props {
   card: SkillCard;
@@ -17,6 +18,7 @@ export function SkillCardTile({ card, owned, disposed, firing, onOpen }: Props) 
   const priceSol = card.price ? (Number(card.price) / 1_000_000_000).toFixed(3) : null;
   const isWorkflow = card.type === "workflow";
   const reqCount = card.requiredSkills?.length ?? 0;
+  const cover = mediaUrl(card.image);
   return (
     <button
       onClick={() => onOpen(card)}
@@ -31,8 +33,8 @@ export function SkillCardTile({ card, owned, disposed, firing, onOpen }: Props) 
       ].join(" ")}
     >
       <div className="flex items-start gap-2">
-        {card.image ? (
-          <img src={card.image} alt="" referrerPolicy="no-referrer" className={`h-10 w-10 rounded-lg object-cover shrink-0 ${isWorkflow ? "ring-1 ring-amber-500/50" : ""}`} />
+        {cover ? (
+          <img src={cover} alt="" referrerPolicy="no-referrer" className={`h-10 w-10 rounded-lg object-cover shrink-0 ${isWorkflow ? "ring-1 ring-amber-500/50" : ""}`} />
         ) : (
           <div className={`h-10 w-10 rounded-lg shrink-0 flex items-center justify-center ${isWorkflow ? "bg-amber-500/15 text-amber-300" : "bg-zinc-800 text-zinc-400"}`}>
             {isWorkflow ? <CollectionIcon className="h-5 w-5" /> : <SkillIcon className={firing ? "h-5 w-5 text-green-400" : "h-5 w-5"} />}
