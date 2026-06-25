@@ -552,7 +552,7 @@ export function Chat({
             lines.push(`engine    claude`);
             lines.push(`auth      subscription`);
           }
-          const win = chat.cli === "codex" ? 256_000 : 200_000;
+          const win = chat.contextWindow ?? (chat.cli === "codex" ? 256_000 : 200_000);
           const used = chat.contextTokens ?? Math.round(chat.messages.reduce((n, m) => n + m.text.length, 0) / 4);
           lines.push(`model     ${chat.model ?? "default"}`);
           lines.push(`ctx used  ${used.toLocaleString()} / ${win.toLocaleString()} tokens`);
@@ -590,7 +590,7 @@ export function Chat({
   const mood: Mood = eggMood ?? (pendingApproval ? "tool" : chat.busy ? "thinking" : idle ? "sleeping" : "idle");
   // context-left: prefer the engine's REAL per-turn usage; before the first turn reports,
   // fall back to a rough chars/4 estimate so the meter isn't blank.
-  const WINDOW = chat.cli === "codex" ? 256_000 : 200_000;
+  const WINDOW = chat.contextWindow ?? (chat.cli === "codex" ? 256_000 : 200_000);
   // Only fall back to char-count estimate when there are actual messages — otherwise
   // the bar shows 0/200k on every fresh session which is meaningless noise.
   const usedTokens =

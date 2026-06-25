@@ -100,9 +100,12 @@ export interface SessionHandle {
   onMessage(cb: (msg: ChatMessage) => void): void; // CLI output (UI renders)
   onTurnEnd(cb: () => void): void; // turn finished (runtime auto-saves here)
   onSkill(cb: (name: string) => void): void; // a skill fired → UI "Casting <skill>" cue
-  // real context-window occupancy (tokens) reported by the engine each turn. Optional
-  // for the UI to use (e.g. a context-left meter); surfaces may ignore it.
-  onUsage(cb: (contextTokens: number) => void): void;
+  // real context-window occupancy (tokens) reported by the engine each turn, plus the
+  // model's window size (contextWindow) when known — so the UI can render a percentage
+  // meter, not just a raw count. Optional for the UI to use; surfaces may ignore it.
+  onUsage(cb: (contextTokens: number, contextWindow?: number) => void): void;
+  // the engine compacted the conversation (history summarized to reclaim context).
+  onCompact(cb: () => void): void;
   // interrupt the CURRENT turn but keep the session alive (claude q.interrupt / codex
   // turn/interrupt) — the next send continues the same conversation. Distinct from
   // stop(), which tears the whole handle down.

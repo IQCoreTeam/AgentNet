@@ -102,6 +102,7 @@ export interface State {
   buyCelebrate: boolean;
   buyCelebrateLabel: string | null; // bought skill's slug/name for the purchase card
   contextTokens?: number;
+  contextWindow?: number;
   currentModel?: string;
   queuePending: number;
   agents: Reputation[];
@@ -310,9 +311,15 @@ function reducer(state: State, ev: Action): State {
         ? { ...state, cli: "codex", phase: "chat", cliReport: state.cliReport ? { ...state.cliReport, codex: "ok" } : state.cliReport, codexLoginUrl: null, codexLoginCode: null, codexLoginError: null }
         : { ...state, codexLoginUrl: null, codexLoginCode: null, codexLoginError: ev.error ?? "Login failed." };
     case "usage":
-      return { ...state, contextTokens: ev.contextTokens };
+      return {
+        ...state,
+        contextTokens: ev.contextTokens,
+        contextWindow: ev.contextWindow ?? state.contextWindow,
+      };
+    case "compacted":
+      return { ...state, contextTokens: undefined, toast: "Context compacted — conversation history summarised to free space." };
     case "clear":
-      return { ...state, log: [], approvals: [], typing: false, loading: false, contextTokens: undefined, firingSkills: [] };
+      return { ...state, log: [], approvals: [], typing: false, loading: false, contextTokens: undefined, contextWindow: undefined, firingSkills: [] };
     case "message":
       return { ...state, log: appendMessage(state.log, ev.msg) };
     case "turnEnd":
@@ -361,6 +368,7 @@ function reducer(state: State, ev: Action): State {
         hasMore: false,
         cursor: 0,
         contextTokens: undefined,
+        contextWindow: undefined,
         firingSkills: [],
       };
     case "platform":
@@ -381,9 +389,11 @@ function reducer(state: State, ev: Action): State {
       return { ...state, toast: ev.text };
     case "status": {
       const s = ev.status;
+      const win = state.contextWindow ?? (s.cli === "codex" ? 256_000 : 200_000);
+      const fmtK = (n: number) => n >= 1000 ? Math.round(n / 1000) + "k" : String(n);
       const ctx = s.contextTokens === undefined
         ? ""
-        : `, ctx ${s.contextTokens >= 1000 ? Math.round(s.contextTokens / 1000) + "k" : s.contextTokens}`;
+        : `, ctx ${fmtK(s.contextTokens)} / ${fmtK(win)} (${Math.round((s.contextTokens / win) * 100)}%)`;
       return {
         ...state,
         toast: `${s.cli}: model ${s.model ?? "default"}, mode ${s.mode ?? "default"}, effort ${s.effort ?? "default"}${ctx}`,

@@ -7,6 +7,26 @@ import { useElementHeightVariable } from "../layoutEffects";
 import { CHAT_MODEL_OPTIONS } from "@iqlabs-official/agent-sdk/chat/modelOptions";
 import { CHAT_SLASH_COMMANDS } from "@iqlabs-official/agent-sdk/chat/slashCommands";
 
+// ── Context bar (mirrors Claude Code's real status-line meter) ──────────────
+// Colors: green < 60 %, yellow < 85 %, red ≥ 85 %
+function CtxBar({ tokens, window: win, approx }: { tokens: number; window: number; approx?: boolean }) {
+  const frac = Math.min(1, tokens / win);
+  const pct = Math.round(frac * 100);
+  const fmtK = (n: number) => n >= 1000 ? Math.round(n / 1000) + "k" : String(n);
+  const color = frac >= 0.85 ? "var(--an-red, #e55)" : frac >= 0.60 ? "var(--an-amber, #e90)" : "var(--an-green, #4c8)";
+  const CELLS = 8;
+  const filled = Math.round(frac * CELLS);
+  const bar = "█".repeat(filled) + "░".repeat(CELLS - filled);
+  return (
+    <span className="ml-auto flex items-center gap-1 text-[10px] font-mono" style={{ color }} title={`${tokens.toLocaleString()} / ${win.toLocaleString()} tokens (${pct}%)`}>
+      {approx && <span style={{ color: "var(--an-fg-mute)" }}>~</span>}
+      <span style={{ letterSpacing: "-0.5px" }}>[{bar}]</span>
+      <span>{fmtK(tokens)}/{fmtK(win)}</span>
+      <span style={{ color: "var(--an-fg-mute)" }}>ctx</span>
+    </span>
+  );
+}
+
 // The shared model catalog (same one vscode/cli use) — gives versioned chip labels
 // (Opus 4.8, Sonnet 4.6, GPT-5.5 Codex…) + a description, instead of bare aliases.
 // `value` is undefined for the engine default; the picker treats that as "default".
@@ -412,11 +432,10 @@ export function Composer() {
           <span className="max-w-[7rem] truncate">{MODES[state.cli].find((m) => m.value === mode)?.label ?? mode}</span>
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" style={{ transform: controlsOpen ? "rotate(180deg)" : "none", transition: "transform .15s" }}><path d="M2.5 4l2.5 2.5L7.5 4" /></svg>
         </button>
-        {state.contextTokens !== undefined && (
-          <span className="ml-auto" style={{ color: "var(--an-fg-mute)" }}>
-            ctx: {state.contextTokens >= 1000 ? Math.round(state.contextTokens / 1000) + "k" : state.contextTokens}
-          </span>
-        )}
+        {state.contextTokens !== undefined && (() => {
+          const win = state.contextWindow ?? (state.cli === "codex" ? 256_000 : 200_000);
+          return <CtxBar tokens={state.contextTokens} window={win} />;
+        })()}
         {queueCount > 0 && (
           <span className="ml-auto animate-pulse text-[10px]" style={{ color: "var(--an-amber)" }}>
             ⏳ {queueCount} queued

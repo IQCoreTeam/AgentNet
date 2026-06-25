@@ -160,7 +160,8 @@ export type ClientMessage =
 
 export type ServerMessage =
   | { type: "clear" }
-  | { type: "usage"; contextTokens: number }
+  | { type: "usage"; contextTokens: number; contextWindow?: number }
+  | { type: "compacted" }
   | { type: "notice"; text: string }
   | {
       type: "status";

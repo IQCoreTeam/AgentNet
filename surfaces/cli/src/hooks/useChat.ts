@@ -29,6 +29,7 @@ export function useChat(
   const [pendingId, setPendingId] = useState<string | undefined>(opts.resume);
   const [elapsed, setElapsed] = useState<number | undefined>(undefined);
   const [contextTokens, setContextTokens] = useState<number | undefined>(undefined);
+  const [contextWindow, setContextWindow] = useState<number | undefined>(undefined);
   // scrollback pagination (older pages) + a Static-reset epoch (bumped on any wholesale
   // transcript change so the <Static> history re-renders instead of mis-appending).
   const [hasMore, setHasMore] = useState(false);
@@ -107,7 +108,7 @@ export function useChat(
           return [...prev, m];
         }),
       );
-      h.onUsage((n) => setContextTokens(n));
+      h.onUsage((n, win) => { setContextTokens(n); if (win !== undefined) setContextWindow(win); });
       h.onSkill((name) => setFiringSkill(name));
       h.onTurnEnd(() => {
         // a fresh session reveals its canonical id now — adopt it so resume/switch work.
@@ -166,6 +167,7 @@ export function useChat(
       dropHandle();
       setCli(next);
       setContextTokens(undefined);
+      setContextWindow(undefined);
       void savePrefs({ lastCli: next });
     },
     [dropHandle],
@@ -176,6 +178,7 @@ export function useChat(
       dropHandle();
       setModel(m);
       setContextTokens(undefined);
+      setContextWindow(undefined);
       void savePrefs({ lastModel: m });
     },
     [dropHandle],
@@ -194,7 +197,7 @@ export function useChat(
     async (id: string) => {
       dropHandle();
       setPendingId(id);
-      setContextTokens(undefined); // reset bar — new session's usage unknown until first turn
+      setContextTokens(undefined); setContextWindow(undefined); // reset bar — new session's usage unknown until first turn
       const p = await runtime.loadSession(id);
       setMessages(p.messages);
       setHasMore(p.hasMore);
@@ -209,6 +212,7 @@ export function useChat(
     setPendingId(undefined);
     setMessages([]);
     setContextTokens(undefined);
+    setContextWindow(undefined);
     setHasMore(false);
     setCursor(null);
     setEpoch((e) => e + 1);
@@ -268,6 +272,7 @@ export function useChat(
     pendingId,
     elapsed,
     contextTokens,
+    contextWindow,
     hasMore,
     epoch,
     send,

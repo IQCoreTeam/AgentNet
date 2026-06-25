@@ -26,6 +26,7 @@ vi.mock("./spawn.js", () => {
         onMessage: (cb: any) => { mockCliOnMessage = cb; },
         onSkill: () => {},
         onUsage: () => {},
+        onCompact: () => {},
         onTurnEnd: (cb: any) => { mockCliOnTurnEnd = cb; },
         onError: () => {},
       };

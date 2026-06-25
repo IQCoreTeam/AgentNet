@@ -10,7 +10,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 function fakeHandle(id: string, cli: "claude" | "codex") {
-  const usageCbs: Array<(n: number) => void> = [];
+  const usageCbs: Array<(n: number, window?: number) => void> = [];
+  const compactCbs: Array<() => void> = [];
   return {
     sessionId: id,
     cli,
@@ -19,8 +20,10 @@ function fakeHandle(id: string, cli: "claude" | "codex") {
     onMessage: vi.fn(),
     onTurnEnd: vi.fn(),
     onSkill: vi.fn(),
-    onUsage: vi.fn((cb: (n: number) => void) => usageCbs.push(cb)),
-    emitUsage: (n: number) => usageCbs.forEach((cb) => cb(n)),
+    onUsage: vi.fn((cb: (n: number, window?: number) => void) => usageCbs.push(cb)),
+    emitUsage: (n: number, window?: number) => usageCbs.forEach((cb) => cb(n, window)),
+    onCompact: vi.fn((cb: () => void) => compactCbs.push(cb)),
+    emitCompact: () => compactCbs.forEach((cb) => cb()),
     interrupt: vi.fn(),
     stop: vi.fn(),
   };

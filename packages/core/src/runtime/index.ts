@@ -158,7 +158,8 @@ export function createRuntime(
       const msgCbs: Array<(m: ChatMessage) => void> = [];
       const turnCbs: Array<() => void> = [];
       const skillCbs: Array<(name: string) => void> = []; // "Casting <skill>" marquee
-      const usageCbs: Array<(n: number) => void> = [];
+      const usageCbs: Array<(n: number, window?: number) => void> = [];
+      const compactCbs: Array<() => void> = [];
       const pending: ChatMessage[] = []; // messages awaiting a known sessionId
 
       const meta = () => ({ sessionId, cli: opts.cli, title, ts: Date.now(), lastDevice: device });
@@ -195,7 +196,8 @@ export function createRuntime(
       // A skill firing is a transient UI cue, not a transcript entry — fan it out to
       // listeners without persisting it (issue #17).
       cli.onSkill((name: string) => { for (const cb of skillCbs) cb(name); });
-      cli.onUsage((n: number) => { for (const cb of usageCbs) cb(n); });
+      cli.onUsage((n: number, window?: number) => { for (const cb of usageCbs) cb(n, window); });
+      cli.onCompact(() => { for (const cb of compactCbs) cb(); });
       cli.onTurnEnd(() => {
         if (opts.ephemeral) {
           for (const cb of turnCbs) cb();
@@ -253,6 +255,9 @@ export function createRuntime(
         },
         onUsage(cb) {
           usageCbs.push(cb);
+        },
+        onCompact(cb) {
+          compactCbs.push(cb);
         },
         interrupt() {
           cli.interrupt(); // stop the current turn; the session stays open for the next send

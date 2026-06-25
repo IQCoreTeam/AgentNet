@@ -18,6 +18,12 @@ import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ChatModelOption } from "./modelOptions.js";
 
+// Format a token count with thousands separators (e.g. 167000 → "167,000") for the
+// /context breakdown notice.
+function fmtTok(n: number): string {
+  return Math.round(n).toLocaleString("en-US");
+}
+
 // The two-way pipe to ONE chat UI (one panel / one socket). Messages both ways are
 // flat {type, ...} JSON — the same shape the webview already speaks.
 export interface ChatTransport {
@@ -168,7 +174,7 @@ export function createChatSession(
   // q.interrupt / codex child.kill). Instead we re-spawn lazily on the next send,
   // carrying the live session over, so the running turn finishes untouched and the new
   // setting applies from the next message.
-  type Slot = { handle: SessionHandle | null; pendingId?: string; model?: string; mode?: string; effort?: "low" | "medium" | "high" | "xhigh" | "max"; restage?: boolean; lastUsage?: number };
+  type Slot = { handle: SessionHandle | null; pendingId?: string; model?: string; mode?: string; effort?: "low" | "medium" | "high" | "xhigh" | "max"; restage?: boolean; lastUsage?: number; lastWindow?: number };
   const slots: Record<"claude" | "codex", Slot> = {
     claude: { handle: null, mode: "acceptEdits" },
     codex: { handle: null, mode: "auto" },
@@ -190,10 +196,17 @@ export function createChatSession(
     // a skill firing → the green "Casting <skill>" marquee (issue #17). Transient, not
     // persisted; only painted for the active tab.
     h.onSkill((name) => { if (cli === forCli) sendMarket({ type: "skillActive", name }); });
-    // token usage: forward to the active surface so it can render a context meter.
-    h.onUsage((contextTokens) => {
+    // token usage: forward to the active surface so it can render a context meter. The
+    // window (when the engine reports it) lets the UI show a percentage, not a bare count.
+    h.onUsage((contextTokens, contextWindow) => {
       slots[forCli].lastUsage = contextTokens;
-      if (cli === forCli) transport.send({ type: "usage", contextTokens });
+      if (contextWindow !== undefined) slots[forCli].lastWindow = contextWindow;
+      if (cli === forCli) transport.send({ type: "usage", contextTokens, contextWindow: slots[forCli].lastWindow });
+    });
+    // compaction: the engine condensed history to reclaim context. Cue the active surface
+    // (a notice + the next usage update reflects the reclaimed space).
+    h.onCompact(() => {
+      if (cli === forCli) transport.send({ type: "compacted" });
     });
     h.onTurnEnd(async () => {
       if (cli === forCli) transport.send({ type: "turnEnd" }); // stop the typing dots
@@ -443,7 +456,35 @@ export function createChatSession(
               mode: s.mode,
               effort: s.effort ?? "default",
               contextTokens: s.lastUsage,
+              contextWindow: s.lastWindow,
             },
+          });
+          break;
+        }
+        // /context — local breakdown of context-window occupancy (no native call). Mirrors
+        // Claude Code's `/context`: used / window / free / auto-compact threshold. We don't
+        // have per-category token data from the engines, so we report the totals we do have.
+        if (command === "context") {
+          const s = slot();
+          const window = s.lastWindow ?? (cli === "codex" ? 256_000 : 200_000);
+          if (s.lastUsage === undefined) {
+            transport.send({ type: "notice", text: `Context: 0 / ${fmtTok(window)} tokens — send a message to measure usage.` });
+            break;
+          }
+          const used = s.lastUsage;
+          const free = Math.max(0, window - used);
+          const pct = Math.round((used / window) * 100);
+          // auto-compact reserve: ~20k for the model's reply + ~13k summary headroom,
+          // matching Claude Code's effectiveWindow − 13k formula.
+          const threshold = Math.max(0, window - 33_000);
+          const tpct = Math.round((threshold / window) * 100);
+          transport.send({
+            type: "notice",
+            text:
+              `Context window (${cli})\n` +
+              `  used    ${fmtTok(used)} / ${fmtTok(window)} (${pct}%)\n` +
+              `  free    ${fmtTok(free)}\n` +
+              `  auto-compact at ~${fmtTok(threshold)} (${tpct}%)`,
           });
           break;
         }

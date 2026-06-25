@@ -80,7 +80,13 @@ export interface Engine {
   // Transient signal for the "Casting <skill>" activity marquee (issue #17); NOT a
   // transcript message (it isn't persisted).
   onSkill(cb: (name: string) => void): void;
-  onUsage(cb: (contextTokens: number) => void): void; // real context occupancy per turn
+  // real context occupancy per turn. contextWindow is the model's window size when the
+  // engine reports it (codex modelContextWindow), else a sensible default — so the UI can
+  // render a percentage/meter instead of a bare token count.
+  onUsage(cb: (contextTokens: number, contextWindow?: number) => void): void;
+  // the engine compacted the conversation (history summarized to reclaim context). The
+  // next onUsage will reflect the reclaimed space; this fires the UI's compaction cue.
+  onCompact(cb: () => void): void;
   send(text: string, images?: ImageInput[]): void;
   runSlashCommand?(command: string, arg?: string): void;
   interrupt(): void; // stop the current turn, keep the session alive
@@ -160,16 +166,26 @@ function callbacks() {
   const turn: Array<() => void> = [];
   const err: Array<(t: string) => void> = [];
   const skill: Array<(name: string) => void> = [];
-  const use: Array<(n: number) => void> = [];
+  const use: Array<(n: number, window?: number) => void> = [];
+  const comp: Array<() => void> = [];
   return {
-    msg, sid, turn, err, skill, use,
+    msg, sid, turn, err, skill, use, comp,
     emitMsg: (m: ChatMessage) => { for (const c of msg) c(m); },
     emitSid: (id: string) => { for (const c of sid) c(id); },
     emitTurn: () => { for (const c of turn) c(); },
     emitErr: (t: string) => { for (const c of err) c(t); },
     emitSkill: (n: string) => { for (const c of skill) c(n); },
-    emitUsage: (n: number) => { for (const c of use) c(n); },
+    emitUsage: (n: number, window?: number) => { for (const c of use) c(n, window); },
+    emitCompact: () => { for (const c of comp) c(); },
   };
+}
+
+// Default context-window size (tokens) when the engine doesn't report a real one.
+// Codex carries the authoritative `modelContextWindow` per turn (we prefer it when
+// present); Claude's SDK exposes no window field, so we fall back to the published
+// model limit. Keep in sync with the constants the surfaces used to hardcode.
+function defaultWindow(cli: "claude" | "codex", _model?: string): number {
+  return cli === "codex" ? 256_000 : 200_000;
 }
 
 function loadPersistentWhitelist(): Set<string> {
@@ -391,7 +407,10 @@ function claudeEngine(opts: SpawnOpts): Engine {
             cb.emitMsg(cm);
           }
         }
-        if (r.contextTokens !== undefined) cb.emitUsage(r.contextTokens);
+        if (r.contextTokens !== undefined) cb.emitUsage(r.contextTokens, defaultWindow("claude", opts.model));
+        // claude surfaces a compaction as a "summary" record (compact_boundary); mirror it
+        // as the explicit compaction cue so the UI behaves the same as it does for codex.
+        if (r.messages.some((cm) => cm.role === "summary")) cb.emitCompact();
         if (r.turnEnded) { streamBuf = ""; cb.emitTurn(); }
       }
     } catch (e) {
@@ -407,6 +426,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
     onError: (c) => cb.err.push(c),
     onSkill: (c) => cb.skill.push(c),
     onUsage: (c) => cb.use.push(c),
+    onCompact: (c) => cb.comp.push(c),
     send: (t, images) => push(t, images),
     runSlashCommand: (command, arg) => {
       const text = "/" + command + (arg ? " " + arg : "");
@@ -434,6 +454,9 @@ export function codexMcpFlags(m: { name: string; command: string; args: string[]
 // and processes requests and notifications, routing approvals to the ApprovalChannel.
 function codexEngine(opts: SpawnOpts): Engine {
   const cb = callbacks();
+  // last known context-window size (tokens). Seeded with the model default; replaced by
+  // the real modelContextWindow the moment the server reports it in a usage notification.
+  let knownWindow = defaultWindow("codex", opts.model);
   const approval = opts.approval ?? autoApprove();
 
   const codexPath = resolveExecutable("codex") || "codex";
@@ -604,10 +627,23 @@ function codexEngine(opts: SpawnOpts): Engine {
           thinkingBuf = "";
         }
       }
+    } else if (msg.method === "thread/tokenUsage/updated") {
+      // Authoritative usage notification: carries the running total AND the real model
+      // context window. Prefer it over the turn/completed estimate when present.
+      const tu = params?.tokenUsage;
+      if (tu) {
+        if (typeof tu.modelContextWindow === "number") knownWindow = tu.modelContextWindow;
+        const total = tu.total?.totalTokens;
+        if (typeof total === "number") cb.emitUsage(total, knownWindow);
+      }
+    } else if (msg.method === "thread/compacted") {
+      // history was condensed to reclaim context — fire the compaction cue. The following
+      // tokenUsage/updated (or next turn) reports the reclaimed occupancy.
+      cb.emitCompact();
     } else if (msg.method === "turn/completed") {
       if (params?.usage) {
         const usage = params.usage;
-        cb.emitUsage((usage.input_tokens ?? 0) + (usage.cached_input_tokens ?? 0));
+        cb.emitUsage((usage.input_tokens ?? 0) + (usage.cached_input_tokens ?? 0), knownWindow);
       }
       cb.emitTurn();
       running = false;
@@ -932,6 +968,7 @@ function codexEngine(opts: SpawnOpts): Engine {
     // mapCodexEvent flags any command/path that references our skills dir (convert/codex).
     onSkill: (c) => cb.skill.push(c),
     onUsage: (c) => cb.use.push(c),
+    onCompact: (c) => cb.comp.push(c),
     send: (t, images) => {
       void initPromise.then(() => runTurn(t, images));
     },
