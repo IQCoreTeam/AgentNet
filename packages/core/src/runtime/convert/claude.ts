@@ -146,7 +146,7 @@ export function mapClaudeMessage(m: unknown): ParseResult {
 
   // a compact boundary = claude condensed the history; surface a summary record so
   // it folds in cross-CLI exactly like the line path's isCompactSummary.
-  if (msg.type === "compact_boundary") {
+  if (msg.type === "compact_boundary" || (msg.type === "system" && msg.subtype === "compact_boundary")) {
     out.messages.push({ role: "summary", text: "[conversation compacted]", ts: Date.now() });
     return out;
   }

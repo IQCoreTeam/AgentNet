@@ -10,7 +10,7 @@ import { encryptForWallet, decryptForWallet, type SessionKey } from "../core/cry
 
 // A log record: either session meta (first line) or one chat message.
 type LogRecord =
-  | { kind: "meta"; sessionId: string; cli: string; title: string; ts: number }
+  | { kind: "meta"; sessionId: string; cli: string; title: string; ts: number; lastDevice?: { id: string; label: string } }
   | { kind: "msg"; msg: ChatMessage };
 
 const NL = new TextEncoder().encode("\n");
@@ -27,7 +27,7 @@ export async function encodeRecord(key: SessionKey, rec: LogRecord): Promise<Uin
 
 // Convenience encoders for the two record kinds.
 export function metaRecord(s: Omit<CanonicalSession, "messages">): LogRecord {
-  return { kind: "meta", sessionId: s.sessionId, cli: s.cli, title: s.title, ts: s.ts };
+  return { kind: "meta", sessionId: s.sessionId, cli: s.cli, title: s.title, ts: s.ts, lastDevice: s.lastDevice };
 }
 export function msgRecord(msg: ChatMessage): LogRecord {
   return { kind: "msg", msg };
@@ -45,6 +45,7 @@ export async function decodeLog(
   let cli: "claude" | "codex" = "claude";
   let title = "";
   let ts = 0;
+  let lastDevice: { id: string; label: string } | undefined = undefined;
   const messages: ChatMessage[] = [];
 
   for (const line of text.split("\n")) {
@@ -56,11 +57,12 @@ export async function decodeLog(
       cli = rec.cli as "claude" | "codex";
       title = rec.title;
       ts = rec.ts;
+      lastDevice = rec.lastDevice;
     } else {
       messages.push(rec.msg);
     }
   }
 
   if (!sessionId) return null;
-  return { sessionId, cli, title, messages, ts };
+  return { sessionId, cli, title, messages, ts, lastDevice };
 }

@@ -8,6 +8,7 @@ import { Connection } from "@solana/web3.js";
 import { spawnCli } from "./spawn.js";
 import { SessionStore } from "../account/store.js";
 import { prepareResume } from "./inject/index.js";
+import { getDeviceProfile, buildDeviceNotice } from "../core/device.js";
 import { MemorySync, updateSkillsSection } from "../memory/index.js";
 import { getSkillShopping } from "../account/login.js";
 import { setSkillShoppingActive } from "../skill-market/passive.js";
@@ -88,14 +89,30 @@ export function createRuntime(
 
   return {
     async startSession(opts): Promise<SessionHandle> {
+      const device = await getDeviceProfile();
       // RESUME: opts.sessionId is the CANONICAL id. Rewrite its history into the
       // target cli's native jsonl and resume under the NATIVE id (claude/codex only
       // accept their own ids) — this is what lets a session cross between CLIs.
       // FRESH: no sessionId; the cli mints its own, which becomes the canonical id.
       const resuming = !!opts.sessionId;
-      const nativeId = resuming
+      const resumeResult = resuming
         ? await prepareResume(store, opts.cli, opts.cwd, opts.sessionId!, opts.ephemeral)
         : undefined;
+      const nativeId = resumeResult?.nativeId;
+
+      let pendingDeviceNotice: string | null = null;
+      if (resuming && resumeResult) {
+        if (resumeResult.hasMessages && resumeResult.lastDevice?.id && resumeResult.lastDevice.id !== device.id) {
+          pendingDeviceNotice = buildDeviceNotice(resumeResult.lastDevice, device);
+          if (!opts.ephemeral) await store.recordMeta({
+            sessionId: opts.sessionId!,
+            cli: opts.cli,
+            title: resumeResult.title ?? "",
+            ts: Date.now(),
+            lastDevice: device,
+          });
+        }
+      }
 
       // Inject the project's shared memory into this CLI's native files (Claude's
       // memory dir / Codex's AGENTS.md) BEFORE it starts so it loads this run. Best
@@ -140,7 +157,7 @@ export function createRuntime(
       const usageCbs: Array<(n: number) => void> = [];
       const pending: ChatMessage[] = []; // messages awaiting a known sessionId
 
-      const meta = () => ({ sessionId, cli: opts.cli, title, ts: Date.now() });
+      const meta = () => ({ sessionId, cli: opts.cli, title, ts: Date.now(), lastDevice: device });
 
       // Show the message to the UI, then append it to the encrypted log. Stamp the
       // producing CLI on every message so the UI badges each turn with the right
@@ -212,7 +229,11 @@ export function createRuntime(
           // Persist only a COUNT of attached images, never the base64 (keeps the encrypted
           // log small). The live UI still gets thumbnails — it holds the originals itself.
           emit({ role: "user", text: userText, ts: Date.now(), imageCount: images?.length || undefined });
-          cli.send(userText, images);
+          const textToSend = pendingDeviceNotice
+            ? pendingDeviceNotice + "\n\n" + userText
+            : userText;
+          pendingDeviceNotice = null;
+          cli.send(textToSend, images);
         },
         runSlashCommand(command: string, arg?: string) {
           cli.runSlashCommand?.(command, arg);

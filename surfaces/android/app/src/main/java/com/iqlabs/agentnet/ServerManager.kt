@@ -1,6 +1,7 @@
 package com.iqlabs.agentnet
 
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import java.io.BufferedReader
 import java.io.File
@@ -87,6 +88,7 @@ class ServerManager(private val ctx: Context) {
             // the first model request by ~90s on Android. Local skills live under .codex/skills;
             // this only disables the Codex "plugins" feature for the Android app-server.
             "AGENTNET_CODEX_DISABLE_PLUGINS=1",
+            "AGENTNET_DEVICE_LABEL=${Build.MANUFACTURER} ${Build.MODEL} (Android)",
             *googleClientIdEnv.toTypedArray(),
             *googleNativeAuthEnv.toTypedArray(),
             "/bin/sh", "-lc", cmd,
