@@ -743,3 +743,17 @@ html[data-keyboard="open"] .an-chat-float { bottom: 0; }
 }
 .buy-particle { animation: buy-particle 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 .buy-pop      { animation: buy-pop 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+/* Assistant typing indicator — dots rise and brighten in a soft wave (replaces the flat
+   triple opacity-pulse, which read as static). */
+@keyframes an-typing {
+  0%, 70%, 100% { transform: translateY(0);    opacity: 0.3; }
+  35%           { transform: translateY(-3px); opacity: 1; }
+}
+.an-typing-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 9999px;
+  background: var(--an-green);
+  animation: an-typing 1.3s ease-in-out infinite;
+}

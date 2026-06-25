@@ -39,7 +39,7 @@ export function ApprovalDock() {
     <div
       ref={rootRef}
       className={`flex flex-col gap-2 overflow-y-auto px-3 pt-2 ${state.approvals.length === 0 ? "hidden" : ""}`}
-      style={{ maxHeight: hasQuestion ? "calc(var(--vvh, 100dvh) * 0.62)" : "min(13rem, max(7rem, calc(var(--vvh, 100dvh) * 0.32)))" }}
+      style={{ maxHeight: hasQuestion ? "calc(var(--vvh, 100dvh) * 0.62)" : "calc(var(--vvh, 100dvh) * 0.5)" }}
     >
       {state.approvals.map((req) =>
         req.kind === "question" && req.questions?.length ? (
@@ -167,7 +167,7 @@ function QuestionCard({
         <button
           disabled={!allAnswered}
           onClick={submit}
-          className="w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
+          className="w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium [color:var(--an-bg-0)] disabled:opacity-40"
         >
           Send
         </button>
@@ -246,7 +246,10 @@ function ApprovalCard({
 
       {/* detail */}
       {req.command && !editMode && (
-        <pre className="overflow-x-auto px-3 pb-2 font-mono text-xs text-zinc-200">
+        <pre
+          className="overflow-auto px-3 pb-2 font-mono text-xs text-zinc-200"
+          style={{ maxHeight: "calc(var(--vvh, 100dvh) * 0.32)" }}
+        >
           {req.command}
         </pre>
       )}
@@ -270,7 +273,10 @@ function ApprovalCard({
         <div className="px-3 pb-2 font-mono text-xs text-zinc-300">{req.file}</div>
       )}
       {req.diff && (
-        <pre className="overflow-x-auto px-3 pb-2 font-mono text-xs">
+        <pre
+          className="overflow-auto px-3 pb-2 font-mono text-xs"
+          style={{ maxHeight: "calc(var(--vvh, 100dvh) * 0.32)" }}
+        >
           {req.diff.split("\n").map((ln, i) => (
             <div
               key={i}
@@ -318,46 +324,44 @@ function ApprovalCard({
         </div>
       )}
 
-      {/* action buttons */}
-      <div className="flex flex-wrap gap-2 border-t border-emerald-700/40 px-3 py-2">
+      {/* action buttons — equal width, single row; primary action filled, the rest ghost
+          (outline) so the card reads cleanly and the main choice stands out. */}
+      <div className="flex gap-2 border-t border-emerald-700/40 px-3 py-2">
         {isPlan ? (
           <>
-            <button autoFocus onClick={() => onDecide("once")} className="rounded bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white">
+            <button autoFocus onClick={() => onDecide("once")} className="flex-1 whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold [color:var(--an-bg-0)] active:bg-emerald-500">
               Approve plan
             </button>
-            <button onClick={() => { if (req.plan) savePlan(req.plan); onDecide("deny"); }} className="rounded bg-red-900/60 px-4 py-2.5 text-sm text-red-200">
+            <button onClick={() => { if (req.plan) savePlan(req.plan); onDecide("deny"); }} className="flex-1 whitespace-nowrap rounded-lg border border-red-500/40 px-3 py-2.5 text-sm font-medium text-red-300 active:bg-red-900/30">
               Keep planning
             </button>
-            <span className="ml-auto text-[10px] text-zinc-600 self-center select-none">
-              ↩ approve · esc interrupt
-            </span>
           </>
         ) : editMode ? (
           <>
             <button
               autoFocus
               onClick={() => onDecide("once", { updatedInput: { ...(req.input ?? {}), command: editedCmd } })}
-              className="rounded bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white"
+              className="flex-1 whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold [color:var(--an-bg-0)] active:bg-emerald-500"
             >
               Approve edited
             </button>
-            <button onClick={() => setEditMode(false)} className="rounded bg-zinc-700 px-4 py-2.5 text-sm text-zinc-200">
+            <button onClick={() => setEditMode(false)} className="flex-1 whitespace-nowrap rounded-lg border border-zinc-500/40 px-3 py-2.5 text-sm font-medium text-zinc-300 active:bg-zinc-700/40">
               Cancel
             </button>
           </>
         ) : (
           <>
-            <button autoFocus onClick={() => onDecide("once")} className="rounded bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white">
+            <button autoFocus onClick={() => onDecide("once")} className="flex-1 whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold [color:var(--an-bg-0)] active:bg-emerald-500">
               Approve
             </button>
-            <button onClick={() => onDecide("always")} className="rounded bg-emerald-800 px-4 py-2.5 text-sm text-emerald-100">
+            <button onClick={() => onDecide("always")} className="flex-1 whitespace-nowrap rounded-lg border border-emerald-400/45 px-3 py-2.5 text-sm font-medium text-emerald-200 active:bg-emerald-500/15">
               Always
             </button>
             <button
               onClick={() => { setShowReason((s) => !s); }}
-              className="rounded bg-red-900/60 px-4 py-2.5 text-sm text-red-200"
+              className="flex-1 whitespace-nowrap rounded-lg border border-red-500/40 px-3 py-2.5 text-sm font-medium text-red-300 active:bg-red-900/30"
             >
-              Deny…
+              Deny
             </button>
           </>
         )}

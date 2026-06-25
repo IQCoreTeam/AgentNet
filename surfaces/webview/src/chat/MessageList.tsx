@@ -233,10 +233,10 @@ export function MessageList() {
             </section>
           ))}
           {state.typing && (
-            <div className="flex gap-1 px-1 text-zinc-500">
-              <span className="animate-pulse">●</span>
-              <span className="animate-pulse [animation-delay:150ms]">●</span>
-              <span className="animate-pulse [animation-delay:300ms]">●</span>
+            <div className="flex items-center gap-1.5 px-1 py-1.5" aria-label="Assistant is responding">
+              <span className="an-typing-dot" style={{ background: engineAccent }} />
+              <span className="an-typing-dot [animation-delay:160ms]" style={{ background: engineAccent }} />
+              <span className="an-typing-dot [animation-delay:320ms]" style={{ background: engineAccent }} />
             </div>
           )}
         </div>
