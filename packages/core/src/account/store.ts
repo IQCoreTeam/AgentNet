@@ -238,7 +238,12 @@ export class SessionStore {
         // unreadable session never hides all the readable ones.
         try {
           const s = await this.loadPage(sessionId, page);
-          return s ? { sessionId, title: s.title, cli: s.cli, ts: s.ts, lastDevice: s.lastDevice } : null;
+          // Spread lastDevice only when present: SessionMeta.lastDevice is OPTIONAL, so under
+          // exactOptionalPropertyTypes a literal `lastDevice: undefined` (a required key) is not
+          // assignable to it — which broke the `m is SessionMeta` predicate and the sort below.
+          return s
+            ? { sessionId, title: s.title, cli: s.cli, ts: s.ts, ...(s.lastDevice ? { lastDevice: s.lastDevice } : {}) }
+            : null;
         } catch {
           return null; // undecryptable (foreign key / corrupt), omit from the list
         }
