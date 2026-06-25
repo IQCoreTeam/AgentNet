@@ -5,7 +5,6 @@ import { SkillDetailView } from "./SkillDetailView";
 import { PublishForm } from "./PublishForm";
 import { AgentDirectory } from "./AgentDirectory";
 import { AgentProfileView } from "./AgentProfileView";
-import { BuyCelebration } from "./BuyCelebration";
 import type { SkillCard } from "../transport/protocol";
 import { HeliusSetupPanel } from "../settings/HeliusKeyForm";
 import { SkillDetailSkeleton, AgentProfileSkeleton, MarketListSkeleton } from "./Skeletons";
@@ -58,19 +57,21 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
     if (state.marketDetail) setPendingMint(null);
   }, [state.marketDetail]);
 
-  // Skills tab: skeleton on entry until the ownedSkills response lands (marketOwned gets a
-  // new array ref, even when empty) so it never flashes "No owned skills" before the data.
-  const ownedAtArm = useRef(state.marketOwned);
+  // Skills tab: skeleton on entry until the CHAIN-SOURCED owned data lands. We watch
+  // marketOwnedCards (only the chain emit carries `cards`, even when empty → new ref), NOT
+  // marketOwned: a names-only emit (chat panel / post-buy refresh) can arrive empty first
+  // and would otherwise clear the skeleton early, flashing "No owned skills" before cards.
+  const ownedAtArm = useRef(state.marketOwnedCards);
   useEffect(() => {
     if (tab !== "skills") return;
-    ownedAtArm.current = state.marketOwned;
+    ownedAtArm.current = state.marketOwnedCards;
     setOwnedLoading(true);
     const t = setTimeout(() => setOwnedLoading(false), 4000); // fallback if no response comes
     return () => clearTimeout(t);
   }, [tab]);
   useEffect(() => {
-    if (state.marketOwned !== ownedAtArm.current) setOwnedLoading(false);
-  }, [state.marketOwned]);
+    if (state.marketOwnedCards !== ownedAtArm.current) setOwnedLoading(false);
+  }, [state.marketOwnedCards]);
 
   function runSearch(q: string, t?: "skill" | "workflow") {
     marketSearching();
@@ -95,7 +96,6 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
           onBack={() => { send({ type: "ownedSkills" }); clearMarketDetail(); }}
           onOpenSkill={(card) => send({ type: "getSkillDetail", mint: card.id })}
         />
-        {state.buyCelebrate && <BuyCelebration />}
       </div>
     );
   }

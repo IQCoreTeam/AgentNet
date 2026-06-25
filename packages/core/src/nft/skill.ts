@@ -16,7 +16,7 @@ import {
   createAssociatedTokenAccountInstruction,
   TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
-import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
+import type { SignerInput, WalletSigner } from "@iqlabs-official/solana-sdk/utils";
 import { codeIn, signerAddress, ensureDbRoot } from "../core/chain.js";
 import { getSkillsCollectionMint } from "../core/seed.js";
 import { createSkillMint } from "./token2022.js";
@@ -26,6 +26,35 @@ import { sendTx } from "./workflow.js";
 
 /** Default publish price: 0.1 SOL. Explicit `price: 0n` publishes free. */
 export const DEFAULT_SKILL_PRICE_LAMPORTS = 100_000_000n;
+
+// Publish is several on-chain txs (code-in the body → mint → list), each a separate
+// wallet signature — and the body itself may chunk into many code-in signatures. With a
+// web wallet that's a prompt per signature, so we surface progress. The exact total isn't
+// known up front (chunk count depends on body size), so we report named phases + a live
+// signature count; `percent` carries the code-in sub-progress within the store phase.
+export interface PublishProgress {
+  phase: "store" | "mint" | "list";
+  signed: number; // cumulative wallet signatures so far
+  percent?: number; // 0..100 within the store (code-in) phase
+}
+
+// Count every wallet signature by wrapping signTransaction. Keypair signers sign locally
+// with no prompt, so they pass through untouched (no progress is meaningful there).
+function trackSignatures(signer: SignerInput, onSign: () => void): SignerInput {
+  const ws = signer as Partial<WalletSigner>;
+  if (typeof ws.signTransaction !== "function" || "secretKey" in (signer as object)) {
+    return signer;
+  }
+  return {
+    publicKey: ws.publicKey,
+    signAllTransactions: ws.signAllTransactions?.bind(ws),
+    async signTransaction(tx: Parameters<WalletSigner["signTransaction"]>[0]) {
+      const r = await ws.signTransaction!(tx);
+      onSign();
+      return r;
+    },
+  } as SignerInput;
+}
 
 export interface PublishSkillInput {
   name: string;
@@ -51,6 +80,7 @@ export async function publishSkill(
   conn: Connection,
   signer: SignerInput,
   input: PublishSkillInput,
+  onProgress?: (p: PublishProgress) => void,
 ): Promise<string> {
   // Validate the skill the way it will actually exist: a SKILL.md whose frontmatter
   // (name/description) comes from the separate form fields, with the body field used
@@ -69,7 +99,15 @@ export async function publishSkill(
     throw new FormatError(format.errors);
   }
 
-  await ensureDbRoot(signer);
+  // Wrap the signer so each wallet signature advances the publish gauge. `phase` is
+  // updated before each on-chain stage; the wrapper reads it at sign time.
+  let phase: PublishProgress["phase"] = "store";
+  let signed = 0;
+  const tx = onProgress
+    ? trackSignatures(signer, () => { signed += 1; onProgress({ phase, signed }); })
+    : signer;
+
+  await ensureDbRoot(tx);
 
   // code-in the standard NFT JSON (skill-nft-json.md §2): name/description +
   // standard `attributes` (category once, each hashtag as a repeated "skill"
@@ -85,7 +123,14 @@ export async function publishSkill(
     attributes,
     skillText: input.text,
   });
-  const skillTxid = await codeIn(signer, skillJson, `${input.name}.json`, "application/json");
+  phase = "store";
+  const skillTxid = await codeIn(
+    tx,
+    skillJson,
+    `${input.name}.json`,
+    "application/json",
+    onProgress ? (percent) => onProgress({ phase: "store", signed, percent }) : undefined,
+  );
 
   // Pre-generate the mint → derive the gate PDA that will own the mint authority.
   const skillMintKp = Keypair.generate();
@@ -98,7 +143,9 @@ export async function publishSkill(
   if (!collectionStr) throw new Error("Skills collection mint is not configured");
   const collectionMint = new PublicKey(collectionStr);
 
-  await createSkillMint(conn, signer, {
+  phase = "mint";
+  if (onProgress) onProgress({ phase, signed });
+  await createSkillMint(conn, tx, {
     name: input.name,
     symbol: input.name.substring(0, 8).toUpperCase(),
     uri: skillTxid, // points at the JSON above (traits live there, not on the mint)
@@ -120,7 +167,9 @@ export async function publishSkill(
     price: input.price ?? DEFAULT_SKILL_PRICE_LAMPORTS,
     group: collectionMint, // skills collection — publish_item enrolls the mint
   });
-  await sendTx(conn, signer, [ataIx, ix]);
+  phase = "list";
+  if (onProgress) onProgress({ phase, signed });
+  await sendTx(conn, tx, [ataIx, ix]);
 
   return skillMint.toBase58();
 }

@@ -233,7 +233,7 @@ const SKILL_TOOLS: { name: string; description: string; schema: z.ZodRawShape }[
       category: z.string().optional().describe("Optional single category, e.g. 'clean-code'."),
       hashtags: z.array(z.string()).optional().describe("Optional tags, e.g. ['refactoring','testing']."),
       priceSol: z.string().optional().describe("Price in SOL a buyer pays (e.g. '0.1'). Use '0' for a free skill. Defaults to 0.1 if omitted."),
-      image: z.string().optional().describe("Optional cover image: an http URL or an on-chain (base58) address."),
+      image: z.string().optional().describe("Cover image, ONLY if the user explicitly gave you an image URL or on-chain (base58) address. Pass it through verbatim. Do NOT generate, invent, or ask for one, and NEVER pass raw/base64 image data — omit this field entirely when the user didn't provide a link."),
     },
   },
 ];
@@ -248,6 +248,11 @@ export function getAgentNetTools() {
 }
 
 /** Handle a tool call (shared by the stdio server + the SDK bridge). */
+// Optional surface→webview channel so a chat/agent buy or publish can reuse the UI's
+// celebration/toast/gauge (the same MarketEvent shapes the UI buy emits). Best-effort:
+// wrapped at each call site so a closed transport never fails the tool.
+export type MarketEmit = (e: import("../chat/marketMessages.js").MarketEvent) => void;
+
 export async function handleToolCall(
   conn: Connection,
   signer: SignerInput,
@@ -255,7 +260,9 @@ export async function handleToolCall(
   name: string,
   args: any,
   guard: VerifyGuard = ALLOW_ALL_GUARD,
+  onMarketEvent?: MarketEmit,
 ) {
+  const emit: MarketEmit = (e) => { try { onMarketEvent?.(e); } catch { /* UI gone — ignore */ } };
   if (name === "verify_skill") {
     const skillId = args?.skillId as string;
     if (!skillId) throw new Error("Missing required argument: skillId");
@@ -308,11 +315,15 @@ export async function handleToolCall(
     const creatorWallet = (args?.creatorWallet as string) || defaultCreatorWallet;
     try {
       const { txSig, slug } = await new SkillSync(conn).buyAndEquip(signer, skillId, creatorWallet);
+      // Mirror the UI buy: fire buyResult so the webview shows the celebration + toast even
+      // though this purchase came from a chat tool, not a tap.
+      emit({ type: "buyResult", skillId, ok: true, slug: slug ?? undefined });
       const where = slug
         ? ` and equipped it as "${slug}" (usable now)`
         : " (purchase landed; its SKILL.md will install once the mint metadata is readable)";
       return { content: [{ type: "text", text: `Purchased skill ${skillId}${where}.\nTransaction Signature: ${txSig}` }] };
     } catch (err: any) {
+      emit({ type: "buyResult", skillId, ok: false, error: err.message });
       return { isError: true, content: [{ type: "text", text: `Failed to buy skill: ${err.message}` }] };
     }
   }
@@ -410,9 +421,11 @@ export async function handleToolCall(
         hashtags: args?.hashtags as string[] | undefined,
         price: lamports,
         image: args?.image as string | undefined,
-      });
+      }, (p) => emit({ type: "publishProgress", phase: p.phase, signed: p.signed, percent: p.percent }));
+      emit({ type: "publishResult", ok: true, mint });
       return { content: [{ type: "text", text: `Published skill "${skillName}" — mint: ${mint}` }] };
     } catch (err: any) {
+      emit({ type: "publishResult", ok: false, error: err.message });
       return { isError: true, content: [{ type: "text", text: `Failed to publish skill: ${err.message}` }] };
     }
   }
@@ -454,8 +467,9 @@ export function createAgentSdkMcpServer(
   signer: SignerInput,
   defaultCreatorWallet: string,
   guard: VerifyGuard = newVerifyGuard(),
+  onMarketEvent?: MarketEmit,
 ) {
-  const call = (name: string, args: any) => handleToolCall(conn, signer, defaultCreatorWallet, name, args, guard);
+  const call = (name: string, args: any) => handleToolCall(conn, signer, defaultCreatorWallet, name, args, guard, onMarketEvent);
 
   // Same SKILL_TOOLS the stdio server uses — fed straight to tool() (Zod), so the two
   // transports expose an identical tool set by construction. typed loosely: tool()

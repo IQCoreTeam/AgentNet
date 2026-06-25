@@ -14,6 +14,7 @@
 // (Phantom, Ledger, a local Keypair, mobile wallet) can satisfy it.
 import type { WalletSigner } from "@iqlabs-official/solana-sdk/utils";
 import type { ApprovalChannel } from "./approval/channel.js";
+import type { MarketEvent } from "../chat/marketMessages.js";
 
 export interface Wallet extends WalletSigner {
   address: string; // base58 (== publicKey.toBase58())
@@ -138,6 +139,10 @@ export interface AgentRuntime {
     ephemeral?: boolean;
     // Reasoning effort level (claude: adaptive thinking depth; codex: reasoning_effort).
     effort?: "low" | "medium" | "high" | "xhigh" | "max";
+    // Surface→webview channel for marketplace events emitted by the agent's OWN tool calls
+    // (buy_skill done, publish_skill progress/result). Lets a chat-driven buy/publish reuse
+    // the same celebration/toast/gauge the UI buy gets. Omit → no agent-tool market events.
+    onMarketEvent?: (e: MarketEvent) => void;
   }): Promise<SessionHandle>;
 
   // list the wallet's saved sessions (for the UI's session list)

@@ -40,6 +40,7 @@ import type {
 async function buildPassiveSpawn(
   cli: "claude" | "codex",
   wallet: Wallet,
+  onMarketEvent?: (e: import("../chat/marketMessages.js").MarketEvent) => void,
 ): Promise<{ mcpServers?: Record<string, unknown>; allowedTools?: string[]; codexMcp?: { name: string; command: string; args: string[] } }> {
   // Skill-shopping is a BUILT-IN now: always on and hidden from the UI toggle. Every spawn
   // (re)installs the bundled skill so a fresh install on ANY surface (mobile/cli/vscode) has
@@ -74,7 +75,7 @@ async function buildPassiveSpawn(
   // without DAS; see its handler), and verify/buy/publish use `conn` (resolveRpcUrl, which
   // falls back to the public RPC) directly. A stored Helius key still upgrades search to DAS.
   const conn = new Connection(await resolveRpcUrl(), "confirmed");
-  const server = createAgentSdkMcpServer(conn, wallet, wallet.address, newVerifyGuard());
+  const server = createAgentSdkMcpServer(conn, wallet, wallet.address, newVerifyGuard(), onMarketEvent);
   return { mcpServers: { [AGENTNET_MCP_SERVER]: server }, allowedTools: agentNetAllowedTools() };
 }
 
@@ -136,7 +137,7 @@ export function createRuntime(
       // toggle + (Claude, ON) wire the marketplace MCP tools. Best-effort.
       let passive: Awaited<ReturnType<typeof buildPassiveSpawn>> = {};
       try {
-        passive = await buildPassiveSpawn(opts.cli, wallet);
+        passive = await buildPassiveSpawn(opts.cli, wallet, opts.onMarketEvent);
       } catch (e) {
         console.warn("[skill-shopping] setup failed:", e);
       }

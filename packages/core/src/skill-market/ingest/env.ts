@@ -14,7 +14,7 @@ import { join } from "node:path";
 import type { Wallet } from "../../runtime/contract.js";
 import { searchSkills } from "../../search/index.js";
 import { dasSource, indexerSource, ownedSkillMints } from "../../core/skillSource.js";
-import { buySkill, publishSkill as corePublishSkill } from "../../nft/skill.js";
+import { buySkill, publishSkill as corePublishSkill, type PublishProgress } from "../../nft/skill.js";
 import { publishWorkflow as corePublishWorkflow } from "../../nft/workflow.js";
 import { getSolBalance } from "../../notes/index.js";
 import { readSkillText, readSkillMintMetadata } from "../../nft/token2022.js";
@@ -274,7 +274,7 @@ export async function marketplaceEnv(wallet: Wallet) {
     async publishSkill(input: {
       name: string; description: string; text: string;
       category?: string; hashtags?: string[]; priceSol: string; image?: string;
-    }): Promise<{ ok: boolean; mint?: string; error?: string }> {
+    }, onProgress?: (p: PublishProgress) => void): Promise<{ ok: boolean; mint?: string; error?: string }> {
       try {
         const lamports = solToLamports(input.priceSol);
         if (lamports === null) return { ok: false, error: "Enter a valid price in SOL (e.g. 0.1)" };
@@ -299,7 +299,7 @@ export async function marketplaceEnv(wallet: Wallet) {
           hashtags: input.hashtags,
           price: lamports,
           image: input.image,
-        });
+        }, onProgress);
         return { ok: true, mint };
       } catch (e) {
         return { ok: false, error: e instanceof Error ? e.message : String(e) };

@@ -744,6 +744,14 @@ html[data-keyboard="open"] .an-chat-float { bottom: 0; }
 .buy-particle { animation: buy-particle 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 .buy-pop      { animation: buy-pop 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 
+/* Publish (forge) in-progress pulse — a soft violet breathe for the active phase bar and
+   the forge glyph while the multi-signature publish runs. */
+@keyframes publish-forge-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+.publish-forge-pulse { animation: publish-forge-pulse 1.2s ease-in-out infinite; }
+
 /* In-chat casting marquee — breathing green aura + a soft slide-in (ported from the
    vscode flashSkill marquee). */
 @keyframes casting-in {

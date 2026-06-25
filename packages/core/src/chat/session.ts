@@ -262,7 +262,7 @@ export function createChatSession(
       s.restage = false;
     }
     const spawnCli = cli; // capture: cli must not change across the await
-    s.handle = await rt.startSession({ cli: spawnCli, model: s.model, mode: s.mode, effort: s.effort, cwd: env.cwd(), sessionId: s.pendingId, approval: env.approval });
+    s.handle = await rt.startSession({ cli: spawnCli, model: s.model, mode: s.mode, effort: s.effort, cwd: env.cwd(), sessionId: s.pendingId, approval: env.approval, onMarketEvent: sendMarket });
     wire(spawnCli, s.handle);
     return s.handle;
   }

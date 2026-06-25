@@ -144,6 +144,8 @@ export type MarketEvent =
   | { type: "buyAllResult"; wallet: string; ok: boolean; bought: number; failed: number; error?: string }
   | { type: "agentNoteResult"; agentWallet: string; ok: boolean; error?: string }
   // make-skill: result of a UI publish. mint = the new skill's mint address on success.
-  | { type: "publishResult"; ok: boolean; mint?: string; error?: string };
+  | { type: "publishResult"; ok: boolean; mint?: string; error?: string }
+  // live publish progress (per wallet signature) while a chat/agent publish runs.
+  | { type: "publishProgress"; phase: "store" | "mint" | "list"; signed: number; percent?: number };
 
 export type MarketMessage = MarketRequest | MarketEvent;

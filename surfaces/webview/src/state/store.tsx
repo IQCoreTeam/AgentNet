@@ -60,6 +60,8 @@ export interface State {
   marketBalance: number | null;
   rpcStatus: RpcStatus | null;
   publishResult: { ok: boolean; mint?: string; error?: string } | null;
+  // Live publish progress while a multi-signature publish runs (web wallet); null when idle.
+  publishProgress: { phase: "store" | "mint" | "list"; signed: number; percent?: number } | null;
   firingSkill: string | null; // currently casting skill name (god-mode glow)
   walletAddress: string | null;
   cli: Cli;
@@ -93,6 +95,7 @@ export interface State {
   cursor: number;
   toast: string | null;
   buyCelebrate: boolean;
+  buyCelebrateLabel: string | null; // bought skill's slug/name for the purchase card
   contextTokens?: number;
   currentModel?: string;
   queuePending: number;
@@ -129,6 +132,7 @@ const initialState: State = {
   cursor: 0,
   toast: null,
   buyCelebrate: false,
+  buyCelebrateLabel: null,
   marketOpen: false,
   marketInitialView: "browse",
   marketTab: "skill",
@@ -144,6 +148,7 @@ const initialState: State = {
   marketBalance: null,
   rpcStatus: null,
   publishResult: null,
+  publishProgress: null,
   firingSkill: null,
   currentModel: undefined,
   queuePending: 0,
@@ -396,7 +401,7 @@ function reducer(state: State, ev: Action): State {
     case "__clearMarketDetail":
       return { ...state, marketDetail: null };
     case "__clearPublishResult":
-      return { ...state, publishResult: null };
+      return { ...state, publishResult: null, publishProgress: null };
     case "__modelChange":
       return {
         ...state,
@@ -424,6 +429,7 @@ function reducer(state: State, ev: Action): State {
         toast: ev.ok ? `Bought! Slug: ${ev.slug ?? ev.skillId}` : `Buy failed: ${ev.error ?? "unknown"}`,
         marketOwned: ev.ok ? [...state.marketOwned, ev.slug ?? ev.skillId] : state.marketOwned,
         buyCelebrate: ev.ok ? true : state.buyCelebrate,
+        buyCelebrateLabel: ev.ok ? (ev.slug ?? ev.skillId) : state.buyCelebrateLabel,
       };
     case "disposeResult":
       return {
@@ -458,7 +464,9 @@ function reducer(state: State, ev: Action): State {
     case "skillActive":
       return { ...state, firingSkill: ev.name };
     case "publishResult":
-      return { ...state, publishResult: ev };
+      return { ...state, publishResult: ev, publishProgress: null };
+    case "publishProgress":
+      return { ...state, publishProgress: { phase: ev.phase, signed: ev.signed, percent: ev.percent } };
     case "postNoteResult":
       return { ...state, toast: ev.ok ? "Comment posted." : `Comment failed: ${ev.error ?? "unknown"}` };
     case "workRepoRegistered":
@@ -495,7 +503,7 @@ function reducer(state: State, ev: Action): State {
     case "__clearFiringSkill":
       return { ...state, firingSkill: null };
     case "__clearCelebrate":
-      return { ...state, buyCelebrate: false };
+      return { ...state, buyCelebrate: false, buyCelebrateLabel: null };
     default:
       return state;
   }

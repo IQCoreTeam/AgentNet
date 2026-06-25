@@ -7,6 +7,8 @@ import { ConnectClaude } from "./onboarding/ConnectClaude";
 import { ConnectCodex } from "./onboarding/ConnectCodex";
 import { ChatScreen } from "./chat/ChatScreen";
 import { MarketScreen } from "./market/MarketScreen";
+import { BuyCelebration } from "./market/BuyCelebration";
+import { PublishCelebration } from "./market/PublishCelebration";
 import { Sessions } from "./chat/Sessions";
 import { TabBar } from "./shell/TabBar";
 import { Toast } from "./Toast";
@@ -47,6 +49,20 @@ export function App() {
     notifyApproval(topApproval.id, topApproval.title, getClientId(), body);
   }, [topApproval?.id, topApproval?.title, getClientId]);
 
+  // A skill bought/published by the agent mid-chat must celebrate at the app root: the
+  // market sub-screens that used to own these overlays aren't mounted during a chat, so
+  // the buzz + burst never fired. Buy rides the store's transient `buyCelebrate` flag;
+  // publish fires once per new successful `publishResult`.
+  const [publishCelebrate, setPublishCelebrate] = useState(false);
+  const celebratedPublish = useRef<unknown>(null);
+  useEffect(() => {
+    const r = state.publishResult;
+    if (r?.ok && r !== celebratedPublish.current) {
+      celebratedPublish.current = r;
+      setPublishCelebrate(true);
+    }
+  }, [state.publishResult]);
+
   return (
     <>
       <div className="app-viewport">
@@ -59,6 +75,8 @@ export function App() {
         {state.phase === "chat" && <TabShell />}
       </div>
       <Toast />
+      {state.buyCelebrate && <BuyCelebration />}
+      {publishCelebrate && <PublishCelebration onDone={() => setPublishCelebrate(false)} />}
     </>
   );
 }

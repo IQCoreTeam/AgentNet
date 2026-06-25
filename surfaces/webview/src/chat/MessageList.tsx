@@ -133,6 +133,21 @@ export function MessageList() {
     loadingOlder.current = false;
   }, [state.cursor, state.hasMore]);
 
+  // A short latest page (e.g. only 2 messages) doesn't overflow, so onScroll never fires
+  // and older history is unreachable. Auto-pull older pages until the viewport fills or
+  // there's nothing more. Runs after each page lands (logLen/cursor change); reuses the
+  // scroll-up path so the offset restore keeps the latest messages visually pinned.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !state.hasMore || loadingOlder.current) return;
+    if (el.scrollHeight <= el.clientHeight + 4) {
+      loadingOlder.current = true;
+      setOlderLoading(true);
+      prevHeight.current = el.scrollHeight;
+      send({ type: "loadMore", cursor: state.cursor });
+    }
+  }, [logLen, state.hasMore, state.cursor]);
+
   // Only yank to bottom on stream update if the user hasn't scrolled away; if they HAVE
   // scrolled away and the AGENT adds new content at the bottom, light the jump button.
   // Keyed on the LAST message's signature so loading OLDER pages (which prepend at the
