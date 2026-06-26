@@ -206,6 +206,98 @@ body {
   border-radius: var(--an-radius);
 }
 
+/* Agent profile hero: Mii-Maker booth form, kept dark. Clean rounded stage, soft shadows,
+   pfp palette used only as a gentle accent. Static (no looping animation). */
+.an-agent-hero {
+  isolation: isolate;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--agent-accent) 10%, var(--an-bg-1)),
+      var(--an-bg-0) 78%
+    );
+  border-bottom: 1px solid color-mix(in srgb, var(--agent-accent) 18%, var(--an-line));
+}
+/* one clean dot field across the hero section (behind the avatar box + stats), tinted by
+   the pfp accent and faded smoothly toward the tabs. Single static layer — no clashing. */
+.an-agent-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: radial-gradient(color-mix(in srgb, var(--agent-accent) 60%, transparent) 1.7px, transparent 2.3px);
+  background-size: 16px 16px;
+  background-position: center top;
+  -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.4) 55%, transparent 88%);
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.4) 55%, transparent 88%);
+  opacity: 0.45;
+  pointer-events: none;
+}
+.an-agent-self-badge {
+  color: var(--an-fg);
+  border: 1px solid color-mix(in srgb, var(--agent-accent) 48%, var(--an-line));
+  background: color-mix(in srgb, var(--agent-accent) 16%, transparent);
+}
+.an-agent-avatar-stage {
+  position: relative;
+  display: flex;
+  height: 10.5rem;
+  width: min(15rem, 66vw);
+  align-items: flex-end;
+  justify-content: center;
+  border-radius: 1.75rem;
+}
+/* clean rounded booth panel behind the character (dark, soft) */
+.an-agent-avatar-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0.4rem 0.6rem 0.4rem;
+  border-radius: 1.5rem;
+  background:
+    radial-gradient(120% 80% at 50% 18%, color-mix(in srgb, var(--agent-accent) 16%, var(--an-bg-2)), var(--an-bg-2) 70%);
+  border: 1px solid color-mix(in srgb, var(--agent-accent) 20%, var(--an-line));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--an-fg) 6%, transparent),
+    0 0.5rem 1.4rem rgba(0, 0, 0, 0.35);
+}
+.an-agent-ground {
+  position: absolute;
+  z-index: 1;
+  bottom: 1.1rem;
+  width: 7rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  background: radial-gradient(50% 50%, rgba(0, 0, 0, 0.45), transparent 72%);
+  filter: blur(2px);
+  opacity: 0.8;
+}
+.an-agent-avatar {
+  position: relative;
+  z-index: 3;
+  height: 9.6rem;
+  width: 9.6rem;
+  margin-bottom: 0.3rem;
+  overflow: hidden;
+  filter: drop-shadow(0 0.5rem 0.7rem rgba(0, 0, 0, 0.4));
+}
+.an-agent-avatar svg {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+.an-agent-stat {
+  background: color-mix(in srgb, var(--an-bg-1) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--agent-accent) 20%, var(--an-line));
+  box-shadow: 0 0.3rem 0.7rem rgba(0, 0, 0, 0.28);
+}
+.an-agent-stat.is-hero {
+  background: color-mix(in srgb, var(--agent-accent) 16%, var(--an-bg-1));
+  border-color: color-mix(in srgb, var(--agent-accent) 50%, var(--an-line));
+  box-shadow:
+    0 0.4rem 0.9rem color-mix(in srgb, var(--agent-accent) 18%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--an-fg) 8%, transparent);
+}
+
 /* Inputs / textarea. */
 .an-input {
   width: 100%;

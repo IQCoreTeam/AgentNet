@@ -3,6 +3,11 @@ import { useStore } from "../state/store";
 import type { SkillCard, SkillDetail } from "../transport/protocol";
 import { SkillIcon } from "../icons";
 import { mediaUrl } from "./mediaUrl";
+import { walletAvatarSvg } from "./walletAvatar";
+
+function shortAddr(w?: string) {
+  return w ? `${w.slice(0, 4)}…${w.slice(-4)}` : "";
+}
 
 interface Props {
   detail: SkillDetail;
@@ -144,26 +149,29 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
           <div className="space-y-2">
             <p className="text-[11px] text-zinc-500 uppercase tracking-wide">Comments</p>
             {(notes as any[]).map((n: any, i) => (
-              <div key={i} className="rounded-lg bg-zinc-900 border border-zinc-800 p-2.5 text-xs text-zinc-300">
-                <span className="font-mono text-zinc-600 text-[10px]">{n.author?.slice(0, 6)}…</span>
-                <p className="mt-0.5">{n.text}</p>
+              <div key={i} className="rounded-xl bg-zinc-900 border border-zinc-800 p-3.5 text-sm text-zinc-300">
+                <div className="mb-2 flex items-center gap-2.5">
+                  <div className="h-8 w-8 shrink-0 overflow-hidden rounded-full border border-zinc-800 bg-zinc-800" aria-hidden="true" dangerouslySetInnerHTML={{ __html: walletAvatarSvg(n.author ?? "") }} />
+                  <span className="font-mono text-xs text-zinc-400">{shortAddr(n.author)}</span>
+                </div>
+                <p className="whitespace-pre-wrap break-words leading-relaxed">{n.text}</p>
               </div>
             ))}
           </div>
         )}
 
         {owned && (
-          <div className="space-y-1.5">
+          <div className="space-y-2.5">
             <p className="text-[11px] text-zinc-500 uppercase tracking-wide">Leave a comment</p>
             <textarea
-              className="w-full rounded-lg bg-zinc-900 border border-zinc-800 p-2 text-xs text-zinc-200 resize-none focus:outline-none focus:border-green-500/50"
-              rows={3}
+              className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-3.5 text-base text-zinc-200 leading-relaxed resize-none focus:outline-none focus:border-green-500/50"
+              rows={4}
               placeholder="Share your experience…"
               value={noteText}
               onChange={(e) => setNoteText(e.target.value)}
             />
             <input
-              className="w-full rounded-lg bg-zinc-900 border border-zinc-800 px-2 py-1.5 text-xs text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-blue-500/50"
+              className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-3 text-base text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-blue-500/50"
               placeholder="GitHub link (optional)"
               value={noteGitLink}
               onChange={(e) => setNoteGitLink(e.target.value)}
@@ -171,7 +179,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
             <button
               onClick={handleNote}
               disabled={!noteText.trim()}
-              className="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 disabled:opacity-40 active:bg-zinc-700"
+              className="w-full rounded-xl py-3.5 text-base font-semibold bg-zinc-800 text-zinc-200 disabled:opacity-40 active:bg-zinc-700"
             >
               Post
             </button>

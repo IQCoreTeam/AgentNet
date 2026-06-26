@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { parseGithubLink, safeExternalUrl } from "@iqlabs-official/agent-sdk/links/github.js";
 import { useStore } from "../state/store";
@@ -7,7 +7,7 @@ import { SkillIcon, CollectionIcon } from "../icons";
 
 // VerifiedRepo isn't re-exported by the protocol barrel; derive it from AgentProfile.
 type VRepo = NonNullable<AgentProfile["verifiedRepos"]>[number];
-import { walletAvatarSvg, walletBandColor } from "./walletAvatar";
+import { walletAvatarPalette, walletAvatarSvg, walletBandColor } from "./walletAvatar";
 import { mediaUrl } from "./mediaUrl";
 import { PostCelebration } from "./PostCelebration";
 import { RegisterWorkRepo } from "../onboarding/RegisterWorkRepo";
@@ -47,6 +47,14 @@ function PlusIcon({ className }: { className?: string }) {
   );
 }
 
+function GithubMark({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" style={{ color: "var(--an-fg)" }} aria-hidden="true">
+      <path d="M12 1.5A10.5 10.5 0 0 0 8.68 22c.52.1.71-.23.71-.5v-1.76c-2.92.64-3.54-1.41-3.54-1.41-.48-1.21-1.16-1.53-1.16-1.53-.95-.65.07-.64.07-.64 1.05.07 1.6 1.08 1.6 1.08.94 1.6 2.46 1.14 3.06.87.1-.68.37-1.14.66-1.4-2.33-.27-4.78-1.17-4.78-5.18 0-1.15.41-2.08 1.08-2.82-.11-.27-.47-1.34.1-2.79 0 0 .88-.28 2.88 1.07a10 10 0 0 1 5.24 0c2-1.35 2.88-1.07 2.88-1.07.57 1.45.21 2.52.1 2.79.68.74 1.08 1.67 1.08 2.82 0 4.02-2.46 4.9-4.8 5.16.38.33.71.97.71 1.96v2.9c0 .28.19.61.72.5A10.5 10.5 0 0 0 12 1.5Z" />
+    </svg>
+  );
+}
+
 function StarIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -81,6 +89,39 @@ function tierInfo(stars: number) {
     else { next = t; break; }
   }
   return { cur, next };
+}
+
+// Per-repo rarity ramp for the WORK cards: a repo's own star count gives it a neon edge,
+// escalating in steps (collection-desire). Starts at 3 stars; below that it's "common"
+// (plain line border). Tight, not glowing — a crisp colored edge + a faint inset ring.
+const REPO_RARITY = [
+  { min: 250, color: "#f472b6" }, // legendary - pink
+  { min: 50, color: "#ffcb45" },  // gold
+  { min: 10, color: "#a78bfa" },  // violet
+  { min: 3, color: "#3fb9e0" },   // uncommon - cyan
+] as const;
+
+function repoRarity(stars: number) {
+  return REPO_RARITY.find((t) => stars >= t.min) ?? null;
+}
+
+// A neon edge with a soft glow (used on the WORK cards): saturated border + inset ring +
+// a gentle outer halo so a high-tier repo subtly glows.
+function neonEdge(color: string) {
+  return {
+    borderColor: `color-mix(in srgb, ${color} 75%, var(--an-line))`,
+    boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 24%, transparent), 0 0 14px color-mix(in srgb, ${color} 26%, transparent)`,
+    background: `color-mix(in srgb, ${color} 9%, var(--an-bg-1))`,
+  } as const;
+}
+
+// A softer edge for the skill cards — just a hint of the color so the grid still reads calm.
+function softEdge(color: string) {
+  return {
+    borderColor: `color-mix(in srgb, ${color} 42%, var(--an-line))`,
+    boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 12%, transparent)`,
+    background: `color-mix(in srgb, ${color} 5%, var(--an-bg-1))`,
+  } as const;
 }
 
 // The agent's "IQ tier" badge for the hero: star glyph + tier name + a 5-segment gauge +
@@ -214,12 +255,15 @@ function GithubCard({ url, className = "mt-2" }: { url: string; className?: stri
       href={info.href}
       target="_blank"
       rel="noreferrer"
-      className={`block rounded-md border px-2.5 py-2 active:opacity-80 ${className}`}
+      className={`flex items-center gap-2.5 rounded-md border px-2.5 py-2 active:opacity-80 ${className}`}
       style={{ background: "var(--an-bg-2)", borderColor: "var(--an-line)" }}
     >
-      <span className="block text-[9px] font-semibold uppercase tracking-wide text-blue-300">{kind}</span>
-      <span className="mt-0.5 block truncate text-[11px] font-medium" style={{ color: "var(--an-fg)" }}>{info.label}</span>
-      <span className="mt-0.5 block truncate text-[10px]" style={{ color: "var(--an-fg-mute)" }}>{info.meta}</span>
+      <GithubMark className="h-5 w-5 shrink-0" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-[9px] font-semibold uppercase tracking-wide text-blue-300">{kind}</span>
+        <span className="mt-0.5 block truncate text-[11px] font-medium" style={{ color: "var(--an-fg)" }}>{info.label}</span>
+        <span className="mt-0.5 block truncate text-[10px]" style={{ color: "var(--an-fg-mute)" }}>{info.meta}</span>
+      </span>
     </a>
   );
 }
@@ -239,20 +283,37 @@ function WorkCard({
     .map((m) => skillById.get(m))
     .filter((c): c is SkillCard => !!c)
     .sort((a, b) => (b.supply ?? 0) - (a.supply ?? 0));
+  const rarity = repoRarity(repo.stars);
+  const starColor = rarity?.color ?? "#f5b94a";
   return (
     <div
-      className="flex min-w-[260px] max-w-[300px] flex-[0_0_84%] snap-start flex-col gap-3 rounded-xl border p-4 sm:flex-[0_0_280px]"
-      style={{ background: "var(--an-bg-1)", borderColor: "var(--an-line)" }}
+      className="relative flex min-w-[260px] max-w-[300px] flex-[0_0_84%] snap-start flex-col gap-3 overflow-hidden rounded-xl border p-4 sm:flex-[0_0_280px]"
+      style={rarity ? neonEdge(rarity.color) : { background: "var(--an-bg-1)", borderColor: "var(--an-line)" }}
     >
-      <div className="flex items-center gap-2">
-        <span className="inline-flex items-center" style={{ color: "#f5b94a" }}><StarIcon className="h-5 w-5" /></span>
+      {/* starred (tiered) repos get a faint dotted gradient inside, in the tier color */}
+      {rarity && (
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage: `radial-gradient(color-mix(in srgb, ${rarity.color} 60%, transparent) 1.4px, transparent 2px)`,
+            backgroundSize: "13px 13px",
+            backgroundPosition: "center top",
+            WebkitMaskImage: "radial-gradient(120% 90% at 80% 0%, rgba(0,0,0,0.8), transparent 70%)",
+            maskImage: "radial-gradient(120% 90% at 80% 0%, rgba(0,0,0,0.8), transparent 70%)",
+            opacity: 0.35,
+          }}
+          aria-hidden="true"
+        />
+      )}
+      <div className="relative z-10 flex items-center gap-2">
+        <span className="inline-flex items-center" style={{ color: starColor }}><StarIcon className="h-5 w-5" /></span>
         <span className="text-2xl font-bold leading-none" style={{ color: "var(--an-fg)" }}>{repo.stars}</span>
         <span className="text-xs" style={{ color: "var(--an-fg-mute)" }}>stars</span>
         {repo.forks > 0 && <span className="ml-auto text-xs" style={{ color: "var(--an-fg-mute)" }}>⑂ {repo.forks}</span>}
       </div>
-      <GithubCard url={repo.url} className="" />
+      <GithubCard url={repo.url} className="relative z-10" />
       {linked.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="relative z-10 flex flex-wrap gap-1.5">
           {linked.slice(0, 3).map((c) => (
             <span key={c.id} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px]" style={{ background: "var(--an-bg-2)", color: "var(--an-fg-dim)" }}>
               <SkillIcon className="h-3 w-3 shrink-0" />
@@ -267,7 +328,7 @@ function WorkCard({
           )}
         </div>
       ) : (
-        <span className="text-[11px]" style={{ color: "var(--an-fg-mute)" }}>
+        <span className="relative z-10 text-[11px]" style={{ color: "var(--an-fg-mute)" }}>
           {repo.skillMints.length} skill{repo.skillMints.length !== 1 ? "s" : ""} linked
         </span>
       )}
@@ -316,16 +377,16 @@ function NoteComposer({
     setTitle(""); setText(""); setLink(""); setImage("");
   }
   return (
-    <div className="space-y-2">
+    <div className="space-y-2.5">
       {withTitle && (
-        <input className="w-full rounded-xl px-2.5 py-2 text-sm font-semibold focus:outline-none" style={inputStyle} placeholder="Title (optional)" value={title} disabled={busy} onChange={(e) => setTitle(e.target.value)} />
+        <input className="w-full rounded-xl px-3.5 py-3 text-base font-semibold focus:outline-none" style={inputStyle} placeholder="Title (optional)" value={title} disabled={busy} onChange={(e) => setTitle(e.target.value)} />
       )}
-      <textarea className="w-full resize-none rounded-xl p-2.5 text-sm focus:outline-none" style={inputStyle} rows={3} placeholder={placeholder} value={text} disabled={busy} onChange={(e) => setText(e.target.value)} />
-      <input className="w-full rounded-xl px-2.5 py-2 text-sm focus:outline-none" style={{ ...inputStyle, color: "var(--an-fg-dim)" }} placeholder="Image link / on-chain address / tx id (optional)" value={image} disabled={busy} onChange={(e) => setImage(e.target.value)} />
-      {!imageOk && <p className="text-[11px]" style={{ color: "var(--an-red, #f87171)" }}>Image must be an https link, on-chain address, or tx id.</p>}
-      {img && imageOk && mediaUrl(img) && <img src={mediaUrl(img)} alt="" referrerPolicy="no-referrer" className="h-16 w-16 rounded-lg object-cover" style={{ border: "1px solid var(--an-line)" }} />}
-      <input className="w-full rounded-xl px-2.5 py-2 text-sm focus:outline-none" style={{ ...inputStyle, color: "var(--an-fg-dim)" }} placeholder="GitHub link (optional)" value={link} disabled={busy} onChange={(e) => setLink(e.target.value)} />
-      <button onClick={submit} disabled={!hasContent || !imageOk || busy} className="w-full rounded-xl py-2.5 text-sm font-semibold disabled:opacity-40" style={{ background: "var(--an-green)", color: "var(--an-on-green)" }}>
+      <textarea className="w-full resize-none rounded-xl p-3.5 text-base leading-relaxed focus:outline-none" style={inputStyle} rows={4} placeholder={placeholder} value={text} disabled={busy} onChange={(e) => setText(e.target.value)} />
+      <input className="w-full rounded-xl px-3.5 py-3 text-base focus:outline-none" style={{ ...inputStyle, color: "var(--an-fg-dim)" }} placeholder="Image link / on-chain address / tx id (optional)" value={image} disabled={busy} onChange={(e) => setImage(e.target.value)} />
+      {!imageOk && <p className="text-xs" style={{ color: "var(--an-red, #f87171)" }}>Image must be an https link, on-chain address, or tx id.</p>}
+      {img && imageOk && mediaUrl(img) && <img src={mediaUrl(img)} alt="" referrerPolicy="no-referrer" className="h-20 w-20 rounded-lg object-cover" style={{ border: "1px solid var(--an-line)" }} />}
+      <input className="w-full rounded-xl px-3.5 py-3 text-base focus:outline-none" style={{ ...inputStyle, color: "var(--an-fg-dim)" }} placeholder="GitHub link (optional)" value={link} disabled={busy} onChange={(e) => setLink(e.target.value)} />
+      <button onClick={submit} disabled={!hasContent || !imageOk || busy} className="w-full rounded-xl py-3.5 text-base font-semibold disabled:opacity-40" style={{ background: "var(--an-green)", color: "var(--an-on-green)" }}>
         {posting ? "Posting..." : submitLabel}
       </button>
     </div>
@@ -456,14 +517,15 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   const blogDrag = useRef({ active: false, moved: false, startX: 0, startLeft: 0 });
   const [copied, setCopied] = useState(false);
   const avatar = useMemo(() => walletAvatarSvg(profile.wallet), [profile.wallet]);
+  const avatarPalette = useMemo(() => walletAvatarPalette(profile.wallet), [profile.wallet]);
   const bandColor = useMemo(() => walletBandColor(profile.wallet), [profile.wallet]);
-  // The hero is now a DEEP MUTED tint of the avatar color over the dark base (not the raw
-  // neon color), so it reads as a dark surface whatever the hue — meaning ink is always
-  // near-white. `band`/`bandSoft` are the tint at the top/bottom of the hero so it melts into
-  // the tab strip + theme instead of a flat saturated slab.
-  const bandInk = "#f5f5f5";
-  const band = `color-mix(in srgb, ${bandColor} 42%, var(--an-bg-0))`;
-  const bandSoft = `color-mix(in srgb, ${bandColor} 16%, var(--an-bg-0))`;
+  // Mii-Maker form, kept dark: a clean rounded "booth" the avatar stands on, with the pfp
+  // palette used only as a soft accent (not a bright tint, since the whole app is dark).
+  // Static — no looping animation, to keep it light on the device.
+  const bandInk = "var(--an-fg)";
+  const heroAccent = avatarPalette.clothes ?? bandColor;
+  const heroSecondary = avatarPalette.face_acc ?? bandColor;
+  const heroLine = avatarPalette.line ?? bandColor;
   const [fabOpen, setFabOpen] = useState(false);
   const [composeMode, setComposeMode] = useState<null | "blog" | "repo">(null);
   const [posting, setPosting] = useState(false);
@@ -577,68 +639,79 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   return (
     <div className="relative flex h-full flex-col" style={{ background: "var(--an-bg-0)" }}>
       <div className={`flex-1 overflow-y-auto ${showBuyAll && tab === "agent" ? "" : "an-tabbar-inset"}`}>
-        {/* HERO BAND — a DEEP MUTED tint of the avatar color (not the raw neon), gradient-
-            fading down into the dark theme so it reads as a rich surface, not a flat slab.
-            Light controls/stats stay legible since the tint is always dark. Shared by tabs. */}
+        {/* HERO STAGE — Mii-Maker booth kept dark: a clean rounded stage the avatar stands on,
+            with the pfp palette as a soft accent only. Static (no looping motion). */}
         <div
-          className="relative px-3 pb-3 pt-3"
+          className="an-agent-hero relative overflow-hidden px-3 pb-4 pt-3"
           style={{
-            background: `linear-gradient(180deg, ${band} 0%, ${bandSoft} 100%)`,
-          }}
+            "--agent-accent": heroAccent,
+            "--agent-secondary": heroSecondary,
+            "--agent-line": heroLine,
+          } as CSSProperties}
         >
-          {/* top controls: back + address + settings (left), IQ tier gauge (right) */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <button onClick={onBack} aria-label="Back" className="shrink-0 text-lg leading-none text-white/90">←</button>
-              <button onClick={copyWallet} className="flex min-w-0 items-center gap-1 font-mono text-sm text-white" style={{ textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}>
-                <span className="truncate">{shortWallet(profile.wallet)}</span>
-                {copied ? <span className="text-[10px]">✓</span> : <CopyIcon className="h-3 w-3 shrink-0 opacity-70" />}
-              </button>
-              {profile.self && (
-                <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ border: `1px solid color-mix(in srgb, ${bandInk} 55%, transparent)`, color: bandInk }}>you</span>
-              )}
-              {profile.self && (
-                <button onClick={() => setSettingsOpen(true)} aria-label="Settings" className="shrink-0 text-white/85"><GearIcon className="h-4 w-4" /></button>
-              )}
-            </div>
-            <TierGauge stars={repoStars} ink={bandInk} onHelp={() => setHelpOpen(true)} />
-          </div>
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 h-28"
+            style={{
+              background: `radial-gradient(120% 80% at 50% -10%, color-mix(in srgb, ${heroAccent} 16%, transparent), transparent 62%)`,
+            }}
+            aria-hidden="true"
+          />
 
-          {/* big avatar — sits on its own color, no separate background box */}
-          <div className="mt-1 flex justify-center">
-            <div className="overflow-hidden" style={{ width: 148, height: 148 }} aria-hidden="true" dangerouslySetInnerHTML={{ __html: avatar }} />
-          </div>
-
-          {/* glass stat cards — translucent, overlapping the avatar's lower edge */}
-          <div className="relative z-10 -mt-7 grid grid-cols-3 gap-2">
-            {stats.map((s) => (
-              <div
-                key={s.label}
-                className="rounded-xl p-3 text-center"
-                style={{
-                  background: s.hero ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.06)",
-                  border: `1px solid color-mix(in srgb, ${bandInk} 55%, transparent)`,
-                  backdropFilter: "blur(4px)",
-                  WebkitBackdropFilter: "blur(4px)",
-                }}
-              >
-                <p className={`font-bold ${s.hero ? "text-2xl" : "text-xl"}`} style={{ color: bandInk }}>{s.n}</p>
-                <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide" style={{ color: bandInk }}>{s.label}</p>
+          <div className="relative z-10">
+            {/* top controls: back + address + settings (left), IQ tier gauge (right) */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <button onClick={onBack} aria-label="Back" className="shrink-0 text-lg leading-none" style={{ color: "var(--an-fg)" }}>←</button>
+                <button onClick={copyWallet} className="flex min-w-0 items-center gap-1 font-mono text-sm" style={{ color: "var(--an-fg)" }}>
+                  <span className="truncate">{shortWallet(profile.wallet)}</span>
+                  {copied ? <span className="text-[10px]">✓</span> : <CopyIcon className="h-3 w-3 shrink-0 opacity-70" />}
+                </button>
+                {profile.self && (
+                  <span className="an-agent-self-badge shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold">you</span>
+                )}
+                {profile.self && (
+                  <button onClick={() => setSettingsOpen(true)} aria-label="Settings" className="shrink-0" style={{ color: "var(--an-fg-dim)" }}><GearIcon className="h-4 w-4" /></button>
+                )}
               </div>
-            ))}
+              <TierGauge stars={repoStars} ink={bandInk} onHelp={() => setHelpOpen(true)} />
+            </div>
+
+            {/* big avatar — Mii booth: the character stands on a clean rounded stage with a
+                soft ground shadow. Static, no motion. */}
+            <div className="mt-2 flex justify-center">
+              <div className="an-agent-avatar-stage" aria-hidden="true">
+                <span className="an-agent-ground" />
+                <div className="an-agent-avatar" dangerouslySetInnerHTML={{ __html: avatar }} />
+              </div>
+            </div>
+
+            {/* HUD stat cards — compact glass, tied to the portrait accent instead of a broad tint */}
+            <div className="relative z-10 -mt-6 grid grid-cols-3 gap-2">
+              {stats.map((s) => (
+                <div
+                  key={s.label}
+                  className={`an-agent-stat rounded-xl p-3 text-center ${s.hero ? "is-hero" : ""}`}
+                >
+                  <p className={`font-bold ${s.hero ? "text-2xl" : "text-xl"}`} style={{ color: bandInk }}>{s.n}</p>
+                  <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide" style={{ color: "var(--an-fg-dim)" }}>{s.label}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* TAB BAR — vscode-style file tabs (skewed); the active tab lifts + gets a green
-            top accent, the inactive one sits dimmer behind it. */}
-        <div className="flex gap-2 px-3 pt-1.5" style={{ background: bandSoft }}>
+        {/* TAB BAR — file-folder tabs: the active tab is the open folder front (same color as
+            the content, raised, bordered, and it breaks the shelf line = folder mouth); the
+            inactive tab is a darker tab tucked lower and behind the shelf. No colored accent —
+            the folder shape carries it. */}
+        <div className="flex items-end gap-1.5 px-3" style={{ background: "var(--an-bg-0)" }}>
           {(["agent", "community"] as const).map((t) => {
             const active = tab === t;
             return (
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className={`flex-1 rounded-t-lg py-2.5 text-sm font-bold capitalize ${active ? "-mb-px" : ""}`}
+                className={`flex-1 rounded-t-xl text-sm font-bold capitalize ${active ? "-mb-px pb-2.5 pt-3" : "pb-2 pt-2 opacity-80"}`}
                 style={
                   active
                     ? {
@@ -649,7 +722,13 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                         borderBottom: "1px solid var(--an-bg-0)",
                         color: "var(--an-fg)",
                       }
-                    : { background: "rgba(0,0,0,0.22)", color: "rgba(255,255,255,0.85)" }
+                    : {
+                        background: "color-mix(in srgb, #000 28%, var(--an-bg-0))",
+                        borderTop: "1px solid color-mix(in srgb, var(--an-line) 60%, transparent)",
+                        borderLeft: "1px solid color-mix(in srgb, var(--an-line) 60%, transparent)",
+                        borderRight: "1px solid color-mix(in srgb, var(--an-line) 60%, transparent)",
+                        color: "var(--an-fg-dim)",
+                      }
                 }
               >
                 {t}
@@ -658,8 +737,8 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
           })}
         </div>
 
-        {/* TAB CONTENT */}
-        <div className="space-y-4 px-3 pt-4">
+        {/* TAB CONTENT — the shelf line under the tabs forms the folder body's top edge */}
+        <div className="space-y-4 px-3 pt-4" style={{ borderTop: "1px solid var(--an-line)" }}>
           {tab === "agent" && (
             <>
               {/* WORK — verified repos, horizontal, each with stars + a representative skill */}
@@ -695,12 +774,9 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                           key={card.id}
                           onClick={() => onOpenSkill(card)}
                           className={`flex items-center rounded-xl border text-left active:scale-[0.98] ${skillsOneCol ? "gap-3 p-3.5" : "gap-2 p-2.5"}`}
-                          style={{
-                            background: isWorkflow ? "linear-gradient(160deg, rgba(245,158,11,0.16), var(--an-bg-1))" : "var(--an-bg-1)",
-                            borderColor: isWorkflow ? "rgba(245,158,11,0.5)" : "var(--an-line)",
-                          }}
+                          style={softEdge(isWorkflow ? "#f5b94a" : "var(--an-green)")}
                         >
-                          <div className={`flex shrink-0 items-center justify-center overflow-hidden rounded-lg ${skillsOneCol ? "h-12 w-12" : "h-9 w-9"}`} style={{ background: "var(--an-bg-2)", color: isWorkflow ? "#f5b94a" : "var(--an-fg-mute)" }}>
+                          <div className={`flex shrink-0 items-center justify-center overflow-hidden rounded-lg ${skillsOneCol ? "h-12 w-12" : "h-9 w-9"}`} style={{ background: "var(--an-bg-2)", color: isWorkflow ? "#f5b94a" : "var(--an-green)" }}>
                             {cover ? (
                               <img src={cover} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
                             ) : isWorkflow ? (
@@ -800,15 +876,15 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                   <p className="mb-2 text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>Comments</p>
                   <div className="space-y-2">
                     {comments.map((n) => (
-                      <div key={n.id} className="rounded-xl border p-3 text-xs" style={{ background: "var(--an-bg-1)", borderColor: "var(--an-line)", color: "var(--an-fg-dim)" }}>
-                        <div className="mb-1 flex items-center gap-2">
-                          <div className="h-5 w-5 shrink-0 overflow-hidden rounded-full" style={{ background: "var(--an-bg-2)" }} aria-hidden="true" dangerouslySetInnerHTML={{ __html: walletAvatarSvg(n.author) }} />
-                          <span className="font-mono text-[10px]" style={{ color: "var(--an-fg-mute)" }}>{shortWallet(n.author)}</span>
-                          {noteDate(n.timestamp) && <span className="ml-auto text-[10px]" style={{ color: "var(--an-fg-mute)" }}>{noteDate(n.timestamp)}</span>}
+                      <div key={n.id} className="rounded-xl border p-3.5 text-sm" style={{ background: "var(--an-bg-1)", borderColor: "var(--an-line)", color: "var(--an-fg-dim)" }}>
+                        <div className="mb-2 flex items-center gap-2.5">
+                          <div className="h-8 w-8 shrink-0 overflow-hidden rounded-full" style={{ background: "var(--an-bg-2)", border: "1px solid var(--an-line)" }} aria-hidden="true" dangerouslySetInnerHTML={{ __html: walletAvatarSvg(n.author) }} />
+                          <span className="font-mono text-xs" style={{ color: "var(--an-fg-dim)" }}>{shortWallet(n.author)}</span>
+                          {noteDate(n.timestamp) && <span className="ml-auto text-[11px]" style={{ color: "var(--an-fg-mute)" }}>{noteDate(n.timestamp)}</span>}
                         </div>
-                        {mediaUrl(n.image) && <img src={mediaUrl(n.image)} alt="" referrerPolicy="no-referrer" className="mb-1.5 max-h-32 w-full rounded-lg object-cover" />}
-                        {n.title && <p className="mb-0.5 text-xs font-bold" style={{ color: "var(--an-fg)" }}>{n.title}</p>}
-                        {n.text && <p className="whitespace-pre-wrap break-words">{n.text}</p>}
+                        {mediaUrl(n.image) && <img src={mediaUrl(n.image)} alt="" referrerPolicy="no-referrer" className="mb-2 max-h-32 w-full rounded-lg object-cover" />}
+                        {n.title && <p className="mb-0.5 text-sm font-bold" style={{ color: "var(--an-fg)" }}>{n.title}</p>}
+                        {n.text && <p className="whitespace-pre-wrap break-words leading-relaxed">{n.text}</p>}
                         {n.gitLink && <GithubCard url={n.gitLink} />}
                       </div>
                     ))}
