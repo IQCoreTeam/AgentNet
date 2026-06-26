@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Build the three Android assets the shell extracts on first run:
-#   app/src/main/assets/proot-<abi>            Android-native proot binary
-#   app/src/main/assets/loader-<abi>           proot's ELF loader helper
+# Build the Android runtime payload:
+#   app/src/main/jniLibs/<abi>/lib*.so         Android-native proot + loader + libs.
+#                                              Ship here (NOT as loose ELF in assets/) so the
+#                                              OS extracts them to nativeLibraryDir and Play
+#                                              Protect doesn't REJECT "executable ELF in assets".
 #   app/src/main/assets/rootfs-<abi>.tar       Ubuntu (glibc) rootfs with node +
 #                                              official claude/codex + ripgrep + AGENTS.md
 #   app/src/main/assets/agentnet-server.tar    our surfaces/localhost build output
@@ -85,16 +87,30 @@ curl -fsSL "$TALLOC_DEB" -o "$WORK/talloc.deb" && deb_extract "$WORK/talloc.deb"
 curl -fsSL "$SHMEM_DEB"  -o "$WORK/shmem.deb"  && deb_extract "$WORK/shmem.deb"  "$PROOT_STAGE/shmem"
 # Termux installs under data/data/com.termux/files/usr — pull the bits we need out of there.
 TUSR="data/data/com.termux/files/usr"
-# Lay out under assets to match Paths.kt: proot at proot/bin/proot, loader at
-# proot/libexec/proot/loader (ServerManager points PROOT_LOADER there), libs at proot/lib.
-rm -rf "$ASSETS/proot-$ABI"
-mkdir -p "$ASSETS/proot-$ABI/bin" "$ASSETS/proot-$ABI/libexec/proot" "$ASSETS/proot-$ABI/lib"
-cp "$PROOT_STAGE/proot/$TUSR/bin/proot" "$ASSETS/proot-$ABI/bin/proot"
-cp "$PROOT_STAGE/proot/$TUSR/libexec/proot/loader"* "$ASSETS/proot-$ABI/libexec/proot/" 2>/dev/null || true
+# Ship proot + loader + libs under jniLibs/<android-abi> as lib*.so (NOT as loose ELF in
+# assets/). The OS extracts jniLibs into nativeLibraryDir at install — an app-owned dir that
+# stays executable on any targetSdk — and ELF under lib/ is what Play Protect expects, so
+# this avoids the "executable ELF in assets" REJECT. jniLibs ONLY packages files named
+# lib*.so, hence the renames (Paths.kt / ServerManager.kt expect these exact names):
+#   proot           -> libproot.so      (ServerManager runs this)
+#   loader/loader32 -> libloader.so / libloader32.so   (PROOT_LOADER / PROOT_LOADER_32)
+#   libtalloc.so.2  -> libtalloc.so     (versioned name isn't lib*.so; ServerManager hangs a
+#                                         libtalloc.so.2 soname symlink at runtime to resolve it)
+#   libandroid-shmem.so                 (already lib*.so)
+# No chmod: the OS sets native-lib perms. proot-userland is unused by the shell, so it's
+# dropped — one fewer ELF in the APK.
+case "$ABI" in
+  arm64)  JNI_ABI="arm64-v8a" ;;
+  x86_64) JNI_ABI="x86_64" ;;
+esac
+JNIDIR="$ANDROID_DIR/app/src/main/jniLibs/$JNI_ABI"
+rm -rf "$JNIDIR"; mkdir -p "$JNIDIR"
+cp "$PROOT_STAGE/proot/$TUSR/bin/proot"               "$JNIDIR/libproot.so"
+cp "$PROOT_STAGE/proot/$TUSR/libexec/proot/loader"    "$JNIDIR/libloader.so"
+cp "$PROOT_STAGE/proot/$TUSR/libexec/proot/loader32"  "$JNIDIR/libloader32.so" 2>/dev/null || true
 # cp -L: the versioned .so.2 is a symlink in the .deb — copy the real bytes.
-cp -L "$PROOT_STAGE/talloc/$TUSR/lib/libtalloc.so.2"      "$ASSETS/proot-$ABI/lib/libtalloc.so.2"
-cp -L "$PROOT_STAGE/shmem/$TUSR/lib/libandroid-shmem.so"  "$ASSETS/proot-$ABI/lib/libandroid-shmem.so"
-chmod +x "$ASSETS/proot-$ABI/bin/proot" "$ASSETS/proot-$ABI/libexec/proot/loader"* 2>/dev/null || true
+cp -L "$PROOT_STAGE/talloc/$TUSR/lib/libtalloc.so.2"     "$JNIDIR/libtalloc.so"
+cp -L "$PROOT_STAGE/shmem/$TUSR/lib/libandroid-shmem.so" "$JNIDIR/libandroid-shmem.so"
 
 # 2) Ubuntu rootfs with the engine installed. KEY: we don't download a rootfs — this
 #    script runs INSIDE an arm64 ubuntu container (see the workflow), so the container's
@@ -197,3 +213,5 @@ tar -cf "$ASSETS/agentnet-server.tar" -C "$STAGE" .
 
 echo "==> done. assets:"
 ls -lh "$ASSETS"
+echo "==> jniLibs ($JNI_ABI):"
+ls -lh "$JNIDIR"

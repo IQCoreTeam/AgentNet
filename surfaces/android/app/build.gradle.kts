@@ -62,6 +62,14 @@ android {
     }
 
     packaging {
+        // proot + its loader/libs ship under jniLibs (as lib*.so) instead of as loose
+        // executable ELF in assets/ — that's what stops the Play Protect "executable ELF
+        // in assets" REJECT. useLegacyPackaging=true makes the OS EXTRACT them into
+        // nativeLibraryDir as real, executable files; the modern default (false) keeps them
+        // mmap'd inside the APK, where proot can't be exec'd. So this flag is load-bearing.
+        jniLibs {
+            useLegacyPackaging = true
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }

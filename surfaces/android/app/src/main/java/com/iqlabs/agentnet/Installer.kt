@@ -4,22 +4,23 @@ import android.content.Context
 import android.system.Os
 import android.util.Log
 import java.io.File
-import java.io.FileOutputStream
 
-// First-run setup: lay down the proot binary, the Ubuntu rootfs, and our server bundle
-// into app storage. Idempotent — a marker file means "already installed", so this is a
-// no-op on every launch after the first.
+// First-run setup: lay down the Ubuntu rootfs and our server bundle into app storage.
+// Idempotent — a marker file means "already installed", so this is a no-op on every
+// launch after the first.
 //
-// What ships in assets (prepared by scripts/, see README):
-//   proot-<abi>/           — Bionic-native proot tree (bin/proot + libexec/proot/loader)
-//   rootfs-<abi>.tar.xz    — proot-distro Ubuntu (glibc) rootfs; claude/codex + node
+// proot itself is NOT installed here anymore: it ships under jniLibs (as libproot.so +
+// libloader*.so + libtalloc.so/libandroid-shmem.so) and the OS extracts it into
+// nativeLibraryDir at install time (see Paths). That keeps executable ELF out of assets/,
+// which is what was tripping the Play Protect REJECT.
+//
+// What ships and is extracted HERE:
+//   rootfs-<abi>.tar       — proot-distro Ubuntu (glibc) rootfs; claude/codex + node
 //                            are installed into it (so they're real Linux binaries)
 //   agentnet-server.tar    — our surfaces/localhost build output (the node bundle)
 //
 // The heavy artifacts are NOT in the repo (they're built/fetched by the release
-// pipeline). This class is the extraction logic that runs when they're present;
-// extractTar* shells out to the guest's own tar AFTER proot is in place for the rootfs,
-// and uses a pure-Kotlin copy for the small proot binary.
+// pipeline). This class is the extraction logic that runs when they're present.
 class Installer(private val ctx: Context) {
     companion object {
         private const val TAG = "AgentNet/Installer"
@@ -89,23 +90,9 @@ class Installer(private val ctx: Context) {
         }
         val abi = abi()
 
-        onProgress("Preparing your runtime")
-        // proot ships as a small dir tree in assets (proot-<abi>/bin/proot +
-        // proot-<abi>/libexec/proot/loader). Copy the whole tree to filesDir/proot and
-        // mark the binary + loaders executable.
-        copyAssetDir("proot-$abi", p.prootRoot)
-        Os.chmod(p.proot, 0b111_101_101) // 0755
-        Os.chmod(p.loader, 0b111_101_101)
-        runCatching { Os.chmod("${p.loader}32", 0b111_101_101) } // loader32, if present
-        // proot 5.1.0 (Termux build, process_vm=yes) is dynamically linked against
-        // libtalloc.so.2 + libandroid-shmem.so, shipped under proot-<abi>/lib/. Make them
-        // readable/executable so the linker can map them (ServerManager points
-        // LD_LIBRARY_PATH here). process_vm_readv strips arm64 top-byte pointer tags,
-        // which is what lets the sandbox boot on tag-enabled devices (e.g. Solana Seeker)
-        // where the old PEEKDATA-only proot died with "ptrace(PEEKDATA): I/O error".
-        File("${p.prootRoot}/lib").listFiles()?.forEach {
-            runCatching { Os.chmod(it.absolutePath, 0b111_101_101) } // 0755
-        }
+        // NOTE: proot is no longer extracted here. It ships under jniLibs and the OS lays
+        // it down in nativeLibraryDir at install time (see Paths). First-run setup is just
+        // the rootfs + the server bundle below.
 
         onProgress("Setting up your environment\nFirst launch only — this takes a few minutes")
         // rootfs is large; stream it to disk, then let the guest's tar unpack it. We
@@ -146,21 +133,5 @@ class Installer(private val ctx: Context) {
         runCatching { android.system.Os.remove(file.absolutePath) } // unlink (link or file)
         file.parentFile?.mkdirs()
         file.writeText(text)
-    }
-
-    // Recursively copy an assets/ subtree to a destination dir. assets.list(path)
-    // returns child names; a leaf (empty list) is a file, a node has children.
-    private fun copyAssetDir(assetPath: String, destPath: String) {
-        val children = ctx.assets.list(assetPath) ?: emptyArray()
-        if (children.isEmpty()) { // file
-            val dest = File(destPath)
-            dest.parentFile?.mkdirs()
-            ctx.assets.open(assetPath).use { input ->
-                FileOutputStream(dest).use { output -> input.copyTo(output) }
-            }
-            return
-        }
-        File(destPath).mkdirs()
-        for (child in children) copyAssetDir("$assetPath/$child", "$destPath/$child")
     }
 }

@@ -2,6 +2,7 @@ package com.iqlabs.agentnet
 
 import android.content.Context
 import android.os.Build
+import android.system.Os
 import android.util.Log
 import java.io.BufferedReader
 import java.io.File
@@ -120,13 +121,25 @@ class ServerManager(private val ctx: Context) {
         // Host-side env for the proot PROCESS (not the guest). These are load-bearing:
         val env = pb.environment()
         env["PROOT_LOADER"] = p.loader            // proot's own ELF loader helper
-        // proot is the Termux 5.1.0 build (process_vm=yes), dynamically linked against
-        // libtalloc.so.2 + libandroid-shmem.so under files/proot/lib. Point the linker at
-        // them. Why this proot: process_vm_readv strips arm64 top-byte pointer tags, so it
-        // avoids the PEEKDATA "I/O error" on tagged addresses that broke the sandbox on
-        // tag-enabled devices (Solana Seeker / Android 16). Full root cause: AndroidManifest.
-        env["LD_LIBRARY_PATH"] = listOfNotNull("${p.prootRoot}/lib", env["LD_LIBRARY_PATH"])
-            .joinToString(":")
+        env["PROOT_LOADER_32"] = p.loader32       // 32-bit loader (guest is 64-bit; set anyway)
+        // proot is the Termux build (process_vm=yes), dynamically linked against
+        // libtalloc.so.2 + libandroid-shmem.so. Those now ship under jniLibs and the OS
+        // extracts them into nativeLibraryDir — so point LD_LIBRARY_PATH there. jniLibs only
+        // packages files named lib*.so, so the versioned libtalloc.so.2 had to ship as
+        // libtalloc.so; but proot's DT_NEEDED still asks for the soname "libtalloc.so.2", so
+        // we hang a symlink with that exact name in a writable dir and put it FIRST on the
+        // search path. (Why this proot: process_vm_readv strips arm64 top-byte pointer tags,
+        // avoiding the PEEKDATA "I/O error" on tagged addresses that broke the sandbox on
+        // tag-enabled devices like the Solana Seeker. Full root cause: AndroidManifest.)
+        val sonameShim = Paths.dir("${p.filesDir}/proot-soname")
+        val talloc2 = File(sonameShim, "libtalloc.so.2")
+        if (!talloc2.exists()) {
+            runCatching { Os.symlink("${p.nativeLibDir}/libtalloc.so", talloc2.absolutePath) }
+                .onFailure { Log.w(TAG, "could not create libtalloc.so.2 soname symlink", it) }
+        }
+        env["LD_LIBRARY_PATH"] =
+            listOfNotNull(sonameShim.absolutePath, p.nativeLibDir, env["LD_LIBRARY_PATH"])
+                .joinToString(":")
         // PROOT_NO_SECCOMP: Android 12+/15 tighten the seccomp filter (e.g. set_robust_list
         // blocked), which makes glibc/node crash with SIGSYS under proot's seccomp fast
         // path. Turning seccomp off trades the speed win for "it runs at all" — necessary

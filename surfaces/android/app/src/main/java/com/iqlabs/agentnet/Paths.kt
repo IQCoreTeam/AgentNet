@@ -12,22 +12,31 @@ object Paths {
     const val GOOGLE_AUTH_PORT = 4318 // Android-native Drive token bridge for the guest
 
     data class Layout(
-        val filesDir: String,   // app private root
-        val proot: String,      // the proot binary (Bionic-native, runs on Android)
-        val loader: String,     // proot's ELF loader FILE (PROOT_LOADER points here)
-        val prootRoot: String,  // the extracted proot/ dir (bin/ + libexec/)
-        val rootfs: String,     // the extracted Ubuntu glibc rootfs
-        val home: String,       // $HOME inside the guest's view (under rootfs)
+        val filesDir: String,     // app private root
+        val nativeLibDir: String, // OS-extracted native lib dir (holds libproot.so + libs)
+        val proot: String,        // the proot binary (ships as jniLibs/<abi>/libproot.so)
+        val loader: String,       // proot's ELF loader (jniLibs libloader.so; PROOT_LOADER)
+        val loader32: String,     // 32-bit loader (libloader32.so; PROOT_LOADER_32)
+        val rootfs: String,       // the extracted Ubuntu glibc rootfs
+        val home: String,         // $HOME inside the guest's view (under rootfs)
         val serverBundle: String, // our localhost bundle, copied into the rootfs
     )
 
     fun layout(ctx: Context): Layout {
         val files = ctx.filesDir.absolutePath
+        // proot + its loader/libs ship under jniLibs, and the OS extracts them into
+        // nativeLibraryDir at install. That's the one app-owned dir that stays executable
+        // regardless of targetSdk, and ELF under lib/ is what Play Protect expects — so
+        // shipping proot here (not as loose ELF in assets/) avoids the "executable ELF in
+        // assets" Play Protect REJECT. (The rootfs's OWN binaries still run via proot from
+        // app storage, so targetSdk=28 is still required — this move doesn't change that.)
+        val nativeLib = ctx.applicationInfo.nativeLibraryDir
         return Layout(
             filesDir = files,
-            prootRoot = "$files/proot",
-            proot = "$files/proot/bin/proot",
-            loader = "$files/proot/libexec/proot/loader",
+            nativeLibDir = nativeLib,
+            proot = "$nativeLib/libproot.so",
+            loader = "$nativeLib/libloader.so",
+            loader32 = "$nativeLib/libloader32.so",
             rootfs = "$files/rootfs",
             home = "$files/rootfs/root",
             serverBundle = "$files/rootfs/root/agentnet-server",

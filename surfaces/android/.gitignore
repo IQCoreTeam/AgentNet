@@ -5,8 +5,11 @@ local.properties
 *.apk
 *.aab
 
-# Runtime assets extracted on-device — large binaries built by the release pipeline,
-# never committed (see scripts/build-assets.sh).
+# Runtime payload built by the release pipeline (large native binaries / images), never
+# committed (see scripts/build-assets.sh).
+# proot + loader + libs: libproot.so, libloader*.so, libtalloc.so, libandroid-shmem.so
+app/src/main/jniLibs/
+# legacy: pre-jniLibs proot tree (no longer produced)
 app/src/main/assets/proot-*
 app/src/main/assets/rootfs-*
 app/src/main/assets/agentnet-server.tar
