@@ -42,7 +42,7 @@ export function SkillDetailSkeleton({ onBack }: { onBack: () => void }) {
           <Bar className="h-3.5 w-4/5 rounded-md" />
           <Bar className="h-3.5 w-2/3 rounded-md" />
         </div>
-        <Bar className="mt-6 h-11 w-full rounded-xl" />
+        <Bar className="mt-6 h-14 w-full rounded-xl" />
       </div>
     </div>
   );
@@ -50,19 +50,20 @@ export function SkillDetailSkeleton({ onBack }: { onBack: () => void }) {
 
 // A list of shimmering rows for the market / skills / agents lists while results load, so
 // the area shows motion instead of flashing an empty "none found" state before data lands.
+// Sized to match the chunky single-column rows (48px icon, p-3.5) the lists now render.
 export function MarketListSkeleton({ rows = 6 }: { rows?: number }) {
   return (
-    <div className="space-y-2 pt-1">
+    <div className="space-y-2.5 pt-1">
       {Array.from({ length: rows }).map((_, i) => (
         <div
           key={i}
-          className="flex items-center gap-3 rounded-xl border border-zinc-800 p-3"
+          className="flex items-center gap-3 rounded-xl border border-zinc-800 p-3.5"
           style={{ background: "var(--an-bg-1)" }}
         >
-          <Bar className="h-10 w-10 shrink-0 rounded-lg" />
-          <div className="flex-1 space-y-1.5">
-            <Bar className="h-3.5 w-2/5 rounded-md" />
-            <Bar className="h-2.5 w-3/5 rounded-md" />
+          <Bar className="h-12 w-12 shrink-0 rounded-lg" />
+          <div className="flex-1 space-y-2">
+            <Bar className="h-4 w-1/2 rounded-md" />
+            <Bar className="h-3 w-2/3 rounded-md" />
           </div>
         </div>
       ))}
@@ -70,29 +71,51 @@ export function MarketListSkeleton({ rows = 6 }: { rows?: number }) {
   );
 }
 
+// Mirrors the redesigned agent profile: a large avatar booth, three stat plaques, the
+// file-folder tabs, a horizontal WORK card, and chunky single-column skill rows.
 export function AgentProfileSkeleton() {
   return (
     <div className="flex h-full flex-col bg-zinc-950">
-      <header className="flex shrink-0 items-center gap-2 border-b border-zinc-800 px-3 py-2" style={headerStyle}>
-        <Bar className="h-4 w-24 rounded-md" />
-      </header>
-      <div className="flex-1 overflow-hidden px-4 py-5">
-        <div className="flex flex-col items-center gap-3">
-          <Bar className="h-20 w-20 rounded-full" />
-          <Bar className="h-4 w-32 rounded-md" />
-          <Bar className="h-3 w-44 rounded-md" />
+      <div className="flex-1 overflow-hidden">
+        {/* hero */}
+        <div className="px-4 pt-3" style={headerStyle}>
+          <div className="flex items-center justify-between">
+            <Bar className="h-4 w-28 rounded-md" />
+            <Bar className="h-7 w-28 rounded-full" />
+          </div>
+          <div className="mt-2 flex justify-center">
+            <Bar className="h-40 w-3/5 rounded-3xl" />
+          </div>
+          <div className="-mt-6 grid grid-cols-3 gap-2">
+            <Bar className="h-16 rounded-xl" />
+            <Bar className="h-16 rounded-xl" />
+            <Bar className="h-16 rounded-xl" />
+          </div>
         </div>
-        <div className="mt-6 flex gap-3">
-          <Bar className="h-16 flex-1 rounded-xl" />
-          <Bar className="h-16 flex-1 rounded-xl" />
-          <Bar className="h-16 flex-1 rounded-xl" />
+        {/* file-folder tabs */}
+        <div className="mt-3 flex gap-1.5 px-3">
+          <Bar className="h-9 flex-1 rounded-t-xl" />
+          <Bar className="h-9 flex-1 rounded-t-xl" />
         </div>
-        <Bar className="mt-6 h-4 w-24 rounded-md" />
-        <div className="mt-3 grid grid-cols-2 gap-3">
-          <Bar className="h-24 rounded-xl" />
-          <Bar className="h-24 rounded-xl" />
-          <Bar className="h-24 rounded-xl" />
-          <Bar className="h-24 rounded-xl" />
+        {/* content: WORK card + chunky skill rows */}
+        <div className="space-y-4 px-4 pt-4">
+          <Bar className="h-3.5 w-20 rounded-md" />
+          <div className="flex gap-2 overflow-hidden">
+            <Bar className="h-40 w-4/5 shrink-0 rounded-xl" />
+            <Bar className="h-40 w-1/5 shrink-0 rounded-xl" />
+          </div>
+          <Bar className="h-3.5 w-20 rounded-md" />
+          <div className="space-y-2.5">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 rounded-xl border border-zinc-800 p-3.5" style={{ background: "var(--an-bg-1)" }}>
+                <Bar className="h-12 w-12 shrink-0 rounded-lg" />
+                <div className="flex-1 space-y-2">
+                  <Bar className="h-4 w-1/2 rounded-md" />
+                  <Bar className="h-3 w-2/3 rounded-md" />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>

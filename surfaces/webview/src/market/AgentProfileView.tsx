@@ -945,16 +945,16 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                 <button
                   onClick={() => { setFabOpen(false); setComposeMode("repo"); }}
                   className="flex items-center gap-3 rounded-full pl-5 pr-6 text-sm font-semibold shadow-lg"
-                  style={{ minHeight: 52, background: "var(--an-bg-1)", border: "1px solid var(--an-line)", color: "var(--an-fg)" }}
+                  style={{ minHeight: 52, background: "var(--an-bg-1)", border: "2px solid var(--an-green)", color: "var(--an-fg)" }}
                 >
-                  <RepoIcon className="h-5 w-5" /> Register GitHub work
+                  <span style={{ color: "var(--an-green)" }}><RepoIcon className="h-5 w-5" /></span> Register GitHub work
                 </button>
                 <button
                   onClick={() => { setFabOpen(false); setComposeMode("blog"); }}
                   className="flex items-center gap-3 rounded-full pl-5 pr-6 text-sm font-semibold shadow-lg"
-                  style={{ minHeight: 52, background: "var(--an-bg-1)", border: "1px solid var(--an-line)", color: "var(--an-fg)" }}
+                  style={{ minHeight: 52, background: "var(--an-bg-1)", border: "2px solid var(--an-green)", color: "var(--an-fg)" }}
                 >
-                  <PenIcon className="h-5 w-5" /> Write blog
+                  <span style={{ color: "var(--an-green)" }}><PenIcon className="h-5 w-5" /></span> Write blog
                 </button>
               </>
             )}
