@@ -63,10 +63,16 @@ jobs:
               bash surfaces/android/scripts/build-assets.sh
             '
 
+      # Upload BOTH the assets (rootfs + server bundle tars) and jniLibs (proot + loader +
+      # libs, shipped as lib*.so so Play Protect doesn't reject loose ELF in assets). The
+      # artifact's common root is .../main/, so the zip contains assets/ and jniLibs/ at top
+      # level — drop them into surfaces/android/app/src/main/.
       - name: Upload assets
         uses: actions/upload-artifact@v4
         with:
           name: android-assets-${{ github.event.inputs.abi }}
-          path: surfaces/android/app/src/main/assets/
+          path: |
+            surfaces/android/app/src/main/assets/
+            surfaces/android/app/src/main/jniLibs/
           retention-days: 7
           if-no-files-found: error

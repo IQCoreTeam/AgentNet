@@ -111,15 +111,31 @@ If it prints `Android Debug Bridge version ...`, you're set.
 
 ## Step 2 — Get the runtime assets (one time)
 
-The app bundles a small Linux world inside the APK. Three things must exist in
-`surfaces/android/app/src/main/assets/` (paths below are from the repo root) before the
-APK can be built:
+The app bundles a small Linux world inside the APK. Two things go under
+`surfaces/android/app/src/main/assets/` (paths from the repo root):
 
 ```
-proot-arm64/            (a folder: the Android-native proot binary + loader + libs)
 rootfs-arm64.tar        (~1 GB: an Ubuntu/glibc rootfs with node + claude/codex installed)
 agentnet-server.tar     (small: our localhost node server + the React web UI it serves)
 ```
+
+…and the proot runtime goes under `surfaces/android/app/src/main/jniLibs/arm64-v8a/` as
+native libraries:
+
+```
+libproot.so             (the Android-native proot binary)
+libloader.so            (proot's ELF loader; libloader32.so for 32-bit)
+libtalloc.so            (proot's libtalloc dependency)
+libandroid-shmem.so     (proot's shmem shim)
+```
+
+> **Why jniLibs and not assets/?** proot's files are executable ELF. Bundling them loosely
+> under `assets/` made **Google Play Protect REJECT the install** on some devices. Shipping
+> them under `jniLibs/` (named `lib*.so`) makes the OS extract them into the app's native
+> library dir, where ELF is expected and stays executable, which clears the rejection. The
+> on-device behavior is identical. (The versioned `libtalloc.so.2` ships as `libtalloc.so`
+> because `jniLibs` only packages `lib*.so`; the app recreates the `libtalloc.so.2` soname
+> with a symlink at runtime.)
 
 These are **not in git** (too large — `.gitignore` excludes them). **Check if they're
 already there first** — if you got this folder from someone who already built it, you can
@@ -127,12 +143,12 @@ skip this step.
 
 ```bash
 # from the repo root
-ls -la surfaces/android/app/src/main/assets/
+ls -la surfaces/android/app/src/main/assets/ surfaces/android/app/src/main/jniLibs/arm64-v8a/
 ```
-If you see all three, jump to [Step 3](#step-3--open-the-project). Otherwise build them.
+If both are populated, jump to [Step 3](#step-3--open-the-project). Otherwise build them.
 
 > Only **`rootfs-arm64.tar`** truly needs an arm64 Linux machine (it installs glibc
-> binaries for the phone's architecture). The other two are cheap and arch-independent. In
+> binaries for the phone's architecture). The rest are cheap and arch-independent. In
 > practice you build the rootfs **once** and then almost never touch it again — day-to-day
 > you only rebuild `agentnet-server.tar` (see
 > [Day-to-day](#day-to-day-rebuild-after-a-code-change)).
@@ -145,8 +161,9 @@ Builds the assets in the cloud; you just download the result. No build tools nee
 2. **android-assets** workflow → **Run workflow** → ABI = `arm64` → **Run**.
 3. Wait ~10–15 min (it builds the Linux image under arm64 emulation).
 4. When green, open the run → **Artifacts** → download **android-assets-arm64** (`.zip`).
-5. Unzip; copy `proot-arm64/`, `rootfs-arm64.tar`, `agentnet-server.tar` into
-   `surfaces/android/app/src/main/assets/`.
+5. Unzip. It contains `assets/` and `jniLibs/` at the top level — copy both into
+   `surfaces/android/app/src/main/` (so the tars land in `.../main/assets/` and the
+   `lib*.so` files in `.../main/jniLibs/arm64-v8a/`).
 
 ### Option B — build locally with Docker (advanced)
 
@@ -163,9 +180,9 @@ docker run --rm --platform linux/arm64 \
   ubuntu:24.04 \
   bash -c 'apt-get update -qq && apt-get install -y -qq curl ca-certificates xz-utils tar coreutils && bash surfaces/android/scripts/build-assets.sh'
 ```
-This writes all three files straight into the assets folder. (Note: it rebuilds the ~1 GB
-rootfs every time, ~10–15 min. If all you changed is app/web code, you don't need this —
-use the lighter server-bundle refresh in
+This writes the tars into `assets/` and the proot `lib*.so` files into `jniLibs/arm64-v8a/`.
+(Note: it rebuilds the ~1 GB rootfs every time, ~10–15 min. If all you changed is app/web
+code, you don't need this — use the lighter server-bundle refresh in
 [Day-to-day](#day-to-day-rebuild-after-a-code-change).)
 
 ---
