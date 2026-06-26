@@ -178,6 +178,93 @@ describe("chat/session — switching sessions does not kill the original in-flig
   });
 });
 
+describe("chat/session — switch-away frees idle sessions, keeps working ones until their turn ends", () => {
+  it("stops an IDLE session (turn already ended) when another session opens", async () => {
+    const { handles, fromUI } = harness();
+
+    fromUI({ type: "send", text: "first" });
+    await flush();
+    handles[0].emitTurnEnd(); // turn finished → session is now idle
+    await flush();
+
+    fromUI({ type: "new" }); // switch away from an idle session
+    await flush();
+    expect(handles[0].stop).toHaveBeenCalledTimes(1); // freed, not kept alive
+  });
+
+  it("keeps a working session alive on switch-away, then retires it the moment its turn ends", async () => {
+    const { handles, fromUI } = harness();
+
+    fromUI({ type: "send", text: "first" });
+    await flush(); // turn in flight (no turnEnd yet)
+
+    fromUI({ type: "new" }); // switch away mid-turn
+    await flush();
+    expect(handles[0].stop).not.toHaveBeenCalled(); // not killed mid-turn
+
+    handles[0].emitTurnEnd(); // the backgrounded turn finishes
+    await flush();
+    expect(handles[0].stop).toHaveBeenCalledTimes(1); // retired now that it's idle
+  });
+
+  it("an approval-blocked turn (no turnEnd) stays alive across a switch-away", async () => {
+    const { handles, fromUI } = harness();
+
+    fromUI({ type: "send", text: "needs approval" });
+    await flush(); // turn blocked awaiting the user → onTurnEnd never fires
+
+    fromUI({ type: "new" });
+    await flush();
+    fromUI({ type: "open", sessionId: "sess-0" }); // come back while still pending
+    await flush();
+    expect(handles[0].stop).not.toHaveBeenCalled(); // kept on the whole time
+  });
+
+  it("cancels retirement if you switch back before the background turn ends", async () => {
+    const { handles, startSession, fromUI } = harness();
+
+    fromUI({ type: "send", text: "first" });
+    await flush();
+    fromUI({ type: "new" }); // park + flag for retirement
+    await flush();
+    fromUI({ type: "open", sessionId: "sess-0" }); // switch back before the turn ends
+    await flush();
+
+    handles[0].emitTurnEnd(); // turn finally ends — but it's the active session again
+    await flush();
+    expect(handles[0].stop).not.toHaveBeenCalled(); // not retired (re-activated)
+
+    fromUI({ type: "send", text: "again" });
+    await flush();
+    expect(startSession).toHaveBeenCalledTimes(1); // reused the live handle, no respawn
+    expect(handles[0].send).toHaveBeenNthCalledWith(2, "again", undefined);
+  });
+
+  it("lazy-resumes a stopped idle session from storage when it is reopened", async () => {
+    const { handles, startSession, fromUI } = harness();
+
+    fromUI({ type: "send", text: "first" });
+    await flush();
+    handles[0].emitTurnEnd(); // idle
+    await flush();
+    fromUI({ type: "new" }); // idle → stopped
+    await flush();
+    expect(handles[0].stop).toHaveBeenCalledTimes(1);
+
+    fromUI({ type: "send", text: "second" });
+    await flush();
+    expect(startSession).toHaveBeenCalledTimes(2);
+
+    fromUI({ type: "open", sessionId: "sess-0" }); // return to the stopped session
+    await flush();
+    fromUI({ type: "send", text: "resume" });
+    await flush();
+    expect(startSession).toHaveBeenCalledTimes(3); // respawned (lazy resume), not reused
+    expect((handles[2] as any).opts.sessionId).toBe("sess-0"); // resumed the same canonical session
+    expect(handles[2].send).toHaveBeenCalledWith("resume", undefined);
+  });
+});
+
 describe("chat/session — image attachments pass through to the engine", () => {
   const img = { mime: "image/png", dataBase64: "AAAA", name: "a.png" };
 

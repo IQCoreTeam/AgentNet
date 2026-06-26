@@ -166,9 +166,21 @@ export function createChatSession(
   env: ChatEnv,
 ): { stop: () => void; pushCloudStatus: (s: { ok: boolean; error?: string } | null) => void } {
   // Both CLIs stay "on" at once: each has its OWN slot (handle + which session +
-  // model). Switching tabs just repaints the active slot — nothing is killed, so
-  // claude and codex never step on each other. A handle is spawned lazily on first
-  // send (spawn costs ~2s); codex re-spawns per turn internally anyway.
+  // model), so claude and codex never step on each other. A handle is spawned lazily
+  // on first send (spawn costs ~2s); codex re-spawns per turn internally anyway.
+  //
+  // Switch-away lifecycle (don't burn a CLI process per backgrounded chat). When you
+  // open a DIFFERENT session, the one you're leaving is handled by its state:
+  //   • mid-turn — working, OR blocked awaiting your approval/answer — → kept ALIVE in
+  //     `parked` and flagged in `retire`; the instant that turn ends in the background
+  //     it's stopped. Returning before then reuses the live handle (no respawn). An
+  //     approval-blocked turn hasn't fired onTurnEnd, so it naturally stays alive — that
+  //     IS "keep it on while it's waiting for the user".
+  //   • idle — no turn running — → stopped immediately to free the process.
+  // Either way the sessionId survives in the session list, so returning to a stopped
+  // session lazy-resumes it from storage on the next send (~2s respawn — acceptable).
+  // `busy` is what tells idle from working (set when a turn starts in ensureHandle,
+  // cleared on onTurnEnd).
   // `restage` = a config (model/mode) changed while a handle was live. We DON'T tear
   // the handle down on the toggle — that would interrupt an in-flight turn (claude
   // q.interrupt / codex child.kill). Instead we re-spawn lazily on the next send,
@@ -192,6 +204,14 @@ export function createChatSession(
   let cli: "claude" | "codex" = "claude"; // which tab is showing
   const slot = () => slots[cli];
 
+  // Handles with a turn in flight (set in ensureHandle when a turn starts, cleared in
+  // wire()'s onTurnEnd). A send/slash-command turn that blocks awaiting your approval
+  // counts as busy — its turn hasn't ended — so it's kept alive on switch-away.
+  const busy = new Set<SessionHandle>();
+  // Parked handles to stop the moment their background turn ends (flagged on switch-away
+  // from a busy session). Cleared if you switch back before that turn ends.
+  const retire = new Set<SessionHandle>();
+
   function isVisibleHandle(forCli: "claude" | "codex", h: SessionHandle): boolean {
     return cli === forCli && slots[forCli].handle === h;
   }
@@ -208,6 +228,8 @@ export function createChatSession(
     if (s.handle === h) s.handle = null;
     s.parked.delete(h);
     if (s.restage === h) s.restage = null;
+    busy.delete(h);
+    retire.delete(h);
     h.stop();
   }
 
@@ -242,8 +264,17 @@ export function createChatSession(
       if (isVisibleHandle(forCli, h)) transport.send({ type: "compacted" });
     });
     h.onTurnEnd(async () => {
+      busy.delete(h);
       if (isVisibleHandle(forCli, h)) transport.send({ type: "turnEnd" }); // stop the typing dots
       await pushSessions();
+      // A backgrounded session that just finished its in-flight turn is retired here:
+      // stop the CLI process now; returning lazy-resumes it from storage. Only when still
+      // parked (the user didn't switch back to it) and flagged for retirement on switch-away.
+      const bg = slots[forCli];
+      if (retire.has(h) && bg.parked.has(h)) {
+        console.log(`[session] retired backgrounded ${String(h.sessionId).slice(0, 8)} (turn ended)`);
+        stopHandle(bg, h);
+      }
     });
   }
 
@@ -294,12 +325,25 @@ export function createChatSession(
       return true;
     }
     if (s.handle) {
-      s.parked.add(s.handle);
-      s.handle = null;
+      const leaving = s.handle;
+      if (busy.has(leaving)) {
+        // a turn is in flight (working, or blocked awaiting your approval/answer) — never
+        // kill it mid-turn. Park it alive; it's retired the instant its turn ends.
+        s.parked.add(leaving);
+        retire.add(leaving);
+        s.handle = null;
+        console.log(`[session] switch-away: parked working ${String(leaving.sessionId).slice(0, 8)} (retire when its turn ends)`);
+      } else {
+        // idle — stop now to free the process. The session list keeps the id, so
+        // returning lazy-resumes it from storage on the next send.
+        console.log(`[session] switch-away: stopped idle ${String(leaving.sessionId).slice(0, 8)}`);
+        stopHandle(s, leaving);
+      }
     }
     const parked = findParkedHandle(s, sessionId);
     if (parked) {
       s.parked.delete(parked);
+      retire.delete(parked); // switched back before its turn ended — cancel retirement
       s.handle = parked;
     }
     s.pendingId = sessionId;
@@ -309,18 +353,24 @@ export function createChatSession(
 
   async function ensureHandle() {
     const s = slot();
-    if (s.handle && s.restage !== s.handle) return s.handle;
-    // A model/mode change since the last spawn: retire the old handle HERE (turn is
-    // idle — we're about to send), carrying its live sessionId into pendingId so the
-    // re-spawn RESUMES the same canonical session instead of starting a blank one.
-    if (s.handle && s.restage === s.handle) {
-      s.pendingId = s.handle.sessionId || s.pendingId;
-      stopHandle(s, s.handle);
+    if (!s.handle || s.restage === s.handle) {
+      // (Re)spawn needed. A model/mode change since the last spawn: retire the old handle
+      // HERE (turn is idle — we're about to send), carrying its live sessionId into pendingId
+      // so the re-spawn RESUMES the same canonical session instead of starting a blank one.
+      if (s.handle && s.restage === s.handle) {
+        s.pendingId = s.handle.sessionId || s.pendingId;
+        stopHandle(s, s.handle);
+      }
+      const spawnCli = cli; // capture: cli must not change across the await
+      s.handle = await rt.startSession({ cli: spawnCli, model: s.model, mode: s.mode, effort: s.effort, cwd: env.cwd(), sessionId: s.pendingId, approval: env.approval, onMarketEvent: sendMarket });
+      wire(spawnCli, s.handle);
     }
-    const spawnCli = cli; // capture: cli must not change across the await
-    s.handle = await rt.startSession({ cli: spawnCli, model: s.model, mode: s.mode, effort: s.effort, cwd: env.cwd(), sessionId: s.pendingId, approval: env.approval, onMarketEvent: sendMarket });
-    wire(spawnCli, s.handle);
-    return s.handle;
+    // Every caller of ensureHandle is about to drive a turn (send / slash command), so the
+    // handle is now busy until its onTurnEnd. This is what keeps a backgrounded working (or
+    // approval-blocked) session alive on switch-away; an idle one is stopped instead.
+    const h = s.handle!;
+    busy.add(h);
+    return h;
   }
 
   async function pushSessions() {
