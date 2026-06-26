@@ -3,13 +3,14 @@ import { createPortal } from "react-dom";
 import { parseGithubLink, safeExternalUrl } from "@iqlabs-official/agent-sdk/links/github.js";
 import { useStore } from "../state/store";
 import type { AgentProfile, SkillCard } from "../transport/protocol";
-import { SkillIcon, CollectionIcon } from "../icons";
+import { SkillIcon } from "../icons";
 
 // VerifiedRepo isn't re-exported by the protocol barrel; derive it from AgentProfile.
 type VRepo = NonNullable<AgentProfile["verifiedRepos"]>[number];
 import { walletAvatarPalette, walletAvatarSvg, walletBandColor } from "./walletAvatar";
 import { mediaUrl } from "./mediaUrl";
 import { PostCelebration } from "./PostCelebration";
+import { SkillCardTile } from "./SkillCardTile";
 import { RegisterWorkRepo } from "../onboarding/RegisterWorkRepo";
 
 function CopyIcon({ className }: { className?: string }) {
@@ -115,15 +116,6 @@ function neonEdge(color: string) {
   } as const;
 }
 
-// A softer edge for the skill cards — just a hint of the color so the grid still reads calm.
-function softEdge(color: string) {
-  return {
-    borderColor: `color-mix(in srgb, ${color} 42%, var(--an-line))`,
-    boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 12%, transparent)`,
-    background: `color-mix(in srgb, ${color} 5%, var(--an-bg-1))`,
-  } as const;
-}
-
 // The agent's "IQ tier" badge for the hero: star glyph + tier name + a 5-segment gauge +
 // the raw "stars/next-threshold" fraction (e.g. 9/10 = on the way to Bronze) + a "?" that
 // opens the tier explanation. Always shown so the system is discoverable from zero.
@@ -208,11 +200,6 @@ function TierHelp({ stars, onClose }: { stars: number; onClose: () => void }) {
 
 function shortWallet(wallet?: string) {
   return wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : "?";
-}
-
-function priceLabel(price?: string) {
-  if (!price || price === "0") return "free";
-  return `${(Number(price) / 1e9).toFixed(3)} SOL`;
 }
 
 // One verified-work repo row (used in the "show all" modal): owner/name, linked-skill count,
@@ -760,45 +747,21 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                 </div>
               )}
 
-              {/* SKILLS — cover-dominant 2-col grid; workflows get the gold frame */}
+              {/* SKILLS — same tile as the My Skills screen (neutral skill card, amber for
+                  workflows, green "owned" accent only when the viewer holds it) */}
               {allSkills.length > 0 && (
                 <div>
                   <p className="mb-2 text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>Skills</p>
                   <div className={skillsOneCol ? "grid grid-cols-1 gap-2.5" : "grid grid-cols-2 gap-2"}>
-                    {allSkills.map((card) => {
-                      const isWorkflow = card.type === "workflow";
-                      const reqCount = card.requiredSkills?.length ?? 0;
-                      const cover = mediaUrl(card.image);
-                      return (
-                        <button
-                          key={card.id}
-                          onClick={() => onOpenSkill(card)}
-                          className={`flex items-center rounded-xl border text-left active:scale-[0.98] ${skillsOneCol ? "gap-3 p-3.5" : "gap-2 p-2.5"}`}
-                          style={softEdge(isWorkflow ? "#f5b94a" : "var(--an-green)")}
-                        >
-                          <div className={`flex shrink-0 items-center justify-center overflow-hidden rounded-lg ${skillsOneCol ? "h-12 w-12" : "h-9 w-9"}`} style={{ background: "var(--an-bg-2)", color: isWorkflow ? "#f5b94a" : "var(--an-green)" }}>
-                            {cover ? (
-                              <img src={cover} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
-                            ) : isWorkflow ? (
-                              <CollectionIcon className={skillsOneCol ? "h-6 w-6" : "h-5 w-5"} />
-                            ) : (
-                              <SkillIcon className={skillsOneCol ? "h-6 w-6" : "h-5 w-5"} />
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5">
-                              {isWorkflow && (
-                                <span className="shrink-0 rounded px-1 py-0.5 text-[9px] font-bold" style={{ background: "rgba(245,158,11,0.85)", color: "#1a1206" }}>WF·{reqCount}</span>
-                              )}
-                              <span className={`truncate font-semibold ${skillsOneCol ? "text-[15px]" : "text-xs"}`} style={{ color: "var(--an-fg)" }}>{card.name}</span>
-                            </div>
-                            <p className={skillsOneCol ? "mt-1 text-xs" : "mt-0.5 text-[10px]"} style={{ color: "var(--an-fg-mute)" }}>
-                              {priceLabel(card.price)}{card.supply != null ? ` · ${card.supply} copies` : ""}
-                            </p>
-                          </div>
-                        </button>
-                      );
-                    })}
+                    {allSkills.map((card) => (
+                      <SkillCardTile
+                        key={card.id}
+                        card={card}
+                        owned={state.marketOwned?.includes(card.name)}
+                        firing={state.firingSkills?.some((f) => f.name === card.name)}
+                        onOpen={onOpenSkill}
+                      />
+                    ))}
                   </div>
                 </div>
               )}
@@ -945,16 +908,16 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                 <button
                   onClick={() => { setFabOpen(false); setComposeMode("repo"); }}
                   className="flex items-center gap-3 rounded-full pl-5 pr-6 text-sm font-semibold shadow-lg"
-                  style={{ minHeight: 52, background: "var(--an-bg-1)", border: "2px solid var(--an-green)", color: "var(--an-fg)" }}
+                  style={{ minHeight: 52, background: "var(--an-bg-1)", border: "1.5px solid var(--an-green-line)", color: "var(--an-fg)" }}
                 >
-                  <span style={{ color: "var(--an-green)" }}><RepoIcon className="h-5 w-5" /></span> Register GitHub work
+                  <span style={{ color: "var(--an-green-line)" }}><RepoIcon className="h-5 w-5" /></span> Register GitHub work
                 </button>
                 <button
                   onClick={() => { setFabOpen(false); setComposeMode("blog"); }}
                   className="flex items-center gap-3 rounded-full pl-5 pr-6 text-sm font-semibold shadow-lg"
-                  style={{ minHeight: 52, background: "var(--an-bg-1)", border: "2px solid var(--an-green)", color: "var(--an-fg)" }}
+                  style={{ minHeight: 52, background: "var(--an-bg-1)", border: "1.5px solid var(--an-green-line)", color: "var(--an-fg)" }}
                 >
-                  <span style={{ color: "var(--an-green)" }}><PenIcon className="h-5 w-5" /></span> Write blog
+                  <span style={{ color: "var(--an-green-line)" }}><PenIcon className="h-5 w-5" /></span> Write blog
                 </button>
               </>
             )}

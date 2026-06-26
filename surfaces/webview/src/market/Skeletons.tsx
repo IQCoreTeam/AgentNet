@@ -50,20 +50,22 @@ export function SkillDetailSkeleton({ onBack }: { onBack: () => void }) {
 
 // A list of shimmering rows for the market / skills / agents lists while results load, so
 // the area shows motion instead of flashing an empty "none found" state before data lands.
-// Sized to match the chunky single-column rows (48px icon, p-3.5) the lists now render.
+// Mirrors SkillCardTile exactly (rounded-xl border p-3, 40px icon, name + description +
+// meta row) so the skeleton doesn't jump in size when the real tiles land.
 export function MarketListSkeleton({ rows = 6 }: { rows?: number }) {
   return (
-    <div className="space-y-2.5 pt-1">
+    <div className="space-y-2 pt-1">
       {Array.from({ length: rows }).map((_, i) => (
         <div
           key={i}
-          className="flex items-center gap-3 rounded-xl border border-zinc-800 p-3.5"
+          className="flex items-start gap-2 rounded-xl border border-zinc-800 p-3"
           style={{ background: "var(--an-bg-1)" }}
         >
-          <Bar className="h-12 w-12 shrink-0 rounded-lg" />
-          <div className="flex-1 space-y-2">
-            <Bar className="h-4 w-1/2 rounded-md" />
-            <Bar className="h-3 w-2/3 rounded-md" />
+          <Bar className="h-10 w-10 shrink-0 rounded-lg" />
+          <div className="flex-1 space-y-1.5 py-0.5">
+            <Bar className="h-3.5 w-1/2 rounded-md" />
+            <Bar className="h-3 w-3/4 rounded-md" />
+            <Bar className="h-2.5 w-2/5 rounded-md" />
           </div>
         </div>
       ))}
@@ -105,13 +107,14 @@ export function AgentProfileSkeleton() {
             <Bar className="h-40 w-1/5 shrink-0 rounded-xl" />
           </div>
           <Bar className="h-3.5 w-20 rounded-md" />
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 rounded-xl border border-zinc-800 p-3.5" style={{ background: "var(--an-bg-1)" }}>
-                <Bar className="h-12 w-12 shrink-0 rounded-lg" />
-                <div className="flex-1 space-y-2">
-                  <Bar className="h-4 w-1/2 rounded-md" />
-                  <Bar className="h-3 w-2/3 rounded-md" />
+              <div key={i} className="flex items-start gap-2 rounded-xl border border-zinc-800 p-3" style={{ background: "var(--an-bg-1)" }}>
+                <Bar className="h-10 w-10 shrink-0 rounded-lg" />
+                <div className="flex-1 space-y-1.5 py-0.5">
+                  <Bar className="h-3.5 w-1/2 rounded-md" />
+                  <Bar className="h-3 w-3/4 rounded-md" />
+                  <Bar className="h-2.5 w-2/5 rounded-md" />
                 </div>
               </div>
             ))}
