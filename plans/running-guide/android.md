@@ -165,6 +165,13 @@ Builds the assets in the cloud; you just download the result. No build tools nee
    `surfaces/android/app/src/main/` (so the tars land in `.../main/assets/` and the
    `lib*.so` files in `.../main/jniLibs/arm64-v8a/`).
 
+> **Old artifact?** If the zip has a `proot-arm64/` folder (instead of `jniLibs/`), it was
+> built before proot moved to jniLibs. Don't hand-rename it — copy that `proot-arm64/`
+> folder into `surfaces/android/app/src/main/assets/` and run
+> `bash surfaces/android/scripts/relayout-proot.sh`, which converts it to the layout the app
+> expects (and removes the loose ELF from assets). The proot bytes are identical, so no
+> rebuild is needed. Re-running the workflow also produces a current-format artifact.
+
 ### Option B — build locally with Docker (advanced)
 
 Requires **Docker Desktop** with arm64 emulation. From the **repo root**:
