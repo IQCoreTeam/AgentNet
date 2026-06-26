@@ -670,7 +670,7 @@ function attachMarketHandlers(c: Client) {
       }
       case "postAgentNote": {
         try {
-          const r = await mkt.postAgentNote(m.agentWallet, m.text, m.gitLink);
+          const r = await mkt.postAgentNote(m.agentWallet, m.text, m.gitLink, m.title, m.image);
           c.send({ type: "agentNoteResult", agentWallet: m.agentWallet, ...r });
         } catch (e) {
           c.send({ type: "agentNoteResult", agentWallet: m.agentWallet, ok: false, error: (e as Error).message });

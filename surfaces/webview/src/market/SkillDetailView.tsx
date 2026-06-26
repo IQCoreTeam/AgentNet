@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useStore } from "../state/store";
 import type { SkillCard, SkillDetail } from "../transport/protocol";
 import { SkillIcon } from "../icons";
+import { mediaUrl } from "./mediaUrl";
 
 interface Props {
   detail: SkillDetail;
@@ -60,8 +61,8 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
 
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
         <div className="flex items-start gap-3">
-          {card.image ? (
-            <img src={card.image} alt="" className="h-14 w-14 rounded-xl object-cover shrink-0" />
+          {mediaUrl(card.image) ? (
+            <img src={mediaUrl(card.image)} alt="" referrerPolicy="no-referrer" className="h-14 w-14 rounded-xl object-cover shrink-0" />
           ) : (
             <div className="h-14 w-14 rounded-xl bg-zinc-800 shrink-0 flex items-center justify-center text-zinc-400"><SkillIcon className="h-7 w-7" /></div>
           )}

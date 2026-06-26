@@ -691,6 +691,11 @@ html[data-keyboard="open"] .an-chat-float { bottom: 0; }
 .md table {
   border-collapse: collapse;
   margin: 0.5em 0;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
 }
 .md th,
 .md td {

@@ -57,7 +57,9 @@ export interface Note {
   id: string; // unique id (author + timestamp + nonce)
   author: string; // wallet address
   text: string;
+  title?: string; // optional post title (blog/comment)
   gitLink?: string; // optional github/on-chain-git link (URL tells on/off-chain)
+  image?: string; // optional image (https link or on-chain ref; viewer resolves via gateway)
   timestamp: number;
   meta?: Record<string, unknown>; // optional free-form extras (one column, JSON)
   subject?: string; // derived on read: the table key (skill mint / agent wallet)
