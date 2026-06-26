@@ -7,5 +7,9 @@ How to install and run each AgentNet surface (app). Pick the one you want.
 | **Android app** | The phone app — runs the agent on your subscription, on-device. | [android.md](android.md) |
 | **VS Code extension** | The desktop extension — the agent inside your editor. | [vscode.md](vscode.md) |
 
+Already have the Android app installed and need to update it or fix a stale/broken build?
+See [android-clean-reinstall.md](android-clean-reinstall.md) — pull a fresh build from CI and
+reinstall (quick refresh vs. full clean reinstall).
+
 > AgentNet is **one codebase, many surfaces** (Android, VS Code, a local web server). They
 > share the same core; each guide here is just how to install and launch that one surface.
