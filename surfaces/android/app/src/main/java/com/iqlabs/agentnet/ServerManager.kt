@@ -133,9 +133,19 @@ class ServerManager(private val ctx: Context) {
         // tag-enabled devices like the Solana Seeker. Full root cause: AndroidManifest.)
         val sonameShim = Paths.dir("${p.filesDir}/proot-soname")
         val talloc2 = File(sonameShim, "libtalloc.so.2")
-        if (!talloc2.exists()) {
-            runCatching { Os.symlink("${p.nativeLibDir}/libtalloc.so", talloc2.absolutePath) }
-                .onFailure { Log.w(TAG, "could not create libtalloc.so.2 soname symlink", it) }
+        val tallocTarget = "${p.nativeLibDir}/libtalloc.so"
+        // nativeLibDir changes on every (re)install, so a symlink left by a PRIOR install points
+        // at a path that no longer exists. File.exists() follows the link → false for that stale
+        // one, yet Os.symlink would then fail EEXIST (the link file is still there) and never get
+        // recreated — leaving proot unable to resolve libtalloc.so.2 and the server stuck on boot
+        // after every reinstall. Recreate whenever the link is missing OR doesn't already point at
+        // the CURRENT target, so a fresh install / upgrade self-heals without manual intervention.
+        val curTarget = runCatching { Os.readlink(talloc2.absolutePath) }.getOrNull()
+        if (curTarget != tallocTarget) {
+            runCatching {
+                talloc2.delete() // drop any stale link/file before relinking
+                Os.symlink(tallocTarget, talloc2.absolutePath)
+            }.onFailure { Log.w(TAG, "could not create libtalloc.so.2 soname symlink", it) }
         }
         env["LD_LIBRARY_PATH"] =
             listOfNotNull(sonameShim.absolutePath, p.nativeLibDir, env["LD_LIBRARY_PATH"])
