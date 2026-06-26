@@ -55,7 +55,10 @@ TERMUX_POOL="${TERMUX_POOL:-https://packages.termux.dev/apt/termux-main/pool/mai
 termux_latest_deb() {  # $1 = pool subdir (e.g. p/proot) ; echoes full URL
   local dir="$TERMUX_POOL/$1/"
   local file
-  file=$(curl -fsSL "$dir" | grep -oE "[a-z0-9.+-]+_${PROOT_ARCH}\.deb" | sort -V | tail -1)
+  # NOTE: `_` MUST be in the character class. Termux filenames are <pkg>_<ver>_<arch>.deb
+  # (e.g. proot_5.1.107.81_aarch64.deb); without `_` the regex drops the <pkg>_ prefix and
+  # yields "5.1.107.81_aarch64.deb", whose URL 404s — which is exactly what broke CI.
+  file=$(curl -fsSL "$dir" | grep -oE "[a-z0-9._+-]+_${PROOT_ARCH}\.deb" | sort -V | tail -1)
   [ -n "$file" ] || { echo "!! no $PROOT_ARCH .deb under $dir" >&2; return 1; }
   echo "$dir$file"
 }
