@@ -11,13 +11,17 @@ import { tmpdir } from "node:os";
 
 function fakeHandle(id: string, cli: "claude" | "codex") {
   const usageCbs: Array<(n: number) => void> = [];
+  const msgCbs: Array<(msg: any) => void> = [];
+  const turnCbs: Array<() => void> = [];
   return {
     sessionId: id,
     cli,
     send: vi.fn(),
     runSlashCommand: vi.fn(),
-    onMessage: vi.fn(),
-    onTurnEnd: vi.fn(),
+    onMessage: vi.fn((cb: (msg: any) => void) => msgCbs.push(cb)),
+    emitMessage: (msg: any) => msgCbs.forEach((cb) => cb(msg)),
+    onTurnEnd: vi.fn((cb: () => void) => turnCbs.push(cb)),
+    emitTurnEnd: () => turnCbs.forEach((cb) => cb()),
     onSkill: vi.fn(),
     onUsage: vi.fn((cb: (n: number) => void) => usageCbs.push(cb)),
     emitUsage: (n: number) => usageCbs.forEach((cb) => cb(n)),
@@ -119,6 +123,55 @@ describe("chat/session — permission mode never interrupts a live turn", () => 
     expect(startSession).toHaveBeenCalledTimes(2);
     expect((handles[1] as any).opts.model).toBe("opus");
     expect((handles[1] as any).opts.sessionId).toBe("sess-0");
+  });
+});
+
+describe("chat/session — switching sessions does not kill the original in-flight handle", () => {
+  it("parks the active same-CLI session instead of stopping it when another session opens", async () => {
+    const { handles, startSession, fromUI, transport } = harness();
+
+    fromUI({ type: "send", text: "first" });
+    await flush();
+    expect(startSession).toHaveBeenCalledTimes(1);
+
+    fromUI({ type: "new" });
+    await flush();
+    expect(handles[0].stop).not.toHaveBeenCalled();
+    expect(startSession).toHaveBeenCalledTimes(1);
+
+    fromUI({ type: "send", text: "second" });
+    await flush();
+    expect(startSession).toHaveBeenCalledTimes(2);
+    expect(handles[1].send).toHaveBeenCalledWith("second", undefined);
+
+    handles[0].emitMessage({ role: "assistant", text: "hidden", ts: 1, cli: "claude" });
+    expect(transport.send).not.toHaveBeenCalledWith({
+      type: "message",
+      msg: { role: "assistant", text: "hidden", ts: 1, cli: "claude" },
+    });
+  });
+
+  it("reuses the parked handle when the original session is reopened", async () => {
+    const { handles, startSession, fromUI } = harness();
+
+    fromUI({ type: "send", text: "first" });
+    await flush();
+    expect(handles[0].sessionId).toBe("sess-0");
+
+    fromUI({ type: "new" });
+    await flush();
+    fromUI({ type: "send", text: "second" });
+    await flush();
+    expect(startSession).toHaveBeenCalledTimes(2);
+
+    fromUI({ type: "open", sessionId: "sess-0" });
+    await flush();
+    fromUI({ type: "send", text: "resume" });
+    await flush();
+
+    expect(startSession).toHaveBeenCalledTimes(2);
+    expect(handles[0].stop).not.toHaveBeenCalled();
+    expect(handles[0].send).toHaveBeenNthCalledWith(2, "resume", undefined);
   });
 });
 

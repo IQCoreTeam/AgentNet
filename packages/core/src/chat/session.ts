@@ -168,13 +168,41 @@ export function createChatSession(
   // q.interrupt / codex child.kill). Instead we re-spawn lazily on the next send,
   // carrying the live session over, so the running turn finishes untouched and the new
   // setting applies from the next message.
-  type Slot = { handle: SessionHandle | null; pendingId?: string; model?: string; mode?: string; effort?: "low" | "medium" | "high" | "xhigh" | "max"; restage?: boolean; lastUsage?: number };
+  type Slot = {
+    handle: SessionHandle | null;
+    parked: Set<SessionHandle>;
+    pendingId?: string;
+    model?: string;
+    mode?: string;
+    effort?: "low" | "medium" | "high" | "xhigh" | "max";
+    restage?: SessionHandle | null;
+    lastUsage?: number;
+  };
   const slots: Record<"claude" | "codex", Slot> = {
-    claude: { handle: null, mode: "acceptEdits" },
-    codex: { handle: null, mode: "auto" },
+    claude: { handle: null, parked: new Set(), mode: "acceptEdits", restage: null },
+    codex: { handle: null, parked: new Set(), mode: "auto", restage: null },
   };
   let cli: "claude" | "codex" = "claude"; // which tab is showing
   const slot = () => slots[cli];
+
+  function isVisibleHandle(forCli: "claude" | "codex", h: SessionHandle): boolean {
+    return cli === forCli && slots[forCli].handle === h;
+  }
+
+  function findParkedHandle(s: Slot, sessionId: string | undefined): SessionHandle | null {
+    if (!sessionId) return null;
+    for (const h of s.parked) {
+      if (h.sessionId === sessionId) return h;
+    }
+    return null;
+  }
+
+  function stopHandle(s: Slot, h: SessionHandle): void {
+    if (s.handle === h) s.handle = null;
+    s.parked.delete(h);
+    if (s.restage === h) s.restage = null;
+    h.stop();
+  }
 
   // typed host->UI marketplace push: the contract (marketMessages.ts) is enforced
   // here, so a wrong field/type on a market event is a compile error, not a silent
@@ -186,17 +214,19 @@ export function createChatSession(
   // carries its own .cli (stamped by the runtime), so the UI badges the real engine
   // per-message — correct even for a cross-CLI session.
   function wire(forCli: "claude" | "codex", h: SessionHandle) {
-    h.onMessage((msg) => { if (cli === forCli) transport.send({ type: "message", msg }); });
+    h.onMessage((msg) => { if (isVisibleHandle(forCli, h)) transport.send({ type: "message", msg }); });
     // a skill firing → the green "Casting <skill>" marquee (issue #17). Transient, not
     // persisted; only painted for the active tab.
-    h.onSkill((name) => { if (cli === forCli) sendMarket({ type: "skillActive", name }); });
+    h.onSkill((name) => { if (isVisibleHandle(forCli, h)) sendMarket({ type: "skillActive", name }); });
     // token usage: forward to the active surface so it can render a context meter.
     h.onUsage((contextTokens) => {
-      slots[forCli].lastUsage = contextTokens;
-      if (cli === forCli) transport.send({ type: "usage", contextTokens });
+      if (isVisibleHandle(forCli, h)) {
+        slots[forCli].lastUsage = contextTokens;
+        transport.send({ type: "usage", contextTokens });
+      }
     });
     h.onTurnEnd(async () => {
-      if (cli === forCli) transport.send({ type: "turnEnd" }); // stop the typing dots
+      if (isVisibleHandle(forCli, h)) transport.send({ type: "turnEnd" }); // stop the typing dots
       await pushSessions();
     });
   }
@@ -241,25 +271,35 @@ export function createChatSession(
   // (the session is live in another panel) — the caller skips the follow-up paint.
   async function open(sessionId?: string): Promise<boolean> {
     if (env.claimSession && !env.claimSession(sessionId)) return false;
-    slot().handle?.stop();
-    slot().handle = null;
-    slot().restage = false; // fresh slot — no pending config re-spawn to carry over
-    slot().pendingId = sessionId;
+    const s = slot();
+    if (s.handle?.sessionId === sessionId) {
+      s.pendingId = sessionId;
+      await repaint();
+      return true;
+    }
+    if (s.handle) {
+      s.parked.add(s.handle);
+      s.handle = null;
+    }
+    const parked = findParkedHandle(s, sessionId);
+    if (parked) {
+      s.parked.delete(parked);
+      s.handle = parked;
+    }
+    s.pendingId = sessionId;
     await repaint();
     return true;
   }
 
   async function ensureHandle() {
     const s = slot();
-    if (s.handle && !s.restage) return s.handle;
+    if (s.handle && s.restage !== s.handle) return s.handle;
     // A model/mode change since the last spawn: retire the old handle HERE (turn is
     // idle — we're about to send), carrying its live sessionId into pendingId so the
     // re-spawn RESUMES the same canonical session instead of starting a blank one.
-    if (s.handle && s.restage) {
+    if (s.handle && s.restage === s.handle) {
       s.pendingId = s.handle.sessionId || s.pendingId;
-      s.handle.stop();
-      s.handle = null;
-      s.restage = false;
+      stopHandle(s, s.handle);
     }
     const spawnCli = cli; // capture: cli must not change across the await
     s.handle = await rt.startSession({ cli: spawnCli, model: s.model, mode: s.mode, effort: s.effort, cwd: env.cwd(), sessionId: s.pendingId, approval: env.approval, onMarketEvent: sendMarket });
@@ -326,7 +366,10 @@ export function createChatSession(
         // Reset context, not only the transcript DOM. This intentionally opens a blank
         // in-place chat for the active engine; `/new` remains the explicit fresh-session
         // action users can pick from the UI.
-        await open();
+        if (slot().handle) stopHandle(slot(), slot().handle);
+        slot().pendingId = undefined;
+        slot().restage = null;
+        await repaint();
         await pushSessions();
         break;
       // Opening a session resumes it in the CURRENT tab's cli (cross-CLI). The
@@ -357,7 +400,7 @@ export function createChatSession(
         // turn) — flag for a lazy re-spawn on the next send. If no handle exists yet,
         // the next spawn already picks up the new value, so no restage is needed.
         slot().model = m.model && m.model !== "default" ? m.model : undefined;
-        if (slot().handle) slot().restage = true;
+        if (slot().handle) slot().restage = slot().handle;
         break;
       case "mode":
         // permission mode is per-slot. Unlike model, the value is always meaningful
@@ -371,7 +414,7 @@ export function createChatSession(
           const h = slot().handle;
           if (h) {
             h.updateMode?.(m.mode);
-            slot().restage = true;
+            slot().restage = h;
           }
         }
         break;
@@ -381,7 +424,7 @@ export function createChatSession(
         const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
         const e = EFFORTS.find((v) => v === m.effort);
         slot().effort = e;
-        if (slot().handle) slot().restage = true;
+        if (slot().handle) slot().restage = slot().handle;
         break;
       }
       case "send": {
@@ -478,7 +521,11 @@ export function createChatSession(
           for (const k of ["claude", "codex"] as const) {
             const s = slots[k];
             if (m.sessionId === (s.handle?.sessionId ?? s.pendingId)) {
-              s.handle?.stop(); s.handle = null; s.pendingId = undefined; s.restage = false;
+              if (s.handle) stopHandle(s, s.handle);
+              s.pendingId = undefined;
+            }
+            for (const h of [...s.parked]) {
+              if (h.sessionId === m.sessionId) stopHandle(s, h);
             }
           }
           await repaint();
@@ -675,7 +722,12 @@ export function createChatSession(
   }
 
   return {
-    stop() { slots.claude.handle?.stop(); slots.codex.handle?.stop(); },
+    stop() {
+      for (const s of [slots.claude, slots.codex]) {
+        if (s.handle) stopHandle(s, s.handle);
+        for (const h of [...s.parked]) stopHandle(s, h);
+      }
+    },
     // core → UI push for the drive-mirror sync pill. The host wires this to its
     // per-write cloud-status callback (writes are otherwise silent). Not part of the
     // UI→HOST switch — it's an out-of-band event the host originates.
