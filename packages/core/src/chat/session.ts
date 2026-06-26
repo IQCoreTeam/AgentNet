@@ -382,7 +382,7 @@ export function createChatSession(
         // Reset context, not only the transcript DOM. This intentionally opens a blank
         // in-place chat for the active engine; `/new` remains the explicit fresh-session
         // action users can pick from the UI.
-        if (slot().handle) stopHandle(slot(), slot().handle);
+        if (slot().handle) stopHandle(slot(), slot().handle!);
         slot().pendingId = undefined;
         slot().restage = null;
         await repaint();
