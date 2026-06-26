@@ -54,7 +54,7 @@ Some workflow body`;
       category: "testing",
       hashtags: ["test", "workflow"],
       price: 250000000n,
-    });
+    }, undefined);
     expect(corePublishSkill).not.toHaveBeenCalled();
   });
 
@@ -83,7 +83,7 @@ Some skill body`;
       hashtags: ["test"],
       price: 100000000n,
       image: undefined,
-    });
+    }, undefined);
     expect(corePublishWorkflow).not.toHaveBeenCalled();
   });
 
@@ -107,7 +107,7 @@ Some skill body`;
       hashtags: undefined,
       price: 1000000000n,
       image: undefined,
-    });
+    }, undefined);
     expect(corePublishWorkflow).not.toHaveBeenCalled();
   });
 });

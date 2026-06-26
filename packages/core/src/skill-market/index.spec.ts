@@ -99,7 +99,7 @@ describe("skill-market", () => {
     expect(publishSkill).toHaveBeenCalledWith(mockConn, signer, expect.objectContaining({
       name: "clean-code",
       price: 100_000_000n,
-    }));
+    }), expect.any(Function));
   });
 
   it("publish_skill rejects an invalid priceSol", async () => {
@@ -129,6 +129,10 @@ describe("skill-market", () => {
 
   it("should handle buy_skill tool call", async () => {
     vi.mocked(buySkill).mockResolvedValue("mockTxSig");
+    // buy now flows through SkillSync.buyAndEquip, which reads the mint metadata to gate
+    // workflows + equip. Resolve it (null = plain skill, nothing to install) so the equip
+    // path is a clean no-op instead of crashing on a non-promise mock.
+    vi.mocked(readSkillMintMetadata).mockResolvedValue(null as any);
     const result = await handleToolCall(mockConn, signer, "defaultCreator", "buy_skill", { skillId: "skill1" });
     expect(result.content[0].text).toContain("Purchased skill");
     expect(result.content[0].text).toContain("mockTxSig");
@@ -144,6 +148,7 @@ describe("skill-market", () => {
 
   it("should handle buy_skill errors", async () => {
     vi.mocked(buySkill).mockRejectedValue(new Error("Insufficient funds"));
+    vi.mocked(readSkillMintMetadata).mockResolvedValue(null as any);
     const result = await handleToolCall(mockConn, signer, "defaultCreator", "buy_skill", { skillId: "skill1" });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("Insufficient funds");

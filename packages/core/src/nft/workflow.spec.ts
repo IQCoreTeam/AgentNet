@@ -71,6 +71,7 @@ Workflow body here, long enough to pass the body length check easily.`;
       expect.any(String),
       "test-workflow.json",
       "application/json",
+      undefined,
     );
     const json = JSON.parse(vi.mocked(chain.codeIn).mock.calls[0][1] as string);
     expect(json.attributes).toEqual([

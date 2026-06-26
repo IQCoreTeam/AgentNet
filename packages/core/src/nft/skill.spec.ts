@@ -72,6 +72,7 @@ This skill teaches agents to reason clearly and break down complex problems.
       expect.any(String),
       "super-skill.json",
       "application/json",
+      undefined,
     );
     const codeInArg = vi.mocked(chain.codeIn).mock.calls[0][1] as string;
     const json = JSON.parse(codeInArg);
