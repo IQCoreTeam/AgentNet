@@ -7,7 +7,7 @@ import { SkillIcon, CollectionIcon } from "../icons";
 
 // VerifiedRepo isn't re-exported by the protocol barrel; derive it from AgentProfile.
 type VRepo = NonNullable<AgentProfile["verifiedRepos"]>[number];
-import { walletAvatarSvg, walletBandColor, walletBandInk } from "./walletAvatar";
+import { walletAvatarSvg, walletBandColor } from "./walletAvatar";
 import { mediaUrl } from "./mediaUrl";
 import { PostCelebration } from "./PostCelebration";
 import { RegisterWorkRepo } from "../onboarding/RegisterWorkRepo";
@@ -99,8 +99,17 @@ function TierGauge({ stars, ink, onHelp }: { stars: number; ink: string; onHelp:
     <div className="flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5" style={{ border: `1px solid ${inkBorder}` }}>
       <span className="inline-flex items-center" style={{ color }}><StarIcon className="h-3.5 w-3.5" /></span>
       <span className="text-[11px] font-bold" style={{ color: ink }}>{label}</span>
-      <span className="relative h-2.5 w-14 overflow-hidden rounded-[2px]" style={{ background: inkFaint, transform: "skewX(-14deg)" }}>
-        <span className="absolute inset-y-0 left-0" style={{ width: `${pct}%`, background: color }} />
+      {/* segmented slanted gauge (/ / / / /) — fills proportionally, so a partial tier shows a
+          partly-filled segment (e.g. 9/10 = 4.5 of 5 lit) for the "charging up" game vibe. */}
+      <span className="flex items-center gap-[2px]">
+        {Array.from({ length: 5 }).map((_, i) => {
+          const segFill = Math.min(1, Math.max(0, (pct / 100) * 5 - i)); // 0..1 within this segment
+          return (
+            <span key={i} className="relative h-2.5 w-2.5 overflow-hidden rounded-[1px]" style={{ background: inkFaint, transform: "skewX(-14deg)" }}>
+              <span className="absolute inset-y-0 left-0" style={{ width: `${segFill * 100}%`, background: color }} />
+            </span>
+          );
+        })}
       </span>
       <span className="text-[11px] font-semibold" style={{ color: ink }}>{frac}</span>
       <button
@@ -448,7 +457,13 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   const [copied, setCopied] = useState(false);
   const avatar = useMemo(() => walletAvatarSvg(profile.wallet), [profile.wallet]);
   const bandColor = useMemo(() => walletBandColor(profile.wallet), [profile.wallet]);
-  const bandInk = useMemo(() => walletBandInk(profile.wallet), [profile.wallet]);
+  // The hero is now a DEEP MUTED tint of the avatar color over the dark base (not the raw
+  // neon color), so it reads as a dark surface whatever the hue — meaning ink is always
+  // near-white. `band`/`bandSoft` are the tint at the top/bottom of the hero so it melts into
+  // the tab strip + theme instead of a flat saturated slab.
+  const bandInk = "#f5f5f5";
+  const band = `color-mix(in srgb, ${bandColor} 42%, var(--an-bg-0))`;
+  const bandSoft = `color-mix(in srgb, ${bandColor} 16%, var(--an-bg-0))`;
   const [fabOpen, setFabOpen] = useState(false);
   const [composeMode, setComposeMode] = useState<null | "blog" | "repo">(null);
   const [posting, setPosting] = useState(false);
@@ -562,13 +577,13 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   return (
     <div className="relative flex h-full flex-col" style={{ background: "var(--an-bg-0)" }}>
       <div className={`flex-1 overflow-y-auto ${showBuyAll && tab === "agent" ? "" : "an-tabbar-inset"}`}>
-        {/* HERO BAND — avatar-tinted top zone, controls + avatar + glass stats. Tints
-            down into the dark theme; a top scrim keeps the white controls legible on
-            any avatar hue. Shared across both tabs. */}
+        {/* HERO BAND — a DEEP MUTED tint of the avatar color (not the raw neon), gradient-
+            fading down into the dark theme so it reads as a rich surface, not a flat slab.
+            Light controls/stats stay legible since the tint is always dark. Shared by tabs. */}
         <div
           className="relative px-3 pb-3 pt-3"
           style={{
-            background: `linear-gradient(180deg, rgba(0,0,0,0.28) 0%, rgba(0,0,0,0) 28%), ${bandColor}`,
+            background: `linear-gradient(180deg, ${band} 0%, ${bandSoft} 100%)`,
           }}
         >
           {/* top controls: back + address + settings (left), IQ tier gauge (right) */}
@@ -616,7 +631,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
 
         {/* TAB BAR — vscode-style file tabs (skewed); the active tab lifts + gets a green
             top accent, the inactive one sits dimmer behind it. */}
-        <div className="flex gap-2 px-3 pt-1.5" style={{ background: bandColor }}>
+        <div className="flex gap-2 px-3 pt-1.5" style={{ background: bandSoft }}>
           {(["agent", "community"] as const).map((t) => {
             const active = tab === t;
             return (
