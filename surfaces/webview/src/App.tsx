@@ -14,7 +14,7 @@ import { TabBar } from "./shell/TabBar";
 import { Toast } from "./Toast";
 import { useVisualViewportVars, useKeyboardChrome } from "./layoutEffects";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { syncAgentService, notifyApproval, ensureBackgroundConsent } from "./platform/agentService";
+import { syncAgentService, notifyApproval, clearApprovalNotice, ensureBackgroundConsent } from "./platform/agentService";
 import { haptics } from "./haptics";
 
 // Phase router:
@@ -26,7 +26,7 @@ import { haptics } from "./haptics";
 //   codexAuth    → codex chosen, not logged in → device-auth (open URL, enter code)
 //   chat         → runtime ready → the tab shell
 export function App() {
-  const { state, getClientId } = useStore();
+  const { state, getClientId, send, closeMarket } = useStore();
   useVisualViewportVars();
   useKeyboardChrome();
 
@@ -39,15 +39,46 @@ export function App() {
   // Default-on background exec: prompt once for battery-optimization exemption on launch.
   useEffect(() => { ensureBackgroundConsent(); }, []);
 
-  // Backgrounded approval → ask the shell to raise a notification. Fires per new top
-  // approval; the shell ignores it when the app is foreground.
+  // A pending approval → ask the shell to raise a notification. Fires per new top approval.
+  // The shell ignores it when foreground UNLESS `force` is set — which it is when the
+  // approval belongs to a session the user isn't currently viewing (chat-app style: the
+  // other thread pings you, tapping jumps to it). Same-session foreground approvals stay
+  // inline in the dock (force false → shell no-ops in foreground).
   const topApproval = state.approvals[0];
   useEffect(() => {
     if (!topApproval) return;
-    // The code/diff/plan body so the notification can show what's being approved.
-    const body = topApproval.command || topApproval.plan || topApproval.diff || topApproval.file || "";
-    notifyApproval(topApproval.id, topApproval.title, getClientId(), body);
-  }, [topApproval?.id, topApproval?.title, getClientId]);
+    // A question (AskUserQuestion) is handled differently from a yes/no approval: it can't be
+    // answered from notification buttons (you pick an option), so the body is the question text
+    // and the shell shows no Approve/Reject actions — just tap to open and answer inline.
+    const isQuestion = topApproval.kind === "question";
+    const body = isQuestion
+      ? (topApproval.questions?.map((q) => q.question).join("\n") ?? "")
+      : (topApproval.command || topApproval.plan || topApproval.diff || topApproval.file || "");
+    const force = !!topApproval.sessionId && topApproval.sessionId !== state.activeSessionId;
+    notifyApproval(topApproval.id, topApproval.title, getClientId(), body, topApproval.sessionId ?? "", force, isQuestion);
+  }, [topApproval?.id, topApproval?.title, state.activeSessionId, getClientId]);
+
+  // Chat-app dismissal: once you're viewing the chat the top approval belongs to (it now
+  // shows inline), or no approval is pending, drop its notification — it's redundant.
+  useEffect(() => {
+    const viewingIt = !!topApproval?.sessionId && topApproval.sessionId === state.activeSessionId;
+    if (!topApproval || viewingIt) clearApprovalNotice();
+  }, [topApproval?.id, topApproval?.sessionId, state.activeSessionId]);
+
+  // Native notification tap → jump to that chat (deep link). The shell calls
+  // window.__agentnetOpenSession(id); if React hasn't registered it yet (cold start) the
+  // shell parks the id on window.__agentnetPendingSession and we drain it on mount.
+  useEffect(() => {
+    const openSession = (sessionId: string) => {
+      if (!sessionId) return;
+      closeMarket();              // leave any market/agent overlay so the chat is visible
+      send({ type: "open", sessionId });
+    };
+    (window as unknown as { __agentnetOpenSession?: (id: string) => void }).__agentnetOpenSession = openSession;
+    const w = window as unknown as { __agentnetPendingSession?: string };
+    if (w.__agentnetPendingSession) { const id = w.__agentnetPendingSession; w.__agentnetPendingSession = undefined; openSession(id); }
+    return () => { delete (window as unknown as { __agentnetOpenSession?: unknown }).__agentnetOpenSession; };
+  }, [send, closeMarket]);
 
   // A skill bought/published by the agent mid-chat must celebrate at the app root: the
   // market sub-screens that used to own these overlays aren't mounted during a chat, so

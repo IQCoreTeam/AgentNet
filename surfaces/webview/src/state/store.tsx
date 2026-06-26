@@ -113,6 +113,13 @@ export interface State {
   modeByCli: Record<Cli, string>;
 }
 
+// An approval belongs to the chat the user is VIEWING — so it docks inline + freezes the
+// composer here — rather than only pinging a notification for a backgrounded session. True
+// when it matches the active session, carries no session, or no chat is selected yet.
+export function isApprovalForView(a: { sessionId?: string }, activeSessionId?: string): boolean {
+  return !a.sessionId || !activeSessionId || a.sessionId === activeSessionId;
+}
+
 const initialState: State = {
   phase: "connecting",
   walletAddress: null,
@@ -319,7 +326,11 @@ function reducer(state: State, ev: Action): State {
     case "compacted":
       return { ...state, contextTokens: undefined, toast: "Context compacted — conversation history summarised to free space." };
     case "clear":
-      return { ...state, log: [], approvals: [], typing: false, loading: false, contextTokens: undefined, contextWindow: undefined, firingSkills: [] };
+      // repaint() sends `clear` on every session open. Keep the approvals that belong to the
+      // session now being opened — otherwise tapping a notification to answer a backgrounded
+      // session's question would wipe that very question (the engine is still awaiting it).
+      // activeSessionId is already the opened session here (set optimistically on open).
+      return { ...state, log: [], approvals: state.approvals.filter((a) => isApprovalForView(a, state.activeSessionId)), typing: false, loading: false, contextTokens: undefined, contextWindow: undefined, firingSkills: [] };
     case "message":
       return { ...state, log: appendMessage(state.log, ev.msg) };
     case "turnEnd":

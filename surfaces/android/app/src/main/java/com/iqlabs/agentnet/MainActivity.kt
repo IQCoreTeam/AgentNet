@@ -48,7 +48,14 @@ class MainActivity : AppCompatActivity() {
         private const val APPROVAL_CHANNEL = "agentnet_approval"
         private const val APPROVAL_NOTIF_ID = 2
         private const val REQ_POST_NOTIFICATIONS = 101
+        // Intent extra: which chat to deep-link to when an approval notification is tapped.
+        const val EXTRA_OPEN_SESSION = "agentnet.openSession"
     }
+
+    // A session id from a tapped approval notification, stashed until the WebView's JS is
+    // ready to receive it (cold start: onCreate runs before the page loads).
+    @Volatile private var pendingDeepLink: String? = null
+    @Volatile private var pageReady = false
 
     // Whether the Activity is currently in the foreground. An approval that arrives while
     // foreground is handled in the WebView; only a backgrounded one raises a notification.
@@ -121,6 +128,9 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Cold start FROM a tapped approval notification: stash the target chat now; it's
+        // drained in onPageFinished once the WebView's JS exists.
+        intent?.getStringExtra(EXTRA_OPEN_SESSION)?.let { pendingDeepLink = it }
         setContentView(R.layout.activity_main)
         webView = findViewById(R.id.webview)
         status = findViewById(R.id.status)
@@ -150,6 +160,12 @@ class MainActivity : AppCompatActivity() {
                     startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                     true // handled: opened externally
                 }.getOrDefault(false)
+            }
+            // Our UI is loaded → drain any deep link a notification tap stashed (cold start
+            // reads the intent in onCreate, before the page — and thus its JS — exists).
+            override fun onPageFinished(view: WebView, url: String) {
+                pageReady = true
+                flushDeepLink()
             }
         }
         webView.webChromeClient = object : WebChromeClient() {
@@ -249,6 +265,34 @@ class MainActivity : AppCompatActivity() {
         super.onPause()
     }
 
+    // Approval notification tapped while the app is already running → deep-link to that chat.
+    // (SINGLE_TOP makes the system reuse this instance and deliver the intent here.)
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.getStringExtra(EXTRA_OPEN_SESSION)?.let { deepLinkSession(it) }
+    }
+
+    // Hand a session id to the WebView so it switches to that chat. If the page's JS isn't
+    // up yet (cold start), it's parked and flushed in onPageFinished.
+    private fun deepLinkSession(sessionId: String) {
+        if (sessionId.isBlank()) return
+        pendingDeepLink = sessionId
+        flushDeepLink()
+    }
+
+    private fun flushDeepLink() {
+        val id = pendingDeepLink ?: return
+        if (!::webView.isInitialized || !pageReady) return
+        pendingDeepLink = null
+        val safe = id.replace("\\", "\\\\").replace("'", "\\'")
+        // Call the opener if React registered it; otherwise park it for the App to drain on mount.
+        val js = "(function(){var s='$safe';" +
+            "if(window.__agentnetOpenSession){window.__agentnetOpenSession(s);}" +
+            "else{window.__agentnetPendingSession=s;}})()"
+        runOnUiThread { runCatching { webView.evaluateJavascript(js, null) } }
+    }
+
     // ── ShellBridge entry points (#53) ──────────────────────────────────────────────
 
     // Promote/demote the foreground service that keeps this process (and the node runtime)
@@ -282,20 +326,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // A turn needs approval. If the app is foreground the WebView already shows it, so we
-    // only raise a notification when backgrounded. Tapping reopens the chat; the Approve /
-    // Reject actions POST an approvalDecision to /rpc (same as the in-app buttons).
-    fun requestApproval(id: String, title: String, clientId: String, body: String) {
-        if (inForeground) return
+    // A turn needs approval. When foreground the WebView's own dock shows it, so we normally
+    // stay quiet — UNLESS `force` is set, meaning the approval is for a session the user
+    // isn't viewing (chat-app style: ping even while using another chat). Tapping deep-links
+    // to that chat (sessionId); the Approve / Reject actions POST an approvalDecision to /rpc.
+    fun requestApproval(id: String, title: String, clientId: String, body: String, sessionId: String, force: Boolean, isQuestion: Boolean) {
+        if (inForeground && !force) return
         val mgr = getSystemService(NotificationManager::class.java) ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             mgr.createNotificationChannel(
                 NotificationChannel(APPROVAL_CHANNEL, "AgentNet approvals", NotificationManager.IMPORTANCE_HIGH)
             )
         }
+        // Tap carries the sessionId so the WebView can jump to that chat. A distinct request
+        // code per session keeps FLAG_UPDATE_CURRENT from collapsing different chats' extras;
+        // SINGLE_TOP delivers it via onNewIntent when the activity is already running.
         val tap = PendingIntent.getActivity(
-            this, 0,
-            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+            this, sessionId.hashCode(),
+            Intent(this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(EXTRA_OPEN_SESSION, sessionId),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -303,24 +353,34 @@ class MainActivity : AppCompatActivity() {
         } else {
             @Suppress("DEPRECATION") Notification.Builder(this)
         }
-        // Expanded view shows the title + the code/diff/plan being approved, so the user can
-        // read what they're allowing without opening the app. Cap it so a huge diff stays sane.
+        // Expanded view shows the title + the code/diff/plan (or the question) so the user can
+        // read it without opening the app. Cap it so a huge diff stays sane.
         val code = if (body.length > 1200) body.take(1200) + "\n…" else body
         val expanded = if (code.isNotBlank()) "$title\n\n$code" else title
-        mgr.notify(
-            APPROVAL_NOTIF_ID,
+        builder
+            // A question isn't a yes/no — it's the agent ASKING you something, so label it as
+            // such; a permission is "Approval needed".
+            .setContentTitle(if (isQuestion) "Agent has a question" else "Approval needed")
+            .setContentText(title)
+            .setStyle(Notification.BigTextStyle().bigText(expanded))
+            .setSmallIcon(R.drawable.iq_logo_green)
+            .setLargeIcon(Icon.createWithResource(this, R.drawable.iq_logo_green))
+            .setContentIntent(tap)
+            .setAutoCancel(true)
+        // Only a yes/no approval gets Approve/Reject buttons. A question is answered by picking
+        // an option in-app, so the notification just deep-links there on tap (no actions).
+        if (!isQuestion) {
             builder
-                .setContentTitle("Approval needed")
-                .setContentText(title)
-                .setStyle(Notification.BigTextStyle().bigText(expanded))
-                .setSmallIcon(R.drawable.iq_logo_green)
-                .setLargeIcon(Icon.createWithResource(this, R.drawable.iq_logo_green))
-                .setContentIntent(tap)
-                .setAutoCancel(true)
                 .addAction(android.R.drawable.ic_menu_revert, "Reject", approvalAction("reject", id, clientId, 2))
                 .addAction(android.R.drawable.ic_menu_send, "Approve", approvalAction("approve", id, clientId, 3))
-                .build(),
-        )
+        }
+        mgr.notify(APPROVAL_NOTIF_ID, builder.build())
+    }
+
+    // Drop the approval notification — called when the WebView reports the user is now
+    // viewing the chat it belongs to, or the approval was answered. Same id onResume cancels.
+    fun clearApprovalNotice() {
+        getSystemService(NotificationManager::class.java)?.cancel(APPROVAL_NOTIF_ID)
     }
 
     // PendingIntent → NotifActionReceiver for an approve/reject button. `reqCode` keeps the

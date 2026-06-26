@@ -13,9 +13,16 @@ declare global {
       // Promote (true) / demote (false) the foreground service. `clientId` lets the
       // persistent notification's Stop action reach /rpc.
       setAgentActive?(active: boolean, clientId: string): void;
-      // Raise an approval notification (shell no-ops it when foreground). Its Approve/
-      // Reject actions POST an approvalDecision to /rpc?client=<clientId>.
-      requestApproval?(id: string, title: string, clientId: string, body: string): void;
+      // Raise an approval notification. `sessionId` lets a tap deep-link to that chat.
+      // `force` = notify even in foreground (the request is for a session the user isn't
+      // viewing — chat-app style ping). When force is false the shell still no-ops in
+      // foreground (the WebView's own dock shows it). `isQuestion` = AskUserQuestion: shown
+      // without Approve/Reject actions (answered by tapping in, not from the notification).
+      // Its Approve/Reject actions POST an approvalDecision to /rpc?client=<clientId>.
+      requestApproval?(id: string, title: string, clientId: string, body: string, sessionId: string, force: boolean, isQuestion: boolean): void;
+      // Drop the approval notification once the user is viewing its chat (or it's answered),
+      // the way a chat app clears a conversation's alert when you open the thread.
+      clearApprovalNotice?(): void;
       // First time the user enables background exec: prompt for battery-optimization
       // exemption so Android doesn't reap a long task. Guarded native-side against nagging.
       onBackgroundEnabled?(): void;
@@ -56,8 +63,17 @@ export function syncAgentService(active: boolean, clientId: string | null): void
   window.AgentNetShell?.setAgentActive?.(active && backgroundExecEnabled(), clientId ?? "");
 }
 
-// Ask the shell to surface a pending approval (it decides notify-vs-ignore by its own
-// foreground state).
-export function notifyApproval(id: string, title: string, clientId: string | null, body?: string): void {
-  window.AgentNetShell?.requestApproval?.(id, title, clientId ?? "", body ?? "");
+// Ask the shell to surface a pending approval. `force` makes it notify even in foreground
+// — used when the approval belongs to a session the user isn't currently viewing, so it
+// pings like a chat app instead of hijacking the open chat. `sessionId` lets a tap deep-link
+// straight to that conversation.
+export function notifyApproval(id: string, title: string, clientId: string | null, body: string, sessionId: string, force: boolean, isQuestion: boolean): void {
+  window.AgentNetShell?.requestApproval?.(id, title, clientId ?? "", body ?? "", sessionId ?? "", force, isQuestion);
+}
+
+// Clear the approval notification — call when the user is viewing the chat the pending
+// approval belongs to, or once no approval is pending (chat-app style: open the thread, the
+// alert goes away). No-op off the Android shell.
+export function clearApprovalNotice(): void {
+  window.AgentNetShell?.clearApprovalNotice?.();
 }

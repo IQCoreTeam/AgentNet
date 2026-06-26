@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useStore } from "../state/store";
+import { useStore, isApprovalForView } from "../state/store";
 import { MessageList } from "./MessageList";
 import { ApprovalDock } from "./ApprovalDock";
 import { Composer } from "./Composer";
@@ -66,7 +66,7 @@ export function ChatScreen({ onOpenDrawer }: { onOpenDrawer: () => void }) {
           )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <StatusBadge waitingApproval={state.approvals.length > 0} working={state.typing} />
+          <StatusBadge waitingApproval={state.approvals.some((a) => isApprovalForView(a, state.activeSessionId))} working={state.typing} />
           {lastFiring && (
             <span
               className="inline-flex items-center gap-1 text-xs animate-pulse skill-firing-badge"

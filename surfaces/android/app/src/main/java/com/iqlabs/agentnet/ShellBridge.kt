@@ -23,10 +23,19 @@ class ShellBridge(private val activity: MainActivity) {
         activity.runOnUiThread { runCatching { activity.setAgentActive(active, clientId) } }
     }
 
-    // #53: a turn is waiting on approval → raise a notification if the app is backgrounded.
+    // #53: a turn is waiting on approval → raise a notification. `sessionId` lets a tap
+    // deep-link to that chat; `force` raises it even in foreground (the approval is for a
+    // session the user isn't viewing — chat-app style ping).
     @JavascriptInterface
-    fun requestApproval(id: String, title: String, clientId: String, body: String) {
-        activity.runOnUiThread { runCatching { activity.requestApproval(id, title, clientId, body) } }
+    fun requestApproval(id: String, title: String, clientId: String, body: String, sessionId: String, force: Boolean, isQuestion: Boolean) {
+        activity.runOnUiThread { runCatching { activity.requestApproval(id, title, clientId, body, sessionId, force, isQuestion) } }
+    }
+
+    // The user is now viewing the chat an approval belongs to (or answered it) → drop its
+    // notification, the way a chat app clears a conversation's alert once you open it.
+    @JavascriptInterface
+    fun clearApprovalNotice() {
+        activity.runOnUiThread { runCatching { activity.clearApprovalNotice() } }
     }
 
     // #53: user just enabled background execution → prompt for battery-opt exemption (once).

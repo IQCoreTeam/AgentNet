@@ -4,7 +4,7 @@ import type {
   ApprovalQuestionResponse,
   ApprovalRequest,
 } from "../transport/protocol";
-import { useStore } from "../state/store";
+import { useStore, isApprovalForView } from "../state/store";
 import { SkillIcon } from "../icons";
 import { useElementHeightVariable } from "../layoutEffects";
 import { haptics } from "../haptics";
@@ -32,17 +32,22 @@ export function ApprovalDock() {
     }
   }
 
+  // Only the CURRENT chat's approvals dock inline. A backgrounded session's approval would
+  // otherwise hijack the chat you're looking at; instead it pings you via a notification
+  // (App.tsx forces one for non-active sessions) and tapping it jumps there. Approvals with
+  // no sessionId, or when no chat is selected yet (fresh chat), still show — they belong here.
+  const visible = state.approvals.filter((a) => isApprovalForView(a, state.activeSessionId));
   // A question (AskUserQuestion) needs room for its options + the Send button; the plain
   // yes/no approvals stay compact. Without the taller cap the question card clipped and the
   // Send button was unreachable (couldn't select or submit).
-  const hasQuestion = state.approvals.some((a) => a.kind === "question" && (a.questions?.length ?? 0) > 0);
+  const hasQuestion = visible.some((a) => a.kind === "question" && (a.questions?.length ?? 0) > 0);
   return (
     <div
       ref={rootRef}
-      className={`flex flex-col gap-2 overflow-y-auto px-3 pt-2 ${state.approvals.length === 0 ? "hidden" : ""}`}
+      className={`flex flex-col gap-2 overflow-y-auto px-3 pt-2 ${visible.length === 0 ? "hidden" : ""}`}
       style={{ maxHeight: hasQuestion ? "calc(var(--vvh, 100dvh) * 0.62)" : "calc(var(--vvh, 100dvh) * 0.5)" }}
     >
-      {state.approvals.map((req) =>
+      {visible.map((req) =>
         req.kind === "question" && req.questions?.length ? (
           <QuestionCard key={req.id} req={req} onAnswer={(a) => decide(req, "once", { questionResponses: a })} />
         ) : (

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useStore } from "../state/store";
+import { useStore, isApprovalForView } from "../state/store";
 import { enqueueLiveImages } from "./liveImages";
 import type { Cli, ImageInput } from "../transport/protocol";
 import { AttachIcon } from "../icons";
@@ -148,7 +148,9 @@ export function Composer() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const composingRef = useRef(false);
   const busy = state.typing;
-  const frozen = state.approvals.length > 0;
+  // Freeze only for an approval in THIS chat — a backgrounded session's pending approval
+  // pings a notification instead, it must not lock the composer of the chat you're in.
+  const frozen = state.approvals.some((a) => isApprovalForView(a, state.activeSessionId));
 
   const [slashIdx, setSlashIdx] = useState(0);
   const [suppressSlash, setSuppressSlash] = useState(false);
