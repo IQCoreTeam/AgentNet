@@ -42,6 +42,25 @@ android {
         buildConfig = true
     }
 
+    // Shared debug signing: every machine (and CI, later) that has the shared keystore
+    // produces the SAME signing SHA-1, so ONE Android OAuth client (package + SHA-1) covers
+    // everyone for Google Drive login — no per-developer registration. The keystore is NOT in
+    // this public repo (.gitignore'd); each dev drops the file distributed out-of-band at
+    // surfaces/android/agentnet-debug.keystore. If it's absent, the build falls back to the
+    // machine's own ~/.android/debug.keystore (build still works, just with that SHA-1). The
+    // password is the standard debug password — not a secret; the file is the secret.
+    val sharedDebugKeystore = rootProject.file("agentnet-debug.keystore")
+    if (sharedDebugKeystore.exists()) {
+        signingConfigs {
+            getByName("debug") {
+                storeFile = sharedDebugKeystore
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false

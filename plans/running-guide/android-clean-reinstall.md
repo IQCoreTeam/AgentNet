@@ -157,6 +157,31 @@ adb forward --remove tcp:4318
 
 ---
 
+## Shared debug signing (one Drive OAuth registration for the whole team)
+
+Google Drive's native login only works if the APK's signing SHA-1 is registered for
+`com.iqlabs.agentnet` in Google Cloud Console. By default every machine signs debug builds
+with its **own** auto-generated `~/.android/debug.keystore`, so each developer would otherwise
+need their own SHA-1 registered (and you get the divergent-build confusion: different SHA-1s,
+different behavior). To avoid that, the project uses **one shared debug keystore** so every
+build has the same SHA-1 and a single registration covers everyone.
+
+- The keystore (`surfaces/android/agentnet-debug.keystore`) is **not in the repo** (this is a
+  public repo) — it is `.gitignore`'d and distributed to the team **out-of-band** (a private
+  channel). `build.gradle.kts` uses it automatically when present and **falls back** to the
+  machine's own debug keystore when absent (the build still works, just with that machine's
+  SHA-1).
+- **To use it:** get the file from the team and drop it at
+  `surfaces/android/agentnet-debug.keystore`. Verify with
+  `cd surfaces/android && ./gradlew :app:signingReport` — the `debug` variant SHA-1 should
+  match the one registered in Google Cloud Console.
+- It is a **debug** key only (standard `android`/`androiddebugkey` password — not a secret;
+  the *file* is the access control). **Never** use it for a Play Store / release build — that
+  must use a separate, secret release key that is never shared or committed.
+- Switching to (or away from) the shared key changes the signature, so the next install over
+  an existing app fails with a signature mismatch. **Uninstall first**
+  (`adb uninstall com.iqlabs.agentnet`), then install — this re-runs onboarding.
+
 ## Troubleshooting the refresh
 
 - **`Cannot find module 'ws'` (or any module) / server crash on boot:** the server bundle was

@@ -5,6 +5,11 @@ local.properties
 *.apk
 *.aab
 
+# Shared debug keystore — distributed out-of-band (private channel), NEVER committed to
+# this public repo. build.gradle uses it when present; see android-clean-reinstall.md.
+*.keystore
+*.jks
+
 # Runtime payload built by the release pipeline (large native binaries / images), never
 # committed (see scripts/build-assets.sh).
 # proot + loader + libs: libproot.so, libloader*.so, libtalloc.so, libandroid-shmem.so
