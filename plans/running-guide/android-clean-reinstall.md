@@ -11,6 +11,7 @@ OAuth). This file is the **refresh runbook** for when the app is already install
 
 - [When to use this](#when-to-use-this)
 - [What a reinstall refreshes (and what it does not)](#what-a-reinstall-refreshes-and-what-it-does-not)
+- [Debug APK source policy](#debug-apk-source-policy)
 - [Step 1 — Get a fresh payload from CI](#step-1--get-a-fresh-payload-from-ci)
 - [Step 2 — Drop the payload into the source tree](#step-2--drop-the-payload-into-the-source-tree)
 - [Step 3 — Build the APK](#step-3--build-the-apk)
@@ -46,6 +47,47 @@ So if you changed **server/UI/proot only**, `install -r` is enough. If you chang
 **rootfs** (new Ubuntu / node / claude / codex), you must force a first-run extraction with
 `pm clear` or `adb uninstall` — and that **wipes onboarding** (wallet, Claude/Codex login,
 Drive connection). See [Step 4](#step-4--reinstall-quick-vs-full-clean).
+
+---
+
+## Debug APK source policy
+
+Do **not** install random debug APKs from another chat, machine, or old local build when
+testing AgentNet Android. Debug APKs are easy to rebuild, and stale ones are the source of
+most confusing failures:
+
+- A stale `agentnet-server.tar` can fall back to web OAuth and trigger Google's
+  `Error 403: disallowed_useragent`.
+- A bundle built without a complete `pnpm install` can boot-crash with
+  `Cannot find module 'ws'`.
+- An APK signed with a different debug keystore can fail Drive auth with
+  `UNREGISTERED_ON_API_CONSOLE` unless that key's SHA-1 is registered.
+
+Use one of these trusted sources instead:
+
+1. Build the APK yourself from current `main`, using the fresh `android-assets-arm64` CI
+   artifact and the team-shared debug keystore.
+2. If someone sends an APK directly, treat it as a team handoff artifact only if they also
+   provide the git commit SHA, the `android-assets` run id, and the signing SHA-1. Verify the
+   signing SHA-1 before installing:
+
+```bash
+cd surfaces/android
+./gradlew :app:signingReport
+# For a received APK, use Android SDK build-tools:
+# ~/Library/Android/sdk/build-tools/<version>/apksigner verify --print-certs app-debug.apk
+```
+
+The Google Cloud Console registration covers the team only when everyone signs with the
+same shared debug keystore. If the shared key is present, the debug SHA-1 should be the
+team-registered value:
+
+```text
+4A:DD:0A:EC:AB:F5:55:CE:85:5C:DE:02:ED:08:82:8C:04:1A:EC:E6
+```
+
+If your build shows a different SHA-1, either install the shared keystore first or register
+that SHA-1 separately as an Android OAuth client for `com.iqlabs.agentnet`.
 
 ---
 
