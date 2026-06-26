@@ -100,8 +100,7 @@ TUSR="data/data/com.termux/files/usr"
 #   libtalloc.so.2  -> libtalloc.so     (versioned name isn't lib*.so; ServerManager hangs a
 #                                         libtalloc.so.2 soname symlink at runtime to resolve it)
 #   libandroid-shmem.so                 (already lib*.so)
-# No chmod: the OS sets native-lib perms. proot-userland is unused by the shell, so it's
-# dropped — one fewer ELF in the APK.
+# proot-userland is unused by the shell, so it's dropped — one fewer ELF in the APK.
 case "$ABI" in
   arm64)  JNI_ABI="arm64-v8a" ;;
   x86_64) JNI_ABI="x86_64" ;;
@@ -114,6 +113,11 @@ cp "$PROOT_STAGE/proot/$TUSR/libexec/proot/loader32"  "$JNIDIR/libloader32.so" 2
 # cp -L: the versioned .so.2 is a symlink in the .deb — copy the real bytes.
 cp -L "$PROOT_STAGE/talloc/$TUSR/lib/libtalloc.so.2"     "$JNIDIR/libtalloc.so"
 cp -L "$PROOT_STAGE/shmem/$TUSR/lib/libandroid-shmem.so" "$JNIDIR/libandroid-shmem.so"
+# The talloc/shmem .debs ship their .so as 0700 (owner-only). In CI this script runs as
+# root inside the arm64 container, so 0700 files are unreadable to the non-root runner that
+# later zips them for upload-artifact (EACCES → "zip creation" failure). Make them
+# world-readable; 0755 is the normal mode for native libs and the OS resets perms on-device.
+chmod 0755 "$JNIDIR"/*.so
 
 # 2) Ubuntu rootfs with the engine installed. KEY: we don't download a rootfs — this
 #    script runs INSIDE an arm64 ubuntu container (see the workflow), so the container's
