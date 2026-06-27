@@ -7,6 +7,34 @@ function Bar({ className = "" }: { className?: string }) {
   return <div className={`animate-pulse ${className}`} style={{ background: "var(--an-bg-2)" }} />;
 }
 
+// One SD-card-shaped placeholder (cut corner + small coral data-chip hint bottom-left) so the
+// skeleton matches the real SkillSdCard and the grid doesn't jump when cards land.
+function SdSkel() {
+  return (
+    <div
+      className="relative w-full overflow-hidden rounded-xl"
+      style={{ aspectRatio: "108 / 150", clipPath: "polygon(0 0,79% 0,100% 13%,100% 100%,0 100%)" }}
+    >
+      <Bar className="h-full w-full" />
+      <div className="absolute bottom-1.5 left-1.5 h-6 w-2/5 rounded-sm" style={{ background: "rgba(255,95,60,0.45)" }} />
+    </div>
+  );
+}
+
+// A stack of landscape agent-card placeholders (matches the cyberpunk AgentBizCard aspect) so the
+// agent directory shimmers in the right shape instead of the 3-col skill grid.
+export function AgentListSkeleton({ rows = 5 }: { rows?: number }) {
+  return (
+    <div className="space-y-2.5 pt-1">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="w-full overflow-hidden rounded-md" style={{ aspectRatio: "350 / 196" }}>
+          <Bar className="h-full w-full" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const headerStyle = { paddingTop: "max(0.5rem, env(safe-area-inset-top))" } as const;
 
 export function SkillDetailSkeleton({ onBack }: { onBack: () => void }) {
@@ -48,26 +76,13 @@ export function SkillDetailSkeleton({ onBack }: { onBack: () => void }) {
   );
 }
 
-// A list of shimmering rows for the market / skills / agents lists while results load, so
-// the area shows motion instead of flashing an empty "none found" state before data lands.
-// Mirrors SkillCardTile exactly (rounded-xl border p-3, 40px icon, name + description +
-// meta row) so the skeleton doesn't jump in size when the real tiles land.
+// A 3-col grid of SD-card placeholders for the market / My Skills lists while results load, so
+// the area shows motion (in the real card shape) instead of flashing an empty state.
 export function MarketListSkeleton({ rows = 6 }: { rows?: number }) {
   return (
-    <div className="space-y-2 pt-1">
+    <div className="grid grid-cols-3 gap-3.5 pt-1">
       {Array.from({ length: rows }).map((_, i) => (
-        <div
-          key={i}
-          className="flex items-start gap-2 rounded-xl border border-zinc-800 p-3"
-          style={{ background: "var(--an-bg-1)" }}
-        >
-          <Bar className="h-10 w-10 shrink-0 rounded-lg" />
-          <div className="flex-1 space-y-1.5 py-0.5">
-            <Bar className="h-3.5 w-1/2 rounded-md" />
-            <Bar className="h-3 w-3/4 rounded-md" />
-            <Bar className="h-2.5 w-2/5 rounded-md" />
-          </div>
-        </div>
+        <SdSkel key={i} />
       ))}
     </div>
   );
@@ -75,14 +90,25 @@ export function MarketListSkeleton({ rows = 6 }: { rows?: number }) {
 
 // Mirrors the redesigned agent profile: a large avatar booth, three stat plaques, the
 // file-folder tabs, a horizontal WORK card, and chunky single-column skill rows.
-export function AgentProfileSkeleton() {
+export function AgentProfileSkeleton({ onBack }: { onBack?: () => void } = {}) {
   return (
     <div className="flex h-full flex-col bg-zinc-950">
       <div className="flex-1 overflow-hidden">
         {/* hero */}
         <div className="px-4 pt-3" style={headerStyle}>
           <div className="flex items-center justify-between">
-            <Bar className="h-4 w-28 rounded-md" />
+            {onBack ? (
+              <button
+                onClick={onBack}
+                className="flex h-8 w-8 items-center justify-center rounded-full active:bg-zinc-800"
+                style={{ color: "var(--an-fg-dim)" }}
+                aria-label="Back"
+              >
+                <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4l-6 6 6 6" /></svg>
+              </button>
+            ) : (
+              <Bar className="h-4 w-28 rounded-md" />
+            )}
             <Bar className="h-7 w-28 rounded-full" />
           </div>
           <div className="mt-2 flex justify-center">
@@ -99,24 +125,17 @@ export function AgentProfileSkeleton() {
           <Bar className="h-9 flex-1 rounded-t-xl" />
           <Bar className="h-9 flex-1 rounded-t-xl" />
         </div>
-        {/* content: WORK card + chunky skill rows */}
+        {/* content: WORK banner cards (horizontal) + SD-card skills grid */}
         <div className="space-y-4 px-4 pt-4">
           <Bar className="h-3.5 w-20 rounded-md" />
-          <div className="flex gap-2 overflow-hidden">
-            <Bar className="h-40 w-4/5 shrink-0 rounded-xl" />
-            <Bar className="h-40 w-1/5 shrink-0 rounded-xl" />
+          <div className="flex gap-3 overflow-hidden">
+            <Bar className="h-[168px] w-[252px] shrink-0 rounded-2xl" />
+            <Bar className="h-[168px] w-[140px] shrink-0 rounded-2xl" />
           </div>
           <Bar className="h-3.5 w-20 rounded-md" />
-          <div className="space-y-2">
+          <div className="grid grid-cols-3 gap-3.5">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="flex items-start gap-2 rounded-xl border border-zinc-800 p-3" style={{ background: "var(--an-bg-1)" }}>
-                <Bar className="h-10 w-10 shrink-0 rounded-lg" />
-                <div className="flex-1 space-y-1.5 py-0.5">
-                  <Bar className="h-3.5 w-1/2 rounded-md" />
-                  <Bar className="h-3 w-3/4 rounded-md" />
-                  <Bar className="h-2.5 w-2/5 rounded-md" />
-                </div>
-              </div>
+              <SdSkel key={i} />
             ))}
           </div>
         </div>

@@ -23,7 +23,7 @@ import { claudeSkillsDir } from "../../core/paths.js";
 import { classifySkills, readSkillManifest } from "../registry.js";
 import { resolveRpcUrl } from "../../core/rpc.js";
 import { init as initChain } from "../../core/chain.js";
-import type { AgentProfile, SkillCard, SkillDetail, VerifiedRepo } from "../../chat/marketMessages.js";
+import type { AgentProfile, Reputation, SkillCard, SkillDetail, VerifiedRepo } from "../../chat/marketMessages.js";
 import type { Skill } from "../../core/types.js";
 import { readNotes, postNote as corePostNote, readAgentNotes, postAgentNote as corePostAgentNote } from "../../notes/notes.js";
 import { getSkillsCollectionMint, getWorkflowsCollectionMint, getIndexerUrl } from "../../core/seed.js";
@@ -78,6 +78,17 @@ async function fetchVerifiedRepos(wallet: string): Promise<VerifiedRepo[]> {
     }
   }
   return [...byRepo.values()];
+}
+
+// Summed verified-work stars for many wallets in ONE indexer call (the directory's reputation
+// axis). Throws on a non-OK response so the caller can fall back to per-wallet lookups against
+// an older indexer that lacks this aggregated route.
+async function fetchStarsByWallet(wallets: string[]): Promise<Record<string, number>> {
+  const qs = wallets.length ? `?wallets=${encodeURIComponent(wallets.join(","))}` : "";
+  const res = await fetch(`${INDEXER_URL}/work-links/stars${qs}`);
+  if (!res.ok) throw new Error(`stars-by-wallet ${res.status}`);
+  const data = (await res.json()) as { stars?: Record<string, number> };
+  return data.stars ?? {};
 }
 
 function collectionIdFor(type?: "skill" | "workflow"): Promise<string | null> {
@@ -411,11 +422,30 @@ export async function marketplaceEnv(wallet: Wallet) {
     // complete — no client-side augmentation needed. das is the fallback when the
     // indexer is down.
     async listAgents() {
+      let board: Reputation[];
       try {
-        return await getLeaderboard(conn, 20, indexerSource(INDEXER_URL));
+        board = await getLeaderboard(conn, 20, indexerSource(INDEXER_URL));
       } catch {
-        return await getLeaderboard(conn, 20, dasSource);
+        board = await getLeaderboard(conn, 20, dasSource);
       }
+      // Attach a reputation axis (summed verified-work stars) alongside totalSupply (popularity)
+      // so the directory can show both. ONE aggregated indexer call for the whole board; if that
+      // route is missing (older indexer deploy) fall back to per-wallet /work-links lookups.
+      // Display-only: any failure yields 0 stars and never blocks the list.
+      const wallets = board.map((a) => a.wallet);
+      let starsMap: Record<string, number>;
+      try {
+        starsMap = await fetchStarsByWallet(wallets);
+      } catch {
+        const pairs = await Promise.all(
+          wallets.map(async (w) => {
+            const repos = await fetchVerifiedRepos(w).catch(() => [] as VerifiedRepo[]);
+            return [w, repos.reduce((sum, r) => sum + (r.stars ?? 0), 0)] as const;
+          }),
+        );
+        starsMap = Object.fromEntries(pairs);
+      }
+      return board.map((a) => ({ ...a, stars: starsMap[a.wallet] ?? 0 }));
     },
 
     // issue #35: full agent profile — reputation + created/owned skills + notes.

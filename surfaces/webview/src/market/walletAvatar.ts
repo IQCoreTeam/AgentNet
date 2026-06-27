@@ -58,6 +58,16 @@ export function walletAvatarSvg(seed: string): string {
     const end = svg.indexOf("}", i);
     svg = svg.slice(0, i) + head + pal[c] + svg.slice(end);
   }
+  // SCOPE the styles to THIS instance. The art uses GLOBAL class selectors (.clothes, .eyes,
+  // ...) inside a <style>; when several avatars are injected into one DOM (the agent directory,
+  // a comment list) the rules cascade globally and the LAST avatar's colors win for ALL of them
+  // — so every wallet rendered the same face. Give the <svg> a unique id (deterministic per
+  // seed) and prefix every selector with it, keeping each avatar's palette to itself.
+  const uid = "av" + hashSeed(seed || "default").toString(36);
+  svg = svg.replace("<svg", `<svg id="${uid}"`);
+  svg = svg.replace(/<style[^>]*>([\s\S]*?)<\/style>/, (_m, css: string) =>
+    `<style>${css.replace(/\.[-_a-zA-Z0-9]+\s*\{/g, (sel) => `#${uid} ${sel}`)}</style>`,
+  );
   return svg;
 }
 

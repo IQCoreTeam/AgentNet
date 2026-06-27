@@ -121,6 +121,7 @@ export function App() {
 const LAST = 3; // Chat(0) Skills(1) Agent(2) Market(3)
 
 function TabShell() {
+  const { state, send } = useStore();
   const [idx, setIdx] = useState(0);
   const [pageDrag, setPageDrag] = useState(0);
   const [paging, setPaging] = useState(false);
@@ -231,7 +232,17 @@ function TabShell() {
           <Sessions
             embedded
             onClose={() => changeDrawer(false)}
-            onOpenAgent={() => { setIdx(2); changeDrawer(false); }}
+            onOpenAgent={() => {
+              // Deep link to MY agent page: jump to the Agent tab, then open the self profile
+              // (sent next tick so MarketScreen's mount effect — which clears any open profile —
+              // has already run; the async getAgentProfile result lands after and shows my page).
+              setIdx(2);
+              changeDrawer(false);
+              if (state.walletAddress) {
+                const wallet = state.walletAddress;
+                setTimeout(() => send({ type: "getAgentProfile", wallet }), 0);
+              }
+            }}
           />
         </div>
       )}

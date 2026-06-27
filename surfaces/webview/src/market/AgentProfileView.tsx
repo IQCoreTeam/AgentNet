@@ -10,7 +10,7 @@ type VRepo = NonNullable<AgentProfile["verifiedRepos"]>[number];
 import { walletAvatarPalette, walletAvatarSvg, walletBandColor } from "./walletAvatar";
 import { mediaUrl } from "./mediaUrl";
 import { PostCelebration } from "./PostCelebration";
-import { SkillCardTile } from "./SkillCardTile";
+import { SkillSdCard } from "./SkillSdCard";
 import { RegisterWorkRepo } from "../onboarding/RegisterWorkRepo";
 
 function CopyIcon({ className }: { className?: string }) {
@@ -48,9 +48,9 @@ function PlusIcon({ className }: { className?: string }) {
   );
 }
 
-function GithubMark({ className }: { className?: string }) {
+function GithubMark({ className, style }: { className?: string; style?: CSSProperties }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" style={{ color: "var(--an-fg)" }} aria-hidden="true">
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" style={{ color: "var(--an-fg)", ...style }} aria-hidden="true">
       <path d="M12 1.5A10.5 10.5 0 0 0 8.68 22c.52.1.71-.23.71-.5v-1.76c-2.92.64-3.54-1.41-3.54-1.41-.48-1.21-1.16-1.53-1.16-1.53-.95-.65.07-.64.07-.64 1.05.07 1.6 1.08 1.6 1.08.94 1.6 2.46 1.14 3.06.87.1-.68.37-1.14.66-1.4-2.33-.27-4.78-1.17-4.78-5.18 0-1.15.41-2.08 1.08-2.82-.11-.27-.47-1.34.1-2.79 0 0 .88-.28 2.88 1.07a10 10 0 0 1 5.24 0c2-1.35 2.88-1.07 2.88-1.07.57 1.45.21 2.52.1 2.79.68.74 1.08 1.67 1.08 2.82 0 4.02-2.46 4.9-4.8 5.16.38.33.71.97.71 1.96v2.9c0 .28.19.61.72.5A10.5 10.5 0 0 0 12 1.5Z" />
     </svg>
   );
@@ -75,11 +75,13 @@ function GearIcon({ className }: { className?: string }) {
 
 // Verified-star tiers: the summed repo stars climb a Bronze->Legendary ladder, shown as a
 // trophy in the hero and expandable into a progress ladder (goal-gradient).
+// Colors come from the shared --an-tier-* tokens (index.css) so the profile star gauge and
+// the agent directory's fame ring/edge climb the exact same bronze->legendary ramp.
 const STAR_TIERS = [
-  { name: "Bronze", min: 10, color: "#cd7f32" },
-  { name: "Silver", min: 50, color: "#c0c0c0" },
-  { name: "Gold", min: 250, color: "#ffd700" },
-  { name: "Legendary", min: 1000, color: "#c084fc" },
+  { name: "Bronze", min: 3, color: "var(--an-tier-bronze)" },
+  { name: "Silver", min: 15, color: "var(--an-tier-silver)" },
+  { name: "Gold", min: 60, color: "var(--an-tier-gold)" },
+  { name: "Legendary", min: 250, color: "var(--an-tier-legendary)" },
 ] as const;
 
 function tierInfo(stars: number) {
@@ -104,16 +106,6 @@ const REPO_RARITY = [
 
 function repoRarity(stars: number) {
   return REPO_RARITY.find((t) => stars >= t.min) ?? null;
-}
-
-// A neon edge with a soft glow (used on the WORK cards): saturated border + inset ring +
-// a gentle outer halo so a high-tier repo subtly glows.
-function neonEdge(color: string) {
-  return {
-    borderColor: `color-mix(in srgb, ${color} 75%, var(--an-line))`,
-    boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 24%, transparent), 0 0 14px color-mix(in srgb, ${color} 26%, transparent)`,
-    background: `color-mix(in srgb, ${color} 9%, var(--an-bg-1))`,
-  } as const;
 }
 
 // The agent's "IQ tier" badge for the hero: star glyph + tier name + a 5-segment gauge +
@@ -255,70 +247,57 @@ function GithubCard({ url, className = "mt-2" }: { url: string; className?: stri
   );
 }
 
-// One horizontal WORK card: a verified repo with its star count, a GitHub embed of the repo,
-// and the skills linked to it. "+N more" opens the full skill list.
+// One WORK card: a refined "banner folder" — a flat tier-colour banner up top (with the GitHub
+// octocat + a VERIFIED label and the folder-tab notch cut into it), a dark body with the bold
+// repo name, a muted skill pill (tap opens the skill; "+N" opens the full list), and the star
+// count. The banner colour is the repo's star tier (cyan/violet/gold/pink, green when untiered).
 function WorkCard({
   repo,
   skillById,
+  onOpenSkill,
   onAllSkills,
 }: {
   repo: VRepo;
   skillById: Map<string, SkillCard>;
+  onOpenSkill: (card: SkillCard) => void;
   onAllSkills: (repo: VRepo) => void;
 }) {
   const linked = repo.skillMints
     .map((m) => skillById.get(m))
     .filter((c): c is SkillCard => !!c)
     .sort((a, b) => (b.supply ?? 0) - (a.supply ?? 0));
+  const rep = linked[0];
+  const extra = linked.length - 1;
   const rarity = repoRarity(repo.stars);
-  const starColor = rarity?.color ?? "#f5b94a";
+  const theme = rarity?.color ?? "#3ac07a";
+  function openRepo() {
+    const u = safeExternalUrl(repo.url);
+    if (u) window.open(u, "_blank", "noopener");
+  }
   return (
-    <div
-      className="relative flex min-w-[260px] max-w-[300px] flex-[0_0_84%] snap-start flex-col gap-3 overflow-hidden rounded-xl border p-4 sm:flex-[0_0_280px]"
-      style={rarity ? neonEdge(rarity.color) : { background: "var(--an-bg-1)", borderColor: "var(--an-line)" }}
-    >
-      {/* starred (tiered) repos get a faint dotted gradient inside, in the tier color */}
-      {rarity && (
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            backgroundImage: `radial-gradient(color-mix(in srgb, ${rarity.color} 60%, transparent) 1.4px, transparent 2px)`,
-            backgroundSize: "13px 13px",
-            backgroundPosition: "center top",
-            WebkitMaskImage: "radial-gradient(120% 90% at 80% 0%, rgba(0,0,0,0.8), transparent 70%)",
-            maskImage: "radial-gradient(120% 90% at 80% 0%, rgba(0,0,0,0.8), transparent 70%)",
-            opacity: 0.35,
-          }}
-          aria-hidden="true"
-        />
-      )}
-      <div className="relative z-10 flex items-center gap-2">
-        <span className="inline-flex items-center" style={{ color: starColor }}><StarIcon className="h-5 w-5" /></span>
-        <span className="text-2xl font-bold leading-none" style={{ color: "var(--an-fg)" }}>{repo.stars}</span>
-        <span className="text-xs" style={{ color: "var(--an-fg-mute)" }}>stars</span>
-        {repo.forks > 0 && <span className="ml-auto text-xs" style={{ color: "var(--an-fg-mute)" }}>⑂ {repo.forks}</span>}
+    <div className="an-bfolder shrink-0 snap-start font-mono" style={{ "--theme": theme } as CSSProperties}>
+      <div className="an-bfolder-banner" aria-hidden="true" />
+      <span className="an-bfolder-tier">VERIFIED</span>
+      <button onClick={openRepo} aria-label="Open repository" className="an-bfolder-cat active:opacity-70">
+        <GithubMark className="h-5 w-5" style={{ color: "#0c0d10", opacity: 0.85 }} />
+      </button>
+      <span className="an-bfolder-tab" aria-hidden="true" />
+      <div className="an-bfolder-body">
+        <p className="an-bfolder-title">{repo.owner}/{repo.name}</p>
       </div>
-      <GithubCard url={repo.url} className="relative z-10" />
-      {linked.length > 0 ? (
-        <div className="relative z-10 flex flex-wrap gap-1.5">
-          {linked.slice(0, 3).map((c) => (
-            <span key={c.id} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px]" style={{ background: "var(--an-bg-2)", color: "var(--an-fg-dim)" }}>
-              <SkillIcon className="h-3 w-3 shrink-0" />
-              <span className="max-w-[100px] truncate" style={{ color: "var(--an-fg)" }}>{c.name}</span>
-              {c.supply != null && <span style={{ color: "var(--an-fg-mute)" }}>{c.supply}</span>}
-            </span>
-          ))}
-          {linked.length > 3 && (
-            <button onClick={() => onAllSkills(repo)} className="rounded-md px-2 py-1 text-[11px] font-medium" style={{ color: "var(--an-green)" }}>
-              +{linked.length - 3} more
-            </button>
-          )}
-        </div>
-      ) : (
-        <span className="relative z-10 text-[11px]" style={{ color: "var(--an-fg-mute)" }}>
-          {repo.skillMints.length} skill{repo.skillMints.length !== 1 ? "s" : ""} linked
-        </span>
+      {rep && (
+        <button
+          onClick={() => (extra > 0 ? onAllSkills(repo) : onOpenSkill(rep))}
+          className="an-bfolder-skill active:opacity-80"
+        >
+          <span className="an-bfolder-skill-i">✦</span>
+          <span className="an-bfolder-skill-t">{rep.name}{extra > 0 ? ` +${extra}` : ""}</span>
+        </button>
       )}
+      <div className="an-bfolder-stars">
+        <span className="an-bfolder-stars-n">{repo.stars}</span>
+        <span className="an-bfolder-stars-s">★</span>
+      </div>
     </div>
   );
 }
@@ -600,7 +579,6 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   const blogNotes = (profile.notes ?? []).filter((n) => n.isSelfNote);
   const comments = (profile.notes ?? []).filter((n) => !n.isSelfNote);
   const canPost = profile.self || profile.canComment;
-  const skillsOneCol = allSkills.length <= 10; // ≤10: chunky single-column rows (mobile feel); >10: 2-col grid
 
   const stats = [
     { n: profile.createdSkills?.length ?? 0, label: "Created", hero: false },
@@ -629,7 +607,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
         {/* HERO STAGE — Mii-Maker booth kept dark: a clean rounded stage the avatar stands on,
             with the pfp palette as a soft accent only. Static (no looping motion). */}
         <div
-          className="an-agent-hero relative overflow-hidden px-3 pb-4 pt-3"
+          className="an-agent-hero sticky top-0 z-20 relative overflow-hidden px-3 pb-4 pt-3"
           style={{
             "--agent-accent": heroAccent,
             "--agent-secondary": heroSecondary,
@@ -728,33 +706,25 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
         <div className="space-y-4 px-3 pt-4" style={{ borderTop: "1px solid var(--an-line)" }}>
           {tab === "agent" && (
             <>
-              {/* WORK — verified repos, horizontal, each with stars + a representative skill */}
+              {/* WORK — verified repos as tall terminal-folders in a horizontal swipe row */}
               {verifiedRepos.length > 0 && (
                 <div>
-                  <div className="mb-2 flex items-center justify-between">
-                    <p className="text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>Work</p>
-                    {sortedRepos.length > 3 && (
-                      <button onClick={() => setShowAllRepos(true)} className="text-[11px] font-medium" style={{ color: "var(--an-fg-dim)" }}>
-                        show more ▸
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex snap-x gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
+                  <p className="mb-2 text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>Work</p>
+                  <div className="flex snap-x gap-3 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
                     {sortedRepos.map((r) => (
-                      <WorkCard key={`${r.owner}/${r.name}`} repo={r} skillById={skillById} onAllSkills={setRepoSkills} />
+                      <WorkCard key={`${r.owner}/${r.name}`} repo={r} skillById={skillById} onOpenSkill={onOpenSkill} onAllSkills={setRepoSkills} />
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* SKILLS — same tile as the My Skills screen (neutral skill card, amber for
-                  workflows, green "owned" accent only when the viewer holds it) */}
+              {/* SKILLS — SD-card collectibles (colour = category, sigil generated from the name) */}
               {allSkills.length > 0 && (
                 <div>
                   <p className="mb-2 text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>Skills</p>
-                  <div className={skillsOneCol ? "grid grid-cols-1 gap-2.5" : "grid grid-cols-2 gap-2"}>
+                  <div className="grid grid-cols-3 gap-3.5">
                     {allSkills.map((card) => (
-                      <SkillCardTile
+                      <SkillSdCard
                         key={card.id}
                         card={card}
                         owned={state.marketOwned?.includes(card.name)}

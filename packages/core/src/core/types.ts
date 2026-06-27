@@ -78,6 +78,15 @@ export interface Reputation {
   skillsPublished: number;
   totalSupply: number; // sum of on-chain supply across agent's skills = fame
   notesReceived: number; // informational count, never a score
+  // Summed verified-work GitHub stars across the agent's registered repos. Optional +
+  // display-only: a reputation axis distinct from totalSupply (popularity). Attached by
+  // listAgents (best-effort) and absent on hosts that don't fetch work-links.
+  stars?: number;
+  // Net lamports the agent has earned from skill sales: SUM price x (supply-1) x (1 - FEE_BPS)
+  // over their created skills (supply-1 drops the creator's own publish self-mint; fee comes out
+  // of the price). Decimal string (lamports; bigint isn't JSON-serializable). Optional +
+  // display-only; 0 when prices are unavailable (das fallback) or every skill is free.
+  totalEarned?: string;
   updatedAt: number;
 }
 

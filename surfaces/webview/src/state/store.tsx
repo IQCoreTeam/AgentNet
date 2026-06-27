@@ -107,6 +107,7 @@ export interface State {
   queuePending: number;
   agents: Reputation[];
   agentProfile: AgentProfile | null;
+  agentProfileLoading: boolean;
   agentsLoading: boolean;
   githubStatus: { hasToken: boolean; masked?: string } | null;
   workRepoResult: { ok: boolean; count?: number; repo?: string; error?: string; at: number } | null;
@@ -168,6 +169,7 @@ const initialState: State = {
   queuePending: 0,
   agents: [],
   agentProfile: null,
+  agentProfileLoading: false,
   agentsLoading: false,
   githubStatus: null,
   workRepoResult: null,
@@ -240,6 +242,7 @@ type LocalAction =
   | { type: "__queueMsg"; text: string }
   | { type: "__dequeueMsg" }
   | { type: "__loadingAgents" }
+  | { type: "__loadingAgentProfile" }
   | { type: "__clearAgentProfile" }
   | { type: "__changeMode"; mode: string }
   | { type: "__clearFiringSkill" }
@@ -516,7 +519,7 @@ function reducer(state: State, ev: Action): State {
     case "agents":
       return { ...state, agents: ev.agents as Reputation[], agentsLoading: false };
     case "agentProfile":
-      return { ...state, agentProfile: ev.profile };
+      return { ...state, agentProfile: ev.profile, agentProfileLoading: false };
     case "buyAllResult":
       return {
         ...state,
@@ -535,8 +538,12 @@ function reducer(state: State, ev: Action): State {
       return { ...state, githubStatus: { hasToken: ev.hasToken, masked: ev.masked } };
     case "__loadingAgents":
       return { ...state, agentsLoading: true };
+    case "__loadingAgentProfile":
+      // Optimistic: clear the old profile and flag loading so the screen shows a skeleton the
+      // instant a card is tapped (the result lands a round-trip later). Cleared by "agentProfile".
+      return { ...state, agentProfileLoading: true, agentProfile: null };
     case "__clearAgentProfile":
-      return { ...state, agentProfile: null };
+      return { ...state, agentProfile: null, agentProfileLoading: false };
     case "__changeMode":
       return {
         ...state,
@@ -726,6 +733,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       if (msg.type === "mode" && typeof msg.mode === "string") {
         raw({ type: "__changeMode", mode: msg.mode });
+      }
+      // Opening an agent's profile should feel instant: show a skeleton immediately instead of a
+      // dead tap while the server load round-trips. Only when NAVIGATING to a different agent (or
+      // none open) — a same-wallet refresh (e.g. after registering a repo) keeps the page on screen.
+      if (msg.type === "getAgentProfile" && state.agentProfile?.wallet !== msg.wallet) {
+        raw({ type: "__loadingAgentProfile" });
       }
       void transportRef.current?.post(msg);
     };

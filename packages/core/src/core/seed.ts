@@ -145,6 +145,13 @@ export const WORKFLOW_GATE_PROGRAM_ID = "3ptXj4yuaQG51WTA3SZZ37jGvYFgMhgXnSKWJLA
 export const FEE_TREASURY = "EWNSTD8tikwqHMcRNuuNbZrnYJUiJdKq9UXLXSEU4wZ1";
 
 /**
+ * Protocol fee in basis points, taken OUT OF the price (the creator nets the rest;
+ * not added on top). Mirrors the gate program's `constants.rs::FEE_BPS`. Free mints
+ * (price 0) pay no fee. Used to derive an agent's net earnings from price x sales.
+ */
+export const FEE_BPS = 690; // 6.9%
+
+/**
  * The TokenGroup mint skills are enrolled into. Env override wins; otherwise the
  * configured devnet test collection.
  */

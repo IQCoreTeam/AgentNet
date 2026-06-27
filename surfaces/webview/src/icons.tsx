@@ -31,6 +31,26 @@ export function SkillIcon(props: IconProps) {
   );
 }
 
+// Book — a skill's item glyph (a skill = a document/SKILL.md you read & apply).
+export function BookIcon(props: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M5 4.5h11.5a1.5 1.5 0 0 1 1.5 1.5v13a1 1 0 0 1-1 1H6.5A1.5 1.5 0 0 1 5 17.5V4.5Z" />
+      <path d="M5 17.5A1.5 1.5 0 0 1 6.5 16H18" />
+      <path d="M9 8h5" />
+    </svg>
+  );
+}
+
 // Photo / image — replaces 📷 (publish cover-image picker).
 export function ImageIcon(props: IconProps) {
   return (

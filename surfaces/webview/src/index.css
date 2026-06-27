@@ -70,6 +70,14 @@
   --an-red: var(--color-an-red);
   --an-on-green: var(--color-an-on-green);
 
+  /* Collectible tier ramp (rarity hues) — single source for the agent fame ring/edge in the
+     directory AND the profile star tiers, so the bronze->legendary look lives in one place.
+     A sanctioned multi-hue exception to the brand palette (design-system §6 collectible loot). */
+  --an-tier-bronze: #cd7f32;
+  --an-tier-silver: #c0c0c0;
+  --an-tier-gold: #ffd700;
+  --an-tier-legendary: #c084fc;
+
   --an-radius: 16px;
   --an-radius-sm: 12px;   /* snapped to M3 shape grid (was 11) */
   --an-radius-pill: 999px;
@@ -218,21 +226,8 @@ body {
     );
   border-bottom: 1px solid color-mix(in srgb, var(--agent-accent) 18%, var(--an-line));
 }
-/* one clean dot field across the hero section (behind the avatar box + stats), tinted by
-   the pfp accent and faded smoothly toward the tabs. Single static layer — no clashing. */
-.an-agent-hero::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background-image: radial-gradient(color-mix(in srgb, var(--agent-accent) 60%, transparent) 1.7px, transparent 2.3px);
-  background-size: 16px 16px;
-  background-position: center top;
-  -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.4) 55%, transparent 88%);
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.4) 55%, transparent 88%);
-  opacity: 0.45;
-  pointer-events: none;
-}
+/* (the halftone dot field on the hero was removed — it read as dated; the clean accent
+   gradient on .an-agent-hero carries the mood on its own.) */
 .an-agent-self-badge {
   color: var(--an-fg);
   border: 1px solid color-mix(in srgb, var(--agent-accent) 48%, var(--an-line));
@@ -297,6 +292,303 @@ body {
     0 0.4rem 0.9rem color-mix(in srgb, var(--agent-accent) 18%, transparent),
     inset 0 1px 0 color-mix(in srgb, var(--an-fg) 8%, transparent);
 }
+
+/* WORK card: a refined "banner folder" in a horizontal swipe row. A flat tier-colour banner
+   (--theme) up top with the octocat + VERIFIED label and a folder-tab notch cut into it; a dark
+   body with the bold repo name; a muted (neutral) skill pill; the star count. */
+.an-bfolder {
+  position: relative;
+  width: 252px;
+  height: 168px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #16181d;
+}
+.an-bfolder-banner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: var(--theme);
+}
+.an-bfolder-tier {
+  position: absolute;
+  top: 13px;
+  left: 16px;
+  z-index: 4;
+  color: #0c0d10;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  opacity: 0.82;
+}
+.an-bfolder-cat {
+  position: absolute;
+  top: 11px;
+  right: 13px;
+  z-index: 4;
+}
+.an-bfolder-tab {
+  position: absolute;
+  top: 44px;
+  left: 0;
+  width: 46%;
+  height: 18px;
+  background: #16181d;
+  border-radius: 0 13px 0 0;
+  z-index: 2;
+}
+.an-bfolder-body {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 60px;
+  bottom: 0;
+  background: #16181d;
+  padding: 13px 16px;
+  z-index: 3;
+}
+.an-bfolder-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f2f2f4;
+  word-break: break-all;
+  line-height: 1.25;
+}
+.an-bfolder-skill {
+  position: absolute;
+  left: 16px;
+  bottom: 13px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 58%;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+}
+.an-bfolder-skill-i {
+  color: color-mix(in srgb, var(--theme) 55%, #8a8a93);
+  font-size: 10px;
+}
+.an-bfolder-skill-t {
+  font-size: 11px;
+  color: #aeaeb6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.an-bfolder-stars {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  z-index: 5;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.an-bfolder-stars-n {
+  font-size: 18px;
+  font-weight: 700;
+  color: #f2f2f4;
+  line-height: 1;
+}
+.an-bfolder-stars-s {
+  color: var(--theme);
+  font-size: 13px;
+}
+
+/* SKILL "SD-card" collectible. The cartridge body (--card) is a deep chic GREY (gold for
+   workflows) so it reads like real cartridge plastic. The dark label carries a magic-circle
+   sigil, a barcode + "CAT / SKILL" mark up top, the NAME big over the sigil, and a small coral
+   data CHIP (copies / price / state) at the bottom. 3-col grid across the app. */
+.an-sd {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 108 / 150;
+  --card: #43454c;   /* cartridge body: deep chic grey (real-cartridge plastic) */
+  --chip: #ff5f3c;   /* the orange data chip (copies / price) */
+  background: var(--card);
+  border-radius: 11px;
+  clip-path: polygon(0 0, 79% 0, 100% 13%, 100% 100%, 0 100%);
+  padding: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  text-align: left;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  transition: transform 0.1s var(--ease-standard);
+}
+.an-sd.is-workflow { --card: #cca741; } /* WORKFLOW cartridge: refined gold (the premium tier) */
+.an-sd:active { transform: scale(0.97); }
+.an-sd.is-disposed { opacity: 0.5; filter: grayscale(1); }
+.an-sd-tab {
+  position: absolute;
+  left: 0;
+  top: 28%;
+  width: 5px;
+  height: 16px;
+  background: var(--chip);
+  border-radius: 0 2px 2px 0;
+  z-index: 5;
+}
+.an-sd-label {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  background: #0b0c0f;
+  border-radius: 6px;
+  clip-path: polygon(0 0, 79% 0, 100% 14%, 100% 100%, 0 100%);
+}
+.an-sd-art { position: absolute; inset: 0; width: 100%; height: 100%; }
+.an-sd-label::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 13px 13px;
+}
+.an-sd.is-firing .an-sd-label { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip) 70%, transparent); }
+/* barcode + category mark — top-left only (clear of the diagonal-cut top-right corner) */
+.an-sd-bar {
+  position: absolute;
+  top: 6px;
+  left: 7px;
+  z-index: 3;
+  width: 26px;
+  height: 9px;
+  background: repeating-linear-gradient(90deg, #d4d5ea 0 1px, transparent 1px 2px, #d4d5ea 2px 4px, transparent 4px 5px);
+  opacity: 0.7;
+}
+.an-sd-mark {
+  position: absolute;
+  top: 20px;
+  left: 7px;
+  z-index: 3;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  white-space: nowrap;
+}
+.an-sd-mark .cat { color: #c7c8d0; } /* light grey — the cartridge is dark now */
+.an-sd-mark .ty { color: #9a9ca6; }
+/* the hero: the name big over the sigil, shadowed for legibility */
+.an-sd-name {
+  position: absolute;
+  left: 7px;
+  right: 8px;
+  bottom: 38px;
+  z-index: 4;
+  font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: #ffffff;
+  line-height: 1.1;
+  word-break: break-word;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85), 0 0 2px rgba(0, 0, 0, 0.7);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* the data chip: copies big, price + state stacked small */
+.an-sd-chip {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  right: 14px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--chip);
+  padding: 3px 7px;
+  border-radius: 2px;
+}
+.an-sd-big { font-size: 14px; font-weight: 700; color: #2a0f06; line-height: 1; }
+.an-sd-meta { font-size: 6px; line-height: 1.3; color: #3a160a; font-weight: 700; letter-spacing: 0.2px; }
+
+/* AGENT cyberpunk "business-card". Mono terminal trading-card (double hairline frame, scanlines,
+   katakana + battery flavor, chrome name). STARS is the one segment gauge (toward the next tier);
+   CREATED/COPIES are plain mono stats; net EARNED sits in the footer. Full-width landscape,
+   stacked in the agent directory. Greys are literal (not theme tokens) to hold the mono look. */
+.an-ac {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 350 / 196;
+  background: #0a0a0c;
+  border: 1px solid #34343a;
+  --accent: #9a9aa3; /* the ONE per-card colour, set inline from the avatar's hue */
+  padding: 8px;
+  overflow: hidden;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.55);
+  text-align: left;
+  color: #ececf0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  transition: transform 0.1s var(--ease-standard);
+}
+.an-ac::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.022) 0 1px, transparent 1px 3px);
+}
+.an-ac:active { transform: scale(0.99); }
+.an-ac.is-self {
+  border-color: color-mix(in srgb, var(--accent) 55%, #34343a);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.55), inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.an-ac-in { position: relative; height: 100%; border: 1px solid #34343a; padding: 7px 9px; display: flex; flex-direction: column; }
+.an-ac-top { display: flex; justify-content: space-between; align-items: center; font-size: 8px; letter-spacing: 0.5px; color: #82828c; }
+.an-ac-hand { color: #ececf0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.an-ac-sig { display: flex; align-items: center; gap: 5px; flex: none; }
+.an-ac-batt { display: inline-block; width: 20px; height: 9px; border: 1px solid #82828c; position: relative; }
+.an-ac-batt::before { content: ""; position: absolute; right: -3px; top: 2px; width: 2px; height: 3px; background: #82828c; }
+.an-ac-batt i { position: absolute; left: 1px; top: 1px; bottom: 1px; background: #82828c; }
+.an-ac-namerow { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid #34343a; padding: 6px 0 8px; }
+.an-ac-kana { font-size: 8px; color: #82828c; letter-spacing: 3px; margin-bottom: 2px; }
+.an-ac-name {
+  font-family: "Saira Condensed", "Space Grotesk", ui-sans-serif, sans-serif;
+  font-weight: 800;
+  font-style: italic;
+  font-size: 30px;
+  line-height: 0.82;
+  letter-spacing: 1px;
+  background: linear-gradient(178deg, #ffffff 0%, #d4d4db 36%, #6f6f78 54%, #b8b8c0 70%, #efeff3 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.an-ac-access { text-align: right; font-size: 8px; color: #82828c; letter-spacing: 1.5px; line-height: 1.55; flex: none; }
+.an-ac-you { color: var(--accent); font-weight: 700; }
+.an-ac-tier { display: inline-block; margin-top: 2px; background: var(--accent); color: #0a0a0c; font-weight: 700; letter-spacing: 1.2px; padding: 1px 6px; }
+.an-ac-tier.unranked { color: #c7c8d0; background: transparent; border: 1px solid #4a4a52; padding: 0 5px; }
+.an-ac-body { flex: 1; display: grid; grid-template-columns: 74px 1fr; gap: 10px; padding-top: 8px; min-height: 0; }
+.an-ac-ava { position: relative; border: 1px solid #34343a; overflow: hidden; background: #08080a; }
+.an-ac-ava svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.an-ac-attr { display: flex; flex-direction: column; justify-content: center; gap: 8px; min-width: 0; }
+.an-ac-rank { font-size: 7.5px; color: #82828c; letter-spacing: 2px; margin-bottom: -3px; }
+.an-ac-gauge { display: flex; align-items: center; gap: 8px; }
+.an-ac-gauge .lab { font-size: 9px; letter-spacing: 1px; color: #ececf0; white-space: nowrap; }
+.an-ac-segs { display: flex; gap: 2px; flex: 1; min-width: 0; }
+.an-ac-segs i { flex: 1; height: 12px; border: 1px solid #82828c; }
+.an-ac-segs i.on { background: var(--accent); border-color: var(--accent); }
+.an-ac-gauge .val { font-size: 10px; font-weight: 700; white-space: nowrap; color: #ececf0; }
+.an-ac-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.an-ac-stat { border: 1px solid #34343a; padding: 3px 7px; }
+.an-ac-stat .k { font-size: 6.5px; color: #82828c; letter-spacing: 1.2px; }
+.an-ac-stat .v { font-size: 15px; font-weight: 700; line-height: 1.05; }
+.an-ac-foot { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #34343a; margin-top: 7px; padding-top: 6px; font-size: 8px; color: #82828c; letter-spacing: 1.5px; }
+.an-ac-foot .earn { color: #d8d9e0; }
+.an-ac-box { width: 13px; height: 13px; border: 1px solid #82828c; position: relative; flex: none; }
+.an-ac-box::before { content: ""; position: absolute; left: 2px; right: 2px; top: 4px; height: 1px; background: #82828c; }
+.an-ac-box::after { content: ""; position: absolute; left: 50%; top: 4px; bottom: 2px; width: 1px; background: #82828c; }
 
 /* Inputs / textarea. */
 .an-input {

@@ -8,10 +8,29 @@
 
 import type { Connection } from "@solana/web3.js";
 import { readRows } from "../core/chain.js";
-import { reviewsHint, collectionFor } from "../core/seed.js";
+import { reviewsHint, collectionFor, FEE_BPS } from "../core/seed.js";
 import { dasSource, type SkillSource } from "../core/skillSource.js";
 import type { Reputation, Skill } from "../core/types.js";
 import { getMintSupply } from "../nft/token2022.js";
+
+// Net lamports a creator keeps from their skills' paid sales, as a decimal string.
+// supply includes the creator's own publish self-mint, so paid sales = supply-1; FEE_BPS
+// comes out of the price. A free skill (price absent/"0") or an unsold one contributes 0.
+// BigInt throughout: lamports x supply overflows Number. `prices`/`supplies` align by index.
+function netEarnedLamports(prices: Array<string | undefined>, supplies: number[]): string {
+  const keep = BigInt(10000 - FEE_BPS); // creator keeps (10000 - FEE_BPS)/10000 of the price
+  let earned = 0n;
+  for (let i = 0; i < supplies.length; i++) {
+    const sales = supplies[i] - 1;
+    const price = prices[i];
+    if (!price || sales <= 0) continue;
+    let lamports: bigint;
+    try { lamports = BigInt(price); } catch { continue; }
+    if (lamports <= 0n) continue;
+    earned += (lamports * BigInt(sales) * keep) / 10000n;
+  }
+  return earned.toString();
+}
 
 export async function getReputation(
   conn: Connection,
@@ -33,6 +52,7 @@ export async function getReputation(
     ? mySkills.map((s) => Number(s.supply))
     : await Promise.all(mySkills.map((s) => getMintSupply(conn, s.id)));
   const totalSupply = supplies.reduce((acc, n) => acc + n, 0);
+  const totalEarned = netEarnedLamports(mySkills.map((s) => s.price), supplies);
 
   // Count reviews across all creator's skills (informational, not a score).
   // Fan out in parallel: a prolific agent has many skills and a sequential loop
@@ -51,6 +71,7 @@ export async function getReputation(
     wallet,
     skillsPublished,
     totalSupply,
+    totalEarned,
     notesReceived,
     updatedAt: Date.now(),
   };
@@ -86,10 +107,12 @@ export async function getLeaderboard(
       ? creatorSkills.map((s) => Number(s.supply))
       : await Promise.all(creatorSkills.map((s) => getMintSupply(conn, s.id)));
     const totalSupply = supplies.reduce((acc, n) => acc + n, 0);
+    const totalEarned = netEarnedLamports(creatorSkills.map((s) => s.price), supplies);
     entries.push({
       wallet,
       skillsPublished,
       totalSupply,
+      totalEarned,
       notesReceived: 0,
       updatedAt: Date.now(),
     });
