@@ -2,13 +2,14 @@
 // feels responsive instead of dead air. Interim — the agent screen gets reworked later.
 
 // One shimmering block. Rounding is passed per-use (Tailwind rounded-* classes), so callers
-// control the shape; the muted fill + pulse come from here.
+// control the shape. The fill is an OPAQUE colour-shimmer (.an-skel), not an opacity pulse, so
+// overlapping placeholders fully occlude instead of stacking into darker patches.
 function Bar({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse ${className}`} style={{ background: "var(--an-bg-2)" }} />;
+  return <div className={`an-skel ${className}`} />;
 }
 
-// One SD-card-shaped placeholder (cut corner + small coral data-chip hint bottom-left) so the
-// skeleton matches the real SkillSdCard and the grid doesn't jump when cards land.
+// One SD-card-shaped placeholder (cut corner + a grey data-chip hint bottom-left, no colour) so
+// the skeleton matches the real SkillSdCard and the grid doesn't jump when cards land.
 function SdSkel() {
   return (
     <div
@@ -16,20 +17,55 @@ function SdSkel() {
       style={{ aspectRatio: "108 / 150", clipPath: "polygon(0 0,79% 0,100% 13%,100% 100%,0 100%)" }}
     >
       <Bar className="h-full w-full" />
-      <div className="absolute bottom-1.5 left-1.5 h-6 w-2/5 rounded-sm" style={{ background: "rgba(255,95,60,0.45)" }} />
+      <div className="an-skel-2 absolute bottom-1.5 left-1.5 h-6 w-2/5 rounded-sm" />
     </div>
   );
 }
 
-// A stack of landscape agent-card placeholders (matches the cyberpunk AgentBizCard aspect) so the
-// agent directory shimmers in the right shape instead of the 3-col skill grid.
+// One landscape agent-card placeholder that mirrors the real AgentBizCard's internal layout
+// (frame, handle + signal, big name + tier tag, avatar + gauge + two stats, footer) so the
+// directory shimmers in the right SHAPE and nothing jumps when the real cards land.
+function AcSkel() {
+  return (
+    <div className="w-full rounded-md p-2" style={{ aspectRatio: "350 / 196", background: "#0a0a0c", border: "1px solid #34343a" }}>
+      <div className="flex h-full flex-col rounded-sm p-2" style={{ border: "1px solid #2c2c32" }}>
+        {/* top: handle + signal */}
+        <div className="flex items-center justify-between">
+          <Bar className="h-2 w-2/5 rounded" />
+          <Bar className="h-2 w-9 rounded" />
+        </div>
+        {/* name row: big name + tier tag */}
+        <div className="mt-2 flex items-end justify-between border-b pb-2" style={{ borderColor: "#2c2c32" }}>
+          <Bar className="h-6 w-2/5 rounded" />
+          <Bar className="h-3 w-12 rounded-sm" />
+        </div>
+        {/* body: avatar + gauge + two stats */}
+        <div className="mt-2 flex flex-1 gap-2.5">
+          <Bar className="w-16 shrink-0 rounded" />
+          <div className="flex flex-1 flex-col justify-center gap-2">
+            <Bar className="h-3 w-full rounded" />
+            <div className="flex gap-1.5">
+              <Bar className="h-7 flex-1 rounded" />
+              <Bar className="h-7 flex-1 rounded" />
+            </div>
+          </div>
+        </div>
+        {/* footer */}
+        <div className="mt-1.5 border-t pt-1.5" style={{ borderColor: "#2c2c32" }}>
+          <Bar className="mx-auto h-2 w-1/3 rounded" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// A stack of landscape agent-card placeholders (matches the cyberpunk AgentBizCard) so the agent
+// directory shimmers in the right shape while the list loads.
 export function AgentListSkeleton({ rows = 5 }: { rows?: number }) {
   return (
     <div className="space-y-2.5 pt-1">
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="w-full overflow-hidden rounded-md" style={{ aspectRatio: "350 / 196" }}>
-          <Bar className="h-full w-full" />
-        </div>
+        <AcSkel key={i} />
       ))}
     </div>
   );

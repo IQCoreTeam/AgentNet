@@ -188,33 +188,27 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
       </div>
 
       {owned && (
-        <div className="shrink-0 border-t border-red-900/40 bg-gradient-to-t from-red-950/30 to-transparent p-3 an-tabbar-inset">
-          <button
-            onClick={() => send({ type: "disposeSkill", skillId: card.id })}
-            className="w-full rounded-xl border border-red-500/30 bg-red-950/20 py-3 text-sm font-semibold text-red-400 active:bg-red-900/30"
-          >
+        <div className="shrink-0 bg-transparent p-3 an-tabbar-inset">
+          <button onClick={() => send({ type: "disposeSkill", skillId: card.id })} className="an-btn an-btn-danger">
             Remove Skill
           </button>
         </div>
       )}
 
       {!owned && disposed && (
-        <div className="shrink-0 border-t border-green-800/40 bg-gradient-to-t from-green-900/30 to-transparent p-3 an-tabbar-inset">
-          <button
-            onClick={() => send({ type: "reEquipSkill", skillId: card.id })}
-            className="w-full rounded-xl bg-green-600 py-3 text-sm font-semibold text-white active:bg-green-500"
-          >
+        <div className="shrink-0 bg-transparent p-3 an-tabbar-inset">
+          <button onClick={() => send({ type: "reEquipSkill", skillId: card.id })} className="an-btn an-btn-green">
             Re-equip Skill
           </button>
         </div>
       )}
 
       {!owned && !disposed && (
-        <div className="shrink-0 border-t border-amber-700/40 bg-gradient-to-t from-amber-900/30 to-transparent p-3 an-tabbar-inset">
+        <div className="shrink-0 bg-transparent p-3 an-tabbar-inset">
           <button
             onClick={handleBuy}
             disabled={buying || (isWorkflow && !allRequiredOwned)}
-            className="w-full rounded-xl bg-amber-400 py-3 text-sm font-semibold text-zinc-900 active:bg-amber-300 disabled:opacity-50"
+            className="an-btn an-btn-orange"
           >
             {buying
               ? "Buying…"

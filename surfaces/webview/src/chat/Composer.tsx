@@ -405,7 +405,7 @@ export function Composer() {
       {/* engine segmented control + a single "controls" disclosure (model/effort/mode
           live in the popover so the bar stays clean on a phone) */}
       <div className="relative mb-2 flex items-center gap-1.5 text-xs">
-        <div className="flex items-center gap-1 rounded-full p-0.5 an-composer-glass" style={{ height: "34px", border: "1px solid var(--an-line)" }}>
+        <div className="an-term-seg">
           {(["claude", "codex"] as Cli[]).map((c) => {
             const on = state.cli === c;
             const accent = c === "claude" ? "var(--claude)" : "var(--an-green)";
@@ -413,8 +413,7 @@ export function Composer() {
               <button
                 key={c}
                 onClick={() => selectEngine(c)}
-                className="flex h-full items-center rounded-full px-3.5 font-semibold capitalize transition"
-                style={on ? { background: accent, color: "var(--an-bg-0)" } : { color: "var(--an-fg-mute)" }}
+                style={on ? { background: accent, color: "var(--an-bg-0)" } : undefined}
               >
                 {c}
               </button>
@@ -423,8 +422,7 @@ export function Composer() {
         </div>
         <button
           onClick={() => setControlsOpen((o) => !o)}
-          className="an-pill an-composer-glass shrink-0"
-          style={{ height: "34px" }}
+          className="an-term-chip shrink-0"
           aria-label="Model and mode settings"
           aria-expanded={controlsOpen}
         >
@@ -505,8 +503,8 @@ export function Composer() {
 
       <div
         ref={inputBoxRef}
-        className={`an-composer-input relative flex items-center gap-1.5 px-2 py-1.5 ${frozen ? "opacity-60" : ""}`}
-        style={{ border: `1px solid color-mix(in srgb, ${engineAccent} 30%, var(--an-line))`, borderRadius: "var(--an-radius)" }}
+        className={`an-composer-input relative flex items-center gap-1.5 px-2 ${frozen ? "opacity-60" : ""}`}
+        style={{ minHeight: "56px" }}
         onDragOver={(e) => { e.preventDefault(); }}
         onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files) void addFiles(e.dataTransfer.files); }}
       >
@@ -547,7 +545,7 @@ export function Composer() {
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={frozen}
-          className="flex h-10 w-9 shrink-0 items-center justify-center self-end disabled:opacity-40"
+          className="flex h-10 w-9 shrink-0 items-center justify-center disabled:opacity-40"
           style={{ color: "var(--an-fg-mute)" }}
           title="Attach image"
           aria-label="Attach image"
@@ -631,7 +629,7 @@ export function Composer() {
                     ? "Send a message to start"
                     : `Message ${state.cli}`
           }
-          className="min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-[16px] leading-relaxed outline-none [overflow-wrap:anywhere] disabled:cursor-not-allowed"
+          className="an-term-ta min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-[16px] leading-relaxed outline-none [overflow-wrap:anywhere] disabled:cursor-not-allowed"
           style={{ maxHeight: "min(10rem, max(4rem, calc(var(--vvh, 100dvh) * 0.28)))" }}
         />
         {/* mic: voice dictation into the textarea (red while listening) */}
@@ -639,7 +637,7 @@ export function Composer() {
           type="button"
           onClick={toggleMic}
           disabled={frozen}
-          className="flex h-10 w-9 shrink-0 items-center justify-center self-end disabled:opacity-40"
+          className="flex h-10 w-9 shrink-0 items-center justify-center disabled:opacity-40"
           style={{ color: recording ? "#e5484d" : "var(--an-fg-mute)" }}
           aria-label={recording ? "Stop dictation" : "Voice input"}
           title={recording ? "Stop dictation" : "Voice input"}
@@ -655,7 +653,7 @@ export function Composer() {
         <button
           onClick={busy ? interrupt : submit}
           disabled={!busy && frozen}
-          className={`an-send shrink-0 self-end mb-px ${busy ? "is-stop" : ""}`}
+          className={`an-send shrink-0 ${busy ? "is-stop" : ""}`}
           style={busy ? undefined : { background: engineAccent, color: "var(--an-bg-0)" }}
           aria-label={busy ? "Stop" : "Send"}
           title={busy ? "Stop" : "Send"}

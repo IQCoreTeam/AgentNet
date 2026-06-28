@@ -159,31 +159,61 @@ export function AgentDirectory() {
       }
     );
   }, [state.agents, selfWallet]);
-  const others = useMemo(
-    () => state.agents.filter((a) => a.wallet !== selfWallet),
-    [state.agents, selfWallet],
-  );
+  // Wallet search: filter the ranked list to agents whose address contains the query (case-
+  // insensitive). The self card stays pinned regardless so "me" is always reachable.
+  const [query, setQuery] = useState("");
+  const others = useMemo(() => {
+    const base = state.agents.filter((a) => a.wallet !== selfWallet);
+    const q = query.trim().toLowerCase();
+    return q ? base.filter((a) => a.wallet.toLowerCase().includes(q)) : base;
+  }, [state.agents, selfWallet, query]);
 
-  if (state.agentsLoading || !everLoaded) {
-    return <AgentListSkeleton />;
-  }
+  // Loading = first fetch hasn't landed yet. An EMPTY leaderboard counts as "still coming" too —
+  // a slow/failed startup fetch returns [] (everLoaded flips true), and without this the screen
+  // flashes my self card with zero stats + "No other agents". The legit "only me" case keeps a
+  // card (agents = [self], others = []), so this only skeletons a truly empty board. Self renders
+  // as a skeleton too, so my own stats never flash zeros before the leaderboard lands.
+  const loading = state.agentsLoading || !everLoaded || state.agents.length === 0;
 
   return (
     <div className="pt-1">
-      {/* Sticky "me": always reachable, opens your own full page (same as a chat-menu My Agent). */}
-      {selfRep && (
-        <div className="sticky top-0 z-10 pb-3 pt-1" style={{ background: "var(--an-bg-0)" }}>
-          <AgentCard agent={selfRep} self onOpen={openProfile} />
+      {/* Sticky "me" + wallet search: both pinned so the self card and the filter stay reachable
+          while the ranked list scrolls under them. */}
+      <div className="sticky top-0 z-10 pt-1" style={{ background: "var(--an-bg-0)" }}>
+        <div className="pb-2.5">
+          {loading || !selfRep ? (
+            <AgentListSkeleton rows={1} />
+          ) : (
+            <AgentCard agent={selfRep} self onOpen={openProfile} />
+          )}
         </div>
-      )}
-
-      <div className="mb-2 flex items-center justify-between px-0.5">
-        <span className="text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>Agents</span>
-        <span className="text-[11px]" style={{ color: "var(--an-fg-mute)" }}>by copies</span>
+        {/* wallet search — filters the ranked list below */}
+        <div className="mb-2.5 flex items-center gap-2.5 px-3" style={{ height: "38px", background: "#0b0b0c", border: "1px solid #2a2a2e" }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7a7a7a" strokeWidth="1.8" className="shrink-0"><circle cx="10.5" cy="10.5" r="6.5" /><path d="M20 20l-4.5-4.5" /></svg>
+        <input
+          className="an-term-mono min-w-0 flex-1 bg-transparent text-[11px] uppercase tracking-wide placeholder:uppercase placeholder:tracking-wide focus:outline-none"
+          style={{ color: "#e8e8e8" }}
+          placeholder="Search agent wallet…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+        />
+        {query && (
+          <button onClick={() => setQuery("")} aria-label="Clear search" className="shrink-0 active:opacity-70" style={{ color: "#7a7a7a" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
+        )}
+        </div>
       </div>
 
-      {others.length === 0 ? (
-        <div className="py-10 text-center text-sm" style={{ color: "var(--an-fg-mute)" }}>No other agents yet.</div>
+      {loading ? (
+        <AgentListSkeleton rows={4} />
+      ) : others.length === 0 ? (
+        <div className="an-term-mono py-10 text-center text-[11px] uppercase tracking-wider" style={{ color: "#5a5a5d" }}>
+          {query.trim() ? "No agent matches that wallet" : "No other agents yet"}
+        </div>
       ) : (
         <div className="space-y-2.5">
           {others.map((agent) => (

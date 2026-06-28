@@ -280,17 +280,16 @@ body {
   height: 100%;
   width: 100%;
 }
+/* Flat terminal boxes (nav-dock / agent-card vibe): thin grey hairline, square, no glow. */
 .an-agent-stat {
   background: color-mix(in srgb, var(--an-bg-1) 92%, transparent);
-  border: 1px solid color-mix(in srgb, var(--agent-accent) 20%, var(--an-line));
-  box-shadow: 0 0.3rem 0.7rem rgba(0, 0, 0, 0.28);
+  border: 1px solid color-mix(in srgb, var(--agent-accent) 12%, #2c2c30);
+  box-shadow: none;
 }
 .an-agent-stat.is-hero {
   background: color-mix(in srgb, var(--agent-accent) 16%, var(--an-bg-1));
-  border-color: color-mix(in srgb, var(--agent-accent) 50%, var(--an-line));
-  box-shadow:
-    0 0.4rem 0.9rem color-mix(in srgb, var(--agent-accent) 18%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--an-fg) 8%, transparent);
+  border-color: color-mix(in srgb, var(--agent-accent) 40%, #2c2c30);
+  box-shadow: none;
 }
 
 /* WORK card: a refined "banner folder" in a horizontal swipe row. A flat tier-colour banner
@@ -401,26 +400,54 @@ body {
   font-size: 13px;
 }
 
-/* SKILL "SD-card" collectible. The cartridge body (--card) is a deep chic GREY (gold for
-   workflows) so it reads like real cartridge plastic. The dark label carries a magic-circle
-   sigil, a barcode + "CAT / SKILL" mark up top, the NAME big over the sigil, and a small coral
-   data CHIP (copies / price / state) at the bottom. 3-col grid across the app. */
+/* SKILL "SD-card" collectible. The cartridge body is sophisticated MATTE plastic: a graphite
+   form gradient + a broad diffuse top light (::before, soft-box not gloss) + a contrast-tuned
+   fractal grain (::after, overlay so it reads on dark) + a recessed dark screen. Workflows get a
+   bright mint cartridge. The dark label carries the sigil, a barcode + "CAT / SKILL" mark, the
+   NAME over the sigil, and a coral data CHIP. 3-col grid across the app. */
 .an-sd {
   position: relative;
   width: 100%;
   aspect-ratio: 108 / 150;
-  --card: #43454c;   /* cartridge body: deep chic grey (real-cartridge plastic) */
-  --chip: #ff5f3c;   /* the orange data chip (copies / price) */
-  background: var(--card);
+  --t: #494c54; --b: #3f424a; --d: #33353b; /* graphite plastic: cool top -> deep bottom */
+  --chip: #f15a39;   /* the coral data chip (copies / price) */
+  background: linear-gradient(166deg, var(--t) 0%, var(--b) 56%, var(--d) 100%);
   border-radius: 11px;
   clip-path: polygon(0 0, 79% 0, 100% 13%, 100% 100%, 0 100%);
   padding: 6px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.45));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), inset 0 -1px 0 rgba(0, 0, 0, 0.24);
   text-align: left;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   transition: transform 0.1s var(--ease-standard);
 }
-.an-sd.is-workflow { --card: #cca741; } /* WORKFLOW cartridge: refined gold (the premium tier) */
+/* broad diffuse top light — matte under a softbox, NOT a specular hotspot */
+.an-sd::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 2;
+  background: radial-gradient(135% 90% at 26% -6%, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 52%);
+}
+/* fine contrast-tuned fractal grain — the matte injection texture (overlay reads on the plastic,
+   fades to nothing on the near-black screen, so the grain lives where the plastic is) */
+.an-sd::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 3;
+  opacity: 0.22;
+  mix-blend-mode: overlay;
+  background-size: 150px 150px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='1.7' intercept='-0.35'/%3E%3CfeFuncG type='linear' slope='1.7' intercept='-0.35'/%3E%3CfeFuncB type='linear' slope='1.7' intercept='-0.35'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+}
+.an-sd.is-workflow { /* bright mint / seafoam cartridge */
+  background: linear-gradient(166deg, #d7fffaeb 0%, #c7fdeceb 56%, #8dc3baeb 100%);
+}
 .an-sd:active { transform: scale(0.97); }
 .an-sd.is-disposed { opacity: 0.5; filter: grayscale(1); }
 .an-sd-tab {
@@ -437,9 +464,11 @@ body {
   position: relative;
   height: 100%;
   overflow: hidden;
-  background: #0b0c0f;
+  background: #0a0b0e;
   border-radius: 6px;
   clip-path: polygon(0 0, 79% 0, 100% 14%, 100% 100%, 0 100%);
+  /* the screen sits recessed into the plastic: AO at the top + a 1px lip line all round */
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(0, 0, 0, 0.45), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
 }
 .an-sd-art { position: absolute; inset: 0; width: 100%; height: 100%; }
 .an-sd-label::before {
@@ -508,9 +537,20 @@ body {
   background: var(--chip);
   padding: 3px 7px;
   border-radius: 2px;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.16); /* matte chip: a hair of bottom shade, no gloss */
 }
 .an-sd-big { font-size: 14px; font-weight: 700; color: #2a0f06; line-height: 1; }
 .an-sd-meta { font-size: 6px; line-height: 1.3; color: #3a160a; font-weight: 700; letter-spacing: 0.2px; }
+
+/* Skeleton shimmer. Animate an OPAQUE fill (not opacity) so overlapping placeholders fully
+   occlude instead of stacking into darker patches. All skeleton blocks use .an-skel. */
+@keyframes an-skel {
+  0%, 100% { background-color: var(--an-bg-2); }
+  50% { background-color: color-mix(in srgb, var(--an-bg-2) 82%, #ffffff); }
+}
+.an-skel { background-color: var(--an-bg-2); animation: an-skel 1.6s ease-in-out infinite; }
+/* a slightly lifted variant for a secondary element sitting on a skeleton (e.g. the chip area) */
+.an-skel-2 { background-color: color-mix(in srgb, var(--an-bg-2) 60%, #4a4a52); }
 
 /* AGENT cyberpunk "business-card". Mono terminal trading-card (double hairline frame, scanlines,
    katakana + battery flavor, chrome name). STARS is the one segment gauge (toward the next tier);
@@ -635,7 +675,7 @@ body {
   width: 40px;
   height: 40px;
   flex: none;
-  border-radius: var(--an-radius-pill);
+  border-radius: 0; /* terminal: square send (Top Bar + Input design) */
   background: var(--an-green);
   color: var(--an-on-green);
   transition: filter 0.14s, transform 0.08s, background 0.14s;
@@ -673,6 +713,100 @@ body {
   pointer-events: none;
 }
 .an-tabbar-shell > * { pointer-events: auto; }
+/* Fade the screen content behind/around the dock into the app bg toward the very bottom, so the
+   nav reads clearly on top. A smooth scrim (transparent at the top so it never darkens the
+   composer above it), never a hard section line. */
+.an-tabbar-shell::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* keep the scrim WITHIN the dock's own footprint — the composer floats just above and is
+     trapped (by the pager's transform context) below this z25 layer, so reaching up into it
+     would darken the chat input. Bottom-anchored fade only. */
+  top: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(to top, var(--an-bg-0) 40%, color-mix(in srgb, var(--an-bg-0) 55%, transparent) 76%, transparent 100%);
+}
+/* NAV_DOCK (Nav Dock design · VAR_01 "mono invert") — a compact centred terminal bar with
+   corner-tick brackets and four equal segments. Active segment inverts (white fill, dark
+   icon/label) + a blinking status dot; the rest read grey on near-black. Reuses .an-tabbar-shell
+   for floating + keyboard-hide; everything here is the dock's own look. */
+.an-navdock-shell { padding: 6px 16px 0; }
+.an-navdock { width: min(296px, 100%); margin: 0 auto; }
+.an-navdock-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  padding: 0 1px;
+  font-family: "Space Mono", ui-monospace, monospace;
+  font-weight: 700;
+  font-size: 7px;
+  letter-spacing: 1.5px;
+}
+.an-navdock-status .dim { color: #6e6e72; }
+.an-navdock-status .sig { color: #5e5e62; }
+.an-navdock-status .sig b { color: #cfcfcf; }
+.an-navdock-status .sig i { color: #2c2c2f; font-style: normal; }
+.an-navdock-bar {
+  position: relative;
+  display: flex;
+  height: 60px;
+  border: 1px solid #2a2a2e;
+  background:
+    linear-gradient(#cfcfcf, #cfcfcf) left top / 8px 1.5px no-repeat,
+    linear-gradient(#cfcfcf, #cfcfcf) left top / 1.5px 8px no-repeat,
+    linear-gradient(#cfcfcf, #cfcfcf) right top / 8px 1.5px no-repeat,
+    linear-gradient(#cfcfcf, #cfcfcf) right top / 1.5px 8px no-repeat,
+    linear-gradient(#cfcfcf, #cfcfcf) left bottom / 8px 1.5px no-repeat,
+    linear-gradient(#cfcfcf, #cfcfcf) left bottom / 1.5px 8px no-repeat,
+    linear-gradient(#cfcfcf, #cfcfcf) right bottom / 8px 1.5px no-repeat,
+    linear-gradient(#cfcfcf, #cfcfcf) right bottom / 1.5px 8px no-repeat,
+    #0b0b0c;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+/* sliding active fill — one segment wide, engine-tinted (bg set inline), glides via translateX */
+.an-navdock-ind {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 25%;
+  z-index: 0;
+  transition: transform 0.28s var(--ease-standard);
+}
+.an-navseg {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: #bdbdbd;
+  border-left: 1px solid #1f1f23;
+  font-family: "Space Mono", ui-monospace, monospace;
+  transition: color 0.18s var(--ease-standard);
+}
+.an-navseg:first-child { border-left: none; }
+.an-navseg.is-on { color: #0a0a0b; } /* the sliding indicator provides the fill */
+.an-navseg:active { opacity: 0.85; }
+.an-navseg-label { font-size: 8px; font-weight: 700; letter-spacing: 1px; }
+.an-navseg-dot {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  width: 3px;
+  height: 3px;
+  background: #000;
+  animation: an-navblink 1.4s steps(1) infinite;
+}
+@keyframes an-navblink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0.18; } }
 /* The active screen fills this; the docked tab bar sits below it (no overlap). */
 .an-shell-panels {
   position: relative;
@@ -747,16 +881,139 @@ body {
 /* The composer BAND stays transparent (chat shows through the surrounding area), but the
    input box and engine pill are their OWN frosted-glass surfaces: heavy blur + mostly
    opaque so text behind them is not legible (translucent-everywhere read as cluttered). */
-.an-composer-glass,
-.an-composer-input {
+.an-composer-glass {
   background: color-mix(in srgb, var(--an-bg-1) 95%, transparent);
   backdrop-filter: saturate(1.4) blur(40px);
   -webkit-backdrop-filter: saturate(1.4) blur(40px);
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.32);
 }
-.an-composer-input {
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.36);
+/* Reusable corner-tick brackets (Top Bar + Input / Nav Dock terminal vibe). Override the three
+   vars inline: --tk tick colour, --bk box fill, --ts tick length. */
+.an-bracket {
+  --tk: #cfcfcf;
+  --bk: #0b0b0c;
+  --ts: 9px;
+  background:
+    linear-gradient(var(--tk), var(--tk)) left top / var(--ts) 1.5px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) left top / 1.5px var(--ts) no-repeat,
+    linear-gradient(var(--tk), var(--tk)) right top / var(--ts) 1.5px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) right top / 1.5px var(--ts) no-repeat,
+    linear-gradient(var(--tk), var(--tk)) left bottom / var(--ts) 1.5px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) left bottom / 1.5px var(--ts) no-repeat,
+    linear-gradient(var(--tk), var(--tk)) right bottom / var(--ts) 1.5px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) right bottom / 1.5px var(--ts) no-repeat,
+    var(--bk);
 }
+/* terminal chat input box: sharp frame + corner brackets, flat dark fill (no glass) */
+.an-composer-input {
+  --tk: #cfcfcf;
+  --bk: #0b0b0c;
+  --ts: 10px;
+  border: 1px solid #2a2a2e !important;
+  border-radius: 0 !important;
+  background:
+    linear-gradient(var(--tk), var(--tk)) left top / var(--ts) 1.5px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) left top / 1.5px var(--ts) no-repeat,
+    linear-gradient(var(--tk), var(--tk)) right top / var(--ts) 1.5px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) right top / 1.5px var(--ts) no-repeat,
+    linear-gradient(var(--tk), var(--tk)) left bottom / var(--ts) 1.5px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) left bottom / 1.5px var(--ts) no-repeat,
+    linear-gradient(var(--tk), var(--tk)) right bottom / var(--ts) 1.5px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) right bottom / 1.5px var(--ts) no-repeat,
+    var(--bk);
+}
+/* terminal textarea: mono, uppercased placeholder */
+.an-term-ta { font-family: "Space Mono", ui-monospace, monospace; letter-spacing: 0.2px; }
+.an-term-ta::placeholder { text-transform: uppercase; letter-spacing: 0.5px; color: #6e6e72; }
+/* terminal segmented chips (engine + auto-edit) — opaque fill so chat behind doesn't bleed through */
+.an-term-seg { display: flex; height: 34px; border: 1px solid #2a2a2e; background: #0b0b0c; font-family: "Space Mono", ui-monospace, monospace; }
+.an-term-seg > button { display: flex; align-items: center; height: 100%; font-size: 10px; font-weight: 700; letter-spacing: 1px; padding: 0 13px; text-transform: uppercase; color: #7a7a7a; }
+.an-term-seg > button + button { border-left: 1px solid #2a2a2e; }
+.an-term-chip {
+  display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px;
+  border: 1px solid #2a2a2e; background: #0b0b0c; color: #9a9a9a;
+  font-family: "Space Mono", ui-monospace, monospace; font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+}
+/* terminal top-bar title + katakana sub (Top Bar designs) */
+.an-term-title { font-family: "Space Mono", ui-monospace, monospace; font-weight: 700; letter-spacing: 0.5px; color: #f2f2f2; text-transform: uppercase; }
+.an-term-sub { font-family: "Noto Sans JP", ui-sans-serif, sans-serif; font-size: 8px; letter-spacing: 1px; color: #5a5a5d; margin-top: 2px; }
+.an-term-mono { font-family: "Space Mono", ui-monospace, monospace; }
+
+/* ===== SYSTEM // COMMON BUTTON ===== Like the chat send: transparent behind + corner-tick
+   brackets, a solid accent block inside; only the accent (--acc/--ink) swaps. Apply
+   `.an-btn .an-btn-green|orange|violet` for a primary, `.an-btn-outline` for a secondary. */
+.an-btn {
+  --tk: #6e6e72;
+  --acc: #4ade80;
+  --ink: #06140c;
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 20px 14px; /* 7px bracket gap + 13px fill padding */
+  font-family: "Space Mono", ui-monospace, monospace;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: transparent;
+  transition: opacity 0.12s var(--ease-standard);
+}
+.an-btn::before { /* outer corner-tick brackets (transparent) */
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background:
+    linear-gradient(var(--tk), var(--tk)) left top / 9px 1.5px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) left top / 1.5px 9px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) right top / 9px 1.5px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) right top / 1.5px 9px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) left bottom / 9px 1.5px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) left bottom / 1.5px 9px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) right bottom / 9px 1.5px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) right bottom / 1.5px 9px no-repeat,
+    transparent;
+}
+.an-btn::after { /* the solid accent fill, inset by the bracket gap */
+  content: "";
+  position: absolute;
+  inset: 7px;
+  z-index: -1;
+  background: var(--acc);
+}
+.an-btn:active { opacity: 0.85; }
+.an-btn:disabled { opacity: 0.4; }
+.an-btn-green { --acc: #4ade80; --ink: #06140c; }
+.an-btn-orange { --acc: #f0913e; --ink: #1a0f06; }
+.an-btn-violet { --acc: #8b5cf6; --ink: #0c0618; }
+/* secondary — plain outline, no brackets/fill */
+.an-btn-outline { padding: 13px 14px; color: #bdbdbd; border: 1px solid #34343a; }
+.an-btn-outline::before, .an-btn-outline::after { display: none; }
+/* destructive — red outline (remove / dispose) */
+.an-btn-danger { padding: 13px 14px; color: #f0726f; border: 1px solid #5a2b2b; }
+.an-btn-danger::before, .an-btn-danger::after { display: none; }
+
+/* terminal form field (input / textarea) + its mono label */
+.an-term-label { font-family: "Space Mono", ui-monospace, monospace; font-weight: 700; font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase; color: #6a6a6a; }
+.an-term-field {
+  width: 100%;
+  border: 1px solid #232327;
+  border-radius: 0;
+  background: #0c0c0d;
+  padding: 12px 14px;
+  font-family: "Space Mono", ui-monospace, monospace;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.3px;
+  color: #e8e8e8;
+}
+.an-term-field::placeholder { text-transform: uppercase; letter-spacing: 0.5px; color: #5e5e62; }
+.an-term-field:focus { outline: none; border-color: #34343a; }
 
 /* Jump-to-latest button: floats just above the composer (offset by its measured height),
    VS Code style round arrow. Neutral by default; green + glow when there are unseen msgs. */
@@ -768,22 +1025,20 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 38px;
-  width: 38px;
-  border-radius: 9999px;
-  color: var(--an-fg-dim);
-  background: color-mix(in srgb, var(--an-bg-2) 86%, transparent);
-  border: 1px solid var(--an-line);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.36);
+  height: 34px;
+  width: 34px;
+  border-radius: 0; /* terminal: square, sharp frame (matches the dock / input vibe) */
+  color: #9a9a9a;
+  background: #0b0b0c;
+  border: 1px solid #2a2a2e;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
   transition: color var(--dur-2) var(--ease-standard), border-color var(--dur-2) var(--ease-standard), box-shadow var(--dur-2) var(--ease-standard);
 }
 .an-jump-latest:active { transform: scale(0.94); }
 .an-jump-latest.is-unseen {
   color: var(--an-green);
   border-color: var(--an-green-line);
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.36), 0 0 16px var(--an-green-dim);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), 0 0 14px var(--an-green-dim);
 }
 
 /* Hide the bottom tab bar while the keyboard is open so the composer owns the
@@ -801,7 +1056,7 @@ html[data-keyboard="open"] .an-chat-float { bottom: 0; }
   bottom: 0;
   left: 0;
   z-index: 10;
-  background: var(--an-bg-1);
+  background: #060608; /* black drawer back */
   overflow: hidden;
   touch-action: pan-y;
 }
@@ -819,7 +1074,7 @@ html[data-keyboard="open"] .an-chat-float { bottom: 0; }
               box-shadow var(--dur-screen) var(--ease-emphasized-decelerate);
 }
 .an-app-surface.is-open {
-  box-shadow: -16px 0 44px rgba(0, 0, 0, 0.5);
+  box-shadow: none; /* no drop shadow cast onto the drawer — flat, per design */
 }
 /* Tap-catcher over the receded card while the drawer is open: dims it and closes on tap.
    Above the in-card chrome (tab bar / composer) so a tap anywhere on the card closes. */
@@ -838,18 +1093,34 @@ html[data-keyboard="open"] .an-chat-float { bottom: 0; }
   z-index: 5;
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.6rem 1.15rem;
-  border-radius: var(--an-radius-pill);
-  background: var(--an-bg-1);
-  color: var(--an-fg);
-  border: 1px solid color-mix(in srgb, var(--an-fg) 38%, transparent);
-  font-weight: 600;
-  font-size: 0.92rem;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-  transition: transform var(--dur-2) var(--ease-standard);
+  gap: 0.5rem;
+  padding: 10px 20px; /* sits inside the bracket gap (::before draws the corner ticks) */
+  background: transparent;
+  color: #e8e8e8;
+  font-family: "Space Mono", ui-monospace, monospace;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  transition: opacity var(--dur-2) var(--ease-standard);
 }
-.an-newchat-pill:active { transform: scale(0.96); }
+.an-newchat-pill::before { /* corner-tick brackets, transparent fill */
+  content: "";
+  position: absolute;
+  inset: -6px;
+  z-index: -1;
+  background:
+    linear-gradient(#6e6e72, #6e6e72) left top / 8px 1.5px no-repeat,
+    linear-gradient(#6e6e72, #6e6e72) left top / 1.5px 8px no-repeat,
+    linear-gradient(#6e6e72, #6e6e72) right top / 8px 1.5px no-repeat,
+    linear-gradient(#6e6e72, #6e6e72) right top / 1.5px 8px no-repeat,
+    linear-gradient(#6e6e72, #6e6e72) left bottom / 8px 1.5px no-repeat,
+    linear-gradient(#6e6e72, #6e6e72) left bottom / 1.5px 8px no-repeat,
+    linear-gradient(#6e6e72, #6e6e72) right bottom / 8px 1.5px no-repeat,
+    linear-gradient(#6e6e72, #6e6e72) right bottom / 1.5px 8px no-repeat,
+    transparent;
+}
+.an-newchat-pill:active { opacity: 0.8; }
 
 /* Long-press context menu for a chat row (replaces the per-row delete x). */
 .an-chatmenu-backdrop {
@@ -865,18 +1136,21 @@ html[data-keyboard="open"] .an-chat-float { bottom: 0; }
 .an-chatmenu {
   width: 100%;
   max-width: 18rem;
-  border-radius: 1.1rem;
-  background: var(--an-bg-2);
-  border: 1px solid var(--an-line);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  border-radius: 0; /* terminal: sharp, dark, mono */
+  background: #0a0a0c;
+  border: 1px solid #2a2a2e;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.6);
   overflow: hidden;
 }
 .an-chatmenu-title {
-  padding: 0.85rem 1rem 0.6rem;
-  font-size: 0.78rem;
-  line-height: 1.3;
-  color: var(--an-fg-mute);
-  border-bottom: 1px solid var(--an-line);
+  padding: 0.85rem 1rem 0.65rem;
+  font-family: "Space Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  line-height: 1.4;
+  color: #9a9a9a;
+  border-bottom: 1px solid #1d1d20;
 }
 .an-chatmenu-item {
   display: flex;
@@ -885,11 +1159,14 @@ html[data-keyboard="open"] .an-chat-float { bottom: 0; }
   width: 100%;
   padding: 0.95rem 1rem;
   text-align: left;
-  font-size: 1rem;
-  font-weight: 500;
+  font-family: "Space Mono", ui-monospace, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
 }
-.an-chatmenu-item:active { background: rgba(255, 255, 255, 0.06); }
-.an-chatmenu-item.danger { color: #f87171; }
+.an-chatmenu-item:active { background: rgba(255, 255, 255, 0.05); }
+.an-chatmenu-item.danger { color: #f0726f; }
 
 .an-deck {
   height: var(--vvh, 100dvh);

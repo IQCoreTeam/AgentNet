@@ -108,40 +108,39 @@ function repoRarity(stars: number) {
   return REPO_RARITY.find((t) => stars >= t.min) ?? null;
 }
 
-// The agent's "IQ tier" badge for the hero: star glyph + tier name + a 5-segment gauge +
-// the raw "stars/next-threshold" fraction (e.g. 9/10 = on the way to Bronze) + a "?" that
-// opens the tier explanation. Always shown so the system is discoverable from zero.
-function TierGauge({ stars, ink, onHelp }: { stars: number; ink: string; onHelp: () => void }) {
+// The agent's "IQ tier" badge for the hero (Top Bar / Agent design): a sharp tier-toned terminal
+// box — star + TIER name + a segmented charge bar (lit segments glow the tier colour) + the raw
+// "stars/next-threshold" fraction. The whole box is tappable to open the tier explanation (the
+// old "?" is dropped per the design; the box itself is the affordance). Tier colour generalises
+// the design's bronze to silver/gold/legendary via the shared --an-tier-* tokens.
+function TierGauge({ stars, onHelp }: { stars: number; ink: string; onHelp: () => void }) {
   const { cur, next } = tierInfo(stars);
   const prevMin = cur?.min ?? 0;
-  const label = cur?.name ?? next?.name ?? STAR_TIERS[0].name;
+  const label = (cur?.name ?? next?.name ?? STAR_TIERS[0].name).toUpperCase();
   const color = cur?.color ?? next?.color ?? STAR_TIERS[0].color;
-  const frac = next ? `${stars}/${next.min}` : "max";
-  const pct = next ? Math.min(100, Math.max(0, Math.round(((stars - prevMin) / (next.min - prevMin)) * 100))) : 100;
-  const inkBorder = `color-mix(in srgb, ${ink} 55%, transparent)`;
-  const inkFaint = `color-mix(in srgb, ${ink} 28%, transparent)`;
+  const frac = next ? `${stars}/${next.min}` : "MAX";
+  const pct = next ? Math.min(100, Math.max(0, ((stars - prevMin) / (next.min - prevMin)) * 100)) : 100;
+  const SEG = 10;
+  const filled = Math.round((pct / 100) * SEG);
   return (
-    <div className="flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5" style={{ border: `1px solid ${inkBorder}` }}>
-      <span className="inline-flex items-center" style={{ color }}><StarIcon className="h-3.5 w-3.5" /></span>
-      <span className="text-[11px] font-bold" style={{ color: ink }}>{label}</span>
-      {/* segmented slanted gauge (/ / / / /) — fills proportionally, so a partial tier shows a
-          partly-filled segment (e.g. 9/10 = 4.5 of 5 lit) for the "charging up" game vibe. */}
-      <span className="flex items-center gap-[2px]">
-        {Array.from({ length: 5 }).map((_, i) => {
-          const segFill = Math.min(1, Math.max(0, (pct / 100) * 5 - i)); // 0..1 within this segment
-          return (
-            <span key={i} className="relative h-2.5 w-2.5 overflow-hidden rounded-[1px]" style={{ background: inkFaint, transform: "skewX(-14deg)" }}>
-              <span className="absolute inset-y-0 left-0" style={{ width: `${segFill * 100}%`, background: color }} />
-            </span>
-          );
-        })}
+    <div className="flex shrink-0 items-center gap-2.5">
+      {/* tier name + fraction, stacked & right-aligned */}
+      <div className="flex flex-col items-end gap-[3px] leading-none">
+        <span className="an-term-mono text-[7px] font-bold" style={{ color, letterSpacing: "1.5px" }}>{label}</span>
+        <span className="an-term-mono text-[10px] font-bold" style={{ color, letterSpacing: "0.5px" }}>[{frac}]</span>
+      </div>
+      {/* chunky segment charge bar — solid tier fill, dark empties, in a thin box */}
+      <span className="flex gap-[2px]" style={{ border: "1px solid #3a3a3d", background: "#0a0a0b", padding: "3px" }}>
+        {Array.from({ length: SEG }).map((_, i) => (
+          <span key={i} style={{ width: "7px", height: "18px", background: i < filled ? color : "#23232a" }} />
+        ))}
       </span>
-      <span className="text-[11px] font-semibold" style={{ color: ink }}>{frac}</span>
+      {/* round "?" help, kept as the discoverability affordance */}
       <button
         onClick={onHelp}
-        aria-label="What is this?"
-        className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold leading-none"
-        style={{ border: `1px solid ${inkBorder}`, color: ink }}
+        aria-label="Tier — what is this?"
+        className="an-term-mono flex shrink-0 items-center justify-center rounded-full text-[10px] font-bold active:opacity-80"
+        style={{ width: "22px", height: "22px", border: "1px solid #2e2e31", color: "#6a6a6a" }}
       >
         ?
       </button>
@@ -336,7 +335,6 @@ function NoteComposer({
   const img = image.trim();
   const imageOk = !img || /^https?:\/\//i.test(img) || /^[1-9A-HJ-NP-Za-km-z]{32,128}$/.test(img);
   const hasContent = !!(text.trim() || title.trim());
-  const inputStyle = { background: "var(--an-bg-2)", border: "1px solid var(--an-line)", color: "var(--an-fg)" } as const;
   function submit() {
     if (!hasContent || !imageOk || busy) return;
     onSubmit({ text: text.trim(), title: title.trim() || undefined, gitLink: link.trim() || undefined, image: img || undefined });
@@ -345,14 +343,14 @@ function NoteComposer({
   return (
     <div className="space-y-2.5">
       {withTitle && (
-        <input className="w-full rounded-xl px-3.5 py-3 text-base font-semibold focus:outline-none" style={inputStyle} placeholder="Title (optional)" value={title} disabled={busy} onChange={(e) => setTitle(e.target.value)} />
+        <input className="an-term-field" placeholder="Title (optional)" value={title} disabled={busy} onChange={(e) => setTitle(e.target.value)} />
       )}
-      <textarea className="w-full resize-none rounded-xl p-3.5 text-base leading-relaxed focus:outline-none" style={inputStyle} rows={4} placeholder={placeholder} value={text} disabled={busy} onChange={(e) => setText(e.target.value)} />
-      <input className="w-full rounded-xl px-3.5 py-3 text-base focus:outline-none" style={{ ...inputStyle, color: "var(--an-fg-dim)" }} placeholder="Image link / on-chain address / tx id (optional)" value={image} disabled={busy} onChange={(e) => setImage(e.target.value)} />
+      <textarea className="an-term-field resize-none leading-relaxed" rows={5} placeholder={placeholder} value={text} disabled={busy} onChange={(e) => setText(e.target.value)} />
+      <input className="an-term-field" placeholder="Image link / on-chain address / tx id (optional)" value={image} disabled={busy} onChange={(e) => setImage(e.target.value)} />
       {!imageOk && <p className="text-xs" style={{ color: "var(--an-red, #f87171)" }}>Image must be an https link, on-chain address, or tx id.</p>}
       {img && imageOk && mediaUrl(img) && <img src={mediaUrl(img)} alt="" referrerPolicy="no-referrer" className="h-20 w-20 rounded-lg object-cover" style={{ border: "1px solid var(--an-line)" }} />}
-      <input className="w-full rounded-xl px-3.5 py-3 text-base focus:outline-none" style={{ ...inputStyle, color: "var(--an-fg-dim)" }} placeholder="GitHub link (optional)" value={link} disabled={busy} onChange={(e) => setLink(e.target.value)} />
-      <button onClick={submit} disabled={!hasContent || !imageOk || busy} className="w-full rounded-xl py-3.5 text-base font-semibold disabled:opacity-40" style={{ background: "var(--an-green)", color: "var(--an-on-green)" }}>
+      <input className="an-term-field" placeholder="GitHub link (optional)" value={link} disabled={busy} onChange={(e) => setLink(e.target.value)} />
+      <button onClick={submit} disabled={!hasContent || !imageOk || busy} className="an-btn an-btn-green">
         {posting ? "Posting..." : submitLabel}
       </button>
     </div>
@@ -370,10 +368,10 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
         className="relative flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-2xl border sm:max-w-md sm:rounded-2xl"
         style={{ background: "var(--an-bg-1)", borderColor: "var(--an-line)" }}
       >
-        <div className="flex shrink-0 items-center justify-between border-b px-4 py-3" style={{ borderColor: "var(--an-line)" }}>
-          <h2 className="text-sm font-semibold" style={{ color: "var(--an-fg)" }}>{title}</h2>
-          <button onClick={onClose} aria-label="Close" className="-mr-1 p-1" style={{ color: "var(--an-fg-mute)" }}>
-            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+        <div className="flex shrink-0 items-center justify-between border-b px-4 py-3.5" style={{ borderColor: "#1d1d20" }}>
+          <h2 className="an-term-title text-[14px]" style={{ letterSpacing: "1px" }}>{title}</h2>
+          <button onClick={onClose} aria-label="Close" className="-mr-1 p-1.5 active:opacity-70" style={{ color: "#9a9a9a" }}>
+            <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
               <path d="M18 6 6 18M6 6l12 12" />
             </svg>
           </button>
@@ -625,18 +623,30 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
           <div className="relative z-10">
             {/* top controls: back + address + settings (left), IQ tier gauge (right) */}
             <div className="flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <button onClick={onBack} aria-label="Back" className="shrink-0 text-lg leading-none" style={{ color: "var(--an-fg)" }}>←</button>
-                <button onClick={copyWallet} className="flex min-w-0 items-center gap-1 font-mono text-sm" style={{ color: "var(--an-fg)" }}>
-                  <span className="truncate">{shortWallet(profile.wallet)}</span>
-                  {copied ? <span className="text-[10px]">✓</span> : <CopyIcon className="h-3 w-3 shrink-0 opacity-70" />}
+              <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                <button
+                  onClick={onBack}
+                  aria-label="Back"
+                  className="an-bracket flex shrink-0 items-center justify-center"
+                  style={{ width: "38px", height: "38px", border: "1px solid #1f1f23", color: "#cfcfcf", "--ts": "8px", "--bk": "#0d0d0e", "--tk": "#6e6e72" } as CSSProperties}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 6l-6 6 6 6" /></svg>
                 </button>
-                {profile.self && (
-                  <span className="an-agent-self-badge shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold">you</span>
-                )}
-                {profile.self && (
-                  <button onClick={() => setSettingsOpen(true)} aria-label="Settings" className="shrink-0" style={{ color: "var(--an-fg-dim)" }}><GearIcon className="h-4 w-4" /></button>
-                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <button onClick={copyWallet} className="an-term-title shrink-0 text-[16px] leading-none">{profile.wallet.slice(0, 6)}</button>
+                    {copied && <span className="text-[10px] shrink-0" style={{ color: "var(--an-green)" }}>✓</span>}
+                    {profile.self && (
+                      <span className="an-term-mono shrink-0 text-[8px] font-bold uppercase tracking-wider" style={{ color: "#f2f2f2", border: "1px solid #3a3a3d", padding: "2px 6px" }}>YOU</span>
+                    )}
+                    {profile.self && (
+                      <button onClick={() => setSettingsOpen(true)} aria-label="Settings" className="shrink-0" style={{ color: "#8a8a8a" }}><GearIcon className="h-4 w-4" /></button>
+                    )}
+                  </div>
+                  <div className="an-term-mono truncate leading-none" style={{ fontSize: "9px", letterSpacing: "1px", color: "#6a6a6a", marginTop: "3px" }}>
+                    …{profile.wallet.slice(-4)}_AGENT <span style={{ color: "#3a3a3a" }}>/</span> <span style={{ fontFamily: "'Noto Sans JP', sans-serif", color: "#5a5a5d" }}>エージェント</span>
+                  </div>
+                </div>
               </div>
               <TierGauge stars={repoStars} ink={bandInk} onHelp={() => setHelpOpen(true)} />
             </div>
@@ -655,7 +665,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
               {stats.map((s) => (
                 <div
                   key={s.label}
-                  className={`an-agent-stat rounded-xl p-3 text-center ${s.hero ? "is-hero" : ""}`}
+                  className={`an-agent-stat rounded-[3px] p-3 text-center ${s.hero ? "is-hero" : ""}`}
                 >
                   <p className={`font-bold ${s.hero ? "text-2xl" : "text-xl"}`} style={{ color: bandInk }}>{s.n}</p>
                   <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide" style={{ color: "var(--an-fg-dim)" }}>{s.label}</p>
@@ -676,7 +686,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className={`flex-1 rounded-t-xl text-sm font-bold capitalize ${active ? "-mb-px pb-2.5 pt-3" : "pb-2 pt-2 opacity-80"}`}
+                className={`flex-1 rounded-t-[3px] text-sm font-bold capitalize ${active ? "-mb-px pb-2.5 pt-3" : "pb-2 pt-2 opacity-80"}`}
                 style={
                   active
                     ? {
@@ -854,13 +864,8 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
 
       {/* Buy all footer (agent tab, viewing another agent's skills) */}
       {showBuyAll && tab === "agent" && (
-        <div className="shrink-0 border-t p-3 an-tabbar-inset" style={{ borderColor: "var(--an-line)" }}>
-          <button
-            onClick={handleBuyAll}
-            disabled={buyingAll}
-            className="w-full rounded-xl py-3 text-sm font-semibold disabled:opacity-50"
-            style={{ background: "var(--an-green)", color: "var(--an-on-green)" }}
-          >
+        <div className="shrink-0 bg-transparent p-3 an-tabbar-inset">
+          <button onClick={handleBuyAll} disabled={buyingAll} className="an-btn an-btn-orange">
             {buyingAll ? "Buying..." : `Buy all ${allSkills.length} skill${allSkills.length !== 1 ? "s" : ""}`}
           </button>
         </div>

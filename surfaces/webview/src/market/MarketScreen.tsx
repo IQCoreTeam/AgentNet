@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useStore } from "../state/store";
 import { SkillSdCard } from "./SkillSdCard";
 import { SkillDetailView } from "./SkillDetailView";
@@ -162,21 +162,34 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
   const isAgents = tab === "profile";
   const isMarket = tab === "market";
   const headerTitle = isSkills ? "My Skills" : isAgents ? "Agents" : "Market";
+  const headerSub = isSkills ? "マイスキル" : isAgents ? "エージェント" : "マーケット";
   const balanceSol = state.marketBalance != null ? (state.marketBalance / 1_000_000_000).toFixed(3) : null;
 
   return (
     <div className="flex flex-col h-full bg-zinc-950">
       {/* Header (no back-to-chat button — the bottom tab bar owns top-level nav) */}
       <header
-        className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2 shrink-0"
-        style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))" }}
+        className="flex items-start gap-2.5 border-b px-3.5 shrink-0"
+        style={{ borderColor: "#1d1d20", paddingTop: "max(0.5rem, env(safe-area-inset-top))", paddingBottom: "0.7rem" }}
       >
-        <span className="font-semibold text-sm">{headerTitle}</span>
-        {!isAgents && balanceSol && <span className="ml-auto text-xs text-zinc-500 font-mono">{balanceSol} SOL</span>}
+        <div className="min-w-0 flex-1">
+          <div className="an-term-title text-[18px] leading-none">{headerTitle}</div>
+          <div className="an-term-sub leading-none">{headerSub}</div>
+        </div>
+        {/* SKILLS: SOL balance + owned-count readout (stacked, right-aligned) */}
+        {isSkills && (
+          <div className="shrink-0 text-right">
+            {balanceSol && <div className="an-term-mono text-[13px] font-bold leading-none" style={{ color: "#bdbdbd", letterSpacing: "0.5px" }}>{balanceSol} ◎</div>}
+            <div className="an-term-mono text-[8px] font-bold tracking-wider" style={{ color: "#5a5a5d", marginTop: "5px" }}>[ {state.marketOwned.length} OWNED ]</div>
+          </div>
+        )}
+        {/* MARKET: SOL balance + publish */}
+        {isMarket && balanceSol && <span className="an-term-mono shrink-0 text-xs font-bold" style={{ color: "#bdbdbd", letterSpacing: "0.5px" }}>{balanceSol} ◎</span>}
         {isMarket && (
           <button
             onClick={() => setView("publish")}
-            className={`${balanceSol ? "" : "ml-auto"} shrink-0 text-xs text-green-400 border border-green-700/50 rounded-lg px-2 py-1 active:bg-green-900/30`}
+            className="an-term-mono shrink-0 text-[10px] font-bold uppercase tracking-wider active:opacity-80"
+            style={{ color: "#4ade80", border: "1px solid #1d3a26", background: "#0d140f", padding: "7px 11px" }}
           >
             + Publish
           </button>
@@ -187,10 +200,12 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
       {isMarket && state.rpcStatus && !state.rpcStatus.hasKey && (
         <button
           onClick={() => setView("helius")}
-          className="mx-3 mt-2 shrink-0 flex items-center gap-2 rounded-lg border border-amber-700/40 bg-amber-900/20 px-3 py-2 text-xs text-amber-400 active:bg-amber-900/40"
+          className="an-bracket mx-3.5 mt-2.5 shrink-0 flex items-center gap-2.5 px-3 py-2.5 active:opacity-80"
+          style={{ border: "1px solid #5a4420", color: "#e0913e", "--ts": "8px", "--bk": "#140d04", "--tk": "#c9772f" } as CSSProperties}
         >
-          <span className="flex-1 text-left">Add Helius key for faster results</span>
-          <span>›</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 3 L22 20 H2 Z" /><path d="M12 10 V14" /><circle cx="12" cy="17" r=".7" fill="currentColor" stroke="none" /></svg>
+          <span className="an-term-mono flex-1 text-left text-[10px] font-bold uppercase tracking-wide">Add Helius key for faster results</span>
+          <span className="an-term-mono font-bold">›</span>
         </button>
       )}
       {isMarket && state.rpcStatus?.hasKey && (
@@ -203,13 +218,13 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
 
       {/* Browse tabs (market only): skill / workflow — agents moved to their own Agent tab */}
       {isMarket && (
-        <div className="flex gap-0 border-b border-zinc-800 px-3 mt-2 shrink-0">
+        <div className="flex gap-6 border-b px-3.5 mt-3 shrink-0" style={{ borderColor: "#1d1d20" }}>
           {(["skill", "workflow"] as const).map((t) => (
             <button
               key={t}
               onClick={() => { setView("browse"); handleTabChange(t); }}
               className={[
-                "px-4 py-2 text-sm capitalize border-b-2 transition-colors",
+                "an-term-mono -mb-px px-1 pb-2.5 pt-2 text-[11px] font-bold uppercase tracking-wider border-b-2 transition-colors",
                 view === "browse" && state.marketTab === t
                   ? "border-green-500 text-green-400"
                   : "border-transparent text-zinc-500 active:text-zinc-300",
@@ -223,18 +238,22 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
 
       {/* Search (market browse only) */}
       {isMarket && (
-        <div className="px-3 py-2 shrink-0">
+        <div className="px-3.5 py-3 shrink-0">
           <form
             onSubmit={(e) => { e.preventDefault(); runSearch(state.marketQuery); }}
             className="flex gap-2"
           >
-            <input
-              className="flex-1 rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-green-500/50"
-              placeholder={`Search ${state.marketTab}s…`}
-              value={state.marketQuery}
-              onChange={(e) => setMarketQuery(e.target.value)}
-            />
-            <button type="submit" className="rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-300 active:bg-zinc-700">
+            <div className="flex flex-1 items-center gap-2.5 px-3" style={{ height: "40px", background: "#0b0b0c", border: "1px solid #2a2a2e" }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7a7a7a" strokeWidth="1.8" className="shrink-0"><circle cx="10.5" cy="10.5" r="6.5" /><path d="M20 20l-4.5-4.5" /></svg>
+              <input
+                className="an-term-mono min-w-0 flex-1 bg-transparent text-[11px] uppercase tracking-wide text-zinc-200 placeholder:uppercase placeholder:tracking-wide focus:outline-none"
+                style={{ color: "#e8e8e8" }}
+                placeholder={`Search ${state.marketTab}s…`}
+                value={state.marketQuery}
+                onChange={(e) => setMarketQuery(e.target.value)}
+              />
+            </div>
+            <button type="submit" className="an-term-mono text-[10px] font-bold uppercase tracking-widest active:opacity-80" style={{ padding: "0 18px", height: "40px", border: "1px solid #34343a", background: "#141416", color: "#e8e8e8" }}>
               Search
             </button>
           </form>
@@ -251,7 +270,7 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
               No owned skills yet. Browse the Market to get one.
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-3.5 pt-1">
+            <div className="grid grid-cols-3 gap-3.5 pt-3">
               {ownedCards.map((card) => (
                 <SkillSdCard
                   key={card.id}

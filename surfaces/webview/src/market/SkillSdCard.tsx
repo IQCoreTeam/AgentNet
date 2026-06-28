@@ -30,7 +30,7 @@ export function SkillSdCard({ card, owned, disposed, firing, onOpen }: Props) {
     >
       <span className="an-sd-tab" />
       <div className="an-sd-label">
-        <svg className="an-sd-art" viewBox="0 0 120 150" preserveAspectRatio="none" aria-hidden="true" dangerouslySetInnerHTML={{ __html: sigil }} />
+        <svg className="an-sd-art" viewBox="0 0 120 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true" dangerouslySetInnerHTML={{ __html: sigil }} />
         <span className="an-sd-bar" />
         <div className="an-sd-mark"><span className="cat">{cat}</span> <span className="ty">{ty}</span></div>
         {/* the hero: the name big over the sigil, shadowed for legibility */}

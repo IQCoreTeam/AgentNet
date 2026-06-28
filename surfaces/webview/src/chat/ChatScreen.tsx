@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 import { useStore, isApprovalForView } from "../state/store";
 import { MessageList } from "./MessageList";
 import { ApprovalDock } from "./ApprovalDock";
@@ -44,24 +44,33 @@ export function ChatScreen({ onOpenDrawer }: { onOpenDrawer: () => void }) {
   return (
     <div className="relative flex flex-col" style={{ height: "100%", background: "var(--an-bg-0)" }}>
       <header
-        className="an-header sticky top-0 z-30 flex items-center gap-1 px-2"
-        style={{ paddingTop: "max(0.25rem, env(safe-area-inset-top))", paddingBottom: "0.25rem" }}
+        className="an-header sticky top-0 z-30 flex items-center gap-2.5 px-3.5"
+        style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))", paddingBottom: "0.6rem" }}
       >
         <button
           onClick={onOpenDrawer}
-          className="an-iconbtn shrink-0"
+          className="an-bracket flex shrink-0 items-center justify-center"
+          style={{ width: "38px", height: "38px", border: "1px solid #1f1f23", color: "#cfcfcf", "--ts": "8px", "--bk": "#0d0d0e", "--tk": "#6e6e72" } as CSSProperties}
           title="Chats"
           aria-label="Open chat list"
         >
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-            <path d="M3 6h14M3 10h14M3 14h14" />
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path d="M4 7H20M4 12H20M4 17H20" />
           </svg>
         </button>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[0.95rem] font-semibold leading-tight">{activeTitle}</div>
+          <div
+            className="truncate"
+            style={{ fontFamily: "'Space Mono', ui-monospace, monospace", fontWeight: 700, fontSize: "15px", letterSpacing: "0.5px", color: "#f2f2f2", textTransform: "uppercase" }}
+          >
+            {activeTitle}
+          </div>
           {addr && (
-            <div className="font-mono text-[0.68rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>
-              {addr.slice(0, 4)}…{addr.slice(-4)}
+            <div
+              className="truncate"
+              style={{ fontFamily: "'Space Mono', ui-monospace, monospace", fontSize: "9px", letterSpacing: "1px", color: "#6a6a6a", marginTop: "2px" }}
+            >
+              {addr.slice(0, 4)}…{addr.slice(-4)} <span style={{ color: "#3a3a3a" }}>/</span> <span style={{ fontFamily: "'Noto Sans JP', sans-serif", color: "#5a5a5d" }}>チャット</span>
             </div>
           )}
         </div>

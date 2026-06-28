@@ -39,19 +39,20 @@ function MenuRow({ icon, label, subtitle, onClick, accent = false }: {
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center gap-3.5 rounded-2xl px-2.5 py-3 text-left transition active:bg-[color:var(--an-bg-2)]"
+      className="flex w-full items-center gap-3.5 px-1 py-4 text-left transition active:opacity-80"
+      style={{ borderBottom: "1px solid #1a1a1d" }}
     >
       <span
-        className="flex h-7 w-7 shrink-0 items-center justify-center"
-        style={{ color: accent ? "var(--an-green)" : "var(--an-fg-dim)" }}
+        className="flex h-[40px] w-[40px] shrink-0 items-center justify-center"
+        style={{ color: accent ? "var(--an-green)" : "#cfcfcf", border: "1px solid #232327" }}
       >
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[1.12rem] font-semibold leading-tight" style={{ color: "var(--an-fg)" }}>{label}</span>
-        {subtitle && <span className="block truncate text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>{subtitle}</span>}
+        <span className="an-term-mono block text-[17px] font-bold uppercase leading-tight" style={{ color: "#f2f2f2", letterSpacing: "0.5px" }}>{label}</span>
+        {subtitle && <span className="an-term-mono block truncate text-[10px] uppercase leading-tight" style={{ color: "#6a6a6a", letterSpacing: "0.5px", marginTop: "4px" }}>{subtitle}</span>}
       </span>
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" style={{ color: "var(--an-fg-mute)" }}><path d="M5 3l4 4-4 4" /></svg>
+      <span className="an-term-mono text-[16px] font-bold" style={{ color: "#4a4a4d" }}>›</span>
     </button>
   );
 }
@@ -130,7 +131,7 @@ export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: 
   const panel = (
       <div
         className={embedded ? "relative flex h-full w-full flex-col p-3" : "relative flex w-[82vw] max-w-xs flex-col p-3"}
-        style={{ background: "var(--an-bg-1)", borderRight: "1px solid var(--an-line)", paddingTop: "max(0.75rem, env(safe-area-inset-top))", paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+        style={{ background: "#060608", borderRight: "1px solid #1a1a1d", paddingTop: "max(0.75rem, env(safe-area-inset-top))", paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
         onClick={(e) => e.stopPropagation()}
       >
         {settingsMode === "list" ? (
@@ -152,7 +153,7 @@ export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: 
               </button>
             </div>
 
-            <div className="space-y-1">
+            <div style={{ borderTop: "1px solid #1a1a1d" }}>
               {onOpenAgent && (
                 <MenuRow
                   label="My Agent"
@@ -170,12 +171,12 @@ export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: 
             </div>
 
             <div className="mt-5 flex min-h-0 flex-1 flex-col">
-              <div className="mb-2 flex items-center justify-between px-2">
-                <span className="text-[0.68rem] font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--an-fg-mute)" }}>
+              <div className="mb-1 flex items-center justify-between px-1">
+                <span className="an-term-mono text-[9px] font-bold uppercase" style={{ color: "#6a6a6a", letterSpacing: "2px" }}>
                   Recents
                 </span>
-                <span className="text-[0.72rem]" style={{ color: "var(--an-fg-mute)" }}>
-                  {state.sessionsSynced ? state.sessions.length : ""}
+                <span className="an-term-mono text-[9px] font-bold" style={{ color: "#4a4a4d" }}>
+                  {state.sessionsSynced ? `[ ${String(state.sessions.length).padStart(2, "0")} ]` : ""}
                 </span>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto pr-1" style={{ touchAction: "pan-y" }}>
@@ -220,10 +221,10 @@ export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: 
                         send({ type: "open", sessionId: s.sessionId });
                         onClose();
                       }}
-                      className="flex w-full items-center rounded-2xl px-3 py-2.5 text-left active:bg-[color:var(--an-bg-2)]"
-                      style={active ? { background: "var(--an-bg-2)" } : undefined}
+                      className={`flex w-full items-center px-2.5 py-3.5 text-left active:opacity-80 ${active ? "an-bracket" : ""}`}
+                      style={active ? ({ "--tk": "#7a7a7d", "--bk": "transparent", "--ts": "8px" } as CSSProperties) : undefined}
                     >
-                      <span className="min-w-0 flex-1 truncate text-[1.02rem] font-medium" style={{ color: "var(--an-fg)" }}>
+                      <span className="an-term-mono min-w-0 flex-1 truncate text-[15px] font-bold" style={{ color: active ? "#f2f2f2" : "#d8d8d8" }}>
                         {s.title || "(untitled)"}
                       </span>
                     </button>

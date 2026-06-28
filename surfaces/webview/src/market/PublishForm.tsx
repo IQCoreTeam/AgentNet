@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useStore } from "../state/store";
 import { ImageIcon, SkillIcon } from "../icons";
 
@@ -135,15 +135,22 @@ export function PublishForm({ onBack }: Props) {
 
   return (
     <div className="flex flex-col h-full">
-      <header className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2 shrink-0">
-        <button onClick={onBack} className="text-zinc-400 active:text-zinc-200 px-1 text-lg">←</button>
-        <span className="font-medium text-sm">Publish Skill</span>
+      <header className="flex items-center gap-3 border-b px-3.5 py-3 shrink-0" style={{ borderColor: "#1d1d20" }}>
+        <button
+          onClick={onBack}
+          aria-label="Back"
+          className="an-bracket flex shrink-0 items-center justify-center"
+          style={{ width: "32px", height: "32px", border: "1px solid #1f1f23", color: "#cfcfcf", "--ts": "7px", "--bk": "#0d0d0e", "--tk": "#6e6e72" } as CSSProperties}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 6l-6 6 6 6" /></svg>
+        </button>
+        <span className="an-term-title text-[16px]">Publish Skill</span>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div className="flex-1 overflow-y-auto p-3.5 space-y-4">
         <Field label="Name *">
           <input
-            className="input-field"
+            className="an-term-field"
             placeholder="My Skill"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -151,7 +158,7 @@ export function PublishForm({ onBack }: Props) {
         </Field>
         <Field label="Description">
           <input
-            className="input-field"
+            className="an-term-field"
             placeholder="What does this skill do?"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -159,7 +166,7 @@ export function PublishForm({ onBack }: Props) {
         </Field>
         <Field label="SKILL.md content *">
           <textarea
-            className="input-field font-mono text-xs"
+            className="an-term-field"
             rows={8}
             placeholder="# My Skill&#10;&#10;## Description&#10;…"
             value={text}
@@ -168,7 +175,7 @@ export function PublishForm({ onBack }: Props) {
         </Field>
         <Field label="Category">
           <input
-            className="input-field"
+            className="an-term-field"
             placeholder="e.g. coding, writing"
             value={category}
             onChange={(e) => setCategory(e.target.value)}
@@ -176,7 +183,7 @@ export function PublishForm({ onBack }: Props) {
         </Field>
         <Field label="Hashtags (comma-separated)">
           <input
-            className="input-field"
+            className="an-term-field"
             placeholder="ai, productivity"
             value={hashtags}
             onChange={(e) => setHashtags(e.target.value)}
@@ -184,7 +191,7 @@ export function PublishForm({ onBack }: Props) {
         </Field>
         <Field label="Price (SOL)">
           <input
-            className="input-field"
+            className="an-term-field"
             type="number"
             min="0"
             step="0.001"
@@ -205,7 +212,7 @@ export function PublishForm({ onBack }: Props) {
               )}
             </span>
             <input
-              className="input-field"
+              className="an-term-field"
               placeholder="Image link, on-chain address, or tx id"
               value={imageUrl}
               onChange={(e) => setImageUrl(e.target.value)}
@@ -223,7 +230,7 @@ export function PublishForm({ onBack }: Props) {
         </Field>
       </div>
 
-      <div className="shrink-0 border-t border-purple-800/40 bg-gradient-to-t from-purple-900/30 to-transparent p-3 an-tabbar-inset">
+      <div className="shrink-0 bg-transparent p-3 an-tabbar-inset">
         {/* Failure surfaces here as a bubble (not a separate page) so the filled-in form stays put. */}
         {result && !result.ok && (
           <div className="relative mb-3 rounded-lg border border-red-500/40 bg-red-950/60 px-3 py-2 text-xs text-red-300">
@@ -234,7 +241,7 @@ export function PublishForm({ onBack }: Props) {
         <button
           onClick={handleSubmit}
           disabled={submitting || !name.trim() || !text.trim() || !imageValid}
-          className="w-full rounded-xl bg-purple-600 py-3 text-sm font-semibold text-white active:bg-purple-500 disabled:opacity-50"
+          className="an-btn an-btn-violet"
         >
           {submitting ? "Minting NFT…" : "Mint & Publish"}
         </button>
@@ -245,8 +252,8 @@ export function PublishForm({ onBack }: Props) {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-1">
-      <label className="text-[11px] text-zinc-500 uppercase tracking-wide">{label}</label>
+    <div className="space-y-1.5">
+      <label className="an-term-label block">{label}</label>
       {children}
     </div>
   );
