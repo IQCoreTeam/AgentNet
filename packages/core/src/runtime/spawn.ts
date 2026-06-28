@@ -150,6 +150,10 @@ function gitCredentialEnv(token?: string): Record<string, string> {
 function claudePermissionMode(
   mode?: string,
 ): "default" | "acceptEdits" | "plan" | "bypassPermissions" {
+  // "claudex" (Team mode) is a surface-level mode, not a native SDK one — the lead brain
+  // merges worker output by writing files, so map it to acceptEdits (edits auto-apply,
+  // commands still gated). The fan-out tool itself is enabled separately in the runtime.
+  if (mode === "claudex") return "acceptEdits";
   return mode === "acceptEdits" || mode === "plan" || mode === "bypassPermissions"
     ? mode
     : "default";

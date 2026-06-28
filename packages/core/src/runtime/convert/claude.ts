@@ -102,6 +102,17 @@ function toolUseMessage(b: Block): ChatMessage {
       return { ...base("Agent: " + title), tool: { name, command: title } };
     }
     default: {
+      // Claudex Team mode (plans/claudex-team-mode.md): the fan-out tool. Surface the
+      // worker goals so the webview can paint a war-room card (one per Codex worker).
+      // The MCP tool id arrives namespaced (mcp__claudex__spawn_codex_subagents).
+      if (name.endsWith("spawn_codex_subagents")) {
+        const tasks = Array.isArray((input as { tasks?: unknown }).tasks) ? (input as { tasks: unknown[] }).tasks : [];
+        const goals = tasks.map((t) => String((t as { goal?: unknown })?.goal ?? "")).filter(Boolean);
+        return {
+          ...base(`🧬 Team — ${goals.length} Codex worker${goals.length === 1 ? "" : "s"}`),
+          tool: { name: "Claudex", output: JSON.stringify({ goals }) },
+        };
+      }
       // generic: a short title from the most descriptive input field
       const title = String(input.description ?? input.query ?? input.pattern ?? input.url ?? name);
       return { ...base(name + (title && title !== name ? ": " + title : "")), tool: { name, command: title } };

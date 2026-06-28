@@ -64,6 +64,7 @@ const MODES: Record<Cli, { value: string; label: string; title: string }[]> = {
     { value: "acceptEdits", label: "Auto edit",  title: "Auto-accept file edits; still ask for other tools" },
     { value: "default",     label: "Ask edits",  title: "Ask before each file edit (default)" },
     { value: "plan",        label: "Plan",        title: "Plan mode: read-only until you approve the plan" },
+    { value: "claudex",     label: "🧬 Team",     title: "Claudex Team mode: Claude leads a team of parallel Codex workers that can edit files" },
   ],
   codex: [
     { value: "auto",     label: "Auto accept", title: "Auto-accept edits + run inside the workspace (default)" },
@@ -155,6 +156,15 @@ export function Composer() {
     rec.start();
   }
   function changeMode(v: string) {
+    // Claudex Team mode lets a team of Codex workers edit files in this folder without
+    // a per-edit prompt — get one plain consent before turning it on.
+    // ponytail: native confirm is the one-line consent; a custom modal isn't worth it.
+    if (v === "claudex" && mode !== "claudex") {
+      const ok = window.confirm(
+        "Turn on Team mode?\n\nClaude will lead a team of Codex workers that can read and edit files in this folder on their own. Only use it in a project you're OK with the team changing.",
+      );
+      if (!ok) return;
+    }
     send({ type: "mode", mode: v });
   }
   const [attached, setAttached] = useState<(ImageInput & { dataUrl: string })[]>([]);

@@ -13,6 +13,7 @@ import { MemorySync, updateSkillsSection } from "../memory/index.js";
 import { setSkillShoppingActive } from "../skill-market/passive.js";
 import { setMakeSkillActive } from "../skill-market/makeSkill.js";
 import { createAgentSdkMcpServer, newVerifyGuard, agentNetAllowedTools, AGENTNET_MCP_SERVER } from "../skill-market/index.js";
+import { createClaudexMcpServer, claudexAllowedTools, CLAUDEX_MCP_SERVER } from "./codexSubagent.js";
 import { resolveRpcUrl, hasDasRpc, loadGithubToken } from "../core/rpc.js";
 import { getCodexApiKey } from "../account/codexAuth.js";
 import type { ApprovalChannel } from "./approval/channel.js";
@@ -40,6 +41,8 @@ import type {
 async function buildPassiveSpawn(
   cli: "claude" | "codex",
   wallet: Wallet,
+  cwd: string,
+  mode: string | undefined,
   onMarketEvent?: (e: import("../chat/marketMessages.js").MarketEvent) => void,
 ): Promise<{ mcpServers?: Record<string, unknown>; allowedTools?: string[]; codexMcp?: { name: string; command: string; args: string[] } }> {
   // Skill-shopping is a BUILT-IN now: always on and hidden from the UI toggle. Every spawn
@@ -76,7 +79,16 @@ async function buildPassiveSpawn(
   // falls back to the public RPC) directly. A stored Helius key still upgrades search to DAS.
   const conn = new Connection(await resolveRpcUrl(), "confirmed");
   const server = createAgentSdkMcpServer(conn, wallet, wallet.address, newVerifyGuard(), onMarketEvent);
-  return { mcpServers: { [AGENTNET_MCP_SERVER]: server }, allowedTools: agentNetAllowedTools() };
+  // Claudex "Team mode" (plans/claudex-team-mode.md): give the lead Claude session the
+  // fan-out tool so it can spawn parallel Codex workers. Workers are spawned via spawnCli
+  // directly, so they never get this tool back — depth guard is automatic, no recursion.
+  // mode === "claudex" → workers may EDIT files (the chip is the user's consent); otherwise
+  // workers are read-only researchers and Claude applies any changes itself.
+  const claudex = createClaudexMcpServer(cwd, mode === "claudex");
+  return {
+    mcpServers: { [AGENTNET_MCP_SERVER]: server, [CLAUDEX_MCP_SERVER]: claudex },
+    allowedTools: [...agentNetAllowedTools(), ...claudexAllowedTools()],
+  };
 }
 
 // `approval` is the swappable decision source (webview buttons / auto / push). The
@@ -137,7 +149,7 @@ export function createRuntime(
       // toggle + (Claude, ON) wire the marketplace MCP tools. Best-effort.
       let passive: Awaited<ReturnType<typeof buildPassiveSpawn>> = {};
       try {
-        passive = await buildPassiveSpawn(opts.cli, wallet, opts.onMarketEvent);
+        passive = await buildPassiveSpawn(opts.cli, wallet, opts.cwd, opts.mode, opts.onMarketEvent);
       } catch (e) {
         console.warn("[skill-shopping] setup failed:", e);
       }
