@@ -450,6 +450,7 @@ body {
 }
 .an-sd:active { transform: scale(0.97); }
 .an-sd.is-disposed { opacity: 0.5; filter: grayscale(1); }
+.an-sd.is-owned-dim { opacity: 0.5; filter: grayscale(0.55); } /* market: already-owned reads muted */
 .an-sd-tab {
   position: absolute;
   left: 0;

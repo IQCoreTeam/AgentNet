@@ -7,6 +7,7 @@ interface Props {
   owned?: boolean;
   disposed?: boolean;
   firing?: boolean;
+  dim?: boolean; // mute the card (market: already-owned, so it reads as "got it")
   onOpen: (card: SkillCard) => void;
 }
 
@@ -15,7 +16,7 @@ interface Props {
 // sigil generated deterministically from the name, a barcode + "CAT / SKILL" mark up top, the
 // NAME big over the sigil, and a small coral data CHIP (copies / price / state) at the bottom.
 // Used everywhere skills are listed so the whole app reads as one collection.
-export function SkillSdCard({ card, owned, disposed, firing, onOpen }: Props) {
+export function SkillSdCard({ card, owned, disposed, firing, dim, onOpen }: Props) {
   const isWorkflow = card.type === "workflow";
   const priceSol = card.price && card.price !== "0" ? (Number(card.price) / 1e9).toFixed(2) : null;
   const sigil = useMemo(() => skillSigilSvg(card.name, card.category), [card.name, card.category]);
@@ -26,7 +27,7 @@ export function SkillSdCard({ card, owned, disposed, firing, onOpen }: Props) {
   return (
     <button
       onClick={() => onOpen(card)}
-      className={`an-sd ${isWorkflow ? "is-workflow" : ""} ${disposed ? "is-disposed" : ""} ${firing ? "is-firing" : ""}`}
+      className={`an-sd ${isWorkflow ? "is-workflow" : ""} ${disposed ? "is-disposed" : ""} ${dim ? "is-owned-dim" : ""} ${firing ? "is-firing" : ""}`}
     >
       <span className="an-sd-tab" />
       <div className="an-sd-label">

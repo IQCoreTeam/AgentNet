@@ -23,6 +23,9 @@ export type ShellTab = "market" | "skills" | "profile";
 export function MarketScreen({ tab }: { tab: ShellTab }) {
   const { state, send, setMarketTab, setMarketQuery, marketSearching, clearMarketDetail, clearAgentProfile } = useStore();
   const [view, setView] = useState<MarketView>("browse");
+  // Hide already-owned skills from the market results by default (you came to find NEW ones);
+  // untick to show them too (muted/greyed).
+  const [hideOwned, setHideOwned] = useState(true);
   // Tracks a tapped card whose detail is still loading, so we can show a skeleton in the
   // gap between the tap and `marketDetail` arriving (there's no store-level loading flag).
   const [pendingMint, setPendingMint] = useState<string | null>(null);
@@ -218,7 +221,7 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
 
       {/* Browse tabs (market only): skill / workflow — agents moved to their own Agent tab */}
       {isMarket && (
-        <div className="flex gap-6 border-b px-3.5 mt-3 shrink-0" style={{ borderColor: "#1d1d20" }}>
+        <div className="flex items-end gap-6 border-b px-3.5 mt-3 shrink-0" style={{ borderColor: "#1d1d20" }}>
           {(["skill", "workflow"] as const).map((t) => (
             <button
               key={t}
@@ -233,6 +236,16 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
               {t}s
             </button>
           ))}
+          {/* HIDE OWNED filter — on by default so the grid surfaces NEW skills */}
+          <button onClick={() => setHideOwned((v) => !v)} className="ml-auto flex items-center gap-2 pb-2.5 active:opacity-80">
+            <span
+              className="flex h-[16px] w-[16px] shrink-0 items-center justify-center"
+              style={{ border: hideOwned ? "1px solid #2f6b46" : "1px solid #3a3a3d", background: hideOwned ? "#0d160f" : "#0c0c0d" }}
+            >
+              {hideOwned && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}
+            </span>
+            <span className="an-term-mono text-[9px] font-bold uppercase tracking-wider" style={{ color: hideOwned ? "#9a9a9a" : "#6a6a6a" }}>Hide owned</span>
+          </button>
         </div>
       )}
 
@@ -297,16 +310,22 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-3.5 pt-1">
-                {state.marketResults.map((card) => (
-                  <SkillSdCard
-                    key={card.id}
-                    card={card}
-                    owned={state.marketOwned.includes(card.name)}
-                    disposed={Object.values(state.marketDisposed).includes(card.id)}
-                    firing={state.firingSkills.some((f) => f.name === card.name)}
-                    onOpen={handleOpenCard}
-                  />
-                ))}
+                {state.marketResults
+                  .filter((card) => !hideOwned || !state.marketOwned.includes(card.name))
+                  .map((card) => {
+                  const isOwned = state.marketOwned.includes(card.name);
+                  return (
+                    <SkillSdCard
+                      key={card.id}
+                      card={card}
+                      owned={isOwned}
+                      dim={isOwned}
+                      disposed={Object.values(state.marketDisposed).includes(card.id)}
+                      firing={state.firingSkills.some((f) => f.name === card.name)}
+                      onOpen={handleOpenCard}
+                    />
+                  );
+                })}
               </div>
             )}
           </>

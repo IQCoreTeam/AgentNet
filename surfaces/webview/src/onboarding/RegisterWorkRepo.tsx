@@ -80,13 +80,10 @@ export function RegisterWorkRepo() {
         </div>
       ) : (
         <>
-          <div>
-            <div className="an-term-mono text-[12px] font-bold uppercase tracking-wide" style={{ color: "#e8e8e8" }}>Register verified work</div>
-            <p className="an-term-mono mt-2 text-[10px] leading-relaxed" style={{ color: "#7a7a7a" }}>
-              Link a repo you built to the skills it used. We commit a public{" "}
-              <span style={{ color: "#9a9a9a" }}>.agentnet</span> marker (your wallet address only) to prove ownership.
-            </p>
-          </div>
+          <p className="an-term-mono text-[10px] leading-relaxed" style={{ color: "#7a7a7a" }}>
+            Link a repo you built to the skills it used. We commit a public{" "}
+            <span style={{ color: "#9a9a9a" }}>.agentnet</span> marker (your wallet address only) to prove ownership.
+          </p>
 
           {!hasToken && (
             <p className="an-term-mono text-[10px] uppercase" style={{ color: "#e0913e" }}>Add a GitHub token above first.</p>
