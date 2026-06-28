@@ -103,6 +103,7 @@ export interface State {
   buyCelebrateLabel: string | null; // bought skill's slug/name for the purchase card
   contextTokens?: number;
   contextWindow?: number;
+  isCompacting: boolean;
   currentModel?: string;
   queuePending: number;
   agents: Reputation[];
@@ -173,6 +174,7 @@ const initialState: State = {
   agentsLoading: false,
   githubStatus: null,
   workRepoResult: null,
+  isCompacting: false,
   modeByCli: {
     claude: "acceptEdits",
     codex: "auto",
@@ -225,6 +227,7 @@ function appendMessage(log: ChatMessage[], msg: ChatMessage): ChatMessage[] {
 // dispatcher doesn't round-trip (optimistic typing dots, removing an answered approval
 // from the dock, dismissing a toast).
 type LocalAction =
+  | { type: "__compactStart" }
   | { type: "__typing" }
   | { type: "__removeApproval"; id: string }
   | { type: "__clearToast" }
@@ -326,8 +329,10 @@ function reducer(state: State, ev: Action): State {
         contextTokens: ev.contextTokens,
         contextWindow: ev.contextWindow ?? state.contextWindow,
       };
+    case "__compactStart":
+      return { ...state, isCompacting: true };
     case "compacted":
-      return { ...state, contextTokens: undefined, toast: "Context compacted — conversation history summarised to free space." };
+      return { ...state, isCompacting: false, contextTokens: undefined, toast: "Context compacted — conversation history summarised to free space." };
     case "clear":
       // repaint() sends `clear` on every session open. Keep the approvals that belong to the
       // session now being opened — otherwise tapping a notification to answer a backgrounded
@@ -589,6 +594,7 @@ interface Store {
   getClientId: () => string | null;
   // Show a transient toast locally (e.g. the foreground-only turn-off notice, #53).
   notify: (text: string) => void;
+  markCompacting: () => void;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -769,6 +775,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       clearCelebrate: () => raw({ type: "__clearCelebrate" }),
       getClientId: () => transportRef.current?.getClientId() ?? null,
       notify: (text) => raw({ type: "__setToast", text }),
+      markCompacting: () => raw({ type: "__compactStart" }),
     };
   }, [state]);
 

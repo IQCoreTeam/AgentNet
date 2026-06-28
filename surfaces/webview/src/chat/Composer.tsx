@@ -7,22 +7,37 @@ import { useElementHeightVariable } from "../layoutEffects";
 import { CHAT_MODEL_OPTIONS } from "@iqlabs-official/agent-sdk/chat/modelOptions";
 import { CHAT_SLASH_COMMANDS } from "@iqlabs-official/agent-sdk/chat/slashCommands";
 
-// ── Context bar (mirrors Claude Code's real status-line meter) ──────────────
-// Colors: green < 60 %, yellow < 85 %, red ≥ 85 %
-function CtxBar({ tokens, window: win, approx }: { tokens: number; window: number; approx?: boolean }) {
+// ── Context dot (compact donut circle for mobile, mirrors Claude Code's meter) ──
+// Colors: green < 60 %, amber < 85 %, red ≥ 85 %. Orange pulse while compacting.
+function CtxDot({ tokens, window: win, compacting }: { tokens: number; window: number; compacting?: boolean }) {
   const frac = Math.min(1, tokens / win);
   const pct = Math.round(frac * 100);
+  const color = compacting
+    ? "var(--an-orange, #f80)"
+    : frac >= 0.85 ? "var(--an-red, #e55)" : frac >= 0.60 ? "var(--an-amber, #e90)" : "var(--an-orange, #f80)";
+  const r = 7;
+  const circ = 2 * Math.PI * r;
   const fmtK = (n: number) => n >= 1000 ? Math.round(n / 1000) + "k" : String(n);
-  const color = frac >= 0.85 ? "var(--an-red, #e55)" : frac >= 0.60 ? "var(--an-amber, #e90)" : "var(--an-green, #4c8)";
-  const CELLS = 8;
-  const filled = Math.round(frac * CELLS);
-  const bar = "█".repeat(filled) + "░".repeat(CELLS - filled);
   return (
-    <span className="ml-auto flex items-center gap-1 text-[10px] font-mono" style={{ color }} title={`${tokens.toLocaleString()} / ${win.toLocaleString()} tokens (${pct}%)`}>
-      {approx && <span style={{ color: "var(--an-fg-mute)" }}>~</span>}
-      <span style={{ letterSpacing: "-0.5px" }}>[{bar}]</span>
-      <span>{fmtK(tokens)}/{fmtK(win)}</span>
-      <span style={{ color: "var(--an-fg-mute)" }}>ctx</span>
+    <span
+      className="ml-auto flex items-center"
+      title={compacting ? "Compacting context…" : `Context: ${tokens.toLocaleString()} / ${win.toLocaleString()} tokens (${pct}%)\n${fmtK(tokens)} / ${fmtK(win)} ctx`}
+      style={{ cursor: "default" }}
+    >
+      <svg width="18" height="18" viewBox="0 0 18 18" style={{ display: "block" }}>
+        <circle cx="9" cy="9" r={r} fill="none" stroke="var(--an-line, #333)" strokeWidth="2.5" />
+        <circle
+          cx="9" cy="9" r={r}
+          fill="none"
+          stroke={color}
+          strokeWidth="2.5"
+          strokeDasharray={compacting ? `${circ * 0.75} ${circ * 0.25}` : `${frac * circ} ${(1 - frac) * circ}`}
+          strokeLinecap="round"
+          transform={compacting ? undefined : "rotate(-90 9 9)"}
+          style={compacting ? { transformBox: "fill-box", transformOrigin: "center", animation: "ctxspin 1s linear infinite" } : undefined}
+        />
+      </svg>
+      {compacting && <style>{`@keyframes ctxspin { from { transform: rotate(-90deg); } to { transform: rotate(270deg); } }`}</style>}
     </span>
   );
 }
@@ -101,7 +116,7 @@ function ChipGroup({ label, value, options, onPick }: {
 
 // Input + engine tabs + model/effort pickers. FROZEN while an approval is pending.
 export function Composer() {
-  const { state, send, selectEngine, queueCount } = useStore();
+  const { state, send, selectEngine, queueCount, markCompacting } = useStore();
   const [text, setText] = useState("");
   const [effort, setEffort] = useState("default");
   const [model, setModel] = useState("default");
@@ -350,6 +365,7 @@ export function Composer() {
           setText(""); return;
         }
         default:
+          if (cmd === "compact") markCompacting();
           send({ type: "slashCommand", command: cmd, arg: arg || undefined });
           setText(""); return;
       }
@@ -432,9 +448,10 @@ export function Composer() {
           <span className="max-w-[7rem] truncate">{MODES[state.cli].find((m) => m.value === mode)?.label ?? mode}</span>
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" style={{ transform: controlsOpen ? "rotate(180deg)" : "none", transition: "transform .15s" }}><path d="M2.5 4l2.5 2.5L7.5 4" /></svg>
         </button>
-        {state.contextTokens !== undefined && (() => {
+        {(state.contextTokens !== undefined || state.isCompacting) && (() => {
+          const tokens = state.contextTokens ?? 0;
           const win = state.contextWindow ?? (state.cli === "codex" ? 256_000 : 200_000);
-          return <CtxBar tokens={state.contextTokens} window={win} />;
+          return <CtxDot tokens={tokens} window={win} compacting={state.isCompacting} />;
         })()}
         {queueCount > 0 && (
           <span className="ml-auto animate-pulse text-[10px]" style={{ color: "var(--an-amber)" }}>
@@ -504,7 +521,7 @@ export function Composer() {
       <div
         ref={inputBoxRef}
         className={`an-composer-input relative flex items-center gap-1.5 px-2 ${frozen ? "opacity-60" : ""}`}
-        style={{ minHeight: "56px" }}
+        style={{ minHeight: "56px", ...(state.isCompacting ? { "--tk": "#f80", borderColor: "#f80" } as React.CSSProperties : {}) }}
         onDragOver={(e) => { e.preventDefault(); }}
         onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files) void addFiles(e.dataTransfer.files); }}
       >
