@@ -570,10 +570,15 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
 
   const allSkills = useMemo(() => [...(profile.createdSkills ?? [])], [profile.createdSkills]);
   const skillById = useMemo(() => new Map(allSkills.map((c) => [c.id, c])), [allSkills]);
+  // Only the ones you don't already own — that's what "buy all" actually buys (and the count).
+  const unownedSkills = useMemo(
+    () => allSkills.filter((c) => !state.marketOwned?.includes(c.name)),
+    [allSkills, state.marketOwned],
+  );
   const verifiedRepos = profile.verifiedRepos ?? [];
   const repoStars = verifiedRepos.reduce((sum, r) => sum + (r.stars ?? 0), 0);
   const sortedRepos = [...verifiedRepos].sort((a, b) => (b.stars ?? 0) - (a.stars ?? 0));
-  const showBuyAll = !profile.self && allSkills.length > 0;
+  const showBuyAll = !profile.self && unownedSkills.length > 0;
   const blogNotes = (profile.notes ?? []).filter((n) => n.isSelfNote);
   const comments = (profile.notes ?? []).filter((n) => !n.isSelfNote);
   const canPost = profile.self || profile.canComment;
@@ -872,7 +877,11 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
           style={{ background: "linear-gradient(to top, color-mix(in srgb, var(--an-bg-0) 60%, transparent), transparent)" }}
         >
           <button onClick={handleBuyAll} disabled={buyingAll} className="an-btn an-btn-orange pointer-events-auto">
-            {buyingAll ? "Buying..." : `Buy all ${allSkills.length} skill${allSkills.length !== 1 ? "s" : ""}`}
+            {buyingAll
+              ? "Buying..."
+              : unownedSkills.length === allSkills.length
+                ? `Buy all ${unownedSkills.length} skill${unownedSkills.length !== 1 ? "s" : ""}`
+                : `Buy ${unownedSkills.length} more skill${unownedSkills.length !== 1 ? "s" : ""}`}
           </button>
         </div>
       )}
