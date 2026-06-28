@@ -601,7 +601,10 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
 
   return (
     <div className="relative flex h-full flex-col" style={{ background: "var(--an-bg-0)" }}>
-      <div className={`flex-1 overflow-y-auto ${showBuyAll && tab === "agent" ? "" : "an-tabbar-inset"}`}>
+      <div
+        className="flex-1 overflow-y-auto an-tabbar-inset"
+        style={showBuyAll && tab === "agent" ? { paddingBottom: "calc(var(--tabbar-height, 0px) + max(0.75rem, env(safe-area-inset-bottom)) + 76px)" } : undefined}
+      >
         {/* HERO STAGE — Mii-Maker booth kept dark: a clean rounded stage the avatar stands on,
             with the pfp palette as a soft accent only. Static (no looping motion). */}
         <div
@@ -864,8 +867,11 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
 
       {/* Buy all footer (agent tab, viewing another agent's skills) */}
       {showBuyAll && tab === "agent" && (
-        <div className="shrink-0 bg-transparent p-3 an-tabbar-inset">
-          <button onClick={handleBuyAll} disabled={buyingAll} className="an-btn an-btn-orange">
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-10 an-tabbar-inset"
+          style={{ background: "linear-gradient(to top, color-mix(in srgb, var(--an-bg-0) 60%, transparent), transparent)" }}
+        >
+          <button onClick={handleBuyAll} disabled={buyingAll} className="an-btn an-btn-orange pointer-events-auto">
             {buyingAll ? "Buying..." : `Buy all ${allSkills.length} skill${allSkills.length !== 1 ? "s" : ""}`}
           </button>
         </div>

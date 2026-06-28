@@ -844,10 +844,13 @@ body {
   display: flex;
   flex-direction: column;
   pointer-events: none;
+  /* Chat-only scrim: a SOFT fade behind the composer so the input + nav read clearly without
+     a hard black band — the messages stay partly visible through it (semi-transparent, never
+     solid bg). Just a shadow, not a section divider. */
   background: linear-gradient(
     to top,
-    color-mix(in srgb, var(--an-bg-0) 22%, transparent),
-    transparent 70%
+    color-mix(in srgb, var(--an-bg-0) 55%, transparent),
+    transparent 78%
   );
 }
 .an-chat-float > * { pointer-events: auto; }
@@ -926,6 +929,7 @@ body {
   --tk: #6e6e72;
   --acc: #4ade80;
   --ink: #06140c;
+  pointer-events: auto; /* stay clickable inside a pointer-events:none floating footer */
   position: relative;
   isolation: isolate;
   display: flex;

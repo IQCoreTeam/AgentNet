@@ -45,7 +45,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="relative flex flex-col h-full">
       <header className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2 shrink-0">
         <button onClick={onBack} className="text-zinc-400 active:text-zinc-200 px-1 text-lg">←</button>
         {isWorkflow && (
@@ -64,7 +64,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
         )}
       </header>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-4">
+      <div className="flex-1 overflow-y-auto p-3 space-y-4" style={{ paddingBottom: "calc(var(--tabbar-height, 0px) + max(0.75rem, env(safe-area-inset-bottom)) + 76px)" }}>
         <div className="flex items-start gap-3">
           {mediaUrl(card.image) ? (
             <img src={mediaUrl(card.image)} alt="" referrerPolicy="no-referrer" className="h-14 w-14 rounded-xl object-cover shrink-0" />
@@ -188,7 +188,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
       </div>
 
       {owned && (
-        <div className="shrink-0 bg-transparent p-3 an-tabbar-inset">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-8 an-tabbar-inset" style={{ background: "linear-gradient(to top, color-mix(in srgb, var(--an-bg-0) 60%, transparent), transparent)" }}>
           <button onClick={() => send({ type: "disposeSkill", skillId: card.id })} className="an-btn an-btn-danger">
             Remove Skill
           </button>
@@ -196,7 +196,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
       )}
 
       {!owned && disposed && (
-        <div className="shrink-0 bg-transparent p-3 an-tabbar-inset">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-8 an-tabbar-inset" style={{ background: "linear-gradient(to top, color-mix(in srgb, var(--an-bg-0) 60%, transparent), transparent)" }}>
           <button onClick={() => send({ type: "reEquipSkill", skillId: card.id })} className="an-btn an-btn-green">
             Re-equip Skill
           </button>
@@ -204,7 +204,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
       )}
 
       {!owned && !disposed && (
-        <div className="shrink-0 bg-transparent p-3 an-tabbar-inset">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-8 an-tabbar-inset" style={{ background: "linear-gradient(to top, color-mix(in srgb, var(--an-bg-0) 60%, transparent), transparent)" }}>
           <button
             onClick={handleBuy}
             disabled={buying || (isWorkflow && !allRequiredOwned)}
