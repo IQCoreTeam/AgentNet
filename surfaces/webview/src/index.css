@@ -644,28 +644,7 @@ body {
 .an-input::placeholder { color: var(--an-fg-mute); }
 .an-input:focus { border-color: var(--an-green-line); }
 
-/* Primary action button — thumb-reachable, bold. */
-.an-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 48px;
-  width: 100%;
-  border-radius: var(--an-radius);
-  background: var(--an-green);
-  color: var(--an-on-green);
-  font-size: 0.95rem;
-  font-weight: 700;
-  transition: filter 0.14s, transform 0.08s;
-}
-.an-btn:active { transform: scale(0.985); filter: brightness(1.06); }
-.an-btn:disabled { opacity: 0.45; }
-.an-btn-ghost {
-  background: var(--an-bg-2);
-  color: var(--an-fg-dim);
-  font-weight: 600;
-}
+/* (Primary action button is now the shared terminal `.an-btn` system defined further below.) */
 
 /* Round, thumb-reachable send / stop button in the composer. */
 .an-send {

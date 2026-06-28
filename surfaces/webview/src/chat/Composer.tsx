@@ -84,26 +84,28 @@ function slashCommandsForCli(cli: Cli): { name: string; desc: string; insert: st
 
 // A labelled row of tappable chips — the mobile replacement for a native <select>.
 // One chip is active (accent fill); tapping another picks it. Used for model/effort/mode.
-function ChipGroup({ label, value, options, onPick }: {
+function ChipGroup({ label, value, options, onPick, accent = "green" }: {
   label: string;
   value: string;
   options: { value: string; label: string }[];
   onPick: (v: string) => void;
+  accent?: "green" | "orange";
 }) {
+  const acc = accent === "orange"
+    ? { color: "#f0913e", border: "1px solid #6b4a22", background: "#1a0f06" }
+    : { color: "#4ade80", border: "1px solid #2f6b46", background: "#0d160f" };
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="text-[0.62rem] font-bold uppercase tracking-wider" style={{ color: "var(--an-fg-mute)" }}>{label}</div>
-      <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-col gap-2.5">
+      <div className="an-term-mono text-[9px] font-bold uppercase" style={{ color: "#6a6a6a", letterSpacing: "2px" }}>{label}</div>
+      <div className="flex flex-wrap gap-2">
         {options.map((o) => {
           const on = o.value === value;
           return (
             <button
               key={o.value}
               onClick={() => onPick(o.value)}
-              className="rounded-full px-3 py-1.5 text-xs font-medium transition"
-              style={on
-                ? { background: "var(--an-green-dim)", color: "var(--an-green)", border: "1px solid var(--an-green-line)" }
-                : { background: "var(--an-bg-2)", color: "var(--an-fg-dim)", border: "1px solid var(--an-line)" }}
+              className="an-term-mono text-[11px] font-bold uppercase tracking-wide transition"
+              style={on ? { ...acc, padding: "8px 14px" } : { color: "#8a8a8a", border: "1px solid #2a2a2e", padding: "8px 14px" }}
             >
               {o.label}
             </button>
@@ -463,10 +465,10 @@ export function Composer() {
           <>
             <div className="fixed inset-0 z-40" onClick={() => setControlsOpen(false)} />
             <div
-              className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-50 flex flex-col gap-3 p-3 shadow-2xl"
-              style={{ background: "var(--an-bg-1)", border: "1px solid var(--an-line)", borderRadius: "var(--an-radius)" }}
+              className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-50 flex flex-col gap-5 p-4 shadow-2xl"
+              style={{ background: "#0a0a0b", border: "1px solid #2a2a2e" }}
             >
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-2.5">
                 <ChipGroup
                   label="Model"
                   value={model}
@@ -474,7 +476,7 @@ export function Composer() {
                   onPick={(v) => { setModel(v); send({ type: "model", model: v === "default" ? undefined : v }); }}
                 />
                 {/* version/detail of the selected model, from the shared catalog */}
-                <p className="text-[0.68rem] leading-snug" style={{ color: "var(--an-fg-mute)" }}>
+                <p className="an-term-mono text-[9px] uppercase leading-snug" style={{ color: "#5a5a5d", letterSpacing: "0.5px" }}>
                   {MODELS[state.cli].find((m) => m.value === model)?.desc}
                 </p>
               </div>
@@ -487,6 +489,7 @@ export function Composer() {
               <ChipGroup
                 label="Mode"
                 value={mode}
+                accent="orange"
                 options={MODES[state.cli].map((m) => ({ value: m.value, label: m.label }))}
                 onPick={(v) => changeMode(v)}
               />

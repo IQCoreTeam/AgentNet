@@ -49,5 +49,5 @@ export function OnboardingButton({
   className = "",
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "outline" }) {
-  return <button className={`${variant === "primary" ? "an-btn" : "an-btn an-btn-ghost"} ${className}`} {...props} />;
+  return <button className={`an-btn ${variant === "primary" ? "an-btn-green" : "an-btn-outline"} ${className}`} {...props} />;
 }

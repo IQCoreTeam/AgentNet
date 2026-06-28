@@ -72,7 +72,7 @@ export function RegisterWorkRepo() {
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl bg-zinc-900/60 p-4 ring-1 ring-zinc-800">
+    <div className="flex flex-col gap-4">
       {phase !== "form" ? (
         <div className="space-y-3 py-1">
           <StepRow label="Commit .agentnet marker" done={phase === "done"} />
@@ -81,15 +81,15 @@ export function RegisterWorkRepo() {
       ) : (
         <>
           <div>
-            <h3 className="text-sm font-semibold text-zinc-100">Register verified work</h3>
-            <p className="mt-0.5 text-xs text-zinc-400 leading-relaxed">
+            <div className="an-term-mono text-[12px] font-bold uppercase tracking-wide" style={{ color: "#e8e8e8" }}>Register verified work</div>
+            <p className="an-term-mono mt-2 text-[10px] leading-relaxed" style={{ color: "#7a7a7a" }}>
               Link a repo you built to the skills it used. We commit a public{" "}
-              <span className="font-mono text-zinc-300">.agentnet</span> marker (your wallet address only) to prove ownership.
+              <span style={{ color: "#9a9a9a" }}>.agentnet</span> marker (your wallet address only) to prove ownership.
             </p>
           </div>
 
           {!hasToken && (
-            <p className="text-xs text-amber-400">Add a GitHub token above first.</p>
+            <p className="an-term-mono text-[10px] uppercase" style={{ color: "#e0913e" }}>Add a GitHub token above first.</p>
           )}
 
           <input
@@ -97,28 +97,31 @@ export function RegisterWorkRepo() {
             onChange={(e) => setRepo(e.target.value)}
             placeholder="owner/name or github.com URL"
             disabled={!hasToken}
-            className="rounded-xl bg-zinc-900 px-3 py-2.5 text-sm text-white outline-none ring-1 ring-zinc-800 focus:ring-an-green/50 font-mono disabled:opacity-50"
+            className="an-term-field disabled:opacity-50"
           />
 
-          <div className="flex flex-col gap-1.5">
-            <span className="text-xs text-zinc-500">Skills this repo used</span>
+          <div className="flex flex-col gap-3">
+            <span className="an-term-label">Skills this repo used</span>
             {owned.length === 0 ? (
-              <p className="text-xs text-zinc-500">No owned skills yet.</p>
+              <p className="an-term-mono text-[10px] uppercase" style={{ color: "#5a5a5d" }}>No owned skills yet.</p>
             ) : (
-              <div className="flex flex-col gap-1 max-h-44 overflow-y-auto">
+              <div className="flex flex-col gap-3 max-h-44 overflow-y-auto">
                 {owned.map((name) => {
                   const mint = mints[name];
                   if (!mint) return null;
+                  const on = !!selected[mint];
                   return (
-                    <label key={mint} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-zinc-800/60 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={!!selected[mint]}
-                        onChange={() => toggle(mint)}
-                        disabled={!hasToken}
-                        className="accent-an-green"
-                      />
-                      <span className="text-sm text-zinc-200 truncate">{name}</span>
+                    <label key={mint} className="flex items-center gap-3 cursor-pointer active:opacity-80">
+                      <input type="checkbox" checked={on} onChange={() => toggle(mint)} disabled={!hasToken} className="sr-only" />
+                      <span
+                        className="flex h-[18px] w-[18px] shrink-0 items-center justify-center"
+                        style={{ border: on ? "1px solid #2f6b46" : "1px solid #3a3a3d", background: on ? "#0d160f" : "#0c0c0d" }}
+                      >
+                        {on && (
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                        )}
+                      </span>
+                      <span className="an-term-mono truncate text-[12px] font-bold" style={{ color: on ? "#f2f2f2" : "#cfcfcf" }}>{name}</span>
                     </label>
                   );
                 })}
@@ -127,16 +130,12 @@ export function RegisterWorkRepo() {
           </div>
 
           {error && (
-            <p className="rounded-xl px-3 py-2 text-xs" style={{ background: "rgba(0,0,0,0.25)", border: "1px solid var(--an-red)", color: "var(--an-red)" }}>
+            <p className="an-term-mono px-3 py-2 text-[10px]" style={{ background: "rgba(0,0,0,0.25)", border: "1px solid var(--an-red)", color: "var(--an-red)" }}>
               {error}
             </p>
           )}
 
-          <button
-            onClick={submit}
-            disabled={!canSubmit}
-            className="rounded-xl bg-an-green px-3 py-2.5 text-sm font-semibold text-black disabled:opacity-40 disabled:cursor-not-allowed"
-          >
+          <button onClick={submit} disabled={!canSubmit} className="an-btn an-btn-green">
             Register repo
           </button>
         </>
