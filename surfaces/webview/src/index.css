@@ -693,23 +693,8 @@ body {
   pointer-events: none;
 }
 .an-tabbar-shell > * { pointer-events: auto; }
-/* Fade the screen content behind/around the dock into the app bg toward the very bottom, so the
-   nav reads clearly on top. A smooth scrim (transparent at the top so it never darkens the
-   composer above it), never a hard section line. */
-.an-tabbar-shell::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  /* keep the scrim WITHIN the dock's own footprint — the composer floats just above and is
-     trapped (by the pager's transform context) below this z25 layer, so reaching up into it
-     would darken the chat input. Bottom-anchored fade only. */
-  top: 0;
-  z-index: -1;
-  pointer-events: none;
-  background: linear-gradient(to top, var(--an-bg-0) 40%, color-mix(in srgb, var(--an-bg-0) 55%, transparent) 76%, transparent 100%);
-}
+/* No scrim behind the dock — the area around it stays transparent so the content scrolls visibly
+   behind. The dock bar is opaque enough to read on its own. */
 /* NAV_DOCK (Nav Dock design · VAR_01 "mono invert") — a compact centred terminal bar with
    corner-tick brackets and four equal segments. Active segment inverts (white fill, dark
    icon/label) + a blinking status dot; the rest read grey on near-black. Reuses .an-tabbar-shell
