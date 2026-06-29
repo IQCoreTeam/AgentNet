@@ -7,20 +7,11 @@ import { SkillIcon } from "../icons";
 
 // VerifiedRepo isn't re-exported by the protocol barrel; derive it from AgentProfile.
 type VRepo = NonNullable<AgentProfile["verifiedRepos"]>[number];
-import { walletAvatarPalette, walletAvatarSvg, walletBandColor } from "./walletAvatar";
+import { walletAvatarSvg } from "./walletAvatar";
 import { mediaUrl } from "./mediaUrl";
 import { PostCelebration } from "./PostCelebration";
 import { SkillSdCard } from "./SkillSdCard";
 import { RegisterWorkRepo } from "../onboarding/RegisterWorkRepo";
-
-function CopyIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="9" y="9" width="13" height="13" rx="2" />
-      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-    </svg>
-  );
-}
 
 function PenIcon({ className }: { className?: string }) {
   return (
@@ -106,46 +97,6 @@ const REPO_RARITY = [
 
 function repoRarity(stars: number) {
   return REPO_RARITY.find((t) => stars >= t.min) ?? null;
-}
-
-// The agent's "IQ tier" badge for the hero (Top Bar / Agent design): a sharp tier-toned terminal
-// box — star + TIER name + a segmented charge bar (lit segments glow the tier colour) + the raw
-// "stars/next-threshold" fraction. The whole box is tappable to open the tier explanation (the
-// old "?" is dropped per the design; the box itself is the affordance). Tier colour generalises
-// the design's bronze to silver/gold/legendary via the shared --an-tier-* tokens.
-function TierGauge({ stars, onHelp }: { stars: number; ink: string; onHelp: () => void }) {
-  const { cur, next } = tierInfo(stars);
-  const prevMin = cur?.min ?? 0;
-  const label = (cur?.name ?? next?.name ?? STAR_TIERS[0].name).toUpperCase();
-  const color = cur?.color ?? next?.color ?? STAR_TIERS[0].color;
-  const frac = next ? `${stars}/${next.min}` : "MAX";
-  const pct = next ? Math.min(100, Math.max(0, ((stars - prevMin) / (next.min - prevMin)) * 100)) : 100;
-  const SEG = 10;
-  const filled = Math.round((pct / 100) * SEG);
-  return (
-    <div className="flex shrink-0 items-center gap-2.5">
-      {/* tier name + fraction, stacked & right-aligned */}
-      <div className="flex flex-col items-end gap-[3px] leading-none">
-        <span className="an-term-mono text-[7px] font-bold" style={{ color, letterSpacing: "1.5px" }}>{label}</span>
-        <span className="an-term-mono text-[10px] font-bold" style={{ color, letterSpacing: "0.5px" }}>[{frac}]</span>
-      </div>
-      {/* chunky segment charge bar — solid tier fill, dark empties, in a thin box */}
-      <span className="flex gap-[2px]" style={{ border: "1px solid #3a3a3d", background: "#0a0a0b", padding: "3px" }}>
-        {Array.from({ length: SEG }).map((_, i) => (
-          <span key={i} style={{ width: "7px", height: "18px", background: i < filled ? color : "#23232a" }} />
-        ))}
-      </span>
-      {/* round "?" help, kept as the discoverability affordance */}
-      <button
-        onClick={onHelp}
-        aria-label="Tier — what is this?"
-        className="an-term-mono flex shrink-0 items-center justify-center rounded-full text-[10px] font-bold active:opacity-80"
-        style={{ width: "22px", height: "22px", border: "1px solid #2e2e31", color: "#6a6a6a" }}
-      >
-        ?
-      </button>
-    </div>
-  );
 }
 
 // Small "What is this?" overlay explaining the IQ tier system + the agent's current grade.
@@ -481,15 +432,6 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   const blogDrag = useRef({ active: false, moved: false, startX: 0, startLeft: 0 });
   const [copied, setCopied] = useState(false);
   const avatar = useMemo(() => walletAvatarSvg(profile.wallet), [profile.wallet]);
-  const avatarPalette = useMemo(() => walletAvatarPalette(profile.wallet), [profile.wallet]);
-  const bandColor = useMemo(() => walletBandColor(profile.wallet), [profile.wallet]);
-  // Mii-Maker form, kept dark: a clean rounded "booth" the avatar stands on, with the pfp
-  // palette used only as a soft accent (not a bright tint, since the whole app is dark).
-  // Static — no looping animation, to keep it light on the device.
-  const bandInk = "var(--an-fg)";
-  const heroAccent = avatarPalette.clothes ?? bandColor;
-  const heroSecondary = avatarPalette.face_acc ?? bandColor;
-  const heroLine = avatarPalette.line ?? bandColor;
   const [fabOpen, setFabOpen] = useState(false);
   const [composeMode, setComposeMode] = useState<null | "blog" | "repo">(null);
   const [posting, setPosting] = useState(false);
@@ -583,11 +525,25 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   const comments = (profile.notes ?? []).filter((n) => !n.isSelfNote);
   const canPost = profile.self || profile.canComment;
 
-  const stats = [
-    { n: profile.createdSkills?.length ?? 0, label: "Created", hero: false },
-    { n: profile.ownedSkills?.length ?? 0, label: "Owned", hero: false },
-    { n: profile.reputation?.totalSupply ?? 0, label: "Copies", hero: true },
+  // ID-card stats, in the design's order (CREATED / COPIES / OWNED), zero-padded to two digits.
+  const pad2 = (n: number) => (n < 10 ? `0${n}` : String(n));
+  const idStats = [
+    { k: "CREATED", v: pad2(profile.createdSkills?.length ?? 0) },
+    { k: "COPIES", v: pad2(profile.reputation?.totalSupply ?? 0) },
+    { k: "OWNED", v: pad2(profile.ownedSkills?.length ?? 0) },
   ];
+  // Tier ladder + stars gauge climb the shared STAR_TIERS ramp (same source as TierHelp and
+  // the directory cards) — no fabricated Platinum/Diamond rungs, just our real tiers.
+  const { cur: curTier, next: nextTier } = tierInfo(repoStars);
+  const curTierName = curTier?.name ?? nextTier?.name ?? STAR_TIERS[0].name;
+  const tierColor = (curTier ?? nextTier ?? STAR_TIERS[0]).color;
+  const tierPrevMin = curTier?.min ?? 0;
+  const tierBandPct = nextTier
+    ? Math.min(100, Math.max(0, ((repoStars - tierPrevMin) / (nextTier.min - tierPrevMin)) * 100))
+    : 100;
+  const starsFrac = nextTier ? `${repoStars}/${nextTier.min}` : "MAX";
+  const STAR_SEG = 15;
+  const litSegs = Math.round((tierBandPct / 100) * STAR_SEG);
 
   function noteDate(timestamp?: number) {
     if (!timestamp) return "";
@@ -606,122 +562,127 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
 
   return (
     <div className="relative flex h-full flex-col" style={{ background: "var(--an-bg-0)" }}>
+      {/* Top bar — same chrome as every other screen (bracket back + mono title + kana), so the
+          detail page isn't the odd one out. Carries the AGENTNET brand + YOU + settings; the
+          card below is just the identity. */}
+      <header
+        className="flex items-center gap-2.5 border-b px-3.5 shrink-0"
+        style={{ borderColor: "#1d1d20", paddingTop: "max(0.5rem, env(safe-area-inset-top))", paddingBottom: "0.7rem" }}
+      >
+        <button
+          onClick={onBack}
+          aria-label="Back"
+          className="an-bracket flex shrink-0 items-center justify-center"
+          style={{ width: "38px", height: "38px", border: "1px solid #1f1f23", color: "#cfcfcf", "--ts": "8px", "--bk": "#0d0d0e", "--tk": "#6e6e72" } as CSSProperties}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 6l-6 6 6 6" /></svg>
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className="an-term-title text-[18px] leading-none">Agent Profile</div>
+          <div className="an-term-sub leading-none"><span style={{ fontFamily: "'Noto Sans JP', sans-serif" }}>代理</span> / <span style={{ fontFamily: "'Noto Sans JP', sans-serif" }}>エージェント</span></div>
+        </div>
+        {profile.self && (
+          <span className="an-term-mono shrink-0 text-[8px] font-bold uppercase tracking-wider" style={{ color: "#f2f2f2", border: "1px solid #3a3a3d", padding: "3px 7px" }}>YOU</span>
+        )}
+        {profile.self && (
+          <button onClick={() => setSettingsOpen(true)} aria-label="Settings" className="shrink-0 active:opacity-70" style={{ color: "#8a8a8a" }}><GearIcon className="h-5 w-5" /></button>
+        )}
+      </header>
       <div
         className="flex-1 overflow-y-auto an-tabbar-inset"
         style={showBuyAll && tab === "agent" ? { paddingBottom: "calc(var(--tabbar-height, 0px) + max(0.75rem, env(safe-area-inset-bottom)) + 76px)" } : undefined}
       >
-        {/* HERO STAGE — Mii-Maker booth kept dark: a clean rounded stage the avatar stands on,
-            with the pfp palette as a soft accent only. Static (no looping motion). */}
-        <div
-          className="an-agent-hero sticky top-0 z-20 relative overflow-hidden px-3 pb-4 pt-3"
-          style={{
-            "--agent-accent": heroAccent,
-            "--agent-secondary": heroSecondary,
-            "--agent-line": heroLine,
-          } as CSSProperties}
-        >
-          <div
-            className="pointer-events-none absolute inset-x-0 top-0 h-28"
-            style={{
-              background: `radial-gradient(120% 80% at 50% -10%, color-mix(in srgb, ${heroAccent} 16%, transparent), transparent 62%)`,
-            }}
-            aria-hidden="true"
-          />
-
-          <div className="relative z-10">
-            {/* top controls: back + address + settings (left), IQ tier gauge (right) */}
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                <button
-                  onClick={onBack}
-                  aria-label="Back"
-                  className="an-bracket flex shrink-0 items-center justify-center"
-                  style={{ width: "38px", height: "38px", border: "1px solid #1f1f23", color: "#cfcfcf", "--ts": "8px", "--bk": "#0d0d0e", "--tk": "#6e6e72" } as CSSProperties}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 6l-6 6 6 6" /></svg>
+        {/* HERO — Agent Card · Detail: a large portrait ID card. The wallet avatar replaces the
+            mosaic; the tier ladder + stars gauge climb the shared STAR_TIERS ramp. */}
+        <div className="px-3 pt-3 pb-1">
+          <div className="an-id" style={{ "--tier": tierColor } as CSSProperties}>
+            <div className="an-id-in">
+              {/* name row: role + chrome name (left); tappable short tail to copy (right) */}
+              <div className="an-id-namerow">
+                <div className="min-w-0">
+                  <div className="an-id-role">AGENT</div>
+                  <div className="an-id-name truncate">{profile.wallet.slice(0, 6)}</div>
+                </div>
+                <button onClick={copyWallet} className="an-id-tail shrink-0 active:opacity-70" aria-label="Copy wallet address">
+                  …{profile.wallet.slice(-4)}<br />
+                  {copied ? <span style={{ color: "var(--an-green)" }}>COPIED ✓</span> : "TAP TO COPY ADDRESS"}
                 </button>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <button onClick={copyWallet} className="an-term-title shrink-0 text-[16px] leading-none">{profile.wallet.slice(0, 6)}</button>
-                    {copied && <span className="text-[10px] shrink-0" style={{ color: "var(--an-green)" }}>✓</span>}
-                    {profile.self && (
-                      <span className="an-term-mono shrink-0 text-[8px] font-bold uppercase tracking-wider" style={{ color: "#f2f2f2", border: "1px solid #3a3a3d", padding: "2px 6px" }}>YOU</span>
-                    )}
-                    {profile.self && (
-                      <button onClick={() => setSettingsOpen(true)} aria-label="Settings" className="shrink-0" style={{ color: "#8a8a8a" }}><GearIcon className="h-4 w-4" /></button>
-                    )}
-                  </div>
-                  <div className="an-term-mono truncate leading-none" style={{ fontSize: "9px", letterSpacing: "1px", color: "#6a6a6a", marginTop: "3px" }}>
-                    …{profile.wallet.slice(-4)}_AGENT <span style={{ color: "#3a3a3a" }}>/</span> <span style={{ fontFamily: "'Noto Sans JP', sans-serif", color: "#5a5a5d" }}>エージェント</span>
-                  </div>
+              </div>
+
+              {/* portrait + big stats */}
+              <div className="an-id-body">
+                <div className="an-id-ava">
+                  <div dangerouslySetInnerHTML={{ __html: avatar }} aria-hidden="true" />
+                  <span className="tag">ID//{profile.wallet.slice(0, 4)}</span>
+                </div>
+                <div className="an-id-info">
+                  {idStats.map((s) => (
+                    <div key={s.k} className="an-id-bigstat">
+                      <span className="k">{s.k}</span>
+                      <span className="lead" />
+                      <span className="v">{s.v}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
-              <TierGauge stars={repoStars} ink={bandInk} onHelp={() => setHelpOpen(true)} />
-            </div>
 
-            {/* big avatar — Mii booth: the character stands on a clean rounded stage with a
-                soft ground shadow. Static, no motion. */}
-            <div className="mt-2 flex justify-center">
-              <div className="an-agent-avatar-stage" aria-hidden="true">
-                <span className="an-agent-ground" />
-                <div className="an-agent-avatar" dangerouslySetInnerHTML={{ __html: avatar }} />
-              </div>
-            </div>
-
-            {/* HUD stat cards — compact glass, tied to the portrait accent instead of a broad tint */}
-            <div className="relative z-10 -mt-6 grid grid-cols-3 gap-2">
-              {stats.map((s) => (
-                <div
-                  key={s.label}
-                  className={`an-agent-stat rounded-[3px] p-3 text-center ${s.hero ? "is-hero" : ""}`}
-                >
-                  <p className={`font-bold ${s.hero ? "text-2xl" : "text-xl"}`} style={{ color: bandInk }}>{s.n}</p>
-                  <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide" style={{ color: "var(--an-fg-dim)" }}>{s.label}</p>
+              {/* tier ladder — our real STAR_TIERS rungs, current tier lit + in-band progress */}
+              <div className="an-id-ladder">
+                <span className="lab">TIER</span>
+                <button onClick={() => setHelpOpen(true)} aria-label="Tier — what is this?" className="flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-full text-[9px] font-bold active:opacity-70" style={{ border: "1px solid #2e2e31", color: "var(--an-fg-mute)" }}>?</button>
+                <div className="an-id-rungs">
+                  {STAR_TIERS.map((t) => {
+                    const isCur = t.name === curTierName;
+                    const done = repoStars >= t.min && !isCur;
+                    return (
+                      <div
+                        key={t.name}
+                        className={`an-id-rung ${isCur ? "cur" : done ? "done" : ""}`}
+                      >
+                        {t.name.toUpperCase()}
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
+              </div>
+
+              {/* stars gauge — segments fill by in-band progress; val is stars/next-threshold */}
+              <div className="an-id-gauge">
+                <span className="lab">STARS</span>
+                <span className="an-id-segs">
+                  {Array.from({ length: STAR_SEG }).map((_, i) => (
+                    <i key={i} className={i < litSegs ? "on" : ""} />
+                  ))}
+                </span>
+                <span className="val">{starsFrac}</span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* TAB BAR — file-folder tabs: the active tab is the open folder front (same color as
-            the content, raised, bordered, and it breaks the shelf line = folder mouth); the
-            inactive tab is a darker tab tucked lower and behind the shelf. No colored accent —
-            the folder shape carries it. */}
-        <div className="flex items-end gap-1.5 px-3" style={{ background: "var(--an-bg-0)" }}>
+        {/* TAB BAR — flat underline marker (lighter version): active tab gets a 2px white
+            underline + white mono label; inactive a faint 1px underline + grey. Mono label +
+            kana, no folder chrome. The underlines together form the divider under the row. */}
+        <div className="flex px-3" style={{ background: "var(--an-bg-0)" }}>
           {(["agent", "community"] as const).map((t) => {
             const active = tab === t;
+            const kana = t === "agent" ? "エージェント" : "コミュニティ";
             return (
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className={`flex-1 rounded-t-[3px] text-sm font-bold capitalize ${active ? "-mb-px pb-2.5 pt-3" : "pb-2 pt-2 opacity-80"}`}
-                style={
-                  active
-                    ? {
-                        background: "var(--an-bg-0)",
-                        borderTop: "1px solid var(--an-line)",
-                        borderLeft: "1px solid var(--an-line)",
-                        borderRight: "1px solid var(--an-line)",
-                        borderBottom: "1px solid var(--an-bg-0)",
-                        color: "var(--an-fg)",
-                      }
-                    : {
-                        background: "color-mix(in srgb, #000 28%, var(--an-bg-0))",
-                        borderTop: "1px solid color-mix(in srgb, var(--an-line) 60%, transparent)",
-                        borderLeft: "1px solid color-mix(in srgb, var(--an-line) 60%, transparent)",
-                        borderRight: "1px solid color-mix(in srgb, var(--an-line) 60%, transparent)",
-                        color: "var(--an-fg-dim)",
-                      }
-                }
+                className="flex-1 text-center active:opacity-80"
+                style={{ paddingTop: "10px", paddingBottom: "13px", borderBottom: active ? "2px solid #f2f2f2" : "1px solid #1d1d20" }}
               >
-                {t}
+                <div className="an-term-mono text-[13px] font-bold uppercase" style={{ letterSpacing: "1.5px", color: active ? "#f2f2f2" : "#5a5a5d" }}>{t}</div>
+                <div style={{ fontFamily: "'Noto Sans JP', sans-serif", fontWeight: 500, fontSize: "8px", marginTop: "4px", color: active ? "#5a5a5d" : "#34343a" }}>{kana}</div>
               </button>
             );
           })}
         </div>
 
-        {/* TAB CONTENT — the shelf line under the tabs forms the folder body's top edge */}
-        <div className="space-y-4 px-3 pt-4" style={{ borderTop: "1px solid var(--an-line)" }}>
+        {/* TAB CONTENT */}
+        <div className="space-y-4 px-3 pt-4">
           {tab === "agent" && (
             <>
               {/* WORK — verified repos as tall terminal-folders in a horizontal swipe row */}
@@ -897,27 +858,41 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
               <>
                 <button
                   onClick={() => { setFabOpen(false); setComposeMode("repo"); }}
-                  className="flex items-center gap-3 rounded-full pl-5 pr-6 text-sm font-semibold shadow-lg"
-                  style={{ minHeight: 52, background: "var(--an-bg-1)", border: "1.5px solid var(--an-green-line)", color: "var(--an-fg)" }}
+                  className="an-bracket flex items-center gap-2.5 active:opacity-80"
+                  style={{ "--tk": "#4ade80", "--bk": "#0c0c0d", "--ts": "8px", padding: "11px 16px" } as CSSProperties}
                 >
-                  <span style={{ color: "var(--an-green-line)" }}><RepoIcon className="h-5 w-5" /></span> Register GitHub work
+                  <span style={{ color: "#4ade80" }}><RepoIcon className="h-[17px] w-[17px]" /></span>
+                  <span className="an-term-mono text-[12px] font-bold uppercase" style={{ letterSpacing: "1px", color: "#f2f2f2" }}>Register GitHub work</span>
                 </button>
                 <button
                   onClick={() => { setFabOpen(false); setComposeMode("blog"); }}
-                  className="flex items-center gap-3 rounded-full pl-5 pr-6 text-sm font-semibold shadow-lg"
-                  style={{ minHeight: 52, background: "var(--an-bg-1)", border: "1.5px solid var(--an-green-line)", color: "var(--an-fg)" }}
+                  className="an-bracket flex items-center gap-2.5 active:opacity-80"
+                  style={{ "--tk": "#4ade80", "--bk": "#0c0c0d", "--ts": "8px", padding: "11px 16px" } as CSSProperties}
                 >
-                  <span style={{ color: "var(--an-green-line)" }}><PenIcon className="h-5 w-5" /></span> Write blog
+                  <span style={{ color: "#4ade80" }}><PenIcon className="h-[17px] w-[17px]" /></span>
+                  <span className="an-term-mono text-[12px] font-bold uppercase" style={{ letterSpacing: "1px", color: "#f2f2f2" }}>Write blog</span>
                 </button>
               </>
             )}
+            {/* Square bracketed FAB: closed = solid green with +, open = dark green + glow; the
+                + rotates 45° into × (kept), so there's no separate meaningless × button. */}
             <button
               onClick={() => setFabOpen((o) => !o)}
-              aria-label="Create"
-              className="flex h-16 w-16 items-center justify-center rounded-full shadow-xl"
-              style={{ background: "var(--an-bg-1)", border: "2px solid var(--an-green)", color: "var(--an-green)", transform: fabOpen ? "rotate(45deg)" : "none", transition: "transform 150ms" }}
+              aria-label={fabOpen ? "Close menu" : "Create"}
+              className="an-bracket flex items-center justify-center active:opacity-90"
+              style={{
+                width: 60,
+                height: 60,
+                "--tk": "#4ade80",
+                "--ts": "12px",
+                "--bk": fabOpen ? "#0c160f" : "#4ade80",
+                color: fabOpen ? "#4ade80" : "#06140c",
+                boxShadow: fabOpen ? "0 0 18px rgba(74,222,128,0.18)" : "0 0 18px rgba(74,222,128,0.28)",
+              } as CSSProperties}
             >
-              <PlusIcon className="h-7 w-7" />
+              <span className="flex" style={{ transform: fabOpen ? "rotate(45deg)" : "none", transition: "transform 160ms" }}>
+                <PlusIcon className="h-6 w-6" />
+              </span>
             </button>
           </div>
         </>

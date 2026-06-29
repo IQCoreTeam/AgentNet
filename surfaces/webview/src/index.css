@@ -214,83 +214,90 @@ body {
   border-radius: var(--an-radius);
 }
 
-/* Agent profile hero: Mii-Maker booth form, kept dark. Clean rounded stage, soft shadows,
-   pfp palette used only as a gentle accent. Static (no looping animation). */
-.an-agent-hero {
-  isolation: isolate;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--agent-accent) 10%, var(--an-bg-1)),
-      var(--an-bg-0) 78%
-    );
-  border-bottom: 1px solid color-mix(in srgb, var(--agent-accent) 18%, var(--an-line));
-}
-/* (the halftone dot field on the hero was removed — it read as dated; the clean accent
-   gradient on .an-agent-hero carries the mood on its own.) */
-.an-agent-self-badge {
-  color: var(--an-fg);
-  border: 1px solid color-mix(in srgb, var(--agent-accent) 48%, var(--an-line));
-  background: color-mix(in srgb, var(--agent-accent) 16%, transparent);
-}
-.an-agent-avatar-stage {
+/* Agent profile detail — a large portrait ID card (Agent Card · Detail design). The wallet
+   avatar replaces the mosaic portrait; back/settings/help ride the top AGENTNET bar. The tier
+   ladder + stars gauge climb the shared STAR_TIERS ramp; --tier (the current tier colour) is
+   set inline. Mono = Space Mono (the design's JetBrains Mono), chrome name = Saira Condensed. */
+.an-id {
   position: relative;
-  display: flex;
-  height: 10.5rem;
-  width: min(15rem, 66vw);
-  align-items: flex-end;
-  justify-content: center;
-  border-radius: 1.75rem;
+  background: #0a0a0c;
+  border: 1px solid var(--an-line);
+  padding: 12px;
+  overflow: hidden;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.5);
 }
-/* clean rounded booth panel behind the character (dark, soft) */
-.an-agent-avatar-stage::before {
+.an-id::after {
   content: "";
   position: absolute;
-  inset: 0.4rem 0.6rem 0.4rem;
-  border-radius: 1.5rem;
-  background:
-    radial-gradient(120% 80% at 50% 18%, color-mix(in srgb, var(--agent-accent) 16%, var(--an-bg-2)), var(--an-bg-2) 70%);
-  border: 1px solid color-mix(in srgb, var(--agent-accent) 20%, var(--an-line));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--an-fg) 6%, transparent),
-    0 0.5rem 1.4rem rgba(0, 0, 0, 0.35);
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.02) 0 1px, transparent 1px 3px);
 }
-.an-agent-ground {
+.an-id::before {
+  content: "";
   position: absolute;
-  z-index: 1;
-  bottom: 1.1rem;
-  width: 7rem;
-  height: 1.4rem;
-  border-radius: 50%;
-  background: radial-gradient(50% 50%, rgba(0, 0, 0, 0.45), transparent 72%);
-  filter: blur(2px);
-  opacity: 0.8;
+  inset: 0;
+  pointer-events: none;
+  z-index: 7;
+  background: radial-gradient(120% 80% at 50% 0%, transparent 55%, rgba(0, 0, 0, 0.45) 100%);
 }
-.an-agent-avatar {
+.an-id-in {
   position: relative;
-  z-index: 3;
-  height: 9.6rem;
-  width: 9.6rem;
-  margin-bottom: 0.3rem;
+  z-index: 8;
+  border: 1px solid var(--an-line);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+}
+.an-id-namerow { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 4px 0 12px; }
+.an-id-role { font-family: "Space Mono", ui-monospace, monospace; font-size: 10px; color: var(--an-fg-mute); letter-spacing: 3px; margin-bottom: 4px; }
+.an-id-name {
+  font-family: "Saira Condensed", sans-serif;
+  font-weight: 800;
+  font-style: italic;
+  font-size: 46px;
+  line-height: 0.82;
+  letter-spacing: 1px;
+  background: linear-gradient(178deg, #ffffff 0%, #d4d4db 36%, #6f6f78 54%, #b8b8c0 70%, #efeff3 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.an-id-tail { font-family: "Space Mono", ui-monospace, monospace; text-align: right; font-size: 10px; color: var(--an-fg-mute); letter-spacing: 1px; line-height: 1.6; }
+.an-id-body { display: grid; grid-template-columns: 160px 1fr; gap: 14px; }
+.an-id-ava { position: relative; aspect-ratio: 1 / 1.1; border: 1px solid var(--an-line); overflow: hidden; background: #08080a; }
+.an-id-ava > div, .an-id-ava svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.an-id-ava .tag { position: absolute; left: 5px; bottom: 4px; z-index: 2; font-family: "Space Mono", ui-monospace, monospace; font-size: 9px; color: var(--an-fg-mute); letter-spacing: 1px; }
+.an-id-info { display: flex; flex-direction: column; justify-content: space-between; min-width: 0; padding: 2px 0; }
+.an-id-bigstat { display: flex; align-items: flex-end; gap: 0; border-bottom: 1px solid var(--an-line); padding-bottom: 9px; }
+.an-id-bigstat:last-child { border-bottom: none; padding-bottom: 0; }
+.an-id-bigstat .k { font-family: "Space Mono", ui-monospace, monospace; font-size: 10px; color: var(--an-fg-mute); letter-spacing: 2px; line-height: 1; padding-bottom: 4px; white-space: nowrap; }
+.an-id-bigstat .lead { flex: 1; border-bottom: 2px dotted var(--an-fg-mute); opacity: 0.5; margin: 0 8px 8px; min-width: 14px; }
+.an-id-bigstat .v { font-family: "Saira Condensed", sans-serif; font-weight: 800; font-style: italic; font-size: 40px; line-height: 0.82; color: var(--an-fg); }
+.an-id-ladder { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.an-id-ladder .lab { font-family: "Space Mono", ui-monospace, monospace; font-size: 9px; color: var(--an-fg-mute); letter-spacing: 2px; white-space: nowrap; }
+.an-id-rungs { display: flex; gap: 4px; flex: 1; }
+.an-id-rung {
+  position: relative;
+  flex: 1;
+  text-align: center;
+  font-family: "Space Mono", ui-monospace, monospace;
+  font-size: 8.5px;
+  letter-spacing: 0.5px;
+  padding: 5px 0;
+  border: 1px solid var(--an-fg-mute);
+  color: var(--an-fg-mute);
   overflow: hidden;
-  filter: drop-shadow(0 0.5rem 0.7rem rgba(0, 0, 0, 0.4));
 }
-.an-agent-avatar svg {
-  display: block;
-  height: 100%;
-  width: 100%;
-}
-/* Flat terminal boxes (nav-dock / agent-card vibe): thin grey hairline, square, no glow. */
-.an-agent-stat {
-  background: color-mix(in srgb, var(--an-bg-1) 92%, transparent);
-  border: 1px solid color-mix(in srgb, var(--agent-accent) 12%, #2c2c30);
-  box-shadow: none;
-}
-.an-agent-stat.is-hero {
-  background: color-mix(in srgb, var(--agent-accent) 16%, var(--an-bg-1));
-  border-color: color-mix(in srgb, var(--agent-accent) 40%, #2c2c30);
-  box-shadow: none;
-}
+.an-id-rung.done { background: #222227; color: #b9b9c0; border-color: #2c2c32; }
+.an-id-rung.cur { background: var(--tier); color: #0d0904; border-color: var(--tier); font-weight: 700; }
+.an-id-gauge { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.an-id-gauge .lab { font-family: "Space Mono", ui-monospace, monospace; font-size: 10px; letter-spacing: 1px; color: var(--an-fg-mute); white-space: nowrap; }
+.an-id-segs { display: flex; gap: 2px; flex: 1; min-width: 0; }
+.an-id-segs i { flex: 1; height: 12px; border: 1px solid var(--an-fg-mute); }
+.an-id-segs i.on { background: var(--tier); border-color: var(--tier); }
+.an-id-gauge .val { font-family: "Space Mono", ui-monospace, monospace; font-size: 12px; font-weight: 700; white-space: nowrap; color: var(--an-fg); }
 
 /* WORK card: a refined "banner folder" in a horizontal swipe row. A flat tier-colour banner
    (--theme) up top with the octocat + VERIFIED label and a folder-tab notch cut into it; a dark
