@@ -103,12 +103,22 @@ export interface CodexResult {
   filesChanged: string[];
 }
 
+// Runtime-supplied hooks so the in-process tool can talk back to the live session:
+//   notify  → a transient status cue (drives the "Casting …" marquee) for the war-room
+//   approval/sessionId → the ONE plain-language gate shown before the team touches files
+export interface ClaudexHooks {
+  notify?: (text: string) => void;
+  approval?: ApprovalChannel;
+  sessionId?: () => string;
+}
+
 // Run ONE Codex worker to completion. Resolves on the worker's turn end (or error /
 // timeout) with its assistant text and any files it touched. Never rejects — a failed
 // worker returns its error as output so Claude can react instead of the tool throwing.
-export function runCodexTask(task: CodexTask, defaultCwd: string, write: boolean): Promise<CodexResult> {
+export function runCodexTask(task: CodexTask, defaultCwd: string, write: boolean, label?: string, hooks?: ClaudexHooks): Promise<CodexResult> {
   return new Promise((resolve) => {
     const cwd = task.cwd || defaultCwd;
+    hooks?.notify?.(`🧬 ${label || "Codex worker"} started`);
     const cli = spawnCli({
       cli: "codex",
       cwd,
@@ -125,6 +135,7 @@ export function runCodexTask(task: CodexTask, defaultCwd: string, write: boolean
       done = true;
       clearTimeout(timer);
       try { cli.stop(); } catch { /* already gone */ }
+      hooks?.notify?.(`✓ ${label || "Codex worker"} done`);
       let output = chunks.join("\n").trim();
       if (output.length > MAX_OUTPUT_CHARS) output = output.slice(0, MAX_OUTPUT_CHARS) + "\n…[truncated]";
       resolve({ goal: task.goal, output, filesChanged: [...filesChanged] });
@@ -148,13 +159,13 @@ export function runCodexTask(task: CodexTask, defaultCwd: string, write: boolean
 
 // Fan out: N workers in parallel, one Promise per task. Single-worker is just length 1.
 // ponytail: cap 4 workers — Claude can ask for more, we clamp. Raise when a job needs it.
-export function runCodexTasks(tasks: CodexTask[], defaultCwd: string, write: boolean): Promise<CodexResult[]> {
-  return Promise.all(tasks.slice(0, 4).map((t) => runCodexTask(t, defaultCwd, write)));
+export function runCodexTasks(tasks: CodexTask[], defaultCwd: string, write: boolean, hooks?: ClaudexHooks): Promise<CodexResult[]> {
+  return Promise.all(tasks.slice(0, 4).map((t, i) => runCodexTask(t, defaultCwd, write, `Codex #${i + 1}`, hooks)));
 }
 
 // The SDK MCP server that exposes the fan-out tool to a Claude session. `write` = the
 // session is in Claudex mode (workers may edit files); otherwise workers are researchers.
-export function createClaudexMcpServer(defaultCwd: string, write: boolean) {
+export function createClaudexMcpServer(defaultCwd: string, write: boolean, hooks?: ClaudexHooks) {
   const capability = write
     ? "Each worker can READ and EDIT files in the working directory."
     : "Each worker is READ-ONLY: it researches and reports, but cannot edit files — YOU apply any changes yourself afterward.";
@@ -178,7 +189,25 @@ export function createClaudexMcpServer(defaultCwd: string, write: boolean) {
         .describe("1–4 independent tasks to run in parallel, one Codex worker each."),
     },
     async (args: { tasks: CodexTask[] }) => {
-      const results = await runCodexTasks(args.tasks, defaultCwd, write);
+      // ONE plain-language gate before the team touches files (Claudex mode only — in
+      // researcher mode workers can't write, so no approval needed). Goals go in `plan`
+      // so the user sees exactly what the team will do, and decides once.
+      if (write && hooks?.approval) {
+        const goals = args.tasks.map((t, i) => `${i + 1}. ${t.goal}`).join("\n");
+        const decision = await hooks.approval.request({
+          id: "claudex-" + Date.now(),
+          cli: "claude",
+          sessionId: hooks.sessionId?.() || "",
+          tool: "Team",
+          kind: "other",
+          title: `Run ${args.tasks.length} Codex worker${args.tasks.length === 1 ? "" : "s"} that may edit files in this folder`,
+          plan: goals,
+        });
+        if (decision.outcome === "deny") {
+          return { content: [{ type: "text" as const, text: "The user declined to run the Codex team." + (decision.reason ? " Reason: " + decision.reason : "") }] };
+        }
+      }
+      const results = await runCodexTasks(args.tasks, defaultCwd, write, hooks);
       return { content: [{ type: "text" as const, text: JSON.stringify({ results }, null, 2) }] };
     },
   );

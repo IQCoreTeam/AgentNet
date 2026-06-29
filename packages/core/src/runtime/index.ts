@@ -13,7 +13,7 @@ import { MemorySync, updateSkillsSection } from "../memory/index.js";
 import { setSkillShoppingActive } from "../skill-market/passive.js";
 import { setMakeSkillActive } from "../skill-market/makeSkill.js";
 import { createAgentSdkMcpServer, newVerifyGuard, agentNetAllowedTools, AGENTNET_MCP_SERVER } from "../skill-market/index.js";
-import { createClaudexMcpServer, claudexAllowedTools, CLAUDEX_MCP_SERVER } from "./codexSubagent.js";
+import { createClaudexMcpServer, claudexAllowedTools, CLAUDEX_MCP_SERVER, type ClaudexHooks } from "./codexSubagent.js";
 import { resolveRpcUrl, hasDasRpc, loadGithubToken } from "../core/rpc.js";
 import { getCodexApiKey } from "../account/codexAuth.js";
 import type { ApprovalChannel } from "./approval/channel.js";
@@ -43,6 +43,7 @@ async function buildPassiveSpawn(
   wallet: Wallet,
   cwd: string,
   mode: string | undefined,
+  claudexHooks: ClaudexHooks,
   onMarketEvent?: (e: import("../chat/marketMessages.js").MarketEvent) => void,
 ): Promise<{ mcpServers?: Record<string, unknown>; allowedTools?: string[]; codexMcp?: { name: string; command: string; args: string[] } }> {
   // Skill-shopping is a BUILT-IN now: always on and hidden from the UI toggle. Every spawn
@@ -84,7 +85,7 @@ async function buildPassiveSpawn(
   // directly, so they never get this tool back — depth guard is automatic, no recursion.
   // mode === "claudex" → workers may EDIT files (the chip is the user's consent); otherwise
   // workers are read-only researchers and Claude applies any changes itself.
-  const claudex = createClaudexMcpServer(cwd, mode === "claudex");
+  const claudex = createClaudexMcpServer(cwd, mode === "claudex", claudexHooks);
   return {
     mcpServers: { [AGENTNET_MCP_SERVER]: server, [CLAUDEX_MCP_SERVER]: claudex },
     allowedTools: [...agentNetAllowedTools(), ...claudexAllowedTools()],
@@ -145,11 +146,22 @@ export function createRuntime(
         console.warn("[memory] inject failed:", e);
       }
 
+      // Claudex Team mode hooks: let the in-process fan-out tool talk to THIS live session.
+      // notify → the skill marquee (live war-room cue); approval → the one merge gate before
+      // workers touch files; sessionId → tag that approval. The closures read sessionId/
+      // skillCbs which are declared just below — they're only CALLED later (during a turn),
+      // so this forward reference is safe.
+      const claudexHooks = {
+        notify: (text: string) => { for (const cb of skillCbs) cb(text); },
+        approval: opts.approval ?? approval,
+        sessionId: () => sessionId,
+      };
+
       // Skill-shopping (plans/skill-shopping.md): install/remove the bundled skill per the
       // toggle + (Claude, ON) wire the marketplace MCP tools. Best-effort.
       let passive: Awaited<ReturnType<typeof buildPassiveSpawn>> = {};
       try {
-        passive = await buildPassiveSpawn(opts.cli, wallet, opts.cwd, opts.mode, opts.onMarketEvent);
+        passive = await buildPassiveSpawn(opts.cli, wallet, opts.cwd, opts.mode, claudexHooks, opts.onMarketEvent);
       } catch (e) {
         console.warn("[skill-shopping] setup failed:", e);
       }
