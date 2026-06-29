@@ -7,7 +7,7 @@ import { LoginUrlBlock } from "./LoginUrlBlock";
 import { useStore } from "../state/store";
 
 export function ConnectCodex() {
-  const { state, send } = useStore();
+  const { state, send, showEngineSelect } = useStore();
   const { codexLoginUrl, codexLoginCode, codexLoginError } = state;
   const [busy, setBusy] = useState(false);
 
@@ -26,10 +26,18 @@ export function ConnectCodex() {
     setApiKey(""); // clear from React state immediately; don't let key linger in memory
   }
 
+  function close() {
+    setBusy(false);
+    send({ type: "cancelCodexLogin" });
+    showEngineSelect();
+  }
+
   return (
     <OnboardingShell
       title="Connect Codex"
       subtitle="Choose how you want to connect to the Codex engine."
+      onClose={close}
+      closeLabel="Close Codex connection"
     >
       <div className="flex gap-2 rounded-xl bg-zinc-950 p-1 ring-1 ring-zinc-850">
         <button

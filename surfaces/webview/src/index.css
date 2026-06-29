@@ -720,18 +720,18 @@ body {
   position: relative;
   display: flex;
   height: 60px;
-  border: 1px solid #2a2a2e;
+  border: 1px solid var(--an-line);
   background:
-    linear-gradient(#cfcfcf, #cfcfcf) left top / 8px 1.5px no-repeat,
-    linear-gradient(#cfcfcf, #cfcfcf) left top / 1.5px 8px no-repeat,
-    linear-gradient(#cfcfcf, #cfcfcf) right top / 8px 1.5px no-repeat,
-    linear-gradient(#cfcfcf, #cfcfcf) right top / 1.5px 8px no-repeat,
-    linear-gradient(#cfcfcf, #cfcfcf) left bottom / 8px 1.5px no-repeat,
-    linear-gradient(#cfcfcf, #cfcfcf) left bottom / 1.5px 8px no-repeat,
-    linear-gradient(#cfcfcf, #cfcfcf) right bottom / 8px 1.5px no-repeat,
-    linear-gradient(#cfcfcf, #cfcfcf) right bottom / 1.5px 8px no-repeat,
-    #0b0b0c;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+    linear-gradient(var(--an-fg), var(--an-fg)) left top / 8px 1.5px no-repeat,
+    linear-gradient(var(--an-fg), var(--an-fg)) left top / 1.5px 8px no-repeat,
+    linear-gradient(var(--an-fg), var(--an-fg)) right top / 8px 1.5px no-repeat,
+    linear-gradient(var(--an-fg), var(--an-fg)) right top / 1.5px 8px no-repeat,
+    linear-gradient(var(--an-fg), var(--an-fg)) left bottom / 8px 1.5px no-repeat,
+    linear-gradient(var(--an-fg), var(--an-fg)) left bottom / 1.5px 8px no-repeat,
+    linear-gradient(var(--an-fg), var(--an-fg)) right bottom / 8px 1.5px no-repeat,
+    linear-gradient(var(--an-fg), var(--an-fg)) right bottom / 1.5px 8px no-repeat,
+    var(--an-bg-1);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--an-bg-0) 36%, transparent);
   overflow: hidden;
 }
 /* sliding active fill — one segment wide, engine-tinted (bg set inline), glides via translateX */
@@ -753,13 +753,13 @@ body {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  color: #bdbdbd;
-  border-left: 1px solid #1f1f23;
+  color: var(--an-fg-dim);
+  border-left: 1px solid color-mix(in srgb, var(--an-fg) 12%, transparent);
   font-family: "Space Mono", ui-monospace, monospace;
   transition: color 0.18s var(--ease-standard);
 }
 .an-navseg:first-child { border-left: none; }
-.an-navseg.is-on { color: #0a0a0b; } /* the sliding indicator provides the fill */
+.an-navseg.is-on { color: var(--an-bg-0); } /* the sliding indicator provides the fill */
 .an-navseg:active { opacity: 0.85; }
 .an-navseg-label { font-size: 8px; font-weight: 700; letter-spacing: 1px; }
 .an-navseg-dot {
@@ -768,7 +768,7 @@ body {
   right: 5px;
   width: 3px;
   height: 3px;
-  background: #000;
+  background: var(--an-bg-0);
   animation: an-navblink 1.4s steps(1) infinite;
 }
 @keyframes an-navblink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0.18; } }
@@ -778,6 +778,22 @@ body {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+.an-shell-panels::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 12;
+  height: calc(var(--tabbar-height, 0px) + 64px);
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--an-bg-0) 30%, transparent) 55%,
+    color-mix(in srgb, var(--an-bg-0) 60%, transparent) calc(100% - 10px),
+    color-mix(in srgb, var(--an-bg-0) 88%, transparent) 100%
+  );
 }
 .an-panel {
   position: absolute;
@@ -816,11 +832,8 @@ body {
   padding-bottom: calc(var(--tabbar-height, 0px) + max(0.75rem, env(safe-area-inset-bottom)));
 }
 
-/* Floating chat controls: messages continue behind this layer; the controls themselves
-   are translucent glass so the chat remains visible underneath. */
-/* The controls layer floats over the log. No solid scrim: messages stay visible
-   and scroll *behind* the translucent composer (the modern floating-input look).
-   A faint bottom fade only keeps text from clashing with the very edge. */
+/* Floating chat controls: the layer around the composer stays transparent so messages
+   move behind it. The controls themselves are opaque surfaces. */
 .an-chat-float {
   position: absolute;
   inset-inline: 0;
@@ -829,18 +842,32 @@ body {
   display: flex;
   flex-direction: column;
   pointer-events: none;
-  /* Chat-only scrim: a SOFT fade behind the composer so the input + nav read clearly without
-     a hard black band — the messages stay partly visible through it (semi-transparent, never
-     solid bg). Just a shadow, not a section divider. */
-  background: linear-gradient(
-    to top,
-    color-mix(in srgb, var(--an-bg-0) 55%, transparent),
-    transparent 78%
-  );
+  background: transparent;
 }
 .an-chat-float > * { pointer-events: auto; }
+/* Trailing empty space at the END of the log (not a transform that lifts the section), so
+   the latest message can be scrolled clear ABOVE the composer and THAT is the scroll end.
+   Includes the nav height so the last turn isn't trapped behind the composer/nav; older
+   turns still pass behind the transparent nav while scrolling up. */
 .an-message-scroll {
-  padding-bottom: calc(var(--chat-float-height, 0px) + var(--tabbar-height, 0px) + 16px);
+  padding-bottom: calc(var(--chat-float-height, 0px) + var(--tabbar-height, 0px) + 20px);
+}
+.an-message-stage::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 12;
+  height: calc(var(--chat-float-height, 0px) + var(--tabbar-height, 0px) + 170px);
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--an-bg-0) 22%, transparent) 30%,
+    color-mix(in srgb, var(--an-bg-0) 42%, transparent) 70%,
+    color-mix(in srgb, var(--an-bg-0) 62%, transparent) calc(100% - 10px),
+    color-mix(in srgb, var(--an-bg-0) 88%, transparent) 100%
+  );
 }
 .an-composer-float {
   padding-bottom: 10px;
@@ -875,9 +902,9 @@ body {
 /* terminal chat input box: sharp frame + corner brackets, flat dark fill (no glass) */
 .an-composer-input {
   --tk: #cfcfcf;
-  --bk: #0b0b0c;
+  --bk: var(--an-bg-1);
   --ts: 10px;
-  border: 1px solid #2a2a2e !important;
+  border: 1px solid var(--an-line) !important;
   border-radius: 0 !important;
   background:
     linear-gradient(var(--tk), var(--tk)) left top / var(--ts) 1.5px no-repeat,
@@ -894,12 +921,20 @@ body {
 .an-term-ta { font-family: "Space Mono", ui-monospace, monospace; letter-spacing: 0.2px; }
 .an-term-ta::placeholder { text-transform: uppercase; letter-spacing: 0.5px; color: #6e6e72; }
 /* terminal segmented chips (engine + auto-edit) — opaque fill so chat behind doesn't bleed through */
-.an-term-seg { display: flex; height: 34px; border: 1px solid #2a2a2e; background: #0b0b0c; font-family: "Space Mono", ui-monospace, monospace; }
+.an-term-seg {
+  display: flex;
+  height: 34px;
+  border: 1px solid var(--an-line);
+  background: var(--an-bg-1);
+  font-family: "Space Mono", ui-monospace, monospace;
+}
 .an-term-seg > button { display: flex; align-items: center; height: 100%; font-size: 10px; font-weight: 700; letter-spacing: 1px; padding: 0 13px; text-transform: uppercase; color: #7a7a7a; }
-.an-term-seg > button + button { border-left: 1px solid #2a2a2e; }
+.an-term-seg > button + button { border-left: 1px solid var(--an-line); }
 .an-term-chip {
   display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px;
-  border: 1px solid #2a2a2e; background: #0b0b0c; color: #9a9a9a;
+  border: 1px solid var(--an-line);
+  background: var(--an-bg-1);
+  color: #9a9a9a;
   font-family: "Space Mono", ui-monospace, monospace; font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
 }
 /* terminal top-bar title + katakana sub (Top Bar designs) */

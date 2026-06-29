@@ -42,7 +42,7 @@ export function ChatScreen({ onOpenDrawer }: { onOpenDrawer: () => void }) {
   const activeTitle =
     state.sessions.find((s) => s.sessionId === state.activeSessionId)?.title || "New chat";
   return (
-    <div className="relative flex flex-col" style={{ height: "100%", background: "var(--an-bg-0)" }}>
+    <div className="an-chat-screen relative flex flex-col" style={{ height: "100%", background: "var(--an-bg-0)" }}>
       <header
         className="an-header sticky top-0 z-30 flex items-center gap-2.5 px-3.5"
         style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))", paddingBottom: "0.6rem" }}

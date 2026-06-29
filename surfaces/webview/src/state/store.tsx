@@ -233,6 +233,7 @@ type LocalAction =
   | { type: "__clearToast" }
   | { type: "__selectEngine"; cli: Cli }
   | { type: "__finishStorage" }
+  | { type: "__showEngineSelect" }
   | { type: "__savePlan"; text: string }
   | { type: "__openMarket"; initialView?: "browse" | "agents" | "owned" }
   | { type: "__closeMarket" }
@@ -302,6 +303,16 @@ function reducer(state: State, ev: Action): State {
       return { ...state, cliReport: { claude: ev.claude, codex: ev.codex } };
     case "__finishStorage":
       return { ...state, phase: "engineSelect" };
+    case "__showEngineSelect":
+      return {
+        ...state,
+        phase: "engineSelect",
+        claudeLoginUrl: null,
+        claudeLoginError: null,
+        codexLoginUrl: null,
+        codexLoginCode: null,
+        codexLoginError: null,
+      };
     case "googleLoginUrl":
       return { ...state, googleLoginUrl: ev.url, googleLoginError: null };
     case "googleLoginStatus":
@@ -360,9 +371,13 @@ function reducer(state: State, ev: Action): State {
       // to finally get 2" off-by-one. The optimistic __openingSession owns the active id;
       // the server's id is only needed to restore one on a fresh load (or after __newChat,
       // which clears the selection).
+      //
+      // A chat client can still emit sessions while the user is sitting on an engine auth
+      // gate. Keep the list, but don't let it route codexAuth/claudeAuth back to chat;
+      // cliStatus/login success are the only events that should pass that gate.
       return {
         ...state,
-        phase: "chat",
+        phase: state.phase === "connecting" || state.phase === "chat" ? "chat" : state.phase,
         sessions: ev.list,
         sessionsSynced: true,
         activeSessionId: state.activeSessionId ?? ev.activeId,
@@ -575,6 +590,7 @@ interface Store {
   clearToast: () => void;
   selectEngine: (cli: Cli) => void;
   finishStorage: () => void;
+  showEngineSelect: () => void;
   savePlan: (text: string) => void;
   openMarket: () => void;
   openMarketAgents: () => void;
@@ -758,6 +774,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // Activate the chosen engine; routing (login gate / chat) is decided in the reducer.
       selectEngine,
       finishStorage: () => raw({ type: "__finishStorage" }),
+      showEngineSelect: () => raw({ type: "__showEngineSelect" }),
       savePlan: (text) => raw({ type: "__savePlan", text }),
       openMarket: () => raw({ type: "__openMarket" }),
       openMarketAgents: () => raw({ type: "__openMarket", initialView: "agents" }),

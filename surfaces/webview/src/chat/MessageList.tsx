@@ -168,7 +168,7 @@ export function MessageList() {
   const engineAccent = state.cli === "claude" ? "var(--claude)" : "var(--an-green)";
 
   return (
-    <div className="relative min-w-0 flex-1 overflow-hidden">
+    <div className="an-message-stage relative min-w-0 flex-1 overflow-hidden">
       {/* Empty / loading state, centered in the whole chat viewport (both axes) rather than
           pinned near the top — an absolute overlay so it ignores scroll-area padding. */}
       {logLen === 0 && (

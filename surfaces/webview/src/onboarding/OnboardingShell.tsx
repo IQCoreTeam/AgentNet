@@ -9,19 +9,43 @@ export function OnboardingShell({
   title,
   subtitle,
   children,
+  onClose,
+  closeLabel = "Close",
 }: {
   title: string;
   subtitle: string;
   children: ReactNode;
+  onClose?: () => void;
+  closeLabel?: string;
 }) {
   return (
     <div
-      className="flex h-full flex-col items-center justify-center gap-7 overflow-y-auto px-6"
+      className="relative flex h-full flex-col items-center justify-center gap-7 overflow-y-auto px-6"
       style={{
         paddingTop: "max(1.5rem, env(safe-area-inset-top))",
         paddingBottom: "calc(max(1.5rem, env(safe-area-inset-bottom)) + var(--keyboard-inset-bottom, 0px))",
       }}
     >
+      {onClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={closeLabel}
+          className="absolute right-4 z-10 flex h-11 w-11 items-center justify-center rounded-full border active:opacity-70"
+          style={{
+            top: "max(1rem, env(safe-area-inset-top))",
+            color: "var(--an-fg-dim)",
+            background: "color-mix(in srgb, var(--an-bg-1) 72%, transparent)",
+            borderColor: "var(--an-line)",
+            backdropFilter: "saturate(1.2) blur(20px)",
+            WebkitBackdropFilter: "saturate(1.2) blur(20px)",
+          }}
+        >
+          <svg className="h-5 w-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+            <path d="M5 5l10 10M15 5 5 15" />
+          </svg>
+        </button>
+      )}
       <div className="flex flex-col items-center gap-5">
         <div className="relative flex items-center justify-center">
           {/* soft brand halo behind the mark — quiet depth, not a glow gimmick */}
