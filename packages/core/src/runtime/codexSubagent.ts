@@ -171,9 +171,14 @@ export function createClaudexMcpServer(defaultCwd: string, write: boolean, hooks
     : "Each worker is READ-ONLY: it researches and reports, but cannot edit files — YOU apply any changes yourself afterward.";
   const spawnTool = tool(
     CLAUDEX_SPAWN_TOOL,
-    "Spawn 1–4 Codex worker subagents to work on tasks IN PARALLEL, then return each " +
-      "worker's result. Split a big job into independent tasks and call once with all of " +
-      "them; the workers run at the same time. Assign non-overlapping files per worker. " +
+    "Spawn 1–4 Codex worker subagents that run IN PARALLEL, then return each worker's " +
+      "result. This is your DEFAULT way to work in Team mode: whenever the user's request " +
+      "has 2+ independent parts (separate files, separate components, research + build, " +
+      "multiple checks), break it into one task per part and call this ONCE with all of " +
+      "them — do not do the parts yourself one by one. The user does not need to name the " +
+      "workers; YOU decide the split. Only skip fan-out for a truly single-step task. " +
+      "Give each worker a complete, self-contained goal and assign non-overlapping files. " +
+      "After they return, wire the pieces together and report. " +
       capability,
     {
       tasks: z
@@ -186,7 +191,7 @@ export function createClaudexMcpServer(defaultCwd: string, write: boolean, hooks
         )
         .min(1)
         .max(4)
-        .describe("1–4 independent tasks to run in parallel, one Codex worker each."),
+        .describe("1–4 independent tasks to run in parallel, one Codex worker each. Prefer 2+ when the job splits cleanly."),
     },
     async (args: { tasks: CodexTask[] }) => {
       // ONE plain-language gate before the team touches files (Claudex mode only — in
