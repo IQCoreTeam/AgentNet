@@ -1991,6 +1991,7 @@ export function chatHtml(): string {
       { value: 'default',     label: 'Ask edits',    title: 'Ask before each file edit (default)' },
       { value: 'acceptEdits', label: 'Auto edit',    title: 'Auto-accept file edits; still ask for other tools' },
       { value: 'plan',        label: 'Plan',         title: 'Plan mode: read-only until you approve the plan' },
+      { value: 'claudex',     label: '🧬 Team',      title: 'Claudex Team mode: Claude leads a team of parallel Codex workers that can edit files' },
     ],
     codex: [
       { value: 'readonly', label: 'Read only',   title: 'Read-only sandbox; ask before edits, commands, network' },
@@ -2430,6 +2431,36 @@ export function chatHtml(): string {
   // prepend. Returns the bash card if it's awaiting output (so the caller can track it).
   function renderToolInto(row, msg) {
     const t = msg.tool || {};
+    if (t.name === 'Claudex') {
+      // Claudex Team mode (plans/claudex-team-mode.md): a war-room card — one tile per
+      // Codex worker. output = {goals:[…]}. ponytail: post-hoc tiles, no live bars yet.
+      let goals = [];
+      try { const p = JSON.parse(t.output || '{}'); if (Array.isArray(p.goals)) goals = p.goals.map(String); } catch (e) {}
+      const card = document.createElement('div'); card.className = 'toolCard';
+      const head = document.createElement('div'); head.className = 'toolHead';
+      head.innerHTML = '<span class="tk">🧬</span>';
+      const title = document.createElement('span');
+      title.textContent = 'Team — ' + goals.length + ' Codex worker' + (goals.length === 1 ? '' : 's') + ' in parallel';
+      head.appendChild(title); card.appendChild(head);
+      const grid = document.createElement('div');
+      grid.style.cssText = 'display:grid;gap:6px;padding:8px;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));';
+      goals.forEach((g, i) => {
+        const tile = document.createElement('div');
+        tile.style.cssText = 'border:1px solid var(--an-line);border-radius:var(--an-radius-sm);padding:7px;';
+        const lab = document.createElement('div');
+        lab.style.cssText = 'font-family:var(--vscode-editor-font-family);font-size:0.7em;text-transform:uppercase;letter-spacing:1px;color:var(--an-green);margin-bottom:3px;';
+        lab.textContent = 'codex #' + (i + 1);
+        const goal = document.createElement('div'); goal.textContent = g;
+        tile.appendChild(lab); tile.appendChild(goal); grid.appendChild(tile);
+      });
+      card.appendChild(grid);
+      const foot = document.createElement('div');
+      foot.style.cssText = 'border-top:1px solid var(--an-line-soft);padding:6px 11px;font-size:0.72em;opacity:0.6;';
+      foot.textContent = '🛡️ built by a team of rival AIs — Claude + Codex';
+      card.appendChild(foot);
+      row.appendChild(card);
+      return null;
+    }
     if (t.command !== undefined) {
       const card = document.createElement('div'); card.className = 'toolCard bash';
       const head = document.createElement('div'); head.className = 'toolHead';
@@ -2466,7 +2497,7 @@ export function chatHtml(): string {
   function renderTool(msg, prepend) {
     const t = msg.tool || {};
     // output-only result (claude) → fold into the open bash card
-    if (t.command === undefined && t.diff === undefined && t.output && openBash && !prepend) {
+    if (t.name !== 'Claudex' && t.command === undefined && t.diff === undefined && t.output && openBash && !prepend) {
       setOutput(openBash, t.output, t.exitCode);
       openBash = null;
       return;

@@ -366,6 +366,10 @@ function claudeEngine(opts: SpawnOpts): Engine {
       // NOT injected here anymore — it's a managed memory section (skillsSection.ts).
       ...(opts.mcpServers ? { mcpServers: opts.mcpServers as never } : {}),
       ...(opts.allowedTools ? { allowedTools: opts.allowedTools } : {}),
+      // Claudex Team mode: remove Claude's built-in subagent tool so the ONLY way to fan
+      // out is our spawn_codex_subagents (real Codex workers). Otherwise Claude prefers
+      // its native Task tool and spawns Claude subagents — never touching Codex.
+      ...(opts.mode === "claudex" ? { disallowedTools: ["Task", "Agent"] } : {}),
       ...(opts.enabledSkills?.length ? { skills: opts.enabledSkills } : {}),
       // Give the agent's git the configured GitHub token. The SDK `env` REPLACES the
       // subprocess environment, so spread process.env to keep PATH / ANTHROPIC creds / etc.
