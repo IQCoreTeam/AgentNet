@@ -22,6 +22,7 @@
 
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
+import { resolve, sep } from "node:path";
 import { spawnCli } from "./spawn.js";
 import type { ApprovalChannel, ApprovalRequest, ApprovalDecision } from "./approval/channel.js";
 import type { ChatMessage } from "./contract.js";
@@ -47,20 +48,48 @@ function isReadOnlyCommand(cmd: string): boolean {
   return true;
 }
 
-// Researcher gate: allow reads, deny writes/patches/prompts. Workers can't mutate the repo.
-function readOnlyGate(): ApprovalChannel {
+// Destructive / exfiltration patterns denied even for a coder worker. A worker that reads
+// a poisoned file (prompt injection) must not be able to wipe the disk, push, or pipe a
+// download into a shell just because the chip auto-approves. Codex's own sandbox blocks
+// some of this; this is belt-and-suspenders at the approval gate.
+// ponytail: pattern list, not a real shell parser — covers the obvious blast radius.
+export function isDangerousCommand(cmd: string): boolean {
+  return /\brm\s+-[a-z]*[rf]|sudo\b|\bmkfs\b|\bdd\s+if=|:\(\)\s*\{|\bchmod\s+-R|\bchown\s+-R|\bgit\s+push\b|\b(curl|wget)\b[^\n]*\|\s*(sh|bash|zsh)|>\s*\/dev\/(sd|disk|null\/)|\bshutdown\b|\breboot\b/i.test(cmd);
+}
+
+// Is `file` inside `cwd`? Workers must not read/write OUTSIDE their working dir — that's
+// how a rogue worker would touch ~/.ssh or another project.
+export function isPathInside(file: string, cwd: string): boolean {
+  const r = resolve(cwd, file);
+  const base = resolve(cwd);
+  return r === base || r.startsWith(base + sep);
+}
+
+// Researcher gate: allow reads (inside cwd), deny writes/patches/prompts.
+function readOnlyGate(cwd: string): ApprovalChannel {
   return {
     request: async (req: ApprovalRequest): Promise<ApprovalDecision> => {
-      if (req.kind === "read") return { outcome: "once" };
-      if (req.kind === "bash" && req.command && isReadOnlyCommand(req.command)) return { outcome: "once" };
+      if (req.kind === "read" && (!req.file || isPathInside(req.file, cwd))) return { outcome: "once" };
+      if (req.kind === "bash" && req.command && isReadOnlyCommand(req.command) && !isDangerousCommand(req.command)) return { outcome: "once" };
       return { outcome: "deny", reason: "Researcher subagent is read-only — report findings instead of writing." };
     },
   };
 }
 
-// Coder gate: workers may act freely in the session cwd (consent = the Claudex chip).
-function coderGate(): ApprovalChannel {
-  return { request: async () => ({ outcome: "once" }) };
+// Coder gate: workers may write IN cwd (consent = the Claudex chip), but never run a
+// destructive/exfil command or touch a path outside the working dir.
+function coderGate(cwd: string): ApprovalChannel {
+  return {
+    request: async (req: ApprovalRequest): Promise<ApprovalDecision> => {
+      if (req.kind === "bash" && req.command && isDangerousCommand(req.command)) {
+        return { outcome: "deny", reason: "Blocked: destructive or network-pipe command not allowed in Team mode." };
+      }
+      if ((req.kind === "edit" || req.kind === "write" || req.kind === "read") && req.file && !isPathInside(req.file, cwd)) {
+        return { outcome: "deny", reason: "Blocked: workers may only touch files inside the project folder." };
+      }
+      return { outcome: "once" };
+    },
+  };
 }
 
 export interface CodexTask {
@@ -84,7 +113,7 @@ export function runCodexTask(task: CodexTask, defaultCwd: string, write: boolean
       cli: "codex",
       cwd,
       model: task.model,
-      approval: write ? coderGate() : readOnlyGate(),
+      approval: write ? coderGate(cwd) : readOnlyGate(cwd),
       stream: false,
     });
 
