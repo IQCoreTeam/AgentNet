@@ -285,29 +285,40 @@ export function createChatSession(
     transport.send({ type: "clear" });
     const id = slot().pendingId;
     if (!id) return;
-    // Show the loading state while we read the session from storage (can be slow on
-    // mobile/cloud). Without this the UI just cleared to an empty "start a chat" screen
-    // until messages arrived, which read as "nothing happened". `page` clears it.
+    // Show the loading state while we read the session. CRITICAL: the paint path reads the
+    // LOCAL tier ONLY (loadSessionLocal) so it can NEVER block on a stalled Drive read. A
+    // hung cloud fetch used to leave "Resuming…" spinning forever — the spinner clears ONLY
+    // on `page`, and a request that never settles never reaches it (a try/catch catches a
+    // throw, not a hang). Local is instant and can't hang, so `page` is always sent.
     transport.send({ type: "loading" });
-    // A storage read can fail transiently on mobile (Drive token refresh, a stale cached
-    // file id, proot IO contention). We MUST still emit `page` even on failure: the UI
-    // optimistically flips to a spinner the instant a chat is tapped, and ONLY `page`
-    // clears it. If loadSession threw, this handler aborted before `page` and the tab
-    // hung on a spinner until another session was opened (which re-pumps the queue) —
-    // exactly the "sometimes a chat won't load, but loads after I poke around" symptom.
-    // One retry covers the transient case; a hard failure releases with an empty page so
-    // a re-tap can recover.
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const page = await rt.loadSession(id);
-        for (const msg of page.messages) transport.send({ type: "message", msg });
-        transport.send({ type: "page", hasMore: page.hasMore, cursor: page.cursor });
-        return;
-      } catch (err) {
-        if (attempt === 0) continue;
-        console.error(`[session] loadSession failed for ${String(id).slice(0, 8)}:`, err);
-        transport.send({ type: "page", hasMore: false, cursor: 0 });
-      }
+    let localCount = 0;
+    try {
+      const page = await rt.loadSessionLocal(id);
+      for (const msg of page.messages) transport.send({ type: "message", msg });
+      transport.send({ type: "page", hasMore: page.hasMore, cursor: page.cursor });
+      localCount = page.messages.length;
+    } catch (err) {
+      console.error(`[session] loadSessionLocal failed for ${String(id).slice(0, 8)}:`, err);
+      transport.send({ type: "page", hasMore: false, cursor: 0 }); // release the spinner
+    }
+    // If this device held NOTHING local for the session (created/continued on another
+    // device), reconcile from the cloud OFF the paint path: a best-effort fetch that, if it
+    // lands, repaints with the cloud history. If the cloud has nothing — or never responds —
+    // the UI has already moved on, so there is no hang. Guard on pendingId so a late cloud
+    // result can't clobber a tab the user switched away from in the meantime.
+    if (localCount === 0) {
+      void (async () => {
+        try {
+          const page = await rt.loadSession(id); // mirror: local-miss → cloud (may be slow)
+          if (slot().pendingId !== id) return;   // user switched tabs while we waited
+          if (!page.messages.length) return;     // cloud had nothing either — leave as-is
+          transport.send({ type: "clear" });
+          for (const msg of page.messages) transport.send({ type: "message", msg });
+          transport.send({ type: "page", hasMore: page.hasMore, cursor: page.cursor });
+        } catch (err) {
+          console.error(`[session] cloud reconcile failed for ${String(id).slice(0, 8)}:`, err);
+        }
+      })();
     }
   }
 

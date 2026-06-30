@@ -184,6 +184,27 @@ export class SessionStore {
     return { messages: decoded?.messages ?? [], hasMore: idx > 0, cursor: idx > 0 ? idx - 1 : null };
   }
 
+  // Local-only twin of loadLatest: resolves a session's newest page from the LOCAL tier
+  // ONLY (listLocal + getLocal), never touching the cloud. The resume paint path uses this
+  // so a stalled Drive read can't freeze the UI — local is instant and can't hang. Returns
+  // an empty page when the session isn't present on this device; the caller reconciles the
+  // cloud in the background. Mirrors loadLatest's empty-trailing-page walk-back so a rolled-
+  // over-but-not-yet-written page never paints a blank chat.
+  async loadLatestLocal(sessionId: string): Promise<PageResult> {
+    const listLocal = () => (this.storage.listLocal ? this.storage.listLocal() : this.storage.list());
+    const getLocal = (k: string) => (this.storage.getLocal ? this.storage.getLocal(k) : this.storage.get(k));
+    let idx = maxPageOf(await listLocal(), sessionId);
+    if (idx < 0) return { messages: [], hasMore: false, cursor: null };
+    let blob = await getLocal(pageKey(sessionId, idx));
+    let decoded = blob ? await decodeLog(await this.getKey(), blob) : null;
+    while ((decoded?.messages.length ?? 0) === 0 && idx > 0) {
+      idx -= 1;
+      blob = await getLocal(pageKey(sessionId, idx));
+      decoded = blob ? await decodeLog(await this.getKey(), blob) : null;
+    }
+    return { messages: decoded?.messages ?? [], hasMore: idx > 0, cursor: idx > 0 ? idx - 1 : null };
+  }
+
   // The page at `cursor` (older). Returns its messages + cursor to the one before.
   async loadOlder(sessionId: string, cursor: number): Promise<PageResult> {
     if (cursor < 0) return { messages: [], hasMore: false, cursor: null };

@@ -84,6 +84,13 @@ export function mirrorStorage(
     // local is always written first, so a session used on this device is fully local.
     listLocal: () => local.list(),
 
+    // Fast, local-only read (no network). Symmetric to listLocal: the resume paint path
+    // reads JUST the local tier here so it can NEVER block on a stalled Drive download —
+    // a hung cloud read used to leave "Resuming…" spinning forever. A session used on this
+    // device is fully local (local is written first), so this returns its pages instantly;
+    // the cloud is reconciled OFF the paint path.
+    getLocal: (sessionId) => local.get(sessionId),
+
     async remove(sessionId) {
       await local.remove(sessionId);
       await tryCloud(() => cloud!.remove(sessionId));

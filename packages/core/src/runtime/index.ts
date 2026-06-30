@@ -280,6 +280,10 @@ export function createRuntime(
       return store.loadLatest(sessionId); // newest page + cursor to older
     },
 
+    async loadSessionLocal(sessionId: string) {
+      return store.loadLatestLocal(sessionId); // local tier only — never blocks on cloud
+    },
+
     async loadMore(sessionId: string, cursor: number) {
       return store.loadOlder(sessionId, cursor); // the page before `cursor`
     },

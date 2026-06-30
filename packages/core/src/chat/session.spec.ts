@@ -74,7 +74,12 @@ function harness(opts: { cwd?: string; ownedSkills?: string[] } = {}) {
 
 // minimal AgentRuntime: only startSession is exercised by send/mode handlers
 function startSessionRuntime(startSession: any): any {
-  return { startSession, listSessions: async () => [], loadSession: async () => ({ messages: [], hasMore: false, cursor: 0 }) };
+  return {
+    startSession,
+    listSessions: async () => [],
+    loadSession: async () => ({ messages: [], hasMore: false, cursor: 0 }),
+    loadSessionLocal: async () => ({ messages: [], hasMore: false, cursor: 0 }),
+  };
 }
 
 describe("chat/session — permission mode never interrupts a live turn", () => {

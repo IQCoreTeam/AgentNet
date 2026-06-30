@@ -38,6 +38,11 @@ export interface StorageAdapter {
   // already-local session's pages can skip a network round-trip. Single-tier adapters
   // omit it and callers fall back to list().
   listLocal?(): Promise<string[]>;
+  // OPTIONAL fast/local-only read. Like listLocal, the mirror exposes JUST the local tier
+  // so the resume paint path can read an already-local session WITHOUT blocking on a
+  // stalled cloud (a hung Drive read must never wedge the "Resuming…" spinner). Single-tier
+  // adapters omit it and callers fall back to get().
+  getLocal?(sessionId: string): Promise<Uint8Array | null>;
 }
 
 // ── chat message ────────────────────────────────────────
@@ -155,6 +160,12 @@ export interface AgentRuntime {
   // whether older pages exist + an opaque cursor for loadMore. Call on resume to
   // repaint the recent history; scroll-to-top → loadMore.
   loadSession(sessionId: string): Promise<PageResult>;
+
+  // load a session's newest page from the LOCAL tier ONLY — never the cloud. The UI's
+  // resume paint uses this so a stalled Drive read can't freeze the "Resuming…" spinner:
+  // local is instant and can't hang. A session not present on this device returns an empty
+  // page; the caller reconciles the cloud off the paint path.
+  loadSessionLocal(sessionId: string): Promise<PageResult>;
 
   // load the page BEFORE `cursor` (older messages, for scroll-up). Prepend its
   // messages; use the returned cursor/hasMore for the next step.
