@@ -56,6 +56,7 @@ export function chatHtml(): string {
   :root {
     --an-green:      #3ac07a;          /* brand accent (codex/brand) */
     --claude:        #e9883a;          /* claude engine accent (orange) */
+    --claudex:       #a98bff;          /* claudex/Team engine accent (purple) */
     --an-green-soft: rgba(58,192,122,0.16);
     --an-green-line: rgba(58,192,122,0.38);
     --an-green-dim:  rgba(58,192,122,0.08);
@@ -263,6 +264,7 @@ export function chatHtml(): string {
   /* engine accent for the unread state — keyed off data-cli, same source the send button uses */
   #jumpBtn[data-cli="claude"] { --eng: var(--claude); }
   #jumpBtn[data-cli="codex"]  { --eng: var(--an-green); }
+  #jumpBtn[data-cli="claudex"] { --eng: var(--claudex); }
   /* when there's a NEW message while scrolled up: outline + icon glow in the engine accent
      (claude=orange / codex=green), background stays black/white per theme. */
   #jumpBtn.hasNew { color: var(--eng); border-color: color-mix(in srgb, var(--eng) 88%, transparent);
@@ -586,6 +588,7 @@ export function chatHtml(): string {
   /* per-engine accent: a single var the composer themes off of */
   #composer { --eng: var(--an-green); --engSoft: var(--an-green-dim); --engLine: var(--an-green-line); }
   #composer[data-cli="claude"] { --eng: var(--claude); --engSoft: rgba(233,136,58,0.12); --engLine: rgba(233,136,58,0.45); }
+  #composer[data-cli="claudex"] { --eng: var(--claudex); --engSoft: rgba(169,139,255,0.14); --engLine: rgba(169,139,255,0.48); }
 
   /* composer top row: skills (left) ←→ engine tabs (right) */
   #composerTop { display: flex; align-items: flex-end; justify-content: space-between; }
@@ -818,6 +821,7 @@ export function chatHtml(): string {
   .etab .ed { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.5; }
   .etab[data-cli="claude"] { color: var(--claude); }
   .etab[data-cli="codex"]  { color: var(--an-green); }
+  .etab[data-cli="claudex"] { color: var(--claudex); }
   /* the ACTIVE tab pops forward: full opacity, raised, merged into the input box */
   .etab.active { opacity: 1; background: var(--an-bg-2); border-color: var(--engLine);
                  border-bottom: 1px solid var(--an-bg-2); top: 2px; z-index: 2; font-weight: 600; }
@@ -1515,6 +1519,7 @@ export function chatHtml(): string {
           <div id="engineTabs">
             <div class="etab active" data-cli="claude"><span class="ed"></span>claude</div>
             <div class="etab" data-cli="codex"><span class="ed"></span>codex</div>
+            <div class="etab" data-cli="claudex"><span class="ed"></span>claudex</div>
           </div>
         </div>
         <div id="inputWrap">
@@ -1991,7 +1996,6 @@ export function chatHtml(): string {
       { value: 'default',     label: 'Ask edits',    title: 'Ask before each file edit (default)' },
       { value: 'acceptEdits', label: 'Auto edit',    title: 'Auto-accept file edits; still ask for other tools' },
       { value: 'plan',        label: 'Plan',         title: 'Plan mode: read-only until you approve the plan' },
-      { value: 'claudex',     label: '🧬 Team',      title: 'Claudex Team mode: Claude leads a team of parallel Codex workers that can edit files' },
     ],
     codex: [
       { value: 'readonly', label: 'Read only',   title: 'Read-only sandbox; ask before edits, commands, network' },
@@ -1999,6 +2003,13 @@ export function chatHtml(): string {
       { value: 'full',     label: 'Full access', title: 'Full disk + network access, never ask (use with care)' },
     ],
   };
+  // claudex is its own engine (Team mode) but runs the claude binary, so it shares
+  // claude's model + permission-mode catalogs.
+  MODES.claudex = MODES.claude;
+  MODELS.claudex = MODELS.claude;
+  // Claudex mark: one lead node fanning out to two workers (line-art, currentColor so the
+  // accent color drives it). No emoji anywhere in the UI — this is the engine's glyph.
+  const CLAUDEX_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="2.2"/><circle cx="18" cy="6" r="2.2"/><circle cx="18" cy="18" r="2.2"/><path d="M7.1 11 15.6 6.9M7.1 13 15.6 17.1"/></svg>';
   // reasoning effort levels (applies to both engines; labels mirror CLI EffortPicker)
   const EFFORTS = [
     { value: 'default', label: 'default',  title: 'Engine default (usually medium)' },
@@ -2009,9 +2020,9 @@ export function chatHtml(): string {
     { value: 'max',     label: 'max',      title: 'Maximum effort (select models)' },
   ];
   // remember the chosen mode + model + effort per engine so switching tabs restores them
-  const modeByCli = { claude: 'acceptEdits', codex: 'auto' };
-  const modelByCli = { claude: 'default', codex: 'default' };
-  const effortByCli = { claude: 'default', codex: 'default' };
+  const modeByCli = { claude: 'acceptEdits', codex: 'auto', claudex: 'acceptEdits' };
+  const modelByCli = { claude: 'default', codex: 'default', claudex: 'default' };
+  const effortByCli = { claude: 'default', codex: 'default', claudex: 'default' };
   let cli = 'claude';
   let cliReport = null;
 
@@ -2141,7 +2152,7 @@ export function chatHtml(): string {
     effortMenu.style.bottom = (window.innerHeight - r.top + 6) + 'px';
   }
   function setTab(next) {
-    if (next !== 'claude' && next !== 'codex') return;
+    if (next !== 'claude' && next !== 'codex' && next !== 'claudex') return;
     cli = next;
     tabs.forEach(t => t.classList.toggle('active', t.dataset.cli === cli));
     composer.dataset.cli = cli;                       // tints the input (claude=orange/codex=green)
@@ -2154,13 +2165,16 @@ export function chatHtml(): string {
   function selectTab(next) {
     if (next === cli) return;
     setTab(next);
-    const status = cliReport && cliReport[next];
+    // claudex runs the claude binary, so its install/login state IS claude's.
+    const statusCli = next === 'claudex' ? 'claude' : next;
+    const label = next === 'claudex' ? 'Claudex (Claude)' : next === 'claude' ? 'Claude' : 'Codex';
+    const status = cliReport && cliReport[statusCli];
     if (status === 'missing') {
-      renderNotice((next === 'claude' ? 'Claude' : 'Codex') + ' is not installed.');
+      renderNotice(label + ' is not installed.');
       return;
     }
     if (status === 'no-login') {
-      renderNotice((next === 'claude' ? 'Claude' : 'Codex') + ' is not signed in. Type /login to connect it.');
+      renderNotice(label + ' is not signed in. Type /login to connect it.');
       return;
     }
     vscode.postMessage({ type: 'platform', cli });
@@ -2438,7 +2452,7 @@ export function chatHtml(): string {
       try { const p = JSON.parse(t.output || '{}'); if (Array.isArray(p.goals)) goals = p.goals.map(String); } catch (e) {}
       const card = document.createElement('div'); card.className = 'toolCard';
       const head = document.createElement('div'); head.className = 'toolHead';
-      head.innerHTML = '<span class="tk">🧬</span>';
+      head.innerHTML = '<span class="tk" style="color:var(--claudex);display:inline-flex">' + CLAUDEX_ICON + '</span>';
       const title = document.createElement('span');
       title.textContent = 'Team — ' + goals.length + ' Codex worker' + (goals.length === 1 ? '' : 's') + ' in parallel';
       head.appendChild(title); card.appendChild(head);
@@ -2448,7 +2462,7 @@ export function chatHtml(): string {
         const tile = document.createElement('div');
         tile.style.cssText = 'border:1px solid var(--an-line);border-radius:var(--an-radius-sm);padding:7px;';
         const lab = document.createElement('div');
-        lab.style.cssText = 'font-family:var(--vscode-editor-font-family);font-size:0.7em;text-transform:uppercase;letter-spacing:1px;color:var(--an-green);margin-bottom:3px;';
+        lab.style.cssText = 'font-family:var(--vscode-editor-font-family);font-size:0.7em;text-transform:uppercase;letter-spacing:1px;color:var(--claudex);margin-bottom:3px;';
         lab.textContent = 'codex #' + (i + 1);
         const goal = document.createElement('div'); goal.textContent = g;
         tile.appendChild(lab); tile.appendChild(goal); grid.appendChild(tile);
@@ -2456,7 +2470,7 @@ export function chatHtml(): string {
       card.appendChild(grid);
       const foot = document.createElement('div');
       foot.style.cssText = 'border-top:1px solid var(--an-line-soft);padding:6px 11px;font-size:0.72em;opacity:0.6;';
-      foot.textContent = '🛡️ built by a team of rival AIs — Claude + Codex';
+      foot.textContent = 'Built by a team of rival AIs — Claude + Codex';
       card.appendChild(foot);
       row.appendChild(card);
       return null;

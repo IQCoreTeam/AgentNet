@@ -109,7 +109,7 @@ function toolUseMessage(b: Block): ChatMessage {
         const tasks = Array.isArray((input as { tasks?: unknown }).tasks) ? (input as { tasks: unknown[] }).tasks : [];
         const goals = tasks.map((t) => String((t as { goal?: unknown })?.goal ?? "")).filter(Boolean);
         return {
-          ...base(`🧬 Team — ${goals.length} Codex worker${goals.length === 1 ? "" : "s"}`),
+          ...base(`Team — ${goals.length} Codex worker${goals.length === 1 ? "" : "s"}`),
           tool: { name: "Claudex", output: JSON.stringify({ goals }) },
         };
       }

@@ -20,7 +20,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { configFile, rootDir } from "../core/paths.js";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import type { ChatMessage, ImageInput } from "./contract.js";
+import type { ChatMessage, ImageInput, Cli } from "./contract.js";
+import { engineBinary } from "./contract.js";
 import { mapClaudeMessage } from "./convert/claude.js";
 import { skillFromPath } from "./convert/codex.js";
 import { codexFileChangeMessage } from "./convert/toolFormatting.js";
@@ -95,7 +96,7 @@ export interface Engine {
 }
 
 export interface SpawnOpts {
-  cli: "claude" | "codex";
+  cli: Cli;
   cwd: string;
   sessionId?: string; // NATIVE resume id (inject/prepareResume resolved it already)
   model?: string;
@@ -150,17 +151,15 @@ function gitCredentialEnv(token?: string): Record<string, string> {
 function claudePermissionMode(
   mode?: string,
 ): "default" | "acceptEdits" | "plan" | "bypassPermissions" {
-  // "claudex" (Team mode) is a surface-level mode, not a native SDK one — the lead brain
-  // merges worker output by writing files, so map it to acceptEdits (edits auto-apply,
-  // commands still gated). The fan-out tool itself is enabled separately in the runtime.
-  if (mode === "claudex") return "acceptEdits";
   return mode === "acceptEdits" || mode === "plan" || mode === "bypassPermissions"
     ? mode
     : "default";
 }
 
 export function spawnCli(opts: SpawnOpts): Engine {
-  return opts.cli === "claude" ? claudeEngine(opts) : codexEngine(opts);
+  // claudex is an identity, not a binary — it runs the claude engine (with the fan-out
+  // tool + Task disabled, wired in the runtime). Only codex maps to the codex engine.
+  return engineBinary(opts.cli) === "codex" ? codexEngine(opts) : claudeEngine(opts);
 }
 
 // small typed callback bag so each engine doesn't re-implement listener plumbing.
@@ -369,7 +368,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
       // Claudex Team mode: remove Claude's built-in subagent tool so the ONLY way to fan
       // out is our spawn_codex_subagents (real Codex workers). Otherwise Claude prefers
       // its native Task tool and spawns Claude subagents — never touching Codex.
-      ...(opts.mode === "claudex" ? { disallowedTools: ["Task", "Agent"] } : {}),
+      ...(opts.cli === "claudex" ? { disallowedTools: ["Task", "Agent"] } : {}),
       ...(opts.enabledSkills?.length ? { skills: opts.enabledSkills } : {}),
       // Give the agent's git the configured GitHub token. The SDK `env` REPLACES the
       // subprocess environment, so spread process.env to keep PATH / ANTHROPIC creds / etc.

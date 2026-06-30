@@ -118,7 +118,7 @@ export interface ClaudexHooks {
 export function runCodexTask(task: CodexTask, defaultCwd: string, write: boolean, label?: string, hooks?: ClaudexHooks): Promise<CodexResult> {
   return new Promise((resolve) => {
     const cwd = task.cwd || defaultCwd;
-    hooks?.notify?.(`🧬 ${label || "Codex worker"} started`);
+    hooks?.notify?.(`${label || "Codex worker"} working`);
     const cli = spawnCli({
       cli: "codex",
       cwd,
@@ -135,7 +135,7 @@ export function runCodexTask(task: CodexTask, defaultCwd: string, write: boolean
       done = true;
       clearTimeout(timer);
       try { cli.stop(); } catch { /* already gone */ }
-      hooks?.notify?.(`✓ ${label || "Codex worker"} done`);
+      hooks?.notify?.(`${label || "Codex worker"} done`);
       let output = chunks.join("\n").trim();
       if (output.length > MAX_OUTPUT_CHARS) output = output.slice(0, MAX_OUTPUT_CHARS) + "\n…[truncated]";
       resolve({ goal: task.goal, output, filesChanged: [...filesChanged] });

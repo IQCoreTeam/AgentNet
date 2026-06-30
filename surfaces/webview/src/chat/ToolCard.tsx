@@ -37,6 +37,19 @@ export function ToolCard({ tool }: { tool: NonNullable<ChatMessage["tool"]> }) {
   );
 }
 
+// Claudex mark: one lead node fanning out to two workers. currentColor so the accent
+// drives it. No emoji in the UI — this is the engine's glyph.
+function ClaudexIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="5" cy="12" r="2.2" />
+      <circle cx="18" cy="6" r="2.2" />
+      <circle cx="18" cy="18" r="2.2" />
+      <path d="M7.1 11 15.6 6.9M7.1 13 15.6 17.1" />
+    </svg>
+  );
+}
+
 // War-room: the Claudex fan-out card. The tool output is {goals:string[]} (one per
 // Codex worker). Each goal becomes a worker card — the visible "team" the user watches.
 // ponytail: post-hoc cards (painted when the tool returns). Live per-worker progress
@@ -50,20 +63,20 @@ function WarRoom({ output }: { output?: string }) {
 
   return (
     <div className="my-1 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/60 text-xs">
-      <div className="flex items-center gap-2 border-b border-zinc-800 px-3 py-1.5 text-zinc-300">
-        <span>🧬</span>
+      <div className="flex items-center gap-2 border-b border-zinc-800 px-3 py-1.5" style={{ color: "var(--claudex)" }}>
+        <ClaudexIcon />
         <span className="font-medium">Team — {goals.length} Codex worker{goals.length === 1 ? "" : "s"} in parallel</span>
       </div>
       <div className="grid gap-1.5 p-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" }}>
         {goals.map((g, i) => (
           <div key={i} className="rounded-md border border-zinc-800 bg-zinc-950/60 p-2">
-            <div className="mb-1 font-mono text-[0.6rem] uppercase tracking-wider text-emerald-500">codex #{i + 1}</div>
+            <div className="mb-1 font-mono text-[0.6rem] uppercase tracking-wider" style={{ color: "var(--claudex)" }}>codex #{i + 1}</div>
             <div className="text-zinc-300">{g}</div>
           </div>
         ))}
       </div>
       <div className="border-t border-zinc-800 px-3 py-1.5 text-[0.62rem] text-zinc-500">
-        🛡️ built by a team of rival AIs — Claude + Codex
+        Built by a team of rival AIs — Claude + Codex
       </div>
     </div>
   );
