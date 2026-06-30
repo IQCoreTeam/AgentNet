@@ -10,3 +10,6 @@ dist/
 # local runtime state (sessions, tokens, config live in ~/.agentnet)
 .agentnet/
 HANDOFF.md
+
+# downloaded APK artifacts (CI / release builds)
+apk/
