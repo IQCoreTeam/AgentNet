@@ -37,23 +37,34 @@ export function ApprovalDock() {
   // (App.tsx forces one for non-active sessions) and tapping it jumps there. Approvals with
   // no sessionId, or when no chat is selected yet (fresh chat), still show — they belong here.
   const visible = state.approvals.filter((a) => isApprovalForView(a, state.activeSessionId));
+  // Show ONE approval at a time (a FIFO queue), not all stacked. On a phone, stacked
+  // question/approval cards pile up past the viewport and the lower ones became unreachable
+  // (their Send/Deny buttons sat off-screen, so a second prompt was effectively unanswerable).
+  // The head of the queue renders; answering it (resolveApproval removes it) advances to the
+  // next. A "1 / N" counter signals more are waiting — desktop-style stepping.
+  const head = visible[0];
   // A question (AskUserQuestion) needs room for its options + the Send button; the plain
   // yes/no approvals stay compact. Without the taller cap the question card clipped and the
   // Send button was unreachable (couldn't select or submit).
-  const hasQuestion = visible.some((a) => a.kind === "question" && (a.questions?.length ?? 0) > 0);
+  const hasQuestion = head?.kind === "question" && (head.questions?.length ?? 0) > 0;
   return (
     <div
       ref={rootRef}
       className={`flex flex-col gap-2 overflow-y-auto px-3 pt-2 ${visible.length === 0 ? "hidden" : ""}`}
       style={{ maxHeight: hasQuestion ? "calc(var(--vvh, 100dvh) * 0.62)" : "calc(var(--vvh, 100dvh) * 0.5)" }}
     >
-      {visible.map((req) =>
-        req.kind === "question" && req.questions?.length ? (
-          <QuestionCard key={req.id} req={req} onAnswer={(a) => decide(req, "once", { questionResponses: a })} />
-        ) : (
-          <ApprovalCard key={req.id} req={req} onDecide={(o, extra) => decide(req, o, extra)} />
-        ),
+      {visible.length > 1 && (
+        <div className="flex items-center justify-between px-0.5 text-xs">
+          <span className="font-medium text-zinc-300">1 / {visible.length}</span>
+          <span className="text-zinc-500">{visible.length - 1} more waiting</span>
+        </div>
       )}
+      {head &&
+        (head.kind === "question" && head.questions?.length ? (
+          <QuestionCard key={head.id} req={head} onAnswer={(a) => decide(head, "once", { questionResponses: a })} />
+        ) : (
+          <ApprovalCard key={head.id} req={head} onDecide={(o, extra) => decide(head, o, extra)} />
+        ))}
     </div>
   );
 }
@@ -340,33 +351,38 @@ function ApprovalCard({
         </pre>
       )}
 
-      {/* deny-with-reason input */}
+      {/* deny-with-reason input — mobile-friendly: a full-width multiline field with
+          full-size action buttons below, so the reason is easy to type and the buttons are
+          comfortable tap targets (the old single-line text-xs row was too small on a phone). */}
       {showReason && (
-        <div className="flex items-center gap-2 border-t border-zinc-700 px-3 py-2">
-          <input
-            type="text"
+        <div className="flex flex-col gap-2 border-t border-zinc-700 px-3 py-2.5">
+          <textarea
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="Reason (optional)"
+            placeholder="Reason for denying (optional)"
             autoFocus
-            className="flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-zinc-500 placeholder:text-zinc-600"
+            rows={2}
+            className="w-full resize-y rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-500 placeholder:text-zinc-600"
             onKeyDown={(e) => {
-              if (e.key === "Enter") onDecide("deny", { reason: reason.trim() || undefined });
+              // Cmd/Ctrl+Enter submits; plain Enter inserts a newline (mobile keyboard friendly).
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) onDecide("deny", { reason: reason.trim() || undefined });
               if (e.key === "Escape") { setShowReason(false); setReason(""); }
             }}
           />
-          <button
-            onClick={() => onDecide("deny", { reason: reason.trim() || undefined })}
-            className="rounded bg-red-900/60 px-2 py-1 text-xs text-red-200"
-          >
-            Deny
-          </button>
-          <button
-            onClick={() => { setShowReason(false); setReason(""); }}
-            className="text-xs text-zinc-500 hover:text-zinc-300"
-          >
-            ↩
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => onDecide("deny", { reason: reason.trim() || undefined })}
+              className="flex-1 rounded-lg bg-red-900/70 px-3 py-2.5 text-sm font-medium text-red-100 active:bg-red-800"
+            >
+              Deny
+            </button>
+            <button
+              onClick={() => { setShowReason(false); setReason(""); }}
+              className="rounded-lg border border-zinc-600/50 px-4 py-2.5 text-sm text-zinc-300 active:bg-zinc-700/40"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
