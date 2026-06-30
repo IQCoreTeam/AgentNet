@@ -24,16 +24,20 @@ export const AVATAR_SCRIPT = `
       pal[c]='hsl('+hue+','+sat+'%,'+lig+'%)';
     }
     pal['eyes']=pal[SKIN]==='#111111'?'hsl('+Math.floor(r()*360)+',80%,75%)':'#222222';
-    // No regex (avoids backslash-escaping pitfalls through the webview string):
-    // each style rule is literally ".<class>{fill:#xxxxxx}" — find the prefix,
-    // splice in the new color up to the closing brace.
+    // Recolor by writing a fill="" attribute onto each element, NOT by editing the
+    // shared <style> block. An inline <svg><style> is NOT scoped to its own svg — its
+    // rules apply document-wide, so two avatars' .clothes/.eyes/... selectors collide
+    // and the LAST avatar rendered recolors every avatar on the page (distinct wallets
+    // all end up identical). Dropping the <style> and inlining fills keeps each svg's
+    // colors local to itself. (No regex: avoids backslash-escaping through the webview
+    // string — plain indexOf/splice for the style block and each class token.)
     let svg=AVATAR_SVG;
+    const ds=svg.indexOf('<style>');
+    if(ds>=0){const de=svg.indexOf('</style>');if(de>ds)svg=svg.slice(0,ds)+svg.slice(de+8);}
     for(const c of [...AVATAR_CLASSES, SKIN]){
-      const head='.'+c+'{fill:';
-      const i=svg.indexOf(head);
-      if(i<0) continue;
-      const end=svg.indexOf('}', i);
-      svg=svg.slice(0,i)+head+pal[c]+svg.slice(end);
+      const token='class="'+c+'"', repl='fill="'+pal[c]+'"';
+      let i;
+      while((i=svg.indexOf(token))>=0){svg=svg.slice(0,i)+repl+svg.slice(i+token.length);}
     }
     return svg;
   }

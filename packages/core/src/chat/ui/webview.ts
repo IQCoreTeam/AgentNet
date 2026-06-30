@@ -1011,7 +1011,10 @@ export function chatHtml(): string {
   /* AGENT cyberpunk "business-card" — ported verbatim from the mobile directory (.an-ac).
      Literal greys hold the mono terminal look (theme-independent on purpose); --accent is
      set inline per card from the wallet hue, the single colour each card carries. */
-  .an-ac { position: relative; width: 100%; aspect-ratio: 350 / 196; background: #0a0a0c;
+  /* No forced aspect-ratio: the mobile 350/196 card shape ballooned the height on the
+     wider webview panel, which stretched the avatar cell into a tall sliver and floated
+     the stats in a sea of empty space. Let the card size to its content instead. */
+  .an-ac { position: relative; width: 100%; background: #0a0a0c;
            border: 1px solid #34343a; --accent: #9a9aa3; padding: 8px; overflow: hidden;
            box-shadow: 0 6px 22px rgba(0,0,0,0.55); text-align: left; color: #ececf0;
            font-family: ui-monospace, SFMono-Regular, Menlo, monospace; cursor: pointer;
