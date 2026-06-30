@@ -299,113 +299,77 @@ body {
 .an-id-segs i.on { background: var(--tier); border-color: var(--tier); }
 .an-id-gauge .val { font-family: "Space Mono", ui-monospace, monospace; font-size: 12px; font-weight: 700; white-space: nowrap; color: var(--an-fg); }
 
-/* WORK card: a refined "banner folder" in a horizontal swipe row. A flat tier-colour banner
-   (--theme) up top with the octocat + VERIFIED label and a folder-tab notch cut into it; a dark
-   body with the bold repo name; a muted (neutral) skill pill; the star count. */
-.an-bfolder {
+/* WORK card: a terminal-style verified-work folder (CARD // FOLDER = TERMINAL, monochrome chic)
+   in a horizontal swipe row. A clip-path folder tab over a dark "screen" with a faint binary
+   wash, tier corner ticks, owner + bold repo name + large octocat, a muted skill pill, and a
+   slant star gauge. --c = the muted tier accent, --e = the gauge's empty-segment colour. */
+.an-tfolder {
   position: relative;
-  width: 252px;
-  height: 168px;
-  border-radius: 16px;
+  width: 248px;
+  filter: drop-shadow(0 12px 20px rgba(0, 0, 0, 0.5));
+}
+.an-tfolder-clip {
+  position: relative;
+  background: #0c0c0d;
+  clip-path: polygon(0 7%, 50% 7%, 58% 24%, 100% 24%, 100% 100%, 0 100%);
+  padding: 5px;
+}
+.an-tfolder-screen {
+  position: relative;
+  margin-top: 28px;
+  height: 150px;
   overflow: hidden;
-  background: #16181d;
+  border-radius: 3px;
+  padding: 11px 13px;
 }
-.an-bfolder-banner {
+.an-tfolder-bin {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 60px;
-  background: var(--theme);
-}
-.an-bfolder-tier {
-  position: absolute;
-  top: 13px;
-  left: 16px;
-  z-index: 4;
-  color: #0c0d10;
-  font-weight: 700;
-  font-size: 11px;
-  letter-spacing: 1.5px;
-  opacity: 0.82;
-}
-.an-bfolder-cat {
-  position: absolute;
-  top: 11px;
-  right: 13px;
-  z-index: 4;
-}
-.an-bfolder-tab {
-  position: absolute;
-  top: 44px;
-  left: 0;
-  width: 46%;
-  height: 18px;
-  background: #16181d;
-  border-radius: 0 13px 0 0;
-  z-index: 2;
-}
-.an-bfolder-body {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 60px;
-  bottom: 0;
-  background: #16181d;
-  padding: 13px 16px;
-  z-index: 3;
-}
-.an-bfolder-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: #f2f2f4;
+  inset: 0;
+  opacity: 0.1;
+  font: 700 9px "Space Mono", ui-monospace, monospace;
+  line-height: 1.45;
+  letter-spacing: 1px;
   word-break: break-all;
-  line-height: 1.25;
+  padding: 6px;
+  user-select: none;
+  pointer-events: none;
 }
-.an-bfolder-skill {
+.an-tfolder-tick { position: absolute; width: 9px; height: 9px; }
+.an-tfolder-tick.tl { top: 5px; left: 5px; border-top: 1.5px solid var(--c); border-left: 1.5px solid var(--c); }
+.an-tfolder-tick.tr { top: 5px; right: 5px; border-top: 1.5px solid var(--c); border-right: 1.5px solid var(--c); }
+.an-tfolder-tick.bl { bottom: 5px; left: 5px; border-bottom: 1.5px solid var(--c); border-left: 1.5px solid var(--c); }
+.an-tfolder-tick.br { bottom: 5px; right: 5px; border-bottom: 1.5px solid var(--c); border-right: 1.5px solid var(--c); }
+.an-tfolder-label { position: relative; font: 700 8px "Space Mono", ui-monospace, monospace; letter-spacing: 1.5px; }
+.an-tfolder-owner { position: relative; font: 700 8px "Space Mono", ui-monospace, monospace; letter-spacing: 0.5px; color: #9a9a9a; margin-top: 9px; }
+.an-tfolder-name { position: relative; display: flex; align-items: center; gap: 8px; margin-top: 2px; color: #f2f2f2; font: 700 20px "Space Mono", ui-monospace, monospace; letter-spacing: 0.5px; }
+.an-tfolder-name-t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.an-tfolder-foot {
   position: absolute;
-  left: 16px;
-  bottom: 13px;
-  z-index: 5;
+  left: 13px;
+  right: 13px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.an-tfolder-skill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  max-width: 58%;
-  padding: 5px 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid rgba(255, 255, 255, 0.11);
-}
-.an-bfolder-skill-i {
-  color: color-mix(in srgb, var(--theme) 55%, #8a8a93);
-  font-size: 10px;
-}
-.an-bfolder-skill-t {
-  font-size: 11px;
-  color: #aeaeb6;
+  border: 1px solid #3a3a3d;
+  background: rgba(255, 255, 255, 0.04);
+  font: 700 9px "Space Mono", ui-monospace, monospace;
+  color: #cfcfcf;
+  padding: 4px 8px;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  max-width: 56%;
 }
-.an-bfolder-stars {
-  position: absolute;
-  right: 16px;
-  bottom: 12px;
-  z-index: 5;
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-}
-.an-bfolder-stars-n {
-  font-size: 18px;
-  font-weight: 700;
-  color: #f2f2f4;
-  line-height: 1;
-}
-.an-bfolder-stars-s {
-  color: var(--theme);
-  font-size: 13px;
-}
+.an-tfolder-stars { display: flex; align-items: center; gap: 6px; flex: none; }
+.an-tfolder-stars-n { font: 700 15px "Space Mono", ui-monospace, monospace; }
+.an-tfolder-gauge { display: flex; gap: 2px; align-items: center; }
+.an-tfolder-gauge i { width: 4px; height: 14px; transform: skewX(-12deg); }
 
 /* SKILL "SD-card" collectible. The cartridge body is sophisticated MATTE plastic: a graphite
    form gradient + a broad diffuse top light (::before, soft-box not gloss) + a contrast-tuned

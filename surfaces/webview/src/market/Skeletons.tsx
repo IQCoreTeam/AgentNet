@@ -1,11 +1,12 @@
 // Skeleton placeholders shown while a skill detail or the agent profile loads, so a tap
 // feels responsive instead of dead air. Interim — the agent screen gets reworked later.
+import type { CSSProperties } from "react";
 
 // One shimmering block. Rounding is passed per-use (Tailwind rounded-* classes), so callers
 // control the shape. The fill is an OPAQUE colour-shimmer (.an-skel), not an opacity pulse, so
 // overlapping placeholders fully occlude instead of stacking into darker patches.
-function Bar({ className = "" }: { className?: string }) {
-  return <div className={`an-skel ${className}`} />;
+function Bar({ className = "", style }: { className?: string; style?: CSSProperties }) {
+  return <div className={`an-skel ${className}`} style={style} />;
 }
 
 // One SD-card-shaped placeholder (cut corner + a grey data-chip hint bottom-left, no colour) so
@@ -129,46 +130,65 @@ export function MarketListSkeleton({ rows = 6 }: { rows?: number }) {
 export function AgentProfileSkeleton({ onBack }: { onBack?: () => void } = {}) {
   return (
     <div className="flex h-full flex-col bg-zinc-950">
+      {/* top bar: back + title + actions (mirrors the real Agent Profile chrome header) */}
+      <header className="flex shrink-0 items-center gap-2.5 border-b px-3.5" style={{ borderColor: "#1d1d20", paddingTop: "max(0.5rem, env(safe-area-inset-top))", paddingBottom: "0.7rem" }}>
+        {onBack ? (
+          <button
+            onClick={onBack}
+            className="flex h-[38px] w-[38px] items-center justify-center active:opacity-70"
+            style={{ color: "var(--an-fg-dim)", border: "1px solid #1f1f23" }}
+            aria-label="Back"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 6l-6 6 6 6" /></svg>
+          </button>
+        ) : (
+          <Bar className="h-[38px] w-[38px] rounded-sm" />
+        )}
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <Bar className="h-3.5 w-28 rounded-sm" />
+          <Bar className="h-2.5 w-20 rounded-sm" />
+        </div>
+        <Bar className="h-5 w-9 rounded-sm" />
+      </header>
       <div className="flex-1 overflow-hidden">
-        {/* hero */}
-        <div className="px-4 pt-3" style={headerStyle}>
-          <div className="flex items-center justify-between">
-            {onBack ? (
-              <button
-                onClick={onBack}
-                className="flex h-8 w-8 items-center justify-center rounded-full active:bg-zinc-800"
-                style={{ color: "var(--an-fg-dim)" }}
-                aria-label="Back"
-              >
-                <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4l-6 6 6 6" /></svg>
-              </button>
-            ) : (
-              <Bar className="h-4 w-28 rounded-md" />
-            )}
-            <Bar className="h-7 w-28 rounded-full" />
-          </div>
-          <div className="mt-2 flex justify-center">
-            <Bar className="h-40 w-3/5 rounded-3xl" />
-          </div>
-          <div className="-mt-6 grid grid-cols-3 gap-2">
-            <Bar className="h-16 rounded-xl" />
-            <Bar className="h-16 rounded-xl" />
-            <Bar className="h-16 rounded-xl" />
+        {/* ID card: bordered box with name, portrait + 3 big stats, tier ladder, stars gauge */}
+        <div className="px-3 pt-3 pb-1">
+          <div className="border p-3" style={{ borderColor: "var(--an-line)", background: "#0a0a0c" }}>
+            <div className="border p-3.5" style={{ borderColor: "var(--an-line)" }}>
+              <div className="flex items-start justify-between py-1.5">
+                <Bar className="h-9 w-32 rounded-sm" />
+                <Bar className="h-3 w-14 rounded-sm" />
+              </div>
+              <div className="grid grid-cols-[160px_1fr] gap-3.5">
+                <Bar className="rounded-sm" style={{ aspectRatio: "1 / 1.1" }} />
+                <div className="flex flex-col justify-between py-0.5">
+                  <Bar className="h-9 w-full rounded-sm" />
+                  <Bar className="h-9 w-full rounded-sm" />
+                  <Bar className="h-9 w-full rounded-sm" />
+                </div>
+              </div>
+              <div className="mt-3 flex gap-1">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Bar key={i} className="h-5 flex-1 rounded-sm" />
+                ))}
+              </div>
+              <Bar className="mt-3 h-3.5 w-full rounded-sm" />
+            </div>
           </div>
         </div>
-        {/* file-folder tabs */}
-        <div className="mt-3 flex gap-1.5 px-3">
-          <Bar className="h-9 flex-1 rounded-t-xl" />
-          <Bar className="h-9 flex-1 rounded-t-xl" />
+        {/* underline tabs */}
+        <div className="flex gap-0 px-3">
+          <Bar className="mx-3 mb-2 mt-2.5 h-4 flex-1 rounded-sm" />
+          <Bar className="mx-3 mb-2 mt-2.5 h-4 flex-1 rounded-sm" />
         </div>
-        {/* content: WORK banner cards (horizontal) + SD-card skills grid */}
-        <div className="space-y-4 px-4 pt-4">
-          <Bar className="h-3.5 w-20 rounded-md" />
+        {/* content: verified-work terminal folders (horizontal) + SD-card skills grid */}
+        <div className="space-y-4 px-3 pt-4">
+          <Bar className="h-3 w-24 rounded-sm" />
           <div className="flex gap-3 overflow-hidden">
-            <Bar className="h-[168px] w-[252px] shrink-0 rounded-2xl" />
-            <Bar className="h-[168px] w-[140px] shrink-0 rounded-2xl" />
+            <Bar className="h-[190px] w-[248px] shrink-0 rounded-md" style={{ clipPath: "polygon(0 7%,50% 7%,58% 24%,100% 24%,100% 100%,0 100%)" }} />
+            <Bar className="h-[190px] w-[160px] shrink-0 rounded-md" style={{ clipPath: "polygon(0 7%,50% 7%,58% 24%,100% 24%,100% 100%,0 100%)" }} />
           </div>
-          <Bar className="h-3.5 w-20 rounded-md" />
+          <Bar className="h-3 w-16 rounded-sm" />
           <div className="grid grid-cols-3 gap-3.5">
             {Array.from({ length: 3 }).map((_, i) => (
               <SdSkel key={i} />

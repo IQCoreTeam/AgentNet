@@ -85,19 +85,33 @@ function tierInfo(stars: number) {
   return { cur, next };
 }
 
-// Per-repo rarity ramp for the WORK cards: a repo's own star count gives it a neon edge,
-// escalating in steps (collection-desire). Starts at 3 stars; below that it's "common"
-// (plain line border). Tight, not glowing — a crisp colored edge + a faint inset ring.
-const REPO_RARITY = [
-  { min: 250, color: "#f472b6" }, // legendary - pink
-  { min: 50, color: "#ffcb45" },  // gold
-  { min: 10, color: "#a78bfa" },  // violet
-  { min: 3, color: "#3fb9e0" },   // uncommon - cyan
+// Per-repo tier ramp for the WORK terminal-folders. Same star thresholds that already made each
+// folder look different (3/10/50/250), but the bright neon is swapped for the design's muted,
+// low-saturation accents (CARD // FOLDER TIERS). The tier drives the screen tint, corner ticks,
+// markers, star colour and the gauge fill. Below 3 stars = a neutral "verified" base look.
+const REPO_TIERS = [
+  { min: 250, color: "#86c4cf", from: "#131a1b", to: "#0d1011", empty: "#1e2628" }, // diamond
+  { min: 50, color: "#d8c074", from: "#1a1813", to: "#100f0d", empty: "#2a2618" },  // gold
+  { min: 10, color: "#b8c0cc", from: "#161719", to: "#0e0f10", empty: "#26282c" },  // silver
+  { min: 3, color: "#b8895a", from: "#1a1613", to: "#100f0e", empty: "#2a2420" },   // bronze
 ] as const;
+const REPO_BASE = { color: "#cfcfcf", from: "#1a1a1d", to: "#0d0d0e", empty: "#33333a" } as const;
 
-function repoRarity(stars: number) {
-  return REPO_RARITY.find((t) => stars >= t.min) ?? null;
+function repoTier(stars: number) {
+  return REPO_TIERS.find((t) => stars >= t.min) ?? REPO_BASE;
 }
+
+// Slant gauge fill (real data): the 10 segments fill by progress toward the NEXT star threshold,
+// so a repo with 5★ (next tier at 10) shows 5 lit / 5 empty. Top tier (>=250) is maxed.
+function repoGaugeFill(stars: number) {
+  const next = [3, 10, 50, 250].find((t) => stars < t);
+  if (!next) return 10;
+  return Math.max(0, Math.min(10, Math.round((stars / next) * 10)));
+}
+
+// Faint binary wash behind the terminal-folder screen (decorative, monochrome).
+const FOLDER_BINARY =
+  "01010100101010100101001010101001010010110100101010010101001010010101001010010110101001010010100100101001010101001010";
 
 // Small "What is this?" overlay explaining the IQ tier system + the agent's current grade.
 function TierHelp({ stars, onClose }: { stars: number; onClose: () => void }) {
@@ -197,10 +211,11 @@ function GithubCard({ url, className = "mt-2" }: { url: string; className?: stri
   );
 }
 
-// One WORK card: a refined "banner folder" — a flat tier-colour banner up top (with the GitHub
-// octocat + a VERIFIED label and the folder-tab notch cut into it), a dark body with the bold
-// repo name, a muted skill pill (tap opens the skill; "+N" opens the full list), and the star
-// count. The banner colour is the repo's star tier (cyan/violet/gold/pink, green when untiered).
+// One WORK card: a terminal-style verified-work folder (CARD // FOLDER = TERMINAL, monochrome
+// chic). A clip-path folder tab over a dark "screen" with a faint binary wash, the repo owner +
+// bold name, a large octocat (taps to open the repo), a muted skill pill (taps the skill; "+N"
+// opens the list), and a slant star gauge. Colour is the repo's muted star tier; the gauge fills
+// by real progress toward the next star threshold.
 function WorkCard({
   repo,
   skillById,
@@ -218,35 +233,44 @@ function WorkCard({
     .sort((a, b) => (b.supply ?? 0) - (a.supply ?? 0));
   const rep = linked[0];
   const extra = linked.length - 1;
-  const rarity = repoRarity(repo.stars);
-  const theme = rarity?.color ?? "#3ac07a";
+  const tier = repoTier(repo.stars);
+  const fill = repoGaugeFill(repo.stars);
   function openRepo() {
     const u = safeExternalUrl(repo.url);
     if (u) window.open(u, "_blank", "noopener");
   }
   return (
-    <div className="an-bfolder shrink-0 snap-start font-mono" style={{ "--theme": theme } as CSSProperties}>
-      <div className="an-bfolder-banner" aria-hidden="true" />
-      <span className="an-bfolder-tier">VERIFIED</span>
-      <button onClick={openRepo} aria-label="Open repository" className="an-bfolder-cat active:opacity-70">
-        <GithubMark className="h-5 w-5" style={{ color: "#0c0d10", opacity: 0.85 }} />
-      </button>
-      <span className="an-bfolder-tab" aria-hidden="true" />
-      <div className="an-bfolder-body">
-        <p className="an-bfolder-title">{repo.owner}/{repo.name}</p>
-      </div>
-      {rep && (
-        <button
-          onClick={() => (extra > 0 ? onAllSkills(repo) : onOpenSkill(rep))}
-          className="an-bfolder-skill active:opacity-80"
-        >
-          <span className="an-bfolder-skill-i">✦</span>
-          <span className="an-bfolder-skill-t">{rep.name}{extra > 0 ? ` +${extra}` : ""}</span>
-        </button>
-      )}
-      <div className="an-bfolder-stars">
-        <span className="an-bfolder-stars-n">{repo.stars}</span>
-        <span className="an-bfolder-stars-s">★</span>
+    <div className="an-tfolder shrink-0 snap-start" style={{ "--c": tier.color, "--e": tier.empty } as CSSProperties}>
+      <div className="an-tfolder-clip">
+        <div className="an-tfolder-screen" style={{ background: `radial-gradient(120% 100% at 50% 22%, ${tier.from} 0%, ${tier.to} 70%)` }}>
+          <div className="an-tfolder-bin" style={{ color: tier.color }} aria-hidden="true">{FOLDER_BINARY}</div>
+          <span className="an-tfolder-tick tl" /><span className="an-tfolder-tick tr" />
+          <span className="an-tfolder-tick bl" /><span className="an-tfolder-tick br" />
+          <div className="an-tfolder-label" style={{ color: tier.color }}>&gt;VERIFIED_REPO</div>
+          <div className="an-tfolder-owner">{repo.owner}<span style={{ color: "#5a5a5d" }}>/</span></div>
+          <div className="an-tfolder-name">
+            <span style={{ color: tier.color }}>&gt;</span>
+            <span className="an-tfolder-name-t">{repo.name}</span>
+            <button onClick={openRepo} aria-label="Open repository" className="shrink-0 active:opacity-70">
+              <GithubMark className="h-[26px] w-[26px]" style={{ color: "#cfcfcf" }} />
+            </button>
+          </div>
+          <div className="an-tfolder-foot">
+            {rep ? (
+              <button onClick={() => (extra > 0 ? onAllSkills(repo) : onOpenSkill(rep))} className="an-tfolder-skill active:opacity-80">
+                ✦ {rep.name}{extra > 0 ? ` +${extra}` : ""}
+              </button>
+            ) : <span />}
+            <span className="an-tfolder-stars">
+              <span className="an-tfolder-stars-n" style={{ color: tier.color }}>{repo.stars}★</span>
+              <span className="an-tfolder-gauge">
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <i key={i} style={{ background: i < fill ? tier.color : tier.empty }} />
+                ))}
+              </span>
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -688,7 +712,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
               {/* WORK — verified repos as tall terminal-folders in a horizontal swipe row */}
               {verifiedRepos.length > 0 && (
                 <div>
-                  <p className="mb-2 text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>Work</p>
+                  <p className="mb-2 text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>Verified work</p>
                   <div className="flex snap-x gap-3 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
                     {sortedRepos.map((r) => (
                       <WorkCard key={`${r.owner}/${r.name}`} repo={r} skillById={skillById} onOpenSkill={onOpenSkill} onAllSkills={setRepoSkills} />
@@ -862,7 +886,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                 <button
                   onClick={() => { setFabOpen(false); setComposeMode("repo"); }}
                   className="an-bracket flex items-center gap-2.5 active:opacity-80"
-                  style={{ "--tk": "#4ade80", "--bk": "#0c0c0d", "--ts": "8px", padding: "11px 16px" } as CSSProperties}
+                  style={{ "--tk": "#4ade80", "--bk": "#0c0c0d", "--ts": "8px", padding: "15px 16px" } as CSSProperties}
                 >
                   <span style={{ color: "#4ade80" }}><RepoIcon className="h-[17px] w-[17px]" /></span>
                   <span className="an-term-mono text-[12px] font-bold uppercase" style={{ letterSpacing: "1px", color: "#f2f2f2" }}>Register GitHub work</span>
@@ -870,7 +894,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                 <button
                   onClick={() => { setFabOpen(false); setComposeMode("blog"); }}
                   className="an-bracket flex items-center gap-2.5 active:opacity-80"
-                  style={{ "--tk": "#4ade80", "--bk": "#0c0c0d", "--ts": "8px", padding: "11px 16px" } as CSSProperties}
+                  style={{ "--tk": "#4ade80", "--bk": "#0c0c0d", "--ts": "8px", padding: "15px 16px" } as CSSProperties}
                 >
                   <span style={{ color: "#4ade80" }}><PenIcon className="h-[17px] w-[17px]" /></span>
                   <span className="an-term-mono text-[12px] font-bold uppercase" style={{ letterSpacing: "1px", color: "#f2f2f2" }}>Write blog</span>
