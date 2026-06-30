@@ -433,11 +433,17 @@ export function Composer() {
           {(["claude", "codex", "claudex"] as Cli[]).map((c) => {
             const on = state.cli === c;
             const accent = c === "claude" ? "var(--claude)" : c === "claudex" ? "var(--claudex)" : "var(--an-green)";
+            // claudex needs BOTH engines signed in (claude leads, codex works) → dull + block until then.
+            const locked = c === "claudex" && !(state.cliReport?.claude === "ok" && state.cliReport?.codex === "ok");
             return (
               <button
                 key={c}
-                onClick={() => selectEngine(c)}
-                style={on ? { background: accent, color: "var(--an-bg-0)" } : undefined}
+                onClick={() => {
+                  if (locked) { setSlashNotice("Claudex (Team mode) needs both Claude and Codex signed in."); return; }
+                  selectEngine(c);
+                }}
+                title={locked ? "Sign in to both Claude and Codex to use Claudex" : undefined}
+                style={on ? { background: accent, color: "var(--an-bg-0)" } : locked ? { opacity: 0.3 } : undefined}
               >
                 {c}
               </button>

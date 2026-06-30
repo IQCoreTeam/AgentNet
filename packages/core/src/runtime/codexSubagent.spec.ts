@@ -23,7 +23,20 @@ vi.mock("./spawn.js", () => ({
   }),
 }));
 
-const { runCodexTask, runCodexTasks, isDangerousCommand, isPathInside } = await import("./codexSubagent.js");
+const { runCodexTask, runCodexTasks, isDangerousCommand, isPathInside, isLimitError } = await import("./codexSubagent.js");
+
+describe("limit error detection", () => {
+  it("flags usage/rate limits", () => {
+    for (const t of ["Rate limit exceeded", "429 Too Many Requests", "usage limit reached", "insufficient_quota", "model overloaded, try again later", "resource_exhausted"]) {
+      expect(isLimitError(t)).toBe(true);
+    }
+  });
+  it("ignores ordinary errors", () => {
+    for (const t of ["file not found", "syntax error on line 3", "ENOENT"]) {
+      expect(isLimitError(t)).toBe(false);
+    }
+  });
+});
 
 describe("worker safety gates", () => {
   it("flags destructive / exfil commands", () => {

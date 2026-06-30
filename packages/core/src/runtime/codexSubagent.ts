@@ -57,6 +57,12 @@ export function isDangerousCommand(cmd: string): boolean {
   return /\brm\s+-[a-z]*[rf]|sudo\b|\bmkfs\b|\bdd\s+if=|:\(\)\s*\{|\bchmod\s+-R|\bchown\s+-R|\bgit\s+push\b|\b(curl|wget)\b[^\n]*\|\s*(sh|bash|zsh)|>\s*\/dev\/(sd|disk|null\/)|\bshutdown\b|\breboot\b/i.test(cmd);
 }
 
+// Detect a usage/rate/quota limit in an engine error so we can show the user something
+// actionable instead of a raw stack. Covers Claude + Codex/OpenAI phrasings.
+export function isLimitError(text: string): boolean {
+  return /rate limit|rate-limit|usage limit|quota|too many requests|429|overloaded|capacity|insufficient_quota|limit reached|try again later|resource[_ ]exhausted/i.test(text);
+}
+
 // Is `file` inside `cwd`? Workers must not read/write OUTSIDE their working dir — that's
 // how a rogue worker would touch ~/.ssh or another project.
 export function isPathInside(file: string, cwd: string): boolean {
@@ -150,7 +156,15 @@ export function runCodexTask(task: CodexTask, defaultCwd: string, write: boolean
       if (m.role === "assistant") chunks.push(m.text);
       if (m.role === "tool" && m.tool?.file) filesChanged.add(m.tool.file);
     });
-    cli.onError((t: string) => { chunks.push(`[error] ${t}`); finish(); });
+    cli.onError((t: string) => {
+      if (isLimitError(t)) {
+        chunks.push(`[LIMIT] ${label || "Codex worker"} hit a usage/rate limit and stopped: ${t}`);
+        hooks?.notify?.(`${label || "Codex worker"} hit a rate limit`);
+      } else {
+        chunks.push(`[error] ${t}`);
+      }
+      finish();
+    });
     cli.onTurnEnd(() => finish());
 
     cli.send(task.goal);
@@ -213,7 +227,11 @@ export function createClaudexMcpServer(defaultCwd: string, write: boolean, hooks
         }
       }
       const results = await runCodexTasks(args.tasks, defaultCwd, write, hooks);
-      return { content: [{ type: "text" as const, text: JSON.stringify({ results }, null, 2) }] };
+      const limited = results.filter((r) => isLimitError(r.output)).length;
+      const note = limited
+        ? `\n\nNOTE: ${limited} of ${results.length} worker(s) hit a usage/rate limit. Tell the user plainly that the Codex team is rate-limited right now; suggest retrying in a bit or running fewer workers. Do NOT silently retry in a loop.`
+        : "";
+      return { content: [{ type: "text" as const, text: JSON.stringify({ results }, null, 2) + note }] };
     },
   );
 

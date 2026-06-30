@@ -818,6 +818,9 @@ export function chatHtml(): string {
           border-radius: var(--an-radius-sm) var(--an-radius-sm) 0 0; position: relative; top: 1px;
           transition: opacity 0.12s, background 0.12s; }
   .etab:hover { opacity: 0.8; }
+  /* claudex needs BOTH claude + codex signed in (lead + workers); dulled until then */
+  .etab.locked { opacity: 0.28; cursor: default; }
+  .etab.locked:hover { opacity: 0.3; }
   .etab .ed { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.5; }
   .etab[data-cli="claude"] { color: var(--claude); }
   .etab[data-cli="codex"]  { color: var(--an-green); }
@@ -2162,8 +2165,23 @@ export function chatHtml(): string {
     fillModes();
     fillEfforts();
   }
+  // claudex (Team mode) needs BOTH engines signed in: claude leads, codex does the work.
+  function claudexReady() { return !!(cliReport && cliReport.claude === 'ok' && cliReport.codex === 'ok'); }
+  // Dull the claudex tab until both engines are ready, so it reads as not-yet-available.
+  function refreshEngineTabs() {
+    const cxTab = tabs.find(t => t.dataset.cli === 'claudex');
+    if (cxTab) {
+      cxTab.classList.toggle('locked', !claudexReady());
+      cxTab.title = claudexReady() ? 'Claudex — a team of Codex workers led by Claude' : 'Sign in to BOTH Claude and Codex to use Claudex (Team mode)';
+    }
+  }
   function selectTab(next) {
     if (next === cli) return;
+    // claudex is gated on both engines — block + explain instead of switching.
+    if (next === 'claudex' && !claudexReady()) {
+      renderNotice('Claudex (Team mode) needs BOTH Claude and Codex signed in — Claude leads, Codex does the work. Sign in to whichever is missing, then try again.');
+      return;
+    }
     setTab(next);
     // claudex runs the claude binary, so its install/login state IS claude's.
     const statusCli = next === 'claudex' ? 'claude' : next;
@@ -2183,6 +2201,7 @@ export function chatHtml(): string {
     vscode.postMessage({ type: 'effort', effort: currentEffort() === 'default' ? undefined : currentEffort() });
   }
   tabs.forEach(t => t.addEventListener('click', () => selectTab(t.dataset.cli)));
+  refreshEngineTabs();
   // each chip toggles its own popover; clicking it again (while open) closes it
   modelBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -4898,6 +4917,7 @@ export function chatHtml(): string {
     else if (m.type === 'platform') setTab(m.cli); // extension switched CLI (e.g. on session open)
     else if (m.type === 'cliStatus') {
       cliReport = { claude: m.claude, codex: m.codex };
+      refreshEngineTabs();
       const status = cliReport[cli];
       if (status === 'no-login') renderNotice((cli === 'claude' ? 'Claude' : 'Codex') + ' is not signed in. Type /login to connect it.');
       else if (status === 'missing') renderNotice((cli === 'claude' ? 'Claude' : 'Codex') + ' is not installed.');
@@ -4908,6 +4928,7 @@ export function chatHtml(): string {
     else if (m.type === 'claudeLoginStatus') {
       if (m.status === 'done') {
         cliReport = Object.assign({}, cliReport || {}, { claude: 'ok' });
+        refreshEngineTabs();
         renderNotice('Claude sign-in complete.');
         if (cli === 'claude') vscode.postMessage({ type: 'platform', cli: 'claude' });
       } else {
@@ -4920,6 +4941,7 @@ export function chatHtml(): string {
     else if (m.type === 'codexLoginStatus') {
       if (m.status === 'done') {
         cliReport = Object.assign({}, cliReport || {}, { codex: 'ok' });
+        refreshEngineTabs();
         renderNotice('Codex sign-in complete.');
         if (cli === 'codex') vscode.postMessage({ type: 'platform', cli: 'codex' });
       } else {
