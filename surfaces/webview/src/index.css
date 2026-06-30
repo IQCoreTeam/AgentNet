@@ -1067,7 +1067,11 @@ html[data-keyboard="open"] .an-chat-float { bottom: 0; }
   align-items: center;
   gap: 0.5rem;
   padding: 10px 20px; /* sits inside the bracket gap (::before draws the corner ticks) */
-  background: transparent;
+  /* Solid (opaque) black fill on the pill ITSELF so the button stays legible over whatever
+     chat content scrolls behind it — only the capsule is filled, the corner-tick brackets
+     (::before) and the area around them stay transparent. */
+  background: #0a0a0b;
+  border-radius: 10px;
   color: #e8e8e8;
   font-family: "Space Mono", ui-monospace, monospace;
   font-weight: 700;
