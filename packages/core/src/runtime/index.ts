@@ -13,7 +13,7 @@ import { MemorySync, updateSkillsSection } from "../memory/index.js";
 import { setSkillShoppingActive } from "../skill-market/passive.js";
 import { setMakeSkillActive } from "../skill-market/makeSkill.js";
 import { createAgentSdkMcpServer, newVerifyGuard, agentNetAllowedTools, AGENTNET_MCP_SERVER } from "../skill-market/index.js";
-import { createClaudexMcpServer, claudexAllowedTools, CLAUDEX_MCP_SERVER, type ClaudexHooks } from "./codexSubagent.js";
+import { createClaudexMcpServer, claudexAllowedTools, CLAUDEX_MCP_SERVER, isLimitError, type ClaudexHooks } from "./codexSubagent.js";
 import { resolveRpcUrl, hasDasRpc, loadGithubToken } from "../core/rpc.js";
 import { getCodexApiKey } from "../account/codexAuth.js";
 import type { ApprovalChannel } from "./approval/channel.js";
@@ -249,7 +249,12 @@ export function createRuntime(
       let stopped = false; // we asked it to stop (tab/model switch) → not an error
       cli.onError((text: string) => {
         if (stopped) return;
-        emit({ role: "tool", text, ts: Date.now() });
+        // A usage/rate limit on the LEAD engine is common and actionable — show a clean,
+        // human message (keep the raw text appended for debugging) instead of a raw stack.
+        const shown = isLimitError(text)
+          ? `${opts.cli} hit a usage/rate limit — try again in a bit, or switch engine. (${text.trim().slice(0, 200)})`
+          : text;
+        emit({ role: "tool", text: shown, ts: Date.now() });
         void flush().then(() => {
           for (const cb of turnCbs) cb();
         });
