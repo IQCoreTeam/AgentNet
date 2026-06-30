@@ -847,13 +847,16 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
         </div>
       )}
 
-      {/* Compose FAB (self): write a blog post or register verified GitHub work */}
-      {profile.self && (
+      {/* Compose FAB (self): write a blog post or register verified GitHub work. Portaled to the
+          body so it floats ABOVE the shell's bottom fade (it lives in the pager's transformed
+          stacking context otherwise, which the fade overlay dims). Safe to portal because this
+          view only mounts while the Agent page is active. */}
+      {profile.self && createPortal(
         <>
           {fabOpen && (
-            <button className="fixed inset-0 z-30 cursor-default" aria-label="Close menu" onClick={() => setFabOpen(false)} />
+            <button className="fixed inset-0 z-[49] cursor-default" aria-label="Close menu" onClick={() => setFabOpen(false)} />
           )}
-          <div className="absolute right-5 z-40 flex flex-col items-end gap-3" style={{ bottom: "calc(var(--tabbar-height, 0px) + 1.25rem)" }}>
+          <div className="fixed right-5 z-[50] flex flex-col items-end gap-3" style={{ bottom: "calc(var(--tabbar-height, 0px) + 1.25rem)" }}>
             {fabOpen && (
               <>
                 <button
@@ -874,20 +877,21 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                 </button>
               </>
             )}
-            {/* Square bracketed FAB: closed = solid green with +, open = dark green + glow; the
-                + rotates 45° into × (kept), so there's no separate meaningless × button. */}
+            {/* Square bracketed FAB. Closed = dark (black) fill + green ticks + green glyph, so
+                the button reads as a solid affordance on the dark page. Open = dark-green fill +
+                glow. The + rotates 45° into × (kept), so there's no separate meaningless × button. */}
             <button
               onClick={() => setFabOpen((o) => !o)}
               aria-label={fabOpen ? "Close menu" : "Create"}
               className="an-bracket flex items-center justify-center active:opacity-90"
               style={{
-                width: 60,
-                height: 60,
+                width: 56,
+                height: 56,
                 "--tk": "#4ade80",
-                "--ts": "12px",
-                "--bk": fabOpen ? "#0c160f" : "#4ade80",
-                color: fabOpen ? "#4ade80" : "#06140c",
-                boxShadow: fabOpen ? "0 0 18px rgba(74,222,128,0.18)" : "0 0 18px rgba(74,222,128,0.28)",
+                "--ts": "13px",
+                "--bk": fabOpen ? "#0c160f" : "#0c0c0d",
+                color: "#4ade80",
+                boxShadow: fabOpen ? "0 0 18px rgba(74,222,128,0.18)" : "0 0 14px rgba(0,0,0,0.5)",
               } as CSSProperties}
             >
               <span className="flex" style={{ transform: fabOpen ? "rotate(45deg)" : "none", transition: "transform 160ms" }}>
@@ -895,7 +899,8 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
               </span>
             </button>
           </div>
-        </>
+        </>,
+        document.body,
       )}
 
       {composeMode === "blog" && (

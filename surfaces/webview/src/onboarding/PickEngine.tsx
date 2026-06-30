@@ -1,8 +1,7 @@
-// Engine entry for onboarding. If an engine is already set up we DON'T block on a picker:
-// both ready -> Claude; only one ready -> that one. But a fresh user with NO engine signed in
-// gets a real choice here — otherwise auto-routing to Claude hides Codex entirely and a
-// Codex-only user is stranded on the Claude login screen with no way to pick Codex. Each
-// choice routes to that engine's own login. Users can still switch later from the composer.
+// Engine entry for onboarding. ALWAYS show both Claude and Codex here so the user picks — no
+// auto-routing to one engine (that hid Codex entirely, e.g. when Claude happened to be ready,
+// and stranded Codex-only users on the Claude login). Tapping a ready engine goes straight to
+// chat; tapping a not-yet-signed-in one routes to its own login. Switchable later in chat.
 // Compact layout so it fits short screens.
 
 import { useEffect, useState } from "react";
@@ -13,26 +12,18 @@ import agentnetWordmark from "../assets/agentnet.png";
 export function PickEngine() {
   const { state, selectEngine } = useStore();
   const report = state.cliReport;
-  const claudeOk = report?.claude === "ok";
-  const codexOk = report?.codex === "ok";
-  const anyReady = !!report && (claudeOk || codexOk);
 
-  // At least one engine ready → auto-route (both → Claude; only one → that one). No picker.
-  useEffect(() => {
-    if (anyReady) selectEngine(codexOk && !claudeOk ? "codex" : "claude");
-  }, [anyReady, claudeOk, codexOk]);
-
-  // Show the splash while the CLI report is still arriving (so ready users never flash the
-  // picker), but fall through to the picker if it's slow — a no-engine user must not hang here.
+  // Splash only while the first CLI report is still arriving (so the picker doesn't flash before
+  // statuses are known), then always show both engines — a slow report must not hang here.
   const [waited, setWaited] = useState(false);
   useEffect(() => {
     if (report) return;
     const t = setTimeout(() => setWaited(true), 1200);
     return () => clearTimeout(t);
   }, [report]);
-  if ((!report && !waited) || anyReady) return <Splash />;
+  if (!report && !waited) return <Splash />;
 
-  // Fresh user, neither engine signed in → choose which to set up.
+  // Choose which engine to set up — both always offered.
   const ENGINES = [
     { cli: "claude" as const, label: "Claude", accent: "var(--claude)", desc: "Anthropic · sign in with your Claude plan" },
     { cli: "codex" as const, label: "Codex", accent: "var(--an-green)", desc: "OpenAI · sign in with your Codex/ChatGPT plan" },
