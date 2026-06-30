@@ -87,6 +87,9 @@ jobs:
       - name: Stage assets into the source tree
         run: |
           set -e
+          # assets/ is gitignored (its tars never get committed), so it doesn't exist on a
+          # fresh checkout — create it before copying.
+          mkdir -p surfaces/android/app/src/main/assets
           rm -rf surfaces/android/app/src/main/jniLibs
           cp -R ci-assets/jniLibs surfaces/android/app/src/main/jniLibs
           cp ci-assets/assets/rootfs-*.tar surfaces/android/app/src/main/assets/
