@@ -29,8 +29,20 @@ on:
         description: "android-assets run id to reuse (blank = latest successful)"
         required: false
         default: ""
+  # Auto-build a fresh signed APK whenever main gets an app/server/UI change, so the latest
+  # team-signed APK is always waiting as an artifact. Paths-filtered so doc-only pushes don't
+  # build. (Public repo -> GitHub-hosted minutes are free.)
   push:
-    tags: ["android-v*"]
+    branches: [main]
+    paths:
+      - "surfaces/**"
+      - "packages/**"
+      - ".github/workflows/android-apk.yml"
+
+# One build per ref: a newer push to main cancels an in-progress build so only the latest wins.
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
