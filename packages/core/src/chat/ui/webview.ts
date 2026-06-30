@@ -4886,7 +4886,7 @@ export function chatHtml(): string {
     else if (m.type === 'storage') { renderStorage(m.info, m.options); renderWalletStorage(); }
     else if (m.type === 'cloudSync') renderCloudSync(m.status);
     else if (m.type === 'wallet') setWallet(m.address);
-    else if (m.type === 'page') { hasMore = m.hasMore; pageCursor = m.cursor; maybeFillOlder(); }
+    else if (m.type === 'page') { hideLoading(); hasMore = m.hasMore; pageCursor = m.cursor; maybeFillOlder(); }
     else if (m.type === 'older') {
       prependOlder(m.messages || []);
       hasMore = m.hasMore; pageCursor = m.cursor; loadingOlder = false;
