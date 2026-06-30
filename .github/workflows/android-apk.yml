@@ -1,0 +1,130 @@
+# Build a SIGNED debug APK and upload it as an artifact, so teammates can install a
+# team-signed build (Google Drive works) WITHOUT having the shared keystore locally.
+#
+# Why a separate workflow from android-assets: the heavy part (the ~1 GB aarch64 rootfs,
+# built under QEMU, ~15 min) rarely changes — only when Ubuntu/node/claude/codex change.
+# A UI/server/Kotlin update does NOT need a new rootfs. So this workflow REUSES the latest
+# android-assets artifact's rootfs + jniLibs and only rebuilds the lightweight server
+# bundle (webview + localhost dist) before signing. No QEMU here -> fast (~5 min).
+#
+# Run android-assets when the rootfs deps change; run THIS for every UI/app change.
+#
+# Requires one repo secret: ANDROID_DEBUG_KEYSTORE_B64 = base64 of the shared debug
+# keystore (`base64 -i surfaces/android/agentnet-debug.keystore`). The signed APK never
+# contains the private key (only the public cert + signature), so the artifact is safe to
+# share. Manual / tag trigger only — never fork PRs, so the secret is never exposed to
+# untrusted code.
+
+name: android-apk
+
+on:
+  workflow_dispatch:
+    inputs:
+      abi:
+        description: "Target ABI"
+        type: choice
+        options: ["arm64", "x86_64"]
+        default: "arm64"
+      assets_run_id:
+        description: "android-assets run id to reuse (blank = latest successful)"
+        required: false
+        default: ""
+  push:
+    tags: ["android-v*"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      ABI: ${{ github.event.inputs.abi || 'arm64' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Fail fast if the signing secret is missing — otherwise gradle would sign with an
+      # auto-generated key whose SHA-1 isn't registered for Drive, producing a silently
+      # wrong "team" APK. (Passed via env, not interpolated into the command.)
+      - name: Require signing secret
+        env:
+          KS_B64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KS_B64" ]; then
+            echo "::error::ANDROID_DEBUG_KEYSTORE_B64 is not set. Add it as a repo secret: base64 -i surfaces/android/agentnet-debug.keystore"
+            exit 1
+          fi
+
+      # Lightweight, arch-independent JS — rebuilt every run so the APK carries the latest UI.
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter agentnet-localhost build
+      - run: pnpm --filter agentnet-webview build
+
+      # Reuse the rootfs + jniLibs from the latest android-assets run (no QEMU rebuild).
+      - name: Resolve android-assets run
+        id: assets
+        run: |
+          ID="${{ github.event.inputs.assets_run_id }}"
+          if [ -z "$ID" ]; then
+            ID=$(gh run list --workflow=android-assets.yml --status success -L 1 \
+                   --json databaseId -q '.[0].databaseId' || true)
+          fi
+          if [ -z "$ID" ]; then
+            echo "::error::No successful android-assets run found. Run the android-assets workflow first (it builds the rootfs), then re-run this."
+            exit 1
+          fi
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+
+      - name: Download rootfs + jniLibs
+        run: gh run download "${{ steps.assets.outputs.id }}" -n "android-assets-${ABI}" -D ci-assets
+
+      - name: Stage assets into the source tree
+        run: |
+          set -e
+          rm -rf surfaces/android/app/src/main/jniLibs
+          cp -R ci-assets/jniLibs surfaces/android/app/src/main/jniLibs
+          cp ci-assets/assets/rootfs-*.tar surfaces/android/app/src/main/assets/
+          # Repack the server bundle FRESH from this run's dist (don't reuse the artifact's
+          # stale agentnet-server.tar) so the APK carries the current UI.
+          STAGE="$(mktemp -d)/server-bundle"
+          mkdir -p "$STAGE/webview"
+          cp -R surfaces/localhost/dist/. "$STAGE/"
+          cp -R surfaces/webview/dist/. "$STAGE/webview/"
+          tar -cf surfaces/android/app/src/main/assets/agentnet-server.tar -C "$STAGE" .
+          ls -lh surfaces/android/app/src/main/assets/
+
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+
+      # Decode the shared keystore into the path build.gradle.kts expects. Removed at job end;
+      # GitHub-hosted runners are ephemeral and isolated.
+      - name: Install shared debug keystore
+        env:
+          KS_B64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_B64 }}
+        run: printf '%s' "$KS_B64" | base64 -d > surfaces/android/agentnet-debug.keystore
+
+      - name: Build signed debug APK
+        working-directory: surfaces/android
+        run: ./gradlew --no-daemon assembleDebug
+
+      # SHA-1 is a public fingerprint (not the key), safe to log — proves the team key signed it.
+      - name: Print signing SHA-1
+        working-directory: surfaces/android
+        run: ./gradlew --no-daemon :app:signingReport | grep -E "Variant|SHA1" | head -20
+
+      - name: Remove keystore
+        if: always()
+        run: rm -f surfaces/android/agentnet-debug.keystore
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agentnet-apk-${{ env.ABI }}
+          path: surfaces/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
+          if-no-files-found: error

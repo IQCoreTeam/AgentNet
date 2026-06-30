@@ -9,15 +9,59 @@ OAuth). This file is the **refresh runbook** for when the app is already install
 > `adb` below is `~/Library/Android/sdk/platform-tools/adb` on macOS
 > (`%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe` on Windows). `gh` is the GitHub CLI.
 
+- [Get a signed APK from CI (recommended)](#get-a-signed-apk-from-ci-recommended)
 - [When to use this](#when-to-use-this)
 - [What a reinstall refreshes (and what it does not)](#what-a-reinstall-refreshes-and-what-it-does-not)
 - [Debug APK source policy](#debug-apk-source-policy)
+- [Build the APK locally (alternative)](#build-the-apk-locally-alternative)
 - [Step 1 — Get a fresh payload from CI](#step-1--get-a-fresh-payload-from-ci)
 - [Step 2 — Drop the payload into the source tree](#step-2--drop-the-payload-into-the-source-tree)
 - [Step 3 — Build the APK](#step-3--build-the-apk)
 - [Step 4 — Reinstall (quick vs. full clean)](#step-4--reinstall-quick-vs-full-clean)
 - [Step 5 — Launch and verify](#step-5--launch-and-verify)
 - [Troubleshooting the refresh](#troubleshooting-the-refresh)
+
+---
+
+## Get a signed APK from CI (recommended)
+
+This is the easiest, most reliable path and **needs no keystore and no local asset juggling**.
+The `android-apk` workflow builds a **team-signed** APK from current `main`: it rebuilds the
+server bundle fresh (so Google Drive uses the **native** flow — no "Use secure browsers" block)
+and signs with the **team key** (so the SHA-1 is registered — no "not registered" error). It
+reuses the heavy rootfs from the latest `android-assets` run, so a UI change builds in ~5 min
+(no QEMU).
+
+> One-time setup (a maintainer with the keystore, done once): add a repo secret
+> `ANDROID_DEBUG_KEYSTORE_B64` = `base64 -i surfaces/android/agentnet-debug.keystore`. The
+> signed APK never contains the private key, so the artifact is safe to share.
+
+```bash
+# 1) Trigger the build (needs a prior successful android-assets run for the rootfs;
+#    run `gh workflow run android-assets.yml -f abi=arm64` once if there isn't one).
+gh workflow run android-apk.yml -f abi=arm64
+
+# 2) Watch it, then download the signed APK artifact.
+gh run list --workflow=android-apk.yml -L 1
+gh run watch <run-id> --exit-status
+gh run download <run-id> -n agentnet-apk-arm64 -D ./apk
+
+# 3) Install. If switching from a differently-signed build, uninstall first (re-onboards).
+adb install -r ./apk/app-debug.apk
+# or:  adb uninstall com.iqlabs.agentnet && adb install ./apk/app-debug.apk
+```
+
+No `gh`? Use the **Actions** tab: **android-apk** → **Run workflow** → ABI `arm64`, then
+download **agentnet-apk-arm64** from the finished run.
+
+**When to re-run what:**
+
+- **UI / server / Kotlin change** → run **`android-apk`** only (fast, reuses the rootfs).
+- **rootfs deps change** (Ubuntu / node / claude / codex) → run **`android-assets`** once, then
+  `android-apk`.
+
+Only build locally (below) if you specifically need to iterate without CI **and** you hold the
+shared keystore.
 
 ---
 
@@ -65,9 +109,14 @@ most confusing failures:
 
 Use one of these trusted sources instead:
 
-1. Build the APK yourself from current `main`, using the fresh `android-assets-arm64` CI
-   artifact and the team-shared debug keystore.
-2. If someone sends an APK directly, treat it as a team handoff artifact only if they also
+1. **Download the signed APK from the `android-apk` CI workflow** — it's built from current
+   `main`, server bundle fresh (native Drive flow), and signed with the team key. No local
+   keystore needed. See [Get a signed APK from CI](#get-a-signed-apk-from-ci-recommended).
+2. Build the APK yourself from current `main`, using the fresh `android-assets-arm64` CI
+   artifact. Sign with the shared debug keystore **only if you were handed it out-of-band** —
+   it is not in the repo (see [Google Drive sign-in & the shared debug key](#google-drive-sign-in--the-shared-debug-key-read-this)).
+   Without it your build signs with your own key, which can't use the team Drive OAuth client.
+3. If someone sends an APK directly, treat it as a team handoff artifact only if they also
    provide the git commit SHA, the `android-assets` run id, and the signing SHA-1. Verify the
    signing SHA-1 before installing:
 
@@ -90,6 +139,13 @@ If your build shows a different SHA-1, either install the shared keystore first 
 that SHA-1 separately as an Android OAuth client for `com.iqlabs.agentnet`.
 
 ---
+
+## Build the APK locally (alternative)
+
+Use this only if you need to iterate without CI **and** you hold the shared keystore (otherwise
+your build signs with your own key and can't use the team Drive OAuth — see
+[Google Drive sign-in](#google-drive-sign-in--the-shared-debug-key-read-this)). Most people
+should use [Get a signed APK from CI](#get-a-signed-apk-from-ci-recommended) instead.
 
 ## Step 1 — Get a fresh payload from CI
 
@@ -199,30 +255,47 @@ adb forward --remove tcp:4318
 
 ---
 
-## Shared debug signing (one Drive OAuth registration for the whole team)
+## Google Drive sign-in & the shared debug key (read this)
 
-Google Drive's native login only works if the APK's signing SHA-1 is registered for
-`com.iqlabs.agentnet` in Google Cloud Console. By default every machine signs debug builds
-with its **own** auto-generated `~/.android/debug.keystore`, so each developer would otherwise
-need their own SHA-1 registered (and you get the divergent-build confusion: different SHA-1s,
-different behavior). To avoid that, the project uses **one shared debug keystore** so every
-build has the same SHA-1 and a single registration covers everyone.
+Native Google Drive login only works if the APK's signing SHA-1 is registered for
+`com.iqlabs.agentnet` in Google Cloud Console. The team registered **one** shared debug
+keystore's SHA-1 so a single registration covers everyone who signs with that key:
 
-- The keystore (`surfaces/android/agentnet-debug.keystore`) is **not in the repo** (this is a
-  public repo) — it is `.gitignore`'d and distributed to the team **out-of-band** (a private
-  channel). `build.gradle.kts` uses it automatically when present and **falls back** to the
-  machine's own debug keystore when absent (the build still works, just with that machine's
-  SHA-1).
-- **To use it:** get the file from the team and drop it at
-  `surfaces/android/agentnet-debug.keystore`. Verify with
-  `cd surfaces/android && ./gradlew :app:signingReport` — the `debug` variant SHA-1 should
-  match the one registered in Google Cloud Console.
-- It is a **debug** key only (standard `android`/`androiddebugkey` password — not a secret;
-  the *file* is the access control). **Never** use it for a Play Store / release build — that
-  must use a separate, secret release key that is never shared or committed.
-- Switching to (or away from) the shared key changes the signature, so the next install over
-  an existing app fails with a signature mismatch. **Uninstall first**
-  (`adb uninstall com.iqlabs.agentnet`), then install — this re-runs onboarding.
+```text
+4A:DD:0A:EC:AB:F5:55:CE:85:5C:DE:02:ED:08:82:8C:04:1A:EC:E6
+```
+
+**The shared keystore is NOT in this repo and cannot be.** This is a **public** repo, and the
+keystore holds a **private signing key** — committing it would let anyone sign apps with the
+team identity and abuse the team's Drive OAuth client. It is `.gitignore`'d
+(`surfaces/android/agentnet-debug.keystore`), and the SHA-1 above is only a *fingerprint* —
+you cannot rebuild the key from it. So `git clone` / `git pull` never brings the key.
+
+What this means in practice:
+
+- **Clone the repo and build locally → you CANNOT test the team Google Drive.** Without the
+  shared keystore file, `build.gradle.kts` falls back to your machine's own
+  `~/.android/debug.keystore`, so your APK has a *different* SHA-1 that isn't registered. Drive
+  login fails ("not registered for this Android build" / `UNREGISTERED_ON_API_CONSOLE`).
+  Everything else — wallet, Claude/Codex, chat — still works.
+- **The distributed / production build works.** It's signed with the shared key (by whoever
+  holds the file, or by CI), so its SHA-1 is the registered one and Drive works there.
+- **Want Drive on your own local build? Use YOUR OWN key.** Build with your machine's default
+  debug keystore, read its SHA-1 with `cd surfaces/android && ./gradlew :app:signingReport`,
+  and register that SHA-1 as your **own** Android OAuth client for `com.iqlabs.agentnet` in
+  Google Cloud Console. Then your local build does Drive login under your own client.
+
+If you *do* have the shared keystore file (handed to you **out-of-band** — a private channel,
+never the repo): drop it at `surfaces/android/agentnet-debug.keystore` and the build uses it
+automatically (verify with `./gradlew :app:signingReport`). It is a **debug** key only
+(standard `android` / `androiddebugkey` password — the *file* is the access control); **never**
+use it for a Play Store / release build. Switching keys changes the signature, so the next
+install over an existing app fails with a mismatch: `adb uninstall com.iqlabs.agentnet` first,
+then install (re-onboards).
+
+> Durable fix for "other machines can't sign with the team key": sign in **CI** (store the
+> keystore as a base64 GitHub Actions secret) and ship the **signed APK as a CI artifact**, so
+> nobody needs the file locally. Until that's set up, the key must be passed out-of-band.
 
 ## Troubleshooting the refresh
 
@@ -238,11 +311,13 @@ build has the same SHA-1 and a single registration covers everyone.
   inside the WebView, which Google blocks. Refresh to a current server bundle — it uses the
   **native** Android flow (no WebView) and the error disappears. (Tell-tale: the error's
   `client_id=` is the web client from `local.properties`, not the Android OAuth client.)
-- **Google Drive: "not registered for this Android build":** the APK's signing SHA-1 is not
-  registered for `com.iqlabs.agentnet` in Google Cloud Console. Get this build's SHA-1 with
-  `cd surfaces/android && ./gradlew signingReport`, then add an **Android** OAuth client for
-  that package + SHA-1. Note that each machine's debug keystore has a **different** SHA-1, so
-  each developer must register their own — unless the project pins a shared debug
-  `signingConfig` so every build shares one SHA-1.
+- **Google Drive: "not registered for this Android build" / `UNREGISTERED_ON_API_CONSOLE`:**
+  your APK is signed with your machine's own debug key (the shared team keystore isn't in the
+  repo — see [Google Drive sign-in & the shared debug key](#google-drive-sign-in--the-shared-debug-key-read-this)),
+  so its SHA-1 isn't registered. **In local testing you can't use the team Drive** with your
+  own key. Either (a) get the shared keystore out-of-band and rebuild, or (b) register **your
+  own** SHA-1 (`cd surfaces/android && ./gradlew signingReport`) as your own **Android** OAuth
+  client for `com.iqlabs.agentnet` to test Drive under your own client. The distributed /
+  production build (shared key) is unaffected.
 - **Stuck on the splash after a clean reinstall:** the first run is unpacking the rootfs (a
   few minutes). Watch `adb logcat -d | grep -E "AgentNet/|\[server\]"`.
