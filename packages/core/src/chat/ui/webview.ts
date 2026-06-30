@@ -2479,11 +2479,13 @@ export function chatHtml(): string {
       grid.style.cssText = 'display:grid;gap:6px;padding:8px;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));';
       goals.forEach((g, i) => {
         const tile = document.createElement('div');
-        tile.style.cssText = 'border:1px solid var(--an-line);border-radius:var(--an-radius-sm);padding:7px;';
+        tile.style.cssText = 'border:1px solid var(--an-line);border-radius:var(--an-radius-sm);padding:7px;min-width:0;overflow:hidden;';
         const lab = document.createElement('div');
         lab.style.cssText = 'font-family:var(--vscode-editor-font-family);font-size:0.7em;text-transform:uppercase;letter-spacing:1px;color:var(--claudex);margin-bottom:3px;';
         lab.textContent = 'codex #' + (i + 1);
-        const goal = document.createElement('div'); goal.textContent = g;
+        const goal = document.createElement('div');
+        goal.style.cssText = 'overflow-wrap:anywhere;word-break:break-word;';
+        goal.textContent = g;
         tile.appendChild(lab); tile.appendChild(goal); grid.appendChild(tile);
       });
       card.appendChild(grid);

@@ -69,9 +69,9 @@ function WarRoom({ output }: { output?: string }) {
       </div>
       <div className="grid gap-1.5 p-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" }}>
         {goals.map((g, i) => (
-          <div key={i} className="rounded-md border border-zinc-800 bg-zinc-950/60 p-2">
+          <div key={i} className="min-w-0 overflow-hidden rounded-md border border-zinc-800 bg-zinc-950/60 p-2">
             <div className="mb-1 font-mono text-[0.6rem] uppercase tracking-wider" style={{ color: "var(--claudex)" }}>codex #{i + 1}</div>
-            <div className="text-zinc-300">{g}</div>
+            <div className="text-zinc-300 [overflow-wrap:anywhere] break-words">{g}</div>
           </div>
         ))}
       </div>
