@@ -299,14 +299,14 @@ body {
 .an-id-segs i.on { background: var(--tier); border-color: var(--tier); }
 .an-id-gauge .val { font-family: "Space Mono", ui-monospace, monospace; font-size: 12px; font-weight: 700; white-space: nowrap; color: var(--an-fg); }
 
-/* WORK card: a terminal-style verified-work folder (CARD // FOLDER = TERMINAL, monochrome chic)
-   in a horizontal swipe row. A clip-path folder tab over a dark "screen" with a faint binary
-   wash, tier corner ticks, owner + bold repo name + large octocat, a muted skill pill, and a
-   slant star gauge. --c = the muted tier accent, --e = the gauge's empty-segment colour. */
+/* WORK card: the CARD // FOLDER = TERMINAL shape with CARD // FOLDER TIERS colour. A clip-path
+   folder tab over a dark screen with a faint binary wash, owner + bold repo name + large octocat,
+   a muted skill pill, and a slant star gauge. --c = the muted tier accent, --e = the gauge's
+   empty-segment colour. NO corner ticks, NO star glyph on the pill (dropped per design). */
 .an-tfolder {
   position: relative;
-  width: 248px;
-  filter: drop-shadow(0 12px 20px rgba(0, 0, 0, 0.5));
+  width: 270px;
+  filter: drop-shadow(0 14px 22px rgba(0, 0, 0, 0.55));
 }
 .an-tfolder-clip {
   position: relative;
@@ -325,6 +325,7 @@ body {
 .an-tfolder-bin {
   position: absolute;
   inset: 0;
+  color: var(--c);
   opacity: 0.1;
   font: 700 9px "Space Mono", ui-monospace, monospace;
   line-height: 1.45;
@@ -334,20 +335,15 @@ body {
   user-select: none;
   pointer-events: none;
 }
-.an-tfolder-tick { position: absolute; width: 9px; height: 9px; }
-.an-tfolder-tick.tl { top: 5px; left: 5px; border-top: 1.5px solid var(--c); border-left: 1.5px solid var(--c); }
-.an-tfolder-tick.tr { top: 5px; right: 5px; border-top: 1.5px solid var(--c); border-right: 1.5px solid var(--c); }
-.an-tfolder-tick.bl { bottom: 5px; left: 5px; border-bottom: 1.5px solid var(--c); border-left: 1.5px solid var(--c); }
-.an-tfolder-tick.br { bottom: 5px; right: 5px; border-bottom: 1.5px solid var(--c); border-right: 1.5px solid var(--c); }
-.an-tfolder-label { position: relative; font: 700 8px "Space Mono", ui-monospace, monospace; letter-spacing: 1.5px; }
+.an-tfolder-label { position: relative; font: 700 8px "Space Mono", ui-monospace, monospace; letter-spacing: 0.5px; color: var(--c); }
 .an-tfolder-owner { position: relative; font: 700 8px "Space Mono", ui-monospace, monospace; letter-spacing: 0.5px; color: #9a9a9a; margin-top: 9px; }
-.an-tfolder-name { position: relative; display: flex; align-items: center; gap: 8px; margin-top: 2px; color: #f2f2f2; font: 700 20px "Space Mono", ui-monospace, monospace; letter-spacing: 0.5px; }
+.an-tfolder-name { position: relative; display: flex; align-items: center; gap: 8px; margin-top: 2px; color: #f2f2f2; font: 700 22px "Space Mono", ui-monospace, monospace; letter-spacing: 0.5px; }
 .an-tfolder-name-t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .an-tfolder-foot {
   position: absolute;
   left: 13px;
   right: 13px;
-  bottom: 12px;
+  bottom: 13px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -364,12 +360,13 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 56%;
+  max-width: 62%;
 }
 .an-tfolder-stars { display: flex; align-items: center; gap: 6px; flex: none; }
-.an-tfolder-stars-n { font: 700 15px "Space Mono", ui-monospace, monospace; }
+.an-tfolder-stars-n { font: 700 15px "Space Mono", ui-monospace, monospace; color: var(--c); }
 .an-tfolder-gauge { display: flex; gap: 2px; align-items: center; }
-.an-tfolder-gauge i { width: 4px; height: 14px; transform: skewX(-12deg); }
+.an-tfolder-gauge i { width: 4px; height: 14px; transform: skewX(-12deg); background: var(--e); }
+.an-tfolder-gauge i.on { background: var(--c); }
 
 /* SKILL "SD-card" collectible. The cartridge body is sophisticated MATTE plastic: a graphite
    form gradient + a broad diffuse top light (::before, soft-box not gloss) + a contrast-tuned

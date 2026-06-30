@@ -85,17 +85,17 @@ function tierInfo(stars: number) {
   return { cur, next };
 }
 
-// Per-repo tier ramp for the WORK terminal-folders. Same star thresholds that already made each
-// folder look different (3/10/50/250), but the bright neon is swapped for the design's muted,
-// low-saturation accents (CARD // FOLDER TIERS). The tier drives the screen tint, corner ticks,
-// markers, star colour and the gauge fill. Below 3 stars = a neutral "verified" base look.
+// Per-repo tier ramp (CARD // FOLDER TIERS — low-saturation accents). Same star thresholds that
+// already made each folder differ (3/10/50/250); the tier drives the screen tint, the markers,
+// the star colour and the gauge fill. Below 3 stars = a neutral grey base. (No colour neon, no
+// corner ticks — those were dropped per the design.)
 const REPO_TIERS = [
   { min: 250, color: "#86c4cf", from: "#131a1b", to: "#0d1011", empty: "#1e2628" }, // diamond
   { min: 50, color: "#d8c074", from: "#1a1813", to: "#100f0d", empty: "#2a2618" },  // gold
   { min: 10, color: "#b8c0cc", from: "#161719", to: "#0e0f10", empty: "#26282c" },  // silver
   { min: 3, color: "#b8895a", from: "#1a1613", to: "#100f0e", empty: "#2a2420" },   // bronze
 ] as const;
-const REPO_BASE = { color: "#cfcfcf", from: "#1a1a1d", to: "#0d0d0e", empty: "#33333a" } as const;
+const REPO_BASE = { color: "#9a9a9a", from: "#1a1a1d", to: "#0d0d0e", empty: "#33333a" } as const;
 
 function repoTier(stars: number) {
   return REPO_TIERS.find((t) => stars >= t.min) ?? REPO_BASE;
@@ -211,11 +211,11 @@ function GithubCard({ url, className = "mt-2" }: { url: string; className?: stri
   );
 }
 
-// One WORK card: a terminal-style verified-work folder (CARD // FOLDER = TERMINAL, monochrome
-// chic). A clip-path folder tab over a dark "screen" with a faint binary wash, the repo owner +
-// bold name, a large octocat (taps to open the repo), a muted skill pill (taps the skill; "+N"
-// opens the list), and a slant star gauge. Colour is the repo's muted star tier; the gauge fills
-// by real progress toward the next star threshold.
+// One WORK card: the CARD // FOLDER = TERMINAL shape with the CARD // FOLDER TIERS colour (the
+// muted, low-saturation per-tier accent). A clip-path folder tab over a dark screen with a faint
+// binary wash, repo owner + bold name + a large octocat (taps to open the repo), a muted skill
+// pill (taps the skill; "+N" opens the list), and a slant star gauge that fills by real progress
+// toward the next star threshold. No corner ticks, no star glyph on the pill (dropped per design).
 function WorkCard({
   repo,
   skillById,
@@ -243,29 +243,27 @@ function WorkCard({
     <div className="an-tfolder shrink-0 snap-start" style={{ "--c": tier.color, "--e": tier.empty } as CSSProperties}>
       <div className="an-tfolder-clip">
         <div className="an-tfolder-screen" style={{ background: `radial-gradient(120% 100% at 50% 22%, ${tier.from} 0%, ${tier.to} 70%)` }}>
-          <div className="an-tfolder-bin" style={{ color: tier.color }} aria-hidden="true">{FOLDER_BINARY}</div>
-          <span className="an-tfolder-tick tl" /><span className="an-tfolder-tick tr" />
-          <span className="an-tfolder-tick bl" /><span className="an-tfolder-tick br" />
-          <div className="an-tfolder-label" style={{ color: tier.color }}>&gt;VERIFIED_REPO</div>
+          <div className="an-tfolder-bin" aria-hidden="true">{FOLDER_BINARY}</div>
+          <div className="an-tfolder-label">&gt;VERIFIED_REPO</div>
           <div className="an-tfolder-owner">{repo.owner}<span style={{ color: "#5a5a5d" }}>/</span></div>
           <div className="an-tfolder-name">
-            <span style={{ color: tier.color }}>&gt;</span>
+            <span style={{ color: "var(--c)" }}>&gt;</span>
             <span className="an-tfolder-name-t">{repo.name}</span>
             <button onClick={openRepo} aria-label="Open repository" className="shrink-0 active:opacity-70">
-              <GithubMark className="h-[26px] w-[26px]" style={{ color: "#cfcfcf" }} />
+              <GithubMark style={{ width: 30, height: 26, color: "#cfcfcf" }} />
             </button>
           </div>
           <div className="an-tfolder-foot">
             {rep ? (
               <button onClick={() => (extra > 0 ? onAllSkills(repo) : onOpenSkill(rep))} className="an-tfolder-skill active:opacity-80">
-                ✦ {rep.name}{extra > 0 ? ` +${extra}` : ""}
+                {rep.name}{extra > 0 ? ` +${extra}` : ""}
               </button>
             ) : <span />}
             <span className="an-tfolder-stars">
-              <span className="an-tfolder-stars-n" style={{ color: tier.color }}>{repo.stars}★</span>
+              <span className="an-tfolder-stars-n">{repo.stars}★</span>
               <span className="an-tfolder-gauge">
                 {Array.from({ length: 10 }).map((_, i) => (
-                  <i key={i} style={{ background: i < fill ? tier.color : tier.empty }} />
+                  <i key={i} className={i < fill ? "on" : ""} />
                 ))}
               </span>
             </span>
