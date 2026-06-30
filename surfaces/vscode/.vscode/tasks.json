@@ -1,0 +1,15 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // Compiles the extension (tsup bundles surfaces/vscode + the agent-sdk core src)
+      // before each F5 launch, so the Extension Development Host never runs stale dist.
+      "label": "build-vscode",
+      "type": "shell",
+      "command": "pnpm build",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
+}

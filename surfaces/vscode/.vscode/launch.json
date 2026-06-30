@@ -5,6 +5,7 @@
       "name": "Run AgentNet Extension",
       "type": "extensionHost",
       "request": "launch",
+      "preLaunchTask": "build-vscode",
       "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
       "outFiles": ["${workspaceFolder}/dist/**/*.js"]
     }
