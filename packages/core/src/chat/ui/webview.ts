@@ -69,6 +69,15 @@ export function chatHtml(): string {
     --an-bg-2: color-mix(in srgb, var(--vscode-foreground) 7%, transparent);
     --an-line: color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
     --an-line-soft: color-mix(in srgb, var(--vscode-foreground) 7%, transparent);
+    /* collectible tier ramp (verified-work stars) — agent directory + profile, issue #35.
+       Literal rarity hues (a sanctioned multi-hue exception to the green brand accent). */
+    --an-tier-bronze: #cd7f32;
+    --an-tier-silver: #c0c0c0;
+    --an-tier-gold: #ffd700;
+    --an-tier-legendary: #c084fc;
+    /* foreground ramp for the ported mobile cards (.an-id / .an-tfolder) */
+    --an-fg: var(--vscode-foreground);
+    --an-fg-mute: color-mix(in srgb, var(--vscode-foreground) 45%, transparent);
     --an-radius: 12px;
     --an-radius-sm: 8px;
   }
@@ -984,14 +993,125 @@ export function chatHtml(): string {
 
   /* ── issue #35: agent directory + profile ── */
   #agentsBtn.on { color: var(--an-green); border-bottom: 2px solid var(--an-green); }
-  .agRow { display:flex; align-items:center; gap:10px; padding:10px 0;
-           border-bottom:1px solid var(--an-line); cursor:pointer; }
-  .agRow:hover { background: var(--an-bg-2); }
-  .agAvatar { width:36px; height:36px; flex-shrink:0; }
-  .agInfo { flex:1; min-width:0; }
-  .agAddr { font-family:monospace; font-size:0.88em; color:var(--vscode-foreground); }
-  .agMeta { font-size:0.78em; color:var(--an-muted,#888); margin-top:2px; }
-  .agRank { font-size:0.8em; color:var(--an-muted,#888); flex-shrink:0; }
+
+  /* the agents panel scrolls under a sticky self-card + wallet search (mobile parity) */
+  #agentsView .page { display: flex; flex-direction: column; min-height: 0; flex: 1; overflow-y: auto; }
+  .agSticky { position: sticky; top: 0; z-index: 5; background: var(--vscode-editor-background); padding-bottom: 10px; }
+  .agSearch { display: flex; align-items: center; gap: 9px; height: 38px; padding: 0 12px;
+              background: #0b0b0c; border: 1px solid #2a2a2e; margin-top: 10px; }
+  .agSearch svg { flex: none; }
+  .agSearch input { flex: 1; min-width: 0; background: transparent; border: none; outline: none;
+                    color: #e8e8e8; font-family: ui-monospace, Menlo, monospace; font-size: 11px;
+                    text-transform: uppercase; letter-spacing: 0.04em; }
+  .agSearch input::placeholder { color: #6a6a6a; text-transform: uppercase; }
+  .agList { display: flex; flex-direction: column; gap: 10px; }
+  .agEmpty { padding: 40px 0; text-align: center; font-size: 11px; text-transform: uppercase;
+             letter-spacing: 0.08em; color: #5a5a5d; font-family: ui-monospace, Menlo, monospace; }
+
+  /* AGENT cyberpunk "business-card" — ported verbatim from the mobile directory (.an-ac).
+     Literal greys hold the mono terminal look (theme-independent on purpose); --accent is
+     set inline per card from the wallet hue, the single colour each card carries. */
+  .an-ac { position: relative; width: 100%; aspect-ratio: 350 / 196; background: #0a0a0c;
+           border: 1px solid #34343a; --accent: #9a9aa3; padding: 8px; overflow: hidden;
+           box-shadow: 0 6px 22px rgba(0,0,0,0.55); text-align: left; color: #ececf0;
+           font-family: ui-monospace, SFMono-Regular, Menlo, monospace; cursor: pointer;
+           transition: transform 0.1s ease; }
+  .an-ac::after { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 6;
+                  background: repeating-linear-gradient(0deg, rgba(255,255,255,0.022) 0 1px, transparent 1px 3px); }
+  .an-ac:active { transform: scale(0.99); }
+  .an-ac.is-self { border-color: color-mix(in srgb, var(--accent) 55%, #34343a);
+                   box-shadow: 0 6px 22px rgba(0,0,0,0.55), inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent); }
+  .an-ac-in { position: relative; height: 100%; border: 1px solid #34343a; padding: 7px 9px; display: flex; flex-direction: column; }
+  .an-ac-top { display: flex; justify-content: space-between; align-items: center; font-size: 8px; letter-spacing: 0.5px; color: #82828c; }
+  .an-ac-hand { color: #ececf0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .an-ac-sig { display: flex; align-items: center; gap: 5px; flex: none; }
+  .an-ac-batt { display: inline-block; width: 20px; height: 9px; border: 1px solid #82828c; position: relative; }
+  .an-ac-batt::before { content: ""; position: absolute; right: -3px; top: 2px; width: 2px; height: 3px; background: #82828c; }
+  .an-ac-batt i { position: absolute; left: 1px; top: 1px; bottom: 1px; background: #82828c; }
+  .an-ac-namerow { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid #34343a; padding: 6px 0 8px; }
+  .an-ac-kana { font-size: 8px; color: #82828c; letter-spacing: 3px; margin-bottom: 2px; }
+  .an-ac-name { font-family: "Saira Condensed", "Space Grotesk", ui-sans-serif, sans-serif; font-weight: 800;
+                font-style: italic; font-size: 30px; line-height: 0.82; letter-spacing: 1px;
+                background: linear-gradient(178deg, #ffffff 0%, #d4d4db 36%, #6f6f78 54%, #b8b8c0 70%, #efeff3 100%);
+                -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .an-ac-access { text-align: right; font-size: 8px; color: #82828c; letter-spacing: 1.5px; line-height: 1.55; flex: none; }
+  .an-ac-you { color: var(--accent); font-weight: 700; }
+  .an-ac-tier { display: inline-block; margin-top: 2px; background: var(--accent); color: #0a0a0c; font-weight: 700; letter-spacing: 1.2px; padding: 1px 6px; }
+  .an-ac-tier.unranked { color: #c7c8d0; background: transparent; border: 1px solid #4a4a52; padding: 0 5px; }
+  .an-ac-body { flex: 1; display: grid; grid-template-columns: 74px 1fr; gap: 10px; padding-top: 8px; min-height: 0; }
+  .an-ac-ava { position: relative; border: 1px solid #34343a; overflow: hidden; background: #08080a; }
+  .an-ac-ava svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .an-ac-attr { display: flex; flex-direction: column; justify-content: center; gap: 8px; min-width: 0; }
+  .an-ac-rank { font-size: 7.5px; color: #82828c; letter-spacing: 2px; margin-bottom: -3px; }
+  .an-ac-gauge { display: flex; align-items: center; gap: 8px; }
+  .an-ac-gauge .lab { font-size: 9px; letter-spacing: 1px; color: #ececf0; white-space: nowrap; }
+  .an-ac-segs { display: flex; gap: 2px; flex: 1; min-width: 0; }
+  .an-ac-segs i { flex: 1; height: 12px; border: 1px solid #82828c; }
+  .an-ac-segs i.on { background: var(--accent); border-color: var(--accent); }
+  .an-ac-gauge .val { font-size: 10px; font-weight: 700; white-space: nowrap; color: #ececf0; }
+  .an-ac-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  .an-ac-stat { border: 1px solid #34343a; padding: 3px 7px; }
+  .an-ac-stat .k { font-size: 6.5px; color: #82828c; letter-spacing: 1.2px; }
+  .an-ac-stat .v { font-size: 15px; font-weight: 700; line-height: 1.05; }
+  .an-ac-foot { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #34343a; margin-top: 7px; padding-top: 6px; font-size: 8px; color: #82828c; letter-spacing: 1.5px; }
+  .an-ac-foot .earn { color: #d8d9e0; }
+  .an-ac-box { width: 13px; height: 13px; border: 1px solid #82828c; position: relative; flex: none; }
+  .an-ac-box::before { content: ""; position: absolute; left: 2px; right: 2px; top: 4px; height: 1px; background: #82828c; }
+  .an-ac-box::after { content: ""; position: absolute; left: 50%; top: 4px; bottom: 2px; width: 1px; background: #82828c; }
+
+  /* AGENT PROFILE hero — large portrait ID card (.an-id), ported from the mobile profile.
+     --tier (current tier colour) set inline; mono = Space Mono fallback, chrome name = Saira. */
+  .an-id { position: relative; background: #0a0a0c; border: 1px solid var(--an-line); padding: 12px; overflow: hidden; box-shadow: 0 14px 44px rgba(0,0,0,0.5); margin-bottom: 12px; }
+  .an-id::after { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 6; background: repeating-linear-gradient(0deg, rgba(255,255,255,0.02) 0 1px, transparent 1px 3px); }
+  .an-id::before { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 7; background: radial-gradient(120% 80% at 50% 0%, transparent 55%, rgba(0,0,0,0.45) 100%); }
+  .an-id-in { position: relative; z-index: 8; border: 1px solid var(--an-line); padding: 12px 14px; display: flex; flex-direction: column; }
+  .an-id-namerow { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 4px 0 12px; }
+  .an-id-role { font-family: ui-monospace, Menlo, monospace; font-size: 10px; color: var(--an-fg-mute); letter-spacing: 3px; margin-bottom: 4px; }
+  .an-id-name { font-family: "Saira Condensed", "Space Grotesk", ui-sans-serif, sans-serif; font-weight: 800; font-style: italic;
+                font-size: 46px; line-height: 0.82; letter-spacing: 1px;
+                background: linear-gradient(178deg, #ffffff 0%, #d4d4db 36%, #6f6f78 54%, #b8b8c0 70%, #efeff3 100%);
+                -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .an-id-tail { font-family: ui-monospace, Menlo, monospace; text-align: right; font-size: 10px; color: var(--an-fg-mute); letter-spacing: 1px; line-height: 1.6; }
+  .an-id-body { display: grid; grid-template-columns: 160px 1fr; gap: 14px; }
+  .an-id-ava { position: relative; aspect-ratio: 1 / 1.1; border: 1px solid var(--an-line); overflow: hidden; background: #08080a; }
+  .an-id-ava > svg, .an-id-ava svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .an-id-ava .tag { position: absolute; left: 5px; bottom: 4px; z-index: 2; font-family: ui-monospace, Menlo, monospace; font-size: 9px; color: var(--an-fg-mute); letter-spacing: 1px; }
+  .an-id-info { display: flex; flex-direction: column; justify-content: space-between; min-width: 0; padding: 2px 0; }
+  .an-id-bigstat { display: flex; align-items: flex-end; gap: 0; border-bottom: 1px solid var(--an-line); padding-bottom: 9px; }
+  .an-id-bigstat:last-child { border-bottom: none; padding-bottom: 0; }
+  .an-id-bigstat .k { font-family: ui-monospace, Menlo, monospace; font-size: 10px; color: var(--an-fg-mute); letter-spacing: 2px; line-height: 1; padding-bottom: 4px; white-space: nowrap; }
+  .an-id-bigstat .lead { flex: 1; border-bottom: 2px dotted var(--an-fg-mute); opacity: 0.5; margin: 0 8px 8px; min-width: 14px; }
+  .an-id-bigstat .v { font-family: "Saira Condensed", "Space Grotesk", ui-sans-serif, sans-serif; font-weight: 800; font-style: italic; font-size: 40px; line-height: 0.82; color: var(--an-fg); }
+  .an-id-ladder { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+  .an-id-ladder .lab { font-family: ui-monospace, Menlo, monospace; font-size: 9px; color: var(--an-fg-mute); letter-spacing: 2px; white-space: nowrap; }
+  .an-id-rungs { display: flex; gap: 4px; flex: 1; }
+  .an-id-rung { position: relative; flex: 1; text-align: center; font-family: ui-monospace, Menlo, monospace; font-size: 8.5px; letter-spacing: 0.5px; padding: 5px 0; border: 1px solid var(--an-fg-mute); color: var(--an-fg-mute); overflow: hidden; }
+  .an-id-rung.done { background: #222227; color: #b9b9c0; border-color: #2c2c32; }
+  .an-id-rung.cur { background: var(--tier); color: #0d0904; border-color: var(--tier); font-weight: 700; }
+  .an-id-gauge { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+  .an-id-gauge .lab { font-family: ui-monospace, Menlo, monospace; font-size: 10px; letter-spacing: 1px; color: var(--an-fg-mute); white-space: nowrap; }
+  .an-id-segs { display: flex; gap: 2px; flex: 1; min-width: 0; }
+  .an-id-segs i { flex: 1; height: 12px; border: 1px solid var(--an-fg-mute); }
+  .an-id-segs i.on { background: var(--tier); border-color: var(--tier); }
+  .an-id-gauge .val { font-family: ui-monospace, Menlo, monospace; font-size: 12px; font-weight: 700; white-space: nowrap; color: var(--an-fg); }
+
+  /* WORK card (.an-tfolder) — verified GitHub repos as terminal-folder cards in a swipe row.
+     --c = muted tier accent, --e = gauge empty-segment colour (set inline per repo). */
+  .an-vwork { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; }
+  .an-tfolder { position: relative; width: 270px; flex: none; filter: drop-shadow(0 14px 22px rgba(0,0,0,0.55)); }
+  .an-tfolder-clip { position: relative; background: #0c0c0d; clip-path: polygon(0 7%, 50% 7%, 58% 24%, 100% 24%, 100% 100%, 0 100%); padding: 5px; }
+  .an-tfolder-screen { position: relative; margin-top: 28px; height: 150px; overflow: hidden; border-radius: 3px; padding: 11px 13px; }
+  .an-tfolder-bin { position: absolute; inset: 0; color: var(--c); opacity: 0.1; font: 700 9px ui-monospace, Menlo, monospace; line-height: 1.45; letter-spacing: 1px; word-break: break-all; padding: 6px; user-select: none; pointer-events: none; }
+  .an-tfolder-label { position: relative; font: 700 8px ui-monospace, Menlo, monospace; letter-spacing: 0.5px; color: var(--c); }
+  .an-tfolder-owner { position: relative; font: 700 8px ui-monospace, Menlo, monospace; letter-spacing: 0.5px; color: #9a9a9a; margin-top: 9px; }
+  .an-tfolder-name { position: relative; display: flex; align-items: center; gap: 8px; margin-top: 2px; color: #f2f2f2; font: 700 22px ui-monospace, Menlo, monospace; letter-spacing: 0.5px; }
+  .an-tfolder-name-t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .an-tfolder-foot { position: absolute; left: 13px; right: 13px; bottom: 13px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .an-tfolder-stars { display: flex; align-items: center; gap: 6px; flex: none; }
+  .an-tfolder-stars-n { font: 700 15px ui-monospace, Menlo, monospace; color: var(--c); }
+  .an-tfolder-gauge { display: flex; gap: 2px; align-items: center; }
+  .an-tfolder-gauge i { width: 4px; height: 14px; transform: skewX(-12deg); background: var(--e); }
+  .an-tfolder-gauge i.on { background: var(--c); }
   .pr-sec { font-size:0.78em; font-weight:600; text-transform:uppercase;
             letter-spacing:.04em; color:var(--an-muted,#888); margin:14px 0 6px; }
   /* Blog = horizontal snap-scroll carousel: newest card leftmost, scroll right for older.
@@ -1438,19 +1558,13 @@ export function chatHtml(): string {
   <div id="walletView" class="panel" style="display:none">
     <div class="page">
       <div id="backToChat" class="muted" style="cursor:pointer;margin-bottom:10px">‹ Back to chat</div>
-      <!-- header: identity (left) sits beside a reputation stat card (right) -->
-      <div class="pr-header">
-        <div class="pr-id card">
-          <div id="wAvatarBig"></div>
-          <div class="pr-id-txt">
-            <div class="addr" id="walletAddr">…</div>
-            <div class="muted small" id="profileSubtitle" style="margin:2px 0 0">This wallet is your agent.</div>
-          </div>
-        </div>
-        <div class="pr-rep card">
-          <div class="pr-rep-title">Impact</div>
-          <div id="profileRep" class="pr-rep-stats"></div>
-        </div>
+      <!-- hero: the mobile .an-id ID card (tier ladder + stars gauge) + verified-work folders -->
+      <div id="agentIdCard"></div>
+      <div id="agentVerifiedWork"></div>
+      <!-- hidden compat stubs: showProfile + the wallet-sync handler still set these shared ids -->
+      <div style="display:none">
+        <span id="wAvatarBig"></span><span id="walletAddr"></span>
+        <span id="profileSubtitle"></span><span id="profileRep"></span>
       </div>
       <div id="profileSelfOnly">
         <div class="card">
@@ -1470,11 +1584,15 @@ export function chatHtml(): string {
   <div id="agentsView" class="panel" style="display:none">
     <div class="page">
       <div id="backToChatA" class="muted" style="cursor:pointer;margin-bottom:10px">‹ Back to chat</div>
-      <div class="mktHead">
-        <div class="mktTitle">Agent Directory</div>
-        <div class="muted small">Agents ranked by skill popularity (total supply).</div>
+      <!-- sticky: your own agent card + wallet search, pinned while the ranked list scrolls under -->
+      <div class="agSticky">
+        <div id="agentsSelf"></div>
+        <div class="agSearch">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7a7a7a" stroke-width="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.5-4.5"/></svg>
+          <input id="agentSearch" type="text" placeholder="Search agent wallet…" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
+        </div>
       </div>
-      <div id="agentsList"></div>
+      <div id="agentsList" class="agList"></div>
     </div>
   </div>
 
@@ -3183,29 +3301,114 @@ export function chatHtml(): string {
     document.getElementById('walletAddr').textContent = walletAddr;
     document.getElementById('profileSubtitle').textContent = 'Loading profile…';
     document.getElementById('profileRep').innerHTML = '';
+    document.getElementById('agentIdCard').innerHTML = '<div class="muted" style="padding:18px 4px">Loading profile…</div>';
+    document.getElementById('agentVerifiedWork').innerHTML = '';
     document.getElementById('profileSelfOnly').style.display = 'none';
     document.getElementById('profileSelfOnly2').style.display = 'none';
     document.getElementById('profileBody').innerHTML = '<div class="pr-empty">Loading…</div>';
     showView('wallet');
     vscode.postMessage({ type: 'getAgentProfile', wallet: walletAddr });
   }
+  // ── issue #35: agent directory — cyberpunk cards (ported from the mobile .an-ac) ──
+  // The ONE tier axis is verified-work stars (copies deliberately don't buy a tier), with
+  // the same --an-tier-* thresholds the profile gauge uses, so an agent reads the same tier
+  // on their card and on their page.
+  const AG_SEG = 12; // STARS gauge segment count
+  const AG_TIERS = [
+    { name: 'Legendary', min: 250 },
+    { name: 'Gold', min: 60 },
+    { name: 'Silver', min: 15 },
+    { name: 'Bronze', min: 3 },
+  ];
+  function agStarTier(stars) { return AG_TIERS.find((t) => stars >= t.min) || null; }
+  function agNextTierMin(stars) {
+    const asc = AG_TIERS.slice().sort((a, b) => a.min - b.min); // bronze..legendary
+    const up = asc.find((t) => t.min > stars);
+    return up ? up.min : asc[asc.length - 1].min;
+  }
+  // One stable accent per identity (mobile derives it from the avatar's hue). hashSeed comes
+  // from the avatar script injected above, so the same wallet always gets the same accent.
+  function agAccent(wallet) { return 'hsl(' + (hashSeed(wallet || 'default') % 360) + ' 46% 62%)'; }
+  function agShort(w) { return w.slice(0, 6) + '...' + w.slice(-4); }
+
+  function agentCardEl(agent, self) {
+    const stars = agent.stars || 0;
+    const tier = agStarTier(stars);
+    const isMax = tier && tier.name === 'Legendary';
+    const denom = agNextTierMin(stars);
+    const filled = Math.max(0, Math.min(AG_SEG, Math.round((stars / denom) * AG_SEG)));
+    const tierName = (tier ? tier.name : 'Unranked').toUpperCase();
+    const created = agent.skillsPublished || 0;
+    const copies = agent.totalSupply || 0;
+    const earnedSol = agent.totalEarned ? Number(agent.totalEarned) / 1e9 : 0;
+    const earned = earnedSol >= 100 ? earnedSol.toFixed(0) : earnedSol.toFixed(2);
+    const sig = 34 + (agent.wallet.charCodeAt(2) % 6) * 11; // decorative battery fill
+    let segs = '';
+    for (let i = 0; i < AG_SEG; i++) segs += '<i class="' + (i < filled ? 'on' : '') + '"></i>';
+    // wallet addresses are base58 (no HTML-special chars), so direct interpolation is safe.
+    const btn = document.createElement('button');
+    btn.className = 'an-ac' + (self ? ' is-self' : '');
+    btn.style.setProperty('--accent', agAccent(agent.wallet));
+    btn.innerHTML =
+      '<div class="an-ac-in">' +
+        '<div class="an-ac-top">' +
+          '<span class="an-ac-hand">&gt;' + agShort(agent.wallet).toUpperCase() + '_AGENT' + (self ? '<span class="an-ac-you"> // YOU</span>' : '') + '</span>' +
+          '<span class="an-ac-sig">SIGNAL <span class="an-ac-batt"><i style="width:' + sig + '%"></i></span></span>' +
+        '</div>' +
+        '<div class="an-ac-namerow">' +
+          '<div><div class="an-ac-kana">エージェント</div><div class="an-ac-name">' + agent.wallet.slice(0, 6).toUpperCase() + '</div></div>' +
+          '<div class="an-ac-access">アクセス / ACCESS<br><span class="an-ac-tier' + (tier ? '' : ' unranked') + '">' + tierName + '</span></div>' +
+        '</div>' +
+        '<div class="an-ac-body">' +
+          '<div class="an-ac-ava">' + avatarSvg(agent.wallet) + '</div>' +
+          '<div class="an-ac-attr">' +
+            '<div><div class="an-ac-rank">&mdash; RANKING &mdash;</div>' +
+              '<div class="an-ac-gauge"><span class="lab">STARS</span><span class="an-ac-segs">' + segs + '</span>' +
+              '<span class="val">' + (isMax ? stars : stars + '/' + denom) + '</span></div></div>' +
+            '<div class="an-ac-stats">' +
+              '<div class="an-ac-stat"><div class="k">CREATED</div><div class="v">' + created + '</div></div>' +
+              '<div class="an-ac-stat"><div class="k">COPIES</div><div class="v">' + copies + '</div></div>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="an-ac-foot"><span class="an-ac-box"></span><span>&gt;EARNED <span class="earn">' + earned + '&#9678;</span></span><span class="an-ac-box"></span></div>' +
+      '</div>';
+    btn.addEventListener('click', () => showProfile(agent.wallet));
+    return btn;
+  }
+
+  let lastAgents = [];
   function renderAgents(agents) {
+    lastAgents = agents || [];
+    // your own agent pinned at the top: from the leaderboard if it ranks, else a zero-stat
+    // placeholder so "me" is always present and tappable (the profile fills in real stats).
+    const selfEl = document.getElementById('agentsSelf');
+    if (selfEl) {
+      selfEl.innerHTML = '';
+      if (myWalletAddress) {
+        const selfRep = lastAgents.find((a) => a.wallet === myWalletAddress) ||
+          { wallet: myWalletAddress, skillsPublished: 0, totalSupply: 0, notesReceived: 0, updatedAt: 0 };
+        selfEl.appendChild(agentCardEl(selfRep, true));
+      }
+    }
+    const search = document.getElementById('agentSearch');
+    if (search && !search._wired) { search._wired = true; search.addEventListener('input', renderAgentsList); }
+    renderAgentsList();
+  }
+  function renderAgentsList() {
     const el = document.getElementById('agentsList');
-    if (!agents || !agents.length) { el.innerHTML = '<div class="mktEmpty">No agents found.</div>'; return; }
+    if (!el) return;
+    const searchEl = document.getElementById('agentSearch');
+    const ql = (searchEl && searchEl.value ? searchEl.value : '').trim().toLowerCase();
+    let others = lastAgents.filter((a) => a.wallet !== myWalletAddress);
+    if (ql) others = others.filter((a) => a.wallet.toLowerCase().includes(ql));
     el.innerHTML = '';
-    agents.forEach((a, i) => {
-      const row = document.createElement('div'); row.className = 'agRow';
-      const av = document.createElement('div'); av.className = 'agAvatar'; av.innerHTML = avatarSvg(a.wallet);
-      const info = document.createElement('div'); info.className = 'agInfo';
-      const addr = document.createElement('div'); addr.className = 'agAddr'; addr.textContent = short(a.wallet);
-      const meta = document.createElement('div'); meta.className = 'agMeta';
-      meta.textContent = a.skillsPublished + ' skill' + (a.skillsPublished !== 1 ? 's' : '') + '  ·  ' + a.totalSupply + '× supply';
-      info.appendChild(addr); info.appendChild(meta);
-      const rank = document.createElement('div'); rank.className = 'agRank'; rank.textContent = '#' + (i + 1);
-      row.appendChild(av); row.appendChild(info); row.appendChild(rank);
-      row.addEventListener('click', () => showProfile(a.wallet));
-      el.appendChild(row);
-    });
+    if (!others.length) {
+      const e = document.createElement('div'); e.className = 'agEmpty';
+      e.textContent = ql ? 'No agent matches that wallet' : 'No other agents yet';
+      el.appendChild(e); return;
+    }
+    others.forEach((a) => el.appendChild(agentCardEl(a, false)));
   }
   // Optimistic blog/comment posts. On-chain note reads lag a few seconds, so the
   // profile the host re-pushes right after posting won't include the new note yet —
@@ -3311,33 +3514,100 @@ export function chatHtml(): string {
     a.target = '_blank'; a.rel = 'noopener noreferrer'; wrap.appendChild(a);
     return wrap;
   }
+  // ── issue #35: agent PROFILE hero — .an-id ID card + verified-work folders (mobile parity) ──
+  // Same verified-work star tiers (3/15/60/250) the directory cards use, so an agent reads the
+  // same tier on the card and the profile. Tier colours come from the shared --an-tier-* tokens.
+  const PROF_TIERS = [ { name: 'Bronze', min: 3 }, { name: 'Silver', min: 15 }, { name: 'Gold', min: 60 }, { name: 'Legendary', min: 250 } ];
+  const TIER_COLOR = { Bronze: 'var(--an-tier-bronze)', Silver: 'var(--an-tier-silver)', Gold: 'var(--an-tier-gold)', Legendary: 'var(--an-tier-legendary)' };
+  const PROF_SEG = 15;
+  function profTierInfo(stars) {
+    let cur = null, next = null;
+    for (const t of PROF_TIERS) { if (stars >= t.min) cur = t; else { next = t; break; } }
+    return { cur: cur, next: next };
+  }
+  function pad2(n) { return n < 10 ? '0' + n : String(n); }
+  function renderAgentIdCard(profile) {
+    const el = document.getElementById('agentIdCard');
+    if (!el) return;
+    const wallet = profile.wallet;
+    const rep = profile.reputation || {};
+    const repoStars = (profile.verifiedRepos || []).reduce((s, r) => s + (r.stars || 0), 0);
+    const ti = profTierInfo(repoStars);
+    const curName = (ti.cur && ti.cur.name) || (ti.next && ti.next.name) || 'Bronze';
+    const tierColor = TIER_COLOR[curName] || 'var(--an-tier-bronze)';
+    const prevMin = ti.cur ? ti.cur.min : 0;
+    const bandPct = ti.next ? Math.min(100, Math.max(0, ((repoStars - prevMin) / (ti.next.min - prevMin)) * 100)) : 100;
+    const litSegs = Math.round((bandPct / 100) * PROF_SEG);
+    const starsFrac = ti.next ? (repoStars + '/' + ti.next.min) : 'MAX';
+    const stats = [['CREATED', pad2((profile.createdSkills || []).length)], ['COPIES', pad2(rep.totalSupply || 0)], ['OWNED', pad2((profile.ownedSkills || []).length)]];
+    let statsHtml = '';
+    stats.forEach((s) => { statsHtml += '<div class="an-id-bigstat"><span class="k">' + s[0] + '</span><span class="lead"></span><span class="v">' + s[1] + '</span></div>'; });
+    let rungs = '';
+    PROF_TIERS.forEach((t) => { const isCur = t.name === curName; const done = repoStars >= t.min && !isCur; rungs += '<div class="an-id-rung' + (isCur ? ' cur' : done ? ' done' : '') + '">' + t.name.toUpperCase() + '</div>'; });
+    let segs = '';
+    for (let i = 0; i < PROF_SEG; i++) segs += '<i class="' + (i < litSegs ? 'on' : '') + '"></i>';
+    el.innerHTML =
+      '<div class="an-id" style="--tier:' + tierColor + '"><div class="an-id-in">' +
+        '<div class="an-id-namerow"><div style="min-width:0"><div class="an-id-role">AGENT</div>' +
+          '<div class="an-id-name">' + wallet.slice(0, 6) + '</div></div>' +
+          '<div class="an-id-tail">…' + wallet.slice(-4) + '<br>' + (profile.self ? 'YOUR AGENT' : 'AGENT PROFILE') + '</div></div>' +
+        '<div class="an-id-body"><div class="an-id-ava">' + avatarSvg(wallet) + '<span class="tag">ID//' + wallet.slice(0, 4) + '</span></div>' +
+          '<div class="an-id-info">' + statsHtml + '</div></div>' +
+        '<div class="an-id-ladder"><span class="lab">TIER</span><div class="an-id-rungs">' + rungs + '</div></div>' +
+        '<div class="an-id-gauge"><span class="lab">STARS</span><span class="an-id-segs">' + segs + '</span><span class="val">' + starsFrac + '</span></div>' +
+      '</div></div>';
+  }
+  // Per-repo tier ramp (3/10/50/250) — drives the folder screen tint, star colour, gauge fill.
+  const PROF_REPO_TIERS = [
+    { min: 250, color: '#86c4cf', from: '#131a1b', to: '#0d1011', empty: '#1e2628' },
+    { min: 50,  color: '#d8c074', from: '#1a1813', to: '#100f0d', empty: '#2a2618' },
+    { min: 10,  color: '#b8c0cc', from: '#161719', to: '#0e0f10', empty: '#26282c' },
+    { min: 3,   color: '#b8895a', from: '#1a1613', to: '#100f0e', empty: '#2a2420' },
+  ];
+  const PROF_REPO_BASE = { color: '#9a9a9a', from: '#1a1a1d', to: '#0d0d0e', empty: '#33333a' };
+  function profRepoTier(stars) { return PROF_REPO_TIERS.find((t) => stars >= t.min) || PROF_REPO_BASE; }
+  function profRepoFill(stars) { const next = [3, 10, 50, 250].find((t) => stars < t); if (!next) return 10; return Math.max(0, Math.min(10, Math.round((stars / next) * 10))); }
+  const GH_MARK_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" width="26" height="22" style="color:#cfcfcf"><path d="M12 1.5A10.5 10.5 0 0 0 8.68 22c.52.1.71-.23.71-.5v-1.76c-2.92.64-3.54-1.41-3.54-1.41-.48-1.21-1.16-1.53-1.16-1.53-.95-.65.07-.64.07-.64 1.05.07 1.6 1.08 1.6 1.08.94 1.6 2.46 1.14 3.06.87.1-.68.37-1.14.66-1.4-2.33-.27-4.78-1.17-4.78-5.18 0-1.15.41-2.08 1.08-2.82-.11-.27-.47-1.34.1-2.79 0 0 .88-.28 2.88 1.07a10 10 0 0 1 5.24 0c2-1.35 2.88-1.07 2.88-1.07.57 1.45.21 2.52.1 2.79.68.74 1.08 1.67 1.08 2.82 0 4.02-2.46 4.9-4.8 5.16.38.33.71.97.71 1.96v2.9c0 .28.19.61.72.5A10.5 10.5 0 0 0 12 1.5Z"/></svg>';
+  const FOLDER_BINARY = '01010100101010100101001010101001010010110100101010010101001010010101001010010110101001010010100100101001010101001010';
+  function renderVerifiedWork(profile) {
+    const el = document.getElementById('agentVerifiedWork');
+    if (!el) return;
+    const repos = (profile.verifiedRepos || []).slice().sort((a, b) => (b.stars || 0) - (a.stars || 0));
+    if (!repos.length) { el.innerHTML = ''; return; }
+    let cards = '';
+    repos.forEach((r) => {
+      const stars = r.stars || 0;
+      const tier = profRepoTier(stars);
+      const fill = profRepoFill(stars);
+      let gauge = '';
+      for (let i = 0; i < 10; i++) gauge += '<i class="' + (i < fill ? 'on' : '') + '"></i>';
+      const url = (r.url || '').slice(0, 4) === 'http' ? r.url : '';
+      const ghBtn = url ? '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer" aria-label="Open repository">' + GH_MARK_SVG + '</a>' : GH_MARK_SVG;
+      cards +=
+        '<div class="an-tfolder" style="--c:' + tier.color + ';--e:' + tier.empty + '">' +
+          '<div class="an-tfolder-clip"><div class="an-tfolder-screen" style="background:radial-gradient(120% 100% at 50% 22%, ' + tier.from + ' 0%, ' + tier.to + ' 70%)">' +
+            '<div class="an-tfolder-bin">' + FOLDER_BINARY + '</div>' +
+            '<div class="an-tfolder-label">&gt;VERIFIED_REPO</div>' +
+            '<div class="an-tfolder-owner">' + escapeHtml(r.owner || '') + '<span style="color:#5a5a5d">/</span></div>' +
+            '<div class="an-tfolder-name"><span style="color:var(--c)">&gt;</span><span class="an-tfolder-name-t">' + escapeHtml(r.name || '') + '</span>' + ghBtn + '</div>' +
+            '<div class="an-tfolder-foot"><span></span><span class="an-tfolder-stars"><span class="an-tfolder-stars-n">' + stars + '★</span><span class="an-tfolder-gauge">' + gauge + '</span></span></div>' +
+          '</div></div>' +
+        '</div>';
+    });
+    el.innerHTML = '<div class="pr-sec" style="margin-top:14px">Verified work</div><div class="an-vwork">' + cards + '</div>';
+  }
   function renderProfile(profile) {
     profile = mergeOptimistic(profile);
     const self = profile.self;
     const wallet = profile.wallet;
-    // identity (header, left)
-    document.getElementById('wAvatarBig').innerHTML = avatarSvg(wallet);
-    document.getElementById('walletAddr').textContent = wallet;
-    document.getElementById('profileSubtitle').textContent = self ? 'This wallet is your agent.' : 'Agent profile';
-    // show/hide self-only sections
+    // self-only sections (storage + disconnect) only show on your own profile
     document.getElementById('profileSelfOnly').style.display = self ? '' : 'none';
     document.getElementById('profileSelfOnly2').style.display = self ? '' : 'none';
     if (self) renderWalletStorage();
 
-    // ── reputation card (header, right) — stacked stats ──
-    const rep = profile.reputation;
-    const repEl = document.getElementById('profileRep');
-    repEl.innerHTML = '';
-    [
-      [rep.skillsPublished, 'skills'],
-      [rep.totalSupply, 'total supply'],
-      [rep.notesReceived, 'notes'],
-    ].forEach(([val, label]) => {
-      const stat = document.createElement('div'); stat.className = 'pr-rep-stat';
-      const v = document.createElement('span'); v.className = 'v'; v.textContent = String(val);
-      const l = document.createElement('span'); l.className = 'l'; l.textContent = label;
-      stat.appendChild(v); stat.appendChild(l); repEl.appendChild(stat);
-    });
+    // ── hero: the .an-id ID card + verified-work folders (ported from mobile) ──
+    renderAgentIdCard(profile);
+    renderVerifiedWork(profile);
 
     const body = document.getElementById('profileBody');
     body.innerHTML = '';
@@ -4453,7 +4723,8 @@ export function chatHtml(): string {
       // the profile view shares no element with these — clear its loading state too so
       // a failed getAgentProfile doesn't leave the profile stuck on "Loading…".
       if (currentProfileWallet) {
-        document.getElementById('profileSubtitle').textContent = 'Could not load profile.';
+        document.getElementById('agentIdCard').innerHTML = '<div class="pr-empty">Could not load profile.</div>';
+        document.getElementById('agentVerifiedWork').innerHTML = '';
         document.getElementById('profileBody').innerHTML = '<div class="pr-empty">' + msg + '</div>';
       }
     }
