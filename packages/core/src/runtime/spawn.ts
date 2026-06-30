@@ -662,6 +662,20 @@ function codexEngine(opts: SpawnOpts): Engine {
     }
   }
 
+  // Codex's ReviewDecision protocol has no slot to return a denial reason to the model
+  // (unlike Claude's SDK deny `message`, see the canUseTool deny path above). So when the
+  // user denies a tool WITH a reason, deliver it by steering the still-active turn — the
+  // model reads it right after the rejection, the same way Claude sees a deny message.
+  function deliverDenyReason(reason?: string) {
+    const text = reason?.trim();
+    if (!text || !currentTurnId) return;
+    void sendRequest("turn/steer", {
+      threadId: sessionId,
+      input: [{ type: "text", text, text_elements: [] }],
+      expectedTurnId: currentTurnId,
+    }).catch(() => {}); // turn may have ended between the denial and the steer; harmless
+  }
+
   async function handleServerRequest(msg: any) {
     const params = msg.params;
     try {
@@ -707,6 +721,7 @@ function codexEngine(opts: SpawnOpts): Engine {
           }
           else if (decision.outcome === "deny") reviewDecision = "denied";
           sendResponse(msg.id, { decision: reviewDecision });
+          if (decision.outcome === "deny") deliverDenyReason(decision.reason);
         } else {
           let decisionVal: "accept" | "acceptForSession" | "decline" | "cancel" = "decline";
           if (decision.outcome === "once") decisionVal = "accept";
@@ -717,6 +732,7 @@ function codexEngine(opts: SpawnOpts): Engine {
           }
           else if (decision.outcome === "deny") decisionVal = "decline";
           sendResponse(msg.id, { decision: decisionVal });
+          if (decision.outcome === "deny") deliverDenyReason(decision.reason);
         }
       } else if (msg.method === "applyPatchApproval" || msg.method === "item/fileChange/requestApproval") {
         if (msg.method === "applyPatchApproval") {
@@ -756,8 +772,9 @@ function codexEngine(opts: SpawnOpts): Engine {
             savePersistentWhitelist(allowed);
           }
           else if (decision.outcome === "deny") reviewDecision = "denied";
-          
+
           sendResponse(msg.id, { decision: reviewDecision });
+          if (decision.outcome === "deny") deliverDenyReason(decision.reason);
         } else {
           const pathStr = params.grantRoot || "";
           const req = toApprovalRequest("codex", sessionId, "Edit", { file_path: pathStr }, opts.cwd);
@@ -781,8 +798,9 @@ function codexEngine(opts: SpawnOpts): Engine {
             savePersistentWhitelist(allowed);
           }
           else if (decision.outcome === "deny") decisionVal = "decline";
-          
+
           sendResponse(msg.id, { decision: decisionVal });
+          if (decision.outcome === "deny") deliverDenyReason(decision.reason);
         }
       } else if (msg.method === "item/permissions/requestApproval") {
         const req = toApprovalRequest("codex", sessionId, "Permissions", { reason: params.reason }, opts.cwd);
@@ -791,6 +809,7 @@ function codexEngine(opts: SpawnOpts): Engine {
         const decision = await approval.request(req);
         if (decision.outcome === "deny") {
           sendError(msg.id, { code: 4001, message: "User declined permissions request" });
+          deliverDenyReason(decision.reason);
         } else {
           const permissions: any = {};
           if (params.permissions?.network) {
