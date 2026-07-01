@@ -111,8 +111,10 @@ const macPrompter: Prompter = {
   async askMain({ title, body, danger }, signal) {
     // No text field here — the input only appears after Deny (askReason). No "Cancel" button,
     // so Esc can't dismiss it; only a real teardown (focus back) aborts -> code !== 0.
+    // Approve is always the blue default button (Enter = approve); danger requests still get
+    // the caution icon so they read as risky without making Deny the confusing highlighted one.
     const r = await osa(
-      `display dialog "${macEsc(body)}" with title "${macEsc(title)}" buttons {"Deny", "Always", "Approve"} default button "${danger ? "Deny" : "Approve"}"${danger ? " with icon caution" : ""}`,
+      `display dialog "${macEsc(body + "\n\n↩  Press [Enter] to approve")}" with title "${macEsc(title)}" buttons {"Deny", "Always", "Approve"} default button "Approve"${danger ? " with icon caution" : ""}`,
       signal,
     );
     if (r.code !== 0) return null;
@@ -189,7 +191,7 @@ const zenityPrompter: Prompter = {
   async askMain({ title, body, danger }, signal) {
     const r = await run(
       "zenity",
-      ["--question", "--title", title, "--text", body, "--ok-label=Approve", "--extra-button=Always", "--extra-button=Deny", ...(danger ? ["--icon-name=dialog-warning"] : [])],
+      ["--question", "--title", title, "--text", body + "\n\n↩  Press [Enter] to approve", "--ok-label=Approve", "--extra-button=Always", "--extra-button=Deny", ...(danger ? ["--icon-name=dialog-warning"] : [])],
       signal,
     );
     if (r.code === 0) return "once"; // OK = Approve
@@ -243,7 +245,7 @@ const kdialogPrompter: Prompter = {
   // read as an accidental "always"), so this fallback stays Approve / Deny. Yes = Approve;
   // No or a closed window = Deny (the safe default).
   async askMain({ title, body }, signal) {
-    const r = await run("kdialog", ["--title", title, "--warningyesno", body], signal);
+    const r = await run("kdialog", ["--title", title, "--warningyesno", body + "\n\n↩  Press [Enter] to approve"], signal);
     if (r.code === 0) return "once";
     return signal.aborted ? null : "deny";
   },
@@ -296,7 +298,8 @@ const winPrompter: Prompter = {
     const script =
       `Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; ` +
       `$f=New-Object System.Windows.Forms.Form; $f.Text='${psEsc(title)}'; $f.Width=470; $f.Height=250; $f.StartPosition='CenterScreen'; $f.TopMost=$true; ` +
-      `$l=New-Object System.Windows.Forms.Label; $l.Text='${psEsc(body)}'; $l.AutoSize=$false; $l.Width=440; $l.Height=130; $l.Left=12; $l.Top=10; $f.Controls.Add($l); ` +
+      `$l=New-Object System.Windows.Forms.Label; $l.Text='${psEsc(body)}'; $l.AutoSize=$false; $l.Width=440; $l.Height=116; $l.Left=12; $l.Top=10; $f.Controls.Add($l); ` +
+      `$h=New-Object System.Windows.Forms.Label; $h.Text='Press [Enter] to approve'; $h.AutoSize=$true; $h.Left=12; $h.Top=134; $h.ForeColor=[System.Drawing.Color]::Gray; $h.Font=New-Object System.Drawing.Font($f.Font.FontFamily,7.5); $f.Controls.Add($h); ` +
       `$script:res=''; ` +
       `$ap=New-Object System.Windows.Forms.Button; $ap.Text='Approve'; $ap.Left=12; $ap.Top=160; $ap.Width=135; $ap.Add_Click({$script:res='ONCE';$f.Close()}); $f.Controls.Add($ap); $f.AcceptButton=$ap; ` +
       `$al=New-Object System.Windows.Forms.Button; $al.Text='Always'; $al.Left=157; $al.Top=160; $al.Width=135; $al.Add_Click({$script:res='ALWAYS';$f.Close()}); $f.Controls.Add($al); ` +
