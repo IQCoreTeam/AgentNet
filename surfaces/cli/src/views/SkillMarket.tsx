@@ -2,7 +2,13 @@ import React, { useEffect, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import type { SkillCard, SkillDetail } from "@iqlabs-official/agent-sdk";
 import type { Reputation, AgentProfile } from "@iqlabs-official/agent-sdk";
+import { maskedHeliusKey, hasDasRpc, saveHeliusKey, getNetwork } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../theme.js";
+import { tierInfo } from "./market/tiers.js";
+import { AgentProfileView, type ProfileSub } from "./market/AgentProfileView.js";
+import { SkillDetailView, type DetailSub } from "./market/SkillDetailView.js";
+import { HeliusPanel, HeliusBadge, type RpcStatusLite } from "./market/HeliusPanel.js";
+import { PublishProgressView, type PublishProgress } from "./market/PublishProgressView.js";
 
 export interface MarketApi {
   searchSkills(query: string, kind?: "skill" | "workflow"): Promise<SkillCard[]>;
@@ -10,10 +16,17 @@ export interface MarketApi {
   buySkill(skillId: string, creatorWallet?: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
   solBalance(): Promise<number | null>;
   postNote(skillId: string, skillType: "skill" | "workflow" | undefined, text: string, gitLink?: string): Promise<{ ok: boolean; error?: string }>;
-  publishSkill(input: { name: string; description: string; text: string; category?: string; hashtags?: string[]; priceSol: string }): Promise<{ ok: boolean; mint?: string; error?: string }>;
+  publishSkill(
+    input: { name: string; description: string; text: string; category?: string; hashtags?: string[]; priceSol: string; image?: string },
+    onProgress?: (p: PublishProgress) => void,
+  ): Promise<{ ok: boolean; mint?: string; error?: string }>;
   listAgents(): Promise<Reputation[]>;
   getAgentProfile(wallet: string): Promise<AgentProfile>;
   buyAllSkills(agentWallet: string): Promise<{ ok: boolean; bought: number; failed: number; error?: string }>;
+  postAgentNote(agentWallet: string, text: string, gitLink?: string, title?: string, image?: string): Promise<{ ok: boolean; error?: string }>;
+  disposeSkill(skillId: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
+  reEquipSkill(skillId: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
+  disposedSkillMints?(): Promise<Record<string, string>>;
 }
 
 type Stage =
@@ -23,15 +36,25 @@ type Stage =
   | "comment"
   | "publish"
   | "agents"
-  | "agentProfile";
+  | "agentProfile"
+  | "helius"
+  | "blogCompose";
 
 // Publish form fields in order — tab/arrow cycles through them.
-type PublishField = "name" | "desc" | "text" | "category" | "hashtags" | "price";
-const PUBLISH_FIELDS: PublishField[] = ["name", "desc", "text", "category", "hashtags", "price"];
+type PublishField = "name" | "desc" | "text" | "category" | "hashtags" | "price" | "image";
+const PUBLISH_FIELDS: PublishField[] = ["name", "desc", "text", "category", "hashtags", "price", "image"];
+
+type BlogField = "title" | "text" | "image" | "gitLink";
+const BLOG_FIELDS: BlogField[] = ["title", "text", "image", "gitLink"];
 
 const SOL = 1_000_000_000;
 function sol(lamports: number | null): string {
   return lamports == null ? "—" : `${(lamports / SOL).toFixed(3)} SOL`;
+}
+
+function clampScroll(offset: number, total: number, height: number): number {
+  const max = Math.max(0, total - height);
+  return Math.max(0, Math.min(max, offset));
 }
 
 export function SkillMarket({
@@ -59,6 +82,13 @@ export function SkillMarket({
   const [balance, setBalance] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
+  const [hideOwned, setHideOwned] = useState(true);
+  const [firingIds, setFiringIds] = useState<Set<string>>(new Set());
+  const [disposedNames, setDisposedNames] = useState<Set<string>>(new Set());
+
+  // detail sub-views (SKILL.md / comments scroll panels)
+  const [detailSub, setDetailSub] = useState<DetailSub>("main");
+  const [detailScroll, setDetailScroll] = useState(0);
 
   // comment stage
   const [commentText, setCommentText] = useState("");
@@ -73,16 +103,35 @@ export function SkillMarket({
   const [pubCategory, setPubCategory] = useState("");
   const [pubHashtags, setPubHashtags] = useState("");
   const [pubPrice, setPubPrice] = useState("0.1");
+  const [pubImage, setPubImage] = useState("");
   const [pubResult, setPubResult] = useState<string | null>(null);
+  const [pubProgress, setPubProgress] = useState<PublishProgress | null>(null);
 
   // agents stage
   const [agents, setAgents] = useState<Reputation[]>([]);
   const [agentIdx, setAgentIdx] = useState(0);
+  const [agentQuery, setAgentQuery] = useState("");
+  const [agentTyping, setAgentTyping] = useState(false);
   const [agentProfile, setAgentProfile] = useState<AgentProfile | null>(null);
   const [agentBuyResult, setAgentBuyResult] = useState<string | null>(null);
+  const [profileSub, setProfileSub] = useState<ProfileSub>("main");
+  const [profileScroll, setProfileScroll] = useState(0);
+
+  // blog composer (self note on own profile)
+  const [blogField, setBlogField] = useState<BlogField>("title");
+  const [blogTitle, setBlogTitle] = useState("");
+  const [blogText, setBlogText] = useState("");
+  const [blogImage, setBlogImage] = useState("");
+  const [blogGitLink, setBlogGitLink] = useState("");
+
+  // helius / RPC settings
+  const [rpcStatus, setRpcStatus] = useState<RpcStatusLite | null>(null);
+  const [heliusKeyInput, setHeliusKeyInput] = useState("");
+  const [heliusFlash, setHeliusFlash] = useState<string | null>(null);
 
   const owned = new Set(ownedNames);
   const clamped = Math.min(idx, Math.max(0, results.length - 1));
+  const visibleResults = results.filter((c) => !hideOwned || !owned.has(c.name));
   const selected = results[clamped];
 
   async function search(q: string, k: "skill" | "workflow") {
@@ -99,16 +148,34 @@ export function SkillMarket({
     }
   }
 
+  async function refreshRpcStatus() {
+    const [masked, hasKey, network] = await Promise.all([
+      maskedHeliusKey().catch(() => null),
+      hasDasRpc().catch(() => false),
+      Promise.resolve(getNetwork()),
+    ]);
+    setRpcStatus({ hasKey: !!masked, masked, network });
+  }
+
   useEffect(() => {
     void search("", kind);
     void api.solBalance().then(setBalance).catch(() => setBalance(null));
+    void refreshRpcStatus();
+    void api.disposedSkillMints?.().then((m) => setDisposedNames(new Set(Object.keys(m)))).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function fire(id: string) {
+    setFiringIds((s) => new Set(s).add(id));
+    setTimeout(() => setFiringIds((s) => { const n = new Set(s); n.delete(id); return n; }), 1500);
+  }
 
   async function openDetail(mint: string) {
     setLoading(true);
     try {
       setDetail(await api.getSkillDetail(mint));
+      setDetailSub("main");
+      setDetailScroll(0);
       setStage("detail");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -124,6 +191,7 @@ export function SkillMarket({
     setBusy(false);
     if (res.ok) {
       setFlash(`acquired ${card.name}${res.slug ? ` → ${res.slug}` : ""}`);
+      fire(card.id);
       onBought();
       void api.solBalance().then(setBalance).catch(() => {});
       setStage("list");
@@ -131,6 +199,50 @@ export function SkillMarket({
     } else {
       setFlash(`buy failed: ${res.error ?? "unknown error"}`);
       setStage("detail");
+    }
+  }
+
+  async function doCollectAll() {
+    if (!detail) return;
+    const unownedRequired = detail.requiredCards.filter((r) => !owned.has(r.name));
+    if (unownedRequired.length === 0) return;
+    setBusy(true);
+    let bought = 0, failed = 0;
+    for (const r of unownedRequired) {
+      const res = await api.buySkill(r.id, r.creator);
+      if (res.ok) { bought++; fire(r.id); } else failed++;
+    }
+    setBusy(false);
+    setFlash(`collected ${bought} skill${bought !== 1 ? "s" : ""}${failed ? `, ${failed} failed` : ""}`);
+    if (bought > 0) { onBought(); void api.solBalance().then(setBalance).catch(() => {}); }
+  }
+
+  async function doDispose() {
+    if (!detail) return;
+    setBusy(true);
+    const res = await api.disposeSkill(detail.card.id);
+    setBusy(false);
+    if (res.ok) {
+      setFlash(`disposed ${detail.card.name}`);
+      setDisposedNames((s) => new Set(s).add(detail.card.name));
+      onBought();
+    } else {
+      setFlash(`dispose failed: ${res.error ?? "unknown"}`);
+    }
+  }
+
+  async function doReEquip() {
+    if (!detail) return;
+    setBusy(true);
+    const res = await api.reEquipSkill(detail.card.id);
+    setBusy(false);
+    if (res.ok) {
+      setFlash(`re-equipped ${detail.card.name}`);
+      fire(detail.card.id);
+      setDisposedNames((s) => { const n = new Set(s); n.delete(detail.card.name); return n; });
+      onBought();
+    } else {
+      setFlash(`re-equip failed: ${res.error ?? "unknown"}`);
     }
   }
 
@@ -157,14 +269,19 @@ export function SkillMarket({
   async function doPublish() {
     if (!pubName.trim() || !pubDesc.trim() || !pubText.trim()) return;
     setBusy(true);
-    const res = await api.publishSkill({
-      name: pubName.trim(),
-      description: pubDesc.trim(),
-      text: pubText.trim(),
-      category: pubCategory.trim() || undefined,
-      hashtags: pubHashtags.trim() ? pubHashtags.split(",").map((h) => h.trim()).filter(Boolean) : undefined,
-      priceSol: pubPrice.trim() || "0.1",
-    });
+    setPubProgress(null);
+    const res = await api.publishSkill(
+      {
+        name: pubName.trim(),
+        description: pubDesc.trim(),
+        text: pubText.trim(),
+        category: pubCategory.trim() || undefined,
+        hashtags: pubHashtags.trim() ? pubHashtags.split(",").map((h) => h.trim()).filter(Boolean) : undefined,
+        priceSol: pubPrice.trim() || "0.1",
+        image: pubImage.trim() || undefined,
+      },
+      (p) => setPubProgress(p),
+    );
     setBusy(false);
     if (res.ok) {
       setPubResult(`published! mint: ${res.mint ?? "?"}`);
@@ -178,6 +295,8 @@ export function SkillMarket({
     try {
       setAgents(await api.listAgents());
       setAgentIdx(0);
+      setAgentQuery("");
+      setAgentTyping(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -189,6 +308,8 @@ export function SkillMarket({
     setLoading(true);
     try {
       setAgentProfile(await api.getAgentProfile(wallet));
+      setProfileSub("main");
+      setProfileScroll(0);
       setStage("agentProfile");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -210,37 +331,130 @@ export function SkillMarket({
     }
   }
 
+  async function doPostBlog() {
+    if (!agentProfile || !blogText.trim()) return;
+    setBusy(true);
+    const res = await api.postAgentNote(
+      agentProfile.wallet,
+      blogText.trim(),
+      blogGitLink.trim() || undefined,
+      blogTitle.trim() || undefined,
+      blogImage.trim() || undefined,
+    );
+    setBusy(false);
+    if (res.ok) {
+      setBlogTitle(""); setBlogText(""); setBlogImage(""); setBlogGitLink("");
+      const refreshed = await api.getAgentProfile(agentProfile.wallet).catch(() => null);
+      if (refreshed) setAgentProfile(refreshed);
+      setProfileSub("blog");
+      setStage("agentProfile");
+    } else {
+      setFlash(`post failed: ${res.error ?? "unknown"}`);
+    }
+  }
+
+  async function doSaveHeliusKey(key: string) {
+    setBusy(true);
+    await saveHeliusKey(key);
+    await refreshRpcStatus();
+    setBusy(false);
+    setHeliusKeyInput("");
+    setHeliusFlash(key ? "key saved" : "key cleared");
+  }
+
   // get/set helpers for publish form fields
   function pubGet(f: PublishField) {
-    return { name: pubName, desc: pubDesc, text: pubText, category: pubCategory, hashtags: pubHashtags, price: pubPrice }[f];
+    return { name: pubName, desc: pubDesc, text: pubText, category: pubCategory, hashtags: pubHashtags, price: pubPrice, image: pubImage }[f];
   }
   function pubSet(f: PublishField, v: string) {
-    ({ name: setPubName, desc: setPubDesc, text: setPubText, category: setPubCategory, hashtags: setPubHashtags, price: setPubPrice }[f])(v);
+    ({ name: setPubName, desc: setPubDesc, text: setPubText, category: setPubCategory, hashtags: setPubHashtags, price: setPubPrice, image: setPubImage }[f])(v);
+  }
+
+  function blogGet(f: BlogField) {
+    return { title: blogTitle, text: blogText, image: blogImage, gitLink: blogGitLink }[f];
+  }
+  function blogSet(f: BlogField, v: string) {
+    ({ title: setBlogTitle, text: setBlogText, image: setBlogImage, gitLink: setBlogGitLink }[f])(v);
   }
 
   useInput((input, key) => {
     if (busy) return;
 
+    // ── helius settings ───────────────────────────────────────────────────
+    if (stage === "helius") {
+      if (key.escape) { setStage("list"); setHeliusFlash(null); return; }
+      if (input === "x" && !heliusKeyInput) { void doSaveHeliusKey(""); return; }
+      if (key.return) { void doSaveHeliusKey(heliusKeyInput.trim()); return; }
+      if (key.backspace || key.delete) { setHeliusKeyInput((v) => v.slice(0, -1)); return; }
+      if (input && !key.ctrl && !key.meta) { setHeliusKeyInput((v) => v + input); return; }
+      return;
+    }
+
+    // ── blog composer (self) ──────────────────────────────────────────────
+    if (stage === "blogCompose") {
+      if (key.escape) { setStage("agentProfile"); setProfileSub("blog"); return; }
+      const fi = BLOG_FIELDS.indexOf(blogField);
+      if (key.tab || key.downArrow) { setBlogField(BLOG_FIELDS[(fi + 1) % BLOG_FIELDS.length]); return; }
+      if (key.upArrow) { setBlogField(BLOG_FIELDS[(fi + BLOG_FIELDS.length - 1) % BLOG_FIELDS.length]); return; }
+      if (key.return) {
+        if (fi < BLOG_FIELDS.length - 1) setBlogField(BLOG_FIELDS[fi + 1]);
+        else void doPostBlog();
+        return;
+      }
+      if (key.backspace || key.delete) { blogSet(blogField, blogGet(blogField).slice(0, -1)); return; }
+      if (input && !key.ctrl && !key.meta) { blogSet(blogField, blogGet(blogField) + input); return; }
+      return;
+    }
+
     // ── agent profile ──────────────────────────────────────────────────────
     if (stage === "agentProfile") {
-      if (key.escape) { setStage("agents"); setAgentProfile(null); setAgentBuyResult(null); }
+      const total =
+        profileSub === "repos" ? (agentProfile?.verifiedRepos ?? []).length :
+        profileSub === "comments" ? (agentProfile?.notes ?? []).filter((n) => !n.isSelfNote).length :
+        profileSub === "blog" ? (agentProfile?.notes ?? []).filter((n) => n.isSelfNote).length : 0;
+      const height = profileSub === "repos" ? 10 : 12;
+      if (profileSub !== "main") {
+        if (key.escape) { setProfileSub("main"); setProfileScroll(0); return; }
+        if (key.downArrow) { setProfileScroll((o) => clampScroll(o + 1, total, height)); return; }
+        if (key.upArrow) { setProfileScroll((o) => clampScroll(o - 1, total, height)); return; }
+        if (key.pageDown) { setProfileScroll((o) => clampScroll(o + height, total, height)); return; }
+        if (key.pageUp) { setProfileScroll((o) => clampScroll(o - height, total, height)); return; }
+        if (profileSub === "blog" && input === "n" && agentProfile?.self) {
+          setBlogField("title"); setStage("blogCompose"); return;
+        }
+        return;
+      }
+      if (key.escape) { setStage("agents"); setAgentProfile(null); setAgentBuyResult(null); return; }
+      if (input === "r") { setProfileSub("repos"); setProfileScroll(0); return; }
+      if (input === "k") { setProfileSub("comments"); setProfileScroll(0); return; }
+      if (input === "g") { setProfileSub("blog"); setProfileScroll(0); return; }
+      if (input === "n" && agentProfile?.self) { setBlogField("title"); setStage("blogCompose"); return; }
       if (input === "b" && agentProfile) void doBuyAll(agentProfile.reputation.wallet);
       return;
     }
 
     // ── agents list ────────────────────────────────────────────────────────
     if (stage === "agents") {
+      const filtered = agents.filter((a) => !agentQuery.trim() || a.wallet.toLowerCase().includes(agentQuery.toLowerCase()));
+      if (agentTyping) {
+        if (key.return || key.downArrow) { setAgentTyping(false); setAgentIdx(0); return; }
+        if (key.backspace || key.delete) { setAgentQuery((q) => q.slice(0, -1)); return; }
+        if (key.escape) { setStage("list"); setAgents([]); setError(null); return; }
+        if (input && !key.ctrl && !key.meta) { setAgentQuery((q) => q + input); return; }
+        return;
+      }
       if (key.escape) { setStage("list"); setAgents([]); setError(null); return; }
-      if (key.upArrow) return setAgentIdx((i) => Math.max(0, i - 1));
-      if (key.downArrow) return setAgentIdx((i) => Math.min(agents.length - 1, i + 1));
-      if (key.return && agents[agentIdx]) void openAgentProfile(agents[agentIdx].wallet);
+      if (input === "/") { setAgentTyping(true); return; }
+      if (key.upArrow) { if (agentIdx === 0) { setAgentTyping(true); return; } return setAgentIdx((i) => Math.max(0, i - 1)); }
+      if (key.downArrow) return setAgentIdx((i) => Math.min(filtered.length - 1, i + 1));
+      if (key.return && filtered[agentIdx]) void openAgentProfile(filtered[agentIdx].wallet);
       return;
     }
 
     // ── publish ────────────────────────────────────────────────────────────
     if (stage === "publish") {
       if (pubResult) {
-        if (key.escape || key.return) { setPubResult(null); setStage("list"); }
+        if (key.escape || key.return) { setPubResult(null); setPubProgress(null); setStage("list"); }
         return;
       }
       if (key.escape) { setStage("list"); return; }
@@ -293,14 +507,31 @@ export function SkillMarket({
     }
 
     // ── detail ─────────────────────────────────────────────────────────────
-    if (stage === "detail") {
+    if (stage === "detail" && detail) {
+      const isOwned = owned.has(detail.card.name);
+      const disposed = disposedNames.has(detail.card.name);
+      if (detailSub !== "main") {
+        const total = detailSub === "skillText" ? (detail.skillText ?? "").split("\n").length : (detail.notes ?? []).length;
+        const height = detailSub === "skillText" ? 16 : 12;
+        if (key.escape) { setDetailSub("main"); setDetailScroll(0); return; }
+        if (key.downArrow) { setDetailScroll((o) => clampScroll(o + 1, total, height)); return; }
+        if (key.upArrow) { setDetailScroll((o) => clampScroll(o - 1, total, height)); return; }
+        if (key.pageDown) { setDetailScroll((o) => clampScroll(o + height, total, height)); return; }
+        if (key.pageUp) { setDetailScroll((o) => clampScroll(o - height, total, height)); return; }
+        return;
+      }
       if (key.escape) { setStage("list"); setDetail(null); return; }
-      if (input === "b" && detail && !owned.has(detail.card.name)) { setStage("confirm"); return; }
-      if (input === "c" && detail) {
+      if (input === "b" && !isOwned) { setStage("confirm"); return; }
+      if (input === "c") {
         setCommentText(""); setCommentGitLink(""); setCommentField("text");
         setStage("comment");
         return;
       }
+      if (input === "v" && detail.skillText) { setDetailSub("skillText"); setDetailScroll(0); return; }
+      if (input === "k") { setDetailSub("comments"); setDetailScroll(0); return; }
+      if (input === "d" && isOwned && !disposed) { void doDispose(); return; }
+      if (input === "e" && isOwned && disposed) { void doReEquip(); return; }
+      if (input === "x" && detail.requiredCards.some((r) => !owned.has(r.name))) { void doCollectAll(); return; }
       return;
     }
 
@@ -319,84 +550,103 @@ export function SkillMarket({
     }
     if (input === "/") return setTyping(true);
     if (input === "a") { setStage("agents"); void loadAgents(); return; }
-    if (input === "p") { setPubResult(null); setPubField("name"); setStage("publish"); return; }
+    if (input === "p") { setPubResult(null); setPubProgress(null); setPubField("name"); setStage("publish"); return; }
+    if (input === "r") { setHeliusFlash(null); setHeliusKeyInput(""); setStage("helius"); return; }
+    if (input === "h") { setHideOwned((v) => !v); setIdx(0); return; }
     if (key.tab) {
       const next = kind === "skill" ? "workflow" : "skill";
       setKind(next); void search(query, next); return;
     }
     if (key.upArrow) { if (clamped === 0) return setTyping(true); return setIdx((i) => Math.max(0, i - 1)); }
-    if (key.downArrow) return setIdx((i) => Math.min(results.length - 1, i + 1));
+    if (key.downArrow) return setIdx((i) => Math.min(visibleResults.length - 1, i + 1));
     if (key.return && selected) return void openDetail(selected.id);
     if (input === "b" && selected && !owned.has(selected.name)) { setDetail(null); setStage("confirm"); }
   });
 
-  // ── agent profile ─────────────────────────────────────────────────────────
-  if (stage === "agentProfile" && agentProfile) {
-    const r = agentProfile.reputation;
-    const short = (w: string) => `${w.slice(0, 4)}…${w.slice(-4)}`;
+  // ── helius settings ─────────────────────────────────────────────────────────
+  if (stage === "helius") {
+    return <HeliusPanel status={rpcStatus} keyInput={heliusKeyInput} busy={busy} flash={heliusFlash} />;
+  }
+
+  // ── blog composer ─────────────────────────────────────────────────────────
+  if (stage === "blogCompose") {
+    const labels: Record<BlogField, string> = { title: "title   ", text: "text    ", image: "image   ", gitLink: "gitLink " };
     return (
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
-        <Box>
-          <Text bold color={colors.iqCyan}>{short(r.wallet)}</Text>
-          <Text dimColor>   {r.skillsPublished} skills · ×{r.totalSupply} total supply · {r.notesReceived} notes</Text>
-        </Box>
-        {agentProfile.createdSkills && agentProfile.createdSkills.length ? (
-          <Box flexDirection="column" marginTop={1}>
-            <Text dimColor>skills:</Text>
-            {agentProfile.createdSkills.slice(0, 8).map((s: any) => (
-              <Box key={s.id}>
-                <Text>  · </Text>
-                <Text color={owned.has(s.name) ? colors.ok : undefined}>{s.name}</Text>
-                {owned.has(s.name) ? <Text color={colors.ok}> owned</Text> : null}
+        <Text bold color={colors.iqMagenta}>❖ write a blog post</Text>
+        <Box flexDirection="column" marginTop={1}>
+          {BLOG_FIELDS.map((f) => {
+            const on = f === blogField;
+            const val = blogGet(f);
+            return (
+              <Box key={f}>
+                <Text color={on ? colors.iqCyan : colors.dim}>{on ? "▸ " : "  "}</Text>
+                <Box width={10}><Text color={on ? colors.iqCyan : colors.dim} bold={on}>{labels[f]}</Text></Box>
+                <Text dimColor={!val && f !== "title" && f !== "text"}>{val || (f === "title" || f === "text" ? "" : "(optional)")}</Text>
+                {on ? <Text inverse> </Text> : null}
               </Box>
-            ))}
-          </Box>
-        ) : null}
-        {agentProfile.notes.length ? (
-          <Box flexDirection="column" marginTop={1}>
-            <Text dimColor>notes:</Text>
-            {agentProfile.notes.slice(0, 4).map((n, i) => (
-              <Text key={i} dimColor>  "{n.text.slice(0, 60)}"</Text>
-            ))}
-          </Box>
-        ) : null}
-        {agentBuyResult ? (
-          <Box marginTop={1}><Text color={colors.ok}>{glyph.sparkle} {agentBuyResult}</Text></Box>
-        ) : null}
-        <Box marginTop={1}>
-          <Text dimColor>[b] buy all skills · [esc] back</Text>
+            );
+          })}
         </Box>
+        {busy ? <Box marginTop={1}><Text dimColor>posting…</Text></Box> : null}
+        <Box marginTop={1}><Text dimColor>↑/↓/[tab] field · ↵ next / post on gitLink · esc cancel</Text></Box>
       </Box>
+    );
+  }
+
+  // ── agent profile ─────────────────────────────────────────────────────────
+  if (stage === "agentProfile" && agentProfile) {
+    return (
+      <AgentProfileView
+        profile={agentProfile}
+        owned={owned}
+        buyAllResult={agentBuyResult}
+        busy={busy}
+        sub={profileSub}
+        scrollOffset={profileScroll}
+        self={agentProfile.self}
+      />
     );
   }
 
   // ── agents list ────────────────────────────────────────────────────────────
   if (stage === "agents") {
     const short = (w: string) => `${w.slice(0, 6)}…${w.slice(-4)}`;
+    const filtered = agents.filter((a) => !agentQuery.trim() || a.wallet.toLowerCase().includes(agentQuery.toLowerCase()));
     return (
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
         <Text bold color={colors.iqMagenta}>❖ agent directory</Text>
+        <Box marginTop={1}>
+          <Text color={agentTyping ? colors.iqCyan : colors.dim}>{agentTyping ? "▸ " : "  "}</Text>
+          <Text dimColor>search wallet </Text>
+          <Text>{agentQuery}</Text>
+          {agentTyping ? <Text inverse> </Text> : null}
+        </Box>
         <Box flexDirection="column" marginTop={1}>
           {loading ? (
             <Text dimColor>loading agents…</Text>
           ) : error ? (
             <Text color={colors.err}>{error}</Text>
-          ) : agents.length === 0 ? (
+          ) : filtered.length === 0 ? (
             <Text dimColor>no agents found</Text>
           ) : (
-            agents.slice(0, 12).map((a, i) => {
-              const on = i === agentIdx;
+            filtered.slice(0, 12).map((a, i) => {
+              const on = !agentTyping && i === agentIdx;
+              const { cur } = tierInfo(a.stars ?? 0);
               return (
                 <Box key={a.wallet}>
                   <Text color={on ? colors.iqCyan : undefined}>{on ? "› " : "  "}</Text>
                   <Box width={14}><Text dimColor>{short(a.wallet)}</Text></Box>
                   <Text dimColor>  ×{a.totalSupply} supply · {a.skillsPublished} skills</Text>
+                  {cur ? <Text color={colors.warn}> [{cur.name}]</Text> : null}
                 </Box>
               );
             })
           )}
         </Box>
-        <Box marginTop={1}><Text dimColor>↑/↓ move · ↵ profile · esc back</Text></Box>
+        <Box marginTop={1}>
+          <Text dimColor>{agentTyping ? "type to filter · ↵/↓ browse · esc close" : "↑/↓ move · ↵ profile · [/] search · esc back"}</Text>
+        </Box>
       </Box>
     );
   }
@@ -404,20 +654,21 @@ export function SkillMarket({
   // ── publish form ──────────────────────────────────────────────────────────
   if (stage === "publish") {
     if (pubResult) {
+      const ok = pubResult.startsWith("published");
       return (
-        <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={pubResult.startsWith("published") ? colors.ok : colors.err}>
-          <Text bold color={pubResult.startsWith("published") ? colors.ok : colors.err}>{pubResult}</Text>
+        <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={ok ? colors.ok : colors.err}>
+          <Text bold color={ok ? colors.ok : colors.err}>{pubResult}</Text>
           <Box marginTop={1}><Text dimColor>[esc] / [↵] close</Text></Box>
         </Box>
       );
     }
     const fieldLabels: Record<PublishField, string> = {
       name: "name      ", desc: "desc      ", text: "skill text",
-      category: "category  ", hashtags: "hashtags  ", price: "price (SOL)",
+      category: "category  ", hashtags: "hashtags  ", price: "price (SOL)", image: "image     ",
     };
     const fieldValues: Record<PublishField, string> = {
       name: pubName, desc: pubDesc, text: pubText.slice(0, 60) + (pubText.length > 60 ? "…" : ""),
-      category: pubCategory, hashtags: pubHashtags, price: pubPrice,
+      category: pubCategory, hashtags: pubHashtags, price: pubPrice, image: pubImage,
     };
     return (
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
@@ -435,15 +686,11 @@ export function SkillMarket({
             );
           })}
         </Box>
-        {busy ? (
-          <Box marginTop={1}>
-            <Text dimColor>publishing…</Text>
-          </Box>
-        ) : null}
+        {busy ? <PublishProgressView progress={pubProgress} /> : null}
         <Box marginTop={1}>
-          <Text dimColor>↑/↓/[tab] field · ↵ next / submit on price · esc cancel</Text>
+          <Text dimColor>↑/↓/[tab] field · ↵ next / submit on image · esc cancel</Text>
         </Box>
-        <Box><Text dimColor>hashtags = comma-separated · skill text = raw SKILL.md body</Text></Box>
+        <Box><Text dimColor>hashtags = comma-separated · image = link or on-chain ref, optional</Text></Box>
       </Box>
     );
   }
@@ -499,55 +746,20 @@ export function SkillMarket({
 
   // ── detail ─────────────────────────────────────────────────────────────────
   if (stage === "detail" && detail) {
-    const c = detail.card;
-    const isOwned = owned.has(c.name);
+    const isOwned = owned.has(detail.card.name);
+    const disposed = disposedNames.has(detail.card.name);
     return (
-      <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
-        <Box>
-          <Text bold color={colors.iqCyan}>{c.name}</Text>
-          <Text dimColor>  {c.type ?? "skill"} · ×{c.supply ?? 0}{isOwned ? " · owned" : ""}</Text>
-        </Box>
-        {c.description ? <Text>{c.description}</Text> : null}
-        {c.category || (c.hashtags && c.hashtags.length) ? (
-          <Box marginTop={1}>
-            {c.category ? <Text color={colors.iqViolet}>{c.category} </Text> : null}
-            {(c.hashtags ?? []).map((h) => (
-              <Text key={h} dimColor>#{h} </Text>
-            ))}
-          </Box>
-        ) : null}
-        {detail.requiredCards.length ? (
-          <Box flexDirection="column" marginTop={1}>
-            <Text dimColor>requires:</Text>
-            {detail.requiredCards.map((r) => (
-              <Text key={r.id}>  · {r.name}</Text>
-            ))}
-          </Box>
-        ) : null}
-        {detail.skillText ? (
-          <Box flexDirection="column" marginTop={1}>
-            <Text dimColor>── SKILL.md ──</Text>
-            <Text>{detail.skillText.slice(0, 1200)}</Text>
-          </Box>
-        ) : null}
-        {detail.notes && detail.notes.length ? (
-          <Box flexDirection="column" marginTop={1}>
-            <Text dimColor>── comments ({detail.notes.length}) ──</Text>
-            {detail.notes.slice(0, 4).map((n, i) => (
-              <Box key={i} flexDirection="column">
-                <Text dimColor>  "{n.text.slice(0, 80)}"</Text>
-                {n.gitLink ? <Text dimColor>    {glyph.sparkle} {n.gitLink}</Text> : null}
-              </Box>
-            ))}
-          </Box>
-        ) : null}
-        {flash ? <Box marginTop={1}><Text color={colors.ok}>{glyph.sparkle} {flash}</Text></Box> : null}
-        <Box marginTop={1}>
-          <Text dimColor>
-            {isOwned ? "owned · " : "[b] buy · "}[c] comment · [esc] back
-          </Text>
-        </Box>
-      </Box>
+      <SkillDetailView
+        detail={detail}
+        owned={owned}
+        disposed={disposed}
+        isOwned={isOwned}
+        sub={detailSub}
+        scrollOffset={detailScroll}
+        firing={firingIds.has(detail.card.id)}
+        flash={flash}
+        busy={busy}
+      />
     );
   }
 
@@ -557,6 +769,8 @@ export function SkillMarket({
       <Box>
         <Text bold color={colors.iqMagenta}>❖ skill market</Text>
         <Text dimColor>   balance {sol(balance)}</Text>
+        <Text dimColor>   </Text>
+        <HeliusBadge status={rpcStatus} />
       </Box>
       {/* tabs */}
       <Box marginTop={1}>
@@ -564,14 +778,16 @@ export function SkillMarket({
         <Text dimColor>  ·  </Text>
         <Text color={kind === "workflow" ? colors.iqCyan : colors.dim} bold={kind === "workflow"}>workflows</Text>
         <Text dimColor>  ·  </Text>
-        <Text color={colors.dim}>[a] agents  [p] publish</Text>
+        <Text color={colors.dim}>[a] agents  [p] publish  [r] rpc</Text>
       </Box>
-      {/* search box */}
+      {/* search box + hide-owned filter */}
       <Box marginTop={1}>
         <Text color={typing ? colors.iqCyan : colors.dim}>{typing ? "▸ " : "  "}</Text>
         <Text dimColor>search </Text>
         <Text>{query}</Text>
         {typing ? <Text inverse> </Text> : null}
+        <Text dimColor>   [h] hide owned </Text>
+        <Text color={hideOwned ? colors.ok : colors.dim}>{hideOwned ? "✓" : "✗"}</Text>
       </Box>
       {/* results */}
       <Box flexDirection="column" marginTop={1}>
@@ -579,10 +795,10 @@ export function SkillMarket({
           <Text dimColor>searching…</Text>
         ) : error ? (
           <Text color={colors.err}>{error}</Text>
-        ) : results.length === 0 ? (
+        ) : visibleResults.length === 0 ? (
           <Text dimColor>no {kind === "skill" ? "skills" : "workflows"} found</Text>
         ) : (
-          results.slice(0, 12).map((c, i) => {
+          visibleResults.slice(0, 12).map((c, i) => {
             const on = !typing && i === clamped;
             const isOwned = owned.has(c.name);
             return (
@@ -594,7 +810,7 @@ export function SkillMarket({
                   </Text>
                 </Box>
                 <Text dimColor>×{c.supply ?? 0} </Text>
-                {isOwned ? <Text color={colors.ok}>owned </Text> : null}
+                {isOwned ? <Text color={colors.ok}>owned{firingIds.has(c.id) ? " ✦" : ""} </Text> : null}
                 <Text dimColor>{(c.description ?? "").slice(0, 40)}</Text>
               </Box>
             );
@@ -608,7 +824,7 @@ export function SkillMarket({
         <Text dimColor>
           {typing
             ? "type to search · ↵ run · [tab] skills/workflows · ↓ results · esc close"
-            : "↑/↓ move · ↵ open · [b] buy · [tab] switch · [/] search · [a] agents · [p] publish · esc close"}
+            : "↑/↓ move · ↵ open · [b] buy · [tab] switch · [/] search · [a] agents · [p] publish · [r] rpc · [h] hide owned · esc close"}
         </Text>
       </Box>
     </Box>
