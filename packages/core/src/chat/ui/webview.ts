@@ -12,6 +12,7 @@
 //   partial:false -> that bubble is complete (start a new one next time)
 
 import { AVATAR_SVG, AVATAR_SCRIPT } from "./avatar.js";
+import { SKILL_SIGIL_SCRIPT } from "./skillSigil.js";
 import { IQ_LOGO_SVG } from "./iqlogo.js";
 import { MD_LIBS } from "./mdLibs.generated.js";
 import { CHAT_MODEL_OPTIONS } from "../modelOptions.js";
@@ -606,17 +607,25 @@ export function chatHtml(): string {
                          font-weight: 600; opacity: 0.85; margin-bottom: 9px; }
   #skillsPanel .skHead .wand { width: 14px; height: 14px; color: var(--an-green); }
   #skillsPanel .skMuted { margin-left: auto; font-weight: 400; opacity: 0.5; font-size: 0.92em; }
+  /* filter toggle: hide the built-in (non-collectible) default skills, keep only owned NFTs */
+  #skillsPanel .skFilter { display: inline-flex; align-items: center; gap: 4px; font-weight: 400;
+                           opacity: 0.62; cursor: pointer; user-select: none; white-space: nowrap; }
+  #skillsPanel .skFilter:hover { opacity: 0.95; }
+  #skillsPanel .skFilter input { margin: 0; accent-color: var(--an-green); cursor: pointer; }
   #skillsClose { margin-left: 8px; width: 20px; height: 20px; padding: 0; line-height: 18px; text-align: center;
                  font-size: 15px; border-radius: 5px; background: transparent; color: var(--vscode-foreground);
                  opacity: 0.55; border: 1px solid transparent; cursor: pointer; flex: 0 0 auto; }
   #skillsClose:hover { opacity: 1; background: var(--an-bg-1); border-color: var(--an-line); }
   /* owned-skill grid scrolls once it outgrows ~3 rows instead of pushing the chat up */
-  #skillGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
-               max-height: 188px; overflow-y: auto; }
+  /* responsive: 3 cols in a narrow dock, more as the panel widens (auto-fill packs
+     as many ~96px cards as fit). max-height keeps it to ~3 rows then scrolls. */
+  #skillGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px;
+               max-height: 340px; overflow-y: auto; }
   /* a skill slot: an item card. empty = a quiet dashed "coming soon" placeholder. */
   .skSlot { aspect-ratio: 1; border-radius: var(--an-radius-sm); display: flex; align-items: center;
             justify-content: center; }
-  .skSlot.empty { border: 1.5px dashed var(--an-line-soft); background: var(--an-bg-1); opacity: 0.5; }
+  .skSlot.empty { aspect-ratio: 108 / 150; border: 1.5px dashed var(--an-line-soft); background: var(--an-bg-1); opacity: 0.5;
+                  border-radius: 11px; }
   .skSlot.empty::after { content: ''; width: 16px; height: 16px; border-radius: 4px;
                          background: var(--an-line-soft); }
   /* an OWNED skill = a live item card: green-edged, but STATIC. It only glows while the
@@ -669,8 +678,9 @@ export function chatHtml(): string {
   #skillSearch:focus { border-color: var(--an-green-line); }
   #skillSearchBtn { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
                     border-radius: var(--an-radius); padding: 5px 11px; font-size: 0.82em; cursor: pointer; }
-  #skillResults { margin-top: 8px; display: flex; flex-direction: column; gap: 6px;
-                  max-height: 240px; overflow-y: auto; }
+  #skillResults { margin-top: 8px; display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px;
+                  max-height: 300px; overflow-y: auto; }
+  #skillResults .shopEmpty { grid-column: 1 / -1; }
   .shopItem { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--an-line);
               border-radius: var(--an-radius); font-size: 0.82em; }
   .shopItem .si-main { min-width: 0; flex: 1; }
@@ -682,6 +692,58 @@ export function chatHtml(): string {
   .shopItem .si-buy[disabled] { opacity: 0.5; cursor: default; }
   #skillResults .shopEmpty { opacity: 0.5; font-size: 0.8em; padding: 4px 2px; }
 
+  /* ── skill "SD-card" collectible (ported from surfaces/webview). One component drawn
+     everywhere skills are listed so the whole app reads as one collection. Graphite plastic
+     cartridge (mint for workflows) with a notched tab, a dark recessed label carrying a
+     deterministic magic-circle sigil, a barcode + CAT/SKILL mark, the NAME big over the sigil,
+     and a coral data chip (supply / price / state) at the foot. Greys are literal to hold the
+     collectible look, independent of the VS Code theme. */
+  .an-sd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+  .an-sd { position: relative; width: 100%; aspect-ratio: 108 / 150; padding: 6px; border: 0;
+           --t: #494c54; --b: #3f424a; --d: #33353b; --chip: #f15a39;
+           background: linear-gradient(166deg, var(--t) 0%, var(--b) 56%, var(--d) 100%);
+           border-radius: 11px; clip-path: polygon(0 0, 79% 0, 100% 13%, 100% 100%, 0 100%);
+           filter: drop-shadow(0 6px 14px rgba(0,0,0,0.45));
+           box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.24);
+           text-align: left; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+           cursor: pointer; transition: transform 0.1s ease; }
+  .an-sd::before { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+                   z-index: 2; background: radial-gradient(135% 90% at 26% -6%, rgba(255,255,255,0.06), rgba(255,255,255,0) 52%); }
+  .an-sd::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+                  z-index: 3; opacity: 0.22; mix-blend-mode: overlay; background-size: 150px 150px;
+                  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='1.7' intercept='-0.35'/%3E%3CfeFuncG type='linear' slope='1.7' intercept='-0.35'/%3E%3CfeFuncB type='linear' slope='1.7' intercept='-0.35'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E"); }
+  .an-sd.is-workflow { background: linear-gradient(166deg, #d7fffaeb 0%, #c7fdeceb 56%, #8dc3baeb 100%); }
+  .an-sd:active { transform: scale(0.97); }
+  .an-sd.is-disposed { opacity: 0.5; filter: grayscale(1); }
+  .an-sd.is-owned-dim { opacity: 0.5; filter: grayscale(0.55); }
+  .an-sd-tab { position: absolute; left: 0; top: 28%; width: 5px; height: 16px; background: var(--chip);
+               border-radius: 0 2px 2px 0; z-index: 5; }
+  .an-sd-label { position: relative; height: 100%; overflow: hidden; background: #0a0b0e; border-radius: 6px;
+                 clip-path: polygon(0 0, 79% 0, 100% 14%, 100% 100%, 0 100%);
+                 box-shadow: inset 0 2px 5px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(0,0,0,0.45), inset 0 -1px 0 rgba(255,255,255,0.04); }
+  .an-sd-art { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .an-sd-label::before { content: ''; position: absolute; inset: 0;
+                         background-image: linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+                                           linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+                         background-size: 13px 13px; }
+  .an-sd.is-firing .an-sd-label { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip) 70%, transparent); }
+  .an-sd-bar { position: absolute; top: 6px; left: 7px; z-index: 3; width: 26px; height: 9px; opacity: 0.7;
+               background: repeating-linear-gradient(90deg, #d4d5ea 0 1px, transparent 1px 2px, #d4d5ea 2px 4px, transparent 4px 5px); }
+  .an-sd-mark { position: absolute; top: 20px; left: 7px; z-index: 3; font-size: 8px; font-weight: 700;
+                letter-spacing: 0.6px; white-space: nowrap; }
+  .an-sd-mark .cat { color: #c7c8d0; }
+  .an-sd-mark .ty { color: #9a9ca6; }
+  .an-sd-name { position: absolute; left: 7px; right: 8px; bottom: 38px; z-index: 4;
+                font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif; font-size: 14.5px; font-weight: 700;
+                letter-spacing: -0.2px; color: #ffffff; line-height: 1.1; word-break: break-word;
+                text-shadow: 0 1px 4px rgba(0,0,0,0.85), 0 0 2px rgba(0,0,0,0.7);
+                display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .an-sd-chip { position: absolute; left: 6px; bottom: 6px; right: 14px; z-index: 4; display: flex;
+                align-items: center; gap: 4px; background: var(--chip); padding: 3px 7px; border-radius: 2px;
+                box-shadow: inset 0 -1px 0 rgba(0,0,0,0.16); }
+  .an-sd-big { font-size: 14px; font-weight: 700; color: #2a0f06; line-height: 1; }
+  .an-sd-meta { font-size: 6px; line-height: 1.3; color: #3a160a; font-weight: 700; letter-spacing: 0.2px; }
+
   /* Markets full-screen view */
   .mktHead { margin-bottom: 14px; }
   .mktTitle { display: flex; align-items: center; gap: 8px; font-size: 1.15em; font-weight: 700; }
@@ -692,7 +754,7 @@ export function chatHtml(): string {
   #mktSearch:focus { border-color: var(--an-green-line); }
   #mktSearchBtn { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
                   border-radius: var(--an-radius); padding: 9px 16px; font-size: 0.92em; font-weight: 600; cursor: pointer; }
-  .mktGrid { display: flex; flex-direction: column; gap: 10px; }
+  .mktGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
   .mktCard { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--an-line);
              border-radius: var(--an-radius); background: var(--an-bg); }
   .mktCard .mc-img { width: 40px; height: 40px; border-radius: 8px; background: var(--an-green-dim);
@@ -707,7 +769,7 @@ export function chatHtml(): string {
   .mktCard .mc-buy { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
                      border-radius: var(--an-radius); padding: 6px 14px; cursor: pointer; white-space: nowrap; font-weight: 600; }
   .mktCard .mc-buy[disabled] { opacity: 0.5; cursor: default; }
-  .mktGrid .mktEmpty { opacity: 0.5; font-size: 0.9em; padding: 8px 2px; }
+  .mktGrid .mktEmpty { grid-column: 1 / -1; opacity: 0.5; font-size: 0.9em; padding: 8px 2px; }
   /* a card body is clickable (opens detail); the Buy button stops propagation */
   .mktCard .mc-main { cursor: pointer; }
   .mktCard .mc-main:hover .mc-name { color: var(--an-green); }
@@ -1482,6 +1544,9 @@ export function chatHtml(): string {
           <span class="wand">${WAND_SVG}</span>
           <span>Equipped skills</span>
           <span class="skMuted" id="skillStatus">none active</span>
+          <label class="skFilter" title="Hide the built-in default skills, show only owned on-chain skills">
+            <input type="checkbox" id="skHideDefault" /> Hide default
+          </label>
           <button id="panelMakeSkillBtn" class="skMake" title="Publish a new skill">＋ Make skill</button>
           <button id="skillsClose" title="Close">×</button>
         </div>
@@ -1682,6 +1747,7 @@ export function chatHtml(): string {
 <script>
   const AVATAR_SVG = ${JSON.stringify(AVATAR_SVG)};
   ${AVATAR_SCRIPT}
+  ${SKILL_SIGIL_SCRIPT}
   // The host pipe. Inside VSCode it's acquireVsCodeApi(); in a browser/Android WebView
   // there's no such global, so we fall back to HTTP-RPC + SSE that speaks the SAME
   // shape: postMessage(obj) → POST /rpc (UI→server commands); the server's SSE stream
@@ -2489,9 +2555,16 @@ export function chatHtml(): string {
   // When the engine needs a tool approved, render a green-accented card showing what
   // it wants to do (the command / file / diff) with [Approve] [Always] [Deny] buttons.
   // Clicking posts the decision back; the card then locks to show the resolution.
+  // Remove an approval card by request id — used when the decision was made on another surface
+  // (the macOS desktop popup answered it), so the now-stale on-screen card clears itself.
+  function dismissApproval(id) {
+    const cards = approvalDock.querySelectorAll('[data-approval-id]');
+    for (const c of cards) { if (c.dataset.approvalId === id) { c.remove(); syncComposerLock(); break; } }
+  }
   function renderApproval(req) {
     const card = document.createElement('div');
     card.className = 'approvalCard';
+    card.dataset.approvalId = req.id; // so the host can dismiss THIS card if answered elsewhere (desktop popup)
     // Skill MARKET approvals get the "forge" treatment — a tinted card with a soft glow +
     // a few slow twinkles. Publishing (make) glows violet; buying glows gold (the collectible
     // accent), so acquiring a skill feels like opening a treasure. Every other approval stays
@@ -3640,30 +3713,10 @@ export function chatHtml(): string {
 
     // ── helper: pretty skill card (click body → popup; Buy stops propagation) ──
     function skillCard(card) {
-      const r = document.createElement('div'); r.className = 'pr-skill';
-      const img = document.createElement('div'); img.className = 'ps-img';
-      img.innerHTML = '<span class="wand">' + ${JSON.stringify(IQ_LOGO_SVG)} + '</span>';
-      const main = document.createElement('div'); main.className = 'ps-main';
-      const nm = document.createElement('div'); nm.className = 'ps-name'; nm.textContent = card.name || card.id;
-      main.appendChild(nm);
-      if (card.description) {
-        const ds = document.createElement('div'); ds.className = 'ps-desc'; ds.textContent = card.description; main.appendChild(ds);
-      }
-      main.addEventListener('click', () => openSkillModal(card.id));
-      r.appendChild(img); r.appendChild(main);
-      const priceTxt = fmtPrice(card.price);
-      if (priceTxt) { const pr = document.createElement('span'); pr.className = 'ps-price'; pr.textContent = priceTxt; r.appendChild(pr); }
-      if (!self) {
-        const owned = ownedSkills.indexOf(card.name) >= 0;
-        const btn = document.createElement('button'); btn.className = 'mc-buy';
-        btn.textContent = owned ? 'Owned' : 'Buy'; btn.disabled = owned;
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation(); btn.disabled = true; btn.textContent = 'Buying…';
-          vscode.postMessage({ type: 'buySkill', skillId: card.id, creatorWallet: card.creator });
-        });
-        r.appendChild(btn);
-      }
-      return r;
+      // On another agent's profile a skill you already hold reads muted (dim); your own profile
+      // shows everything at full strength. The card opens the skill modal (which carries Buy).
+      const owned = self || ownedSkills.indexOf(card.name) >= 0;
+      return skillSdCard(card, { owned: owned, dim: owned && !self, onOpen: (c) => openSkillModal(c.id) });
     }
 
     // ── SKILLS pane: created (with buy-all) + owned ──
@@ -3679,13 +3732,17 @@ export function chatHtml(): string {
           paneSkills.appendChild(buyAll);
         }
       }
-      profile.createdSkills.forEach(c => paneSkills.appendChild(skillCard(c)));
+      const cg = document.createElement('div'); cg.className = 'an-sd-grid';
+      profile.createdSkills.forEach(c => cg.appendChild(skillCard(c)));
+      paneSkills.appendChild(cg);
     }
     const ownedNotCreated = profile.ownedSkills.filter(o => !profile.createdSkills.some(c => c.id === o.id));
     if (ownedNotCreated.length) {
       const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Owned skills';
       paneSkills.appendChild(sec);
-      ownedNotCreated.forEach(o => paneSkills.appendChild(skillCard(o)));
+      const og = document.createElement('div'); og.className = 'an-sd-grid';
+      ownedNotCreated.forEach(o => og.appendChild(skillCard(o)));
+      paneSkills.appendChild(og);
     }
     if (!profile.createdSkills.length && !ownedNotCreated.length) {
       const e = document.createElement('div'); e.className = 'pr-empty'; e.textContent = 'No skills yet.'; paneSkills.appendChild(e);
@@ -3917,6 +3974,46 @@ export function chatHtml(): string {
   // The agent's OWNED skills (array of names) — everything owned is "active" (no
   // separate active state). Renders each as an item card in the panel; empty slots
   // fill the rest. No count badge (ownership is the whole point, not a number).
+  // Build a skill as an "SD-card" collectible (ported from the React surface). One component
+  // used everywhere skills are listed. card: { name, id, category?, type?, price?, supply? }.
+  // opts: { owned, disposed, firing, dim, onOpen }. The whole card is the click target (opens
+  // detail); buying happens there, so there is no inline buy button.
+  function skillSdCard(card, opts) {
+    opts = opts || {};
+    const isWorkflow = card.type === 'workflow';
+    const priceSol = (card.price && card.price !== '0' && card.price !== 0)
+      ? (Number(card.price) / 1e9).toFixed(2) : null;
+    const cat = String(card.category || (isWorkflow ? 'workflow' : 'skill')).toUpperCase().slice(0, 8);
+    const ty = isWorkflow ? '/ FLOW' : '/ SKILL';
+    const state = opts.disposed ? 'OFF' : opts.owned ? 'OWNED' : 'GET';
+    const nm = card.name || card.id || '';
+    const el = document.createElement('button');
+    el.className = 'an-sd' + (isWorkflow ? ' is-workflow' : '') + (opts.disposed ? ' is-disposed' : '')
+      + (opts.dim ? ' is-owned-dim' : '') + (opts.firing ? ' is-firing' : '');
+    el.title = nm; el.setAttribute('data-skill', card.name || '');
+    // sigil is our own deterministic SVG (name only seeds numbers) -> safe to inject as markup;
+    // all human-readable fields go through textContent below so a skill name can't inject HTML.
+    el.innerHTML =
+      '<span class="an-sd-tab"></span>' +
+      '<div class="an-sd-label">' +
+        '<svg class="an-sd-art" viewBox="0 0 120 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true">' + skillSigilSvg(nm) + '</svg>' +
+        '<span class="an-sd-bar"></span>' +
+        '<div class="an-sd-mark"><span class="cat"></span> <span class="ty"></span></div>' +
+        '<div class="an-sd-name"></div>' +
+        '<div class="an-sd-chip"><span class="an-sd-big"></span><span class="an-sd-meta"></span></div>' +
+      '</div>';
+    el.querySelector('.an-sd-mark .cat').textContent = cat;
+    el.querySelector('.an-sd-mark .ty').textContent = ty;
+    el.querySelector('.an-sd-name').textContent = nm;
+    el.querySelector('.an-sd-big').textContent = (card.supply != null) ? String(card.supply) : '\\u2014';
+    const meta = el.querySelector('.an-sd-meta');
+    meta.textContent = priceSol ? (priceSol + '\\u25ce') : 'FREE';
+    meta.appendChild(document.createElement('br'));
+    meta.appendChild(document.createTextNode(state));
+    if (opts.onOpen) el.addEventListener('click', () => opts.onOpen(card));
+    return el;
+  }
+
   function setSkills(names, mints) {
     names = names || [];
     // routing map includes disposed skills too, so clicking a greyed slot still opens its
@@ -3926,32 +4023,32 @@ export function chatHtml(): string {
     const status = document.getElementById('skillStatus');
     const n = names.length;
     const disposedSlugs = Object.keys(disposedMints);
+    // "default" skills are the built-in bundled ones — no on-chain mint. The Hide-default
+    // filter drops them from the grid so only owned collectibles show. Counts/badge stay full.
+    const shown = hideDefaultSkills ? names.filter((nm) => !!skillMints[nm]) : names;
+    const hidden = n - shown.length;
     // NOTE: do NOT light up "casting" here — owning a skill is not the same as using it.
     // The glow (panel/button/slot) is driven only by flashSkill when a skill actually fires.
-    status.textContent = n ? (n === 1 ? '1 skill' : n + ' skills') : 'none yet';
+    status.textContent = n
+      ? (n === 1 ? '1 skill' : n + ' skills') + (hidden ? ' \\u00b7 ' + hidden + ' hidden' : '')
+      : 'none yet';
     grid.innerHTML = '';
-    for (const name of names) {
-      const slot = document.createElement('div'); slot.className = 'skSlot item';
-      slot.innerHTML = '<span class="skWand">' + ${JSON.stringify(WAND_SVG)} + '</span>';
-      const lbl = document.createElement('div'); lbl.className = 'skName'; lbl.textContent = name;
-      slot.appendChild(lbl); slot.title = name; slot.style.cursor = 'pointer';
-      // Bought NFT skills have a mint -> open the market detail view (on-chain source,
-      // and it carries the comment box — the popup modal doesn't). Bundled skills (no
-      // mint) fall back to the local SKILL.md doc. Avoids the name!=slug 404 on disk.
-      slot.addEventListener('click', () => { const mt = skillMints[name]; if (mt) { showView('market'); openDetail(mt); } else openSkillDoc(name); });
-      grid.appendChild(slot);
+    for (const name of shown) {
+      // Bought NFT skills have a mint -> open the market detail view (on-chain source, and it
+      // carries the comment box — the popup modal doesn't). Bundled skills (no mint) fall back
+      // to the local SKILL.md doc. Avoids the name!=slug 404 on disk.
+      const open = () => { const mt = skillMints[name]; if (mt) { showView('market'); openDetail(mt); } else openSkillDoc(name); };
+      grid.appendChild(skillSdCard({ name: name }, { owned: true, onOpen: open }));
     }
     // un-pinned skills: shown greyed + desaturated, still listed (not gone). Click opens the
     // detail view, which shows a Re-equip button for an owned-but-disposed skill.
     for (const name of disposedSlugs) {
-      const slot = document.createElement('div'); slot.className = 'skSlot item disabled';
-      slot.innerHTML = '<span class="skWand">' + ${JSON.stringify(WAND_SVG)} + '</span>';
-      const lbl = document.createElement('div'); lbl.className = 'skName'; lbl.textContent = name;
-      slot.appendChild(lbl); slot.title = name + ' — un-pinned (click to re-equip)'; slot.style.cursor = 'pointer';
-      slot.addEventListener('click', () => { showView('market'); openDetail(disposedMints[name]); });
-      grid.appendChild(slot);
+      const c = skillSdCard({ name: name }, { owned: true, disposed: true,
+        onOpen: () => { showView('market'); openDetail(disposedMints[name]); } });
+      c.title = name + ' \\u2014 un-pinned (click to re-equip)';
+      grid.appendChild(c);
     }
-    const fill = Math.max(0, 3 - n - disposedSlugs.length);
+    const fill = Math.max(0, 3 - shown.length - disposedSlugs.length);
     for (let i = 0; i < fill; i++) { const s = document.createElement('div'); s.className = 'skSlot empty'; grid.appendChild(s); }
     ownedSkills = names;
     // mirror the owned count onto the wallet-menu Skills entry (badge hidden when 0)
@@ -3965,6 +4062,20 @@ export function chatHtml(): string {
   let skillMints = {}; // slug/name -> mint for bought NFT skills (reuse market detail)
   let disposedMints = {}; // slug -> mint for un-pinned skills (greyed in the panel)
   let disposedMintSet = new Set(); // the mints above, for isDisposed() detail checks
+  // small view prefs persist via the VSCode webview state; the browser fallback has no
+  // state API, so these are guarded no-ops there (filter just resets to off on reload).
+  function uiGet(k) { try { const s = vscode.getState && vscode.getState(); return s ? s[k] : undefined; } catch (e) { return undefined; } }
+  function uiSet(k, v) { try { if (!vscode.setState) return; const s = (vscode.getState && vscode.getState()) || {}; s[k] = v; vscode.setState(s); } catch (e) {} }
+  let hideDefaultSkills = !!uiGet('hideDefaultSkills');
+  const hideDefaultCb = document.getElementById('skHideDefault');
+  if (hideDefaultCb) {
+    hideDefaultCb.checked = hideDefaultSkills;
+    hideDefaultCb.addEventListener('change', () => {
+      hideDefaultSkills = hideDefaultCb.checked;
+      uiSet('hideDefaultSkills', hideDefaultSkills);
+      setSkills(ownedSkills); // re-render with the full owned list; skillMints is already set
+    });
+  }
   setSkills([]); // idle: grey coming-soon slots
 
   // ---- marketplace: search → buy → install (host does the chain work) ----
@@ -3985,22 +4096,11 @@ export function chatHtml(): string {
     skillResults.innerHTML = '';
     if (!results.length) { skillResults.innerHTML = '<div class="shopEmpty">No skills found.</div>'; return; }
     for (const r of results) {
+      // The inline panel shop shares the collectible language; the card opens the market
+      // detail (where Buy lives), same as an owned slot.
       const owned = ownedSkills.indexOf(r.name) >= 0;
-      const item = document.createElement('div'); item.className = 'shopItem';
-      const main = document.createElement('div'); main.className = 'si-main';
-      const nm = document.createElement('div'); nm.className = 'si-name'; nm.textContent = r.name || r.id;
-      const ds = document.createElement('div'); ds.className = 'si-desc'; ds.textContent = r.description || '';
-      main.appendChild(nm); main.appendChild(ds);
-      const sup = document.createElement('span'); sup.className = 'si-sup';
-      sup.textContent = (typeof r.supply === 'number') ? (r.supply + '\\u00d7') : '';
-      const buy = document.createElement('button'); buy.className = 'si-buy';
-      buy.textContent = owned ? 'Owned' : 'Buy'; buy.disabled = owned;
-      buy.addEventListener('click', () => {
-        buy.disabled = true; buy.textContent = 'Buying…';
-        vscode.postMessage({ type: 'buySkill', skillId: r.id, creatorWallet: r.creator });
-      });
-      item.appendChild(main); item.appendChild(sup); item.appendChild(buy);
-      skillResults.appendChild(item);
+      skillResults.appendChild(skillSdCard(r, { owned: owned, dim: owned,
+        onOpen: (c) => { showView('market'); openDetail(c.id); } }));
     }
   }
   vscode.postMessage({ type: 'ownedSkills' }); // hydrate the panel on load
@@ -4319,37 +4419,10 @@ export function chatHtml(): string {
       return;
     }
     for (const r of results) {
+      // The whole SD card opens the detail view (where Buy lives) — an already-owned card
+      // reads muted (dim). Workflows get the mint cartridge via is-workflow inside skillSdCard.
       const owned = ownedSkills.indexOf(r.name) >= 0;
-      const isWf = r.type === 'workflow';
-      const wfCount = (r.requiredSkills || []).length;
-      const card = document.createElement('div'); card.className = isWf ? 'mktCard workflow' : 'mktCard';
-      const img = document.createElement('div'); img.className = 'mc-img';
-      // workflow = stacked-layers glyph (composite); skill = the IQ wand.
-      img.innerHTML = '<span class="wand">' + (isWf ? ${JSON.stringify(LAYERS_SVG)} : ${JSON.stringify(IQ_LOGO_SVG)}) + '</span>';
-      const main = document.createElement('div'); main.className = 'mc-main';
-      if (isWf) {
-        const badge = document.createElement('span'); badge.className = 'mc-wf';
-        badge.textContent = wfCount ? ('Workflow \\u00b7 ' + wfCount + ' skills') : 'Workflow';
-        main.appendChild(badge);
-      }
-      const nm = document.createElement('div'); nm.className = 'mc-name'; nm.textContent = r.name || r.id;
-      const ds = document.createElement('div'); ds.className = 'mc-desc'; ds.textContent = r.description || '';
-      main.appendChild(nm); main.appendChild(ds);
-      main.addEventListener('click', () => openDetail(r.id)); // card body → detail view
-      const sup = document.createElement('span'); sup.className = 'mc-sup';
-      const priceTxt = fmtPrice(r.price);
-      sup.textContent = (typeof r.supply === 'number') ? (r.supply + '\\u00d7') : '';
-      const pr = document.createElement('span'); pr.className = 'mc-price';
-      if (priceTxt) pr.textContent = priceTxt; // "Free" / "0.1 SOL"; empty when unknown
-      const buy = document.createElement('button'); buy.className = 'mc-buy';
-      buy.textContent = owned ? 'Owned' : 'Buy'; buy.disabled = owned;
-      buy.addEventListener('click', (e) => {
-        e.stopPropagation(); // don't trigger the card-body detail open
-        buy.disabled = true; buy.textContent = 'Buying…';
-        vscode.postMessage({ type: 'buySkill', skillId: r.id, creatorWallet: r.creator });
-      });
-      card.appendChild(img); card.appendChild(main); card.appendChild(sup); card.appendChild(pr); card.appendChild(buy);
-      mktResults.appendChild(card);
+      mktResults.appendChild(skillSdCard(r, { owned: owned, dim: owned, onOpen: (c) => openDetail(c.id) }));
     }
   }
 
@@ -4561,11 +4634,11 @@ export function chatHtml(): string {
     const panel = document.getElementById('skillsPanel');
     const btn = document.getElementById('skillsBtn');
     const clear = () => {
-      grid.querySelectorAll('.skSlot.item.firing').forEach((s) => s.classList.remove('firing'));
+      grid.querySelectorAll('.an-sd.is-firing').forEach((s) => s.classList.remove('is-firing'));
       panel.classList.remove('casting'); btn.classList.remove('casting');
     };
     clear();
-    grid.querySelectorAll('.skSlot.item').forEach((s) => { if (s.title === name) s.classList.add('firing'); });
+    grid.querySelectorAll('.an-sd').forEach((s) => { if (s.getAttribute('data-skill') === name) s.classList.add('is-firing'); });
     panel.classList.add('casting'); btn.classList.add('casting'); // header/button cue even if the name has no slot
     clearTimeout(firingTimer);
     firingTimer = setTimeout(clear, Math.max(dwell || 0, 1400));
@@ -4901,6 +4974,7 @@ export function chatHtml(): string {
       maybeFillOlder();
     }
     else if (m.type === 'approval') renderApproval(m.req);
+    else if (m.type === 'approvalDismiss') dismissApproval(m.id);
   });
 
   vscode.postMessage({ type: 'ready' });
