@@ -42,6 +42,7 @@ import {
   type StorageConfig,
 } from "@iqlabs-official/agent-sdk";
 import { localWallet, solanaDefaultKeypairPath } from "@iqlabs-official/agent-sdk/account/localWallet";
+import { NotifyingApprovalChannel } from "./approvalNotify.js";
 
 // Built during onboarding (or restored on a configured device), then handed to chat.
 // The wallet + runtime are SHARED across all chat panels (one wallet = one session
@@ -276,16 +277,40 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
   // The transport: VSCode's postMessage ⇄ onDidReceiveMessage in the shape the core
   // dispatcher expects. Everything chat-related lives in createChatSession now; this
   // file only adapts VSCode's pipe and supplies the host-specific env callbacks.
+  // recvHandlers mirrors every onRecv subscriber so inject() can feed a message straight into
+  // them — used by the desktop-popup layer to answer an approval as if the webview had.
+  const recvHandlers: ((m: any) => void)[] = [];
+  // Tap the session list as it flows to the webview so the desktop popup can name the session a
+  // request belongs to (sessionId -> title). Kept fresh on every "sessions" push.
+  const sessionTitles = new Map<string, string>();
   const transport = {
-    send: (msg: unknown) => panel.webview.postMessage(msg),
-    onRecv: (cb: (m: any) => void) => panel.webview.onDidReceiveMessage(cb),
+    send: (msg: unknown) => {
+      const m = msg as any;
+      if (m && m.type === "sessions" && Array.isArray(m.list)) {
+        for (const s of m.list) if (s && s.sessionId) sessionTitles.set(s.sessionId, String(s.title || ""));
+      }
+      return panel.webview.postMessage(msg);
+    },
+    onRecv: (cb: (m: any) => void) => {
+      recvHandlers.push(cb);
+      return panel.webview.onDidReceiveMessage(cb);
+    },
+    inject: (m: any) => { for (const h of recvHandlers) h(m); },
   };
   attachAuthHandlers(transport);
 
   // This panel's OWN approval channel — tool approvals from sessions started here
   // dock in THIS panel (it shares this panel's transport). Drained on dispose so a
   // request to a closed panel auto-denies instead of hanging the engine.
-  const approval = withTimeout(new TransportApprovalChannel(transport));
+  // Wrap the webview channel so that, when this window is NOT focused, an approval also pops a
+  // native macOS dialog (answerable without switching back). The webview card stays the source
+  // of truth; whichever surface answers first wins (see approvalNotify.ts).
+  const approval = new NotifyingApprovalChannel(
+    withTimeout(new TransportApprovalChannel(transport)),
+    transport,
+    vscode.env.appName,
+    (req) => sessionTitles.get(req.sessionId) || undefined,
+  );
   panel.onDidDispose(() => approval.drain?.());
 
   // Multi-tab guard: VSCode can open the same session in two panels (two tabs writing
