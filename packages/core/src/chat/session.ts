@@ -57,7 +57,7 @@ export interface ChatEnv {
   searchSkills?(query: string, kind?: "skill" | "workflow"): Promise<SkillCard[]>;
   getSkillDetail?(mint: string): Promise<import("./marketMessages.js").SkillDetail>;
   getSkillDoc?(name: string): Promise<string | null>;
-  buySkill?(skillId: string, creatorWallet?: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
+  buySkill?(skillId: string, creatorWallet?: string): Promise<{ ok: boolean; slug?: string; error?: string; code?: "insufficient_funds" }>;
   // dispose (un-equip) an owned skill: local + sticky (soulbound NFT stays owned, no refund).
   disposeSkill?(skillId: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
   // re-equip a previously-disposed skill the wallet still owns (undo, no re-buy).
@@ -79,6 +79,9 @@ export interface ChatEnv {
   buyAllSkills?(wallet: string): Promise<{ ok: boolean; bought: number; failed: number; error?: string }>;
   postAgentNote?(agentWallet: string, text: string, gitLink?: string, title?: string, image?: string): Promise<{ ok: boolean; notes?: import("./marketMessages.js").Note[]; error?: string }>;
   solBalance?(): Promise<number | null>; // wallet's native SOL balance (lamports), for the UI funds display
+  // devnet-only: fund the wallet from the faucet (manual "Get devnet SOL" on an insufficient-
+  // funds buy). Returns the new balance so the UI refreshes and lets the buyer retry.
+  airdrop?(): Promise<{ ok: boolean; lamports?: number; error?: string }>;
   // make-skill: publish a new skill from the UI. priceSol is the human SOL string; the
   // host converts to lamports and calls core publishSkill. Returns the new mint on success.
   publishSkill?(input: {
@@ -292,34 +295,40 @@ export function createChatSession(
     // throw, not a hang). Local is instant and can't hang, so `page` is always sent.
     transport.send({ type: "loading" });
     let localCount = 0;
+    let localNewestTs = 0;
     try {
       const page = await rt.loadSessionLocal(id);
       for (const msg of page.messages) transport.send({ type: "message", msg });
       transport.send({ type: "page", hasMore: page.hasMore, cursor: page.cursor });
       localCount = page.messages.length;
+      if (localCount) localNewestTs = page.messages[localCount - 1].ts ?? 0;
     } catch (err) {
       console.error(`[session] loadSessionLocal failed for ${String(id).slice(0, 8)}:`, err);
       transport.send({ type: "page", hasMore: false, cursor: 0 }); // release the spinner
     }
-    // If this device held NOTHING local for the session (created/continued on another
-    // device), reconcile from the cloud OFF the paint path: a best-effort fetch that, if it
-    // lands, repaints with the cloud history. If the cloud has nothing — or never responds —
-    // the UI has already moved on, so there is no hang. Guard on pendingId so a late cloud
-    // result can't clobber a tab the user switched away from in the meantime.
-    if (localCount === 0) {
-      void (async () => {
-        try {
-          const page = await rt.loadSession(id); // mirror: local-miss → cloud (may be slow)
-          if (slot().pendingId !== id) return;   // user switched tabs while we waited
-          if (!page.messages.length) return;     // cloud had nothing either — leave as-is
-          transport.send({ type: "clear" });
-          for (const msg of page.messages) transport.send({ type: "message", msg });
-          transport.send({ type: "page", hasMore: page.hasMore, cursor: page.cursor });
-        } catch (err) {
-          console.error(`[session] cloud reconcile failed for ${String(id).slice(0, 8)}:`, err);
-        }
-      })();
-    }
+    // Reconcile from the mirror (local-then-cloud) OFF the paint path. The instant local paint
+    // above can be STALE: the just-ended turn may not have flushed to disk yet (so an engine
+    // switch, which repaints, would show a blank/partial chat until a manual reload), or the
+    // session may carry newer turns from another device. Re-read and ADOPT the result only
+    // when it is FRESHER than what we painted — a newer last-turn ts, or local was empty — so
+    // a fresher local view is never clobbered by a staler mirror copy. Guard on pendingId so a
+    // late result can't overwrite a tab the user switched away from. (The old guard reconciled
+    // only when local was EMPTY, so a stale-but-nonempty local page stuck until a reload — the
+    // "model switch wipes the chat" bug. Now it self-heals with no refresh.)
+    void (async () => {
+      try {
+        const page = await rt.loadSession(id); // mirror: newest page across local+cloud
+        if (slot().pendingId !== id) return;   // user switched tabs while we waited
+        if (!page.messages.length) return;     // nothing to adopt — leave the local paint as-is
+        const newestTs = page.messages[page.messages.length - 1].ts ?? 0;
+        if (localCount > 0 && newestTs <= localNewestTs) return; // local already as fresh
+        transport.send({ type: "clear" });
+        for (const msg of page.messages) transport.send({ type: "message", msg });
+        transport.send({ type: "page", hasMore: page.hasMore, cursor: page.cursor });
+      } catch (err) {
+        console.error(`[session] cloud reconcile failed for ${String(id).slice(0, 8)}:`, err);
+      }
+    })();
   }
 
   // Open a session into the CURRENT tab's slot — cross-CLI: opening a session
@@ -714,6 +723,12 @@ export function createChatSession(
       case "getBalance":
         sendMarket({ type: "balance", lamports: env.solBalance ? await env.solBalance() : null });
         break;
+      case "airdrop": {
+        if (!env.airdrop) break; // another handler owns this on some surfaces (e.g. localhost)
+        const res = await env.airdrop();
+        sendMarket({ type: "airdropResult", ...res });
+        break;
+      }
       // ── RPC config (issue #23): set/clear the Helius key, report status ──
       case "setHeliusKey":
         await env.setHeliusKey?.(); // host opens a native secret input + saves

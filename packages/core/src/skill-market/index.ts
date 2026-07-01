@@ -36,7 +36,7 @@ import { loadHeliusKey } from "../core/rpc.js";
 import { signerAddress } from "../core/chain.js";
 import { scanSkillText } from "./scan.js";
 import { VERIFY_RUBRIC } from "./rubric.js";
-import { solToLamports } from "./ingest/env.js";
+import { solToLamports, friendlyBuyError, isInsufficientFundsError } from "./ingest/env.js";
 import { isHttpsGithubUrl } from "../links/github.js";
 
 /**
@@ -323,8 +323,10 @@ export async function handleToolCall(
         : " (purchase landed; its SKILL.md will install once the mint metadata is readable)";
       return { content: [{ type: "text", text: `Purchased skill ${skillId}${where}.\nTransaction Signature: ${txSig}` }] };
     } catch (err: any) {
-      emit({ type: "buyResult", skillId, ok: false, error: err.message });
-      return { isError: true, content: [{ type: "text", text: `Failed to buy skill: ${err.message}` }] };
+      const friendly = friendlyBuyError(err);
+      const code = isInsufficientFundsError(err) ? ("insufficient_funds" as const) : undefined;
+      emit({ type: "buyResult", skillId, ok: false, error: friendly, code });
+      return { isError: true, content: [{ type: "text", text: `Failed to buy skill: ${friendly}` }] };
     }
   }
 
@@ -365,8 +367,14 @@ export async function handleToolCall(
     if (!agentWallet || !text) throw new Error("Missing required argument: agentWallet and text");
     try {
       const noteId = await postAgentNote(conn, signer, { agentWallet, text, gitLink });
+      // Mirror the UI post path: fire agentNoteResult so an OPEN webview toasts the success
+      // (a chat-tool post otherwise lands on-chain with zero UI feedback — issue: "no error,
+      // nothing appears"). The UI-direct path also re-pushes the profile (session.ts); this
+      // tool path can only signal, so the toast is the confirmation the user gets.
+      emit({ type: "agentNoteResult", agentWallet, ok: true });
       return { content: [{ type: "text", text: `Comment posted (id: ${noteId})` }] };
     } catch (err: any) {
+      emit({ type: "agentNoteResult", agentWallet, ok: false, error: err.message });
       return { isError: true, content: [{ type: "text", text: `Failed to post comment: ${err.message}` }] };
     }
   }
@@ -390,8 +398,13 @@ export async function handleToolCall(
     try {
       const noteId = await postAgentNote(conn, signer, { agentWallet: self, text, gitLink });
       recordBlogPost(self);
+      // Signal the OPEN webview so a chat-tool blog post gets a success toast instead of
+      // silently landing on-chain with no visible trace (the reported "no error, nothing
+      // appears anywhere"). agentWallet == self here (a blog is a self-note).
+      emit({ type: "agentNoteResult", agentWallet: self, ok: true });
       return { content: [{ type: "text", text: `Blog post published (id: ${noteId})` }] };
     } catch (err: any) {
+      emit({ type: "agentNoteResult", agentWallet: self, ok: false, error: err.message });
       return { isError: true, content: [{ type: "text", text: `Failed to post blog entry: ${err.message}` }] };
     }
   }

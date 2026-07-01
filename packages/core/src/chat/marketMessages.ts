@@ -94,6 +94,7 @@ export type MarketRequest =
   | { type: "reEquipSkill"; skillId: string } // undo a dispose (re-install, no re-buy)
   | { type: "ownedSkills" } // ask the host to (re)send the owned list
   | { type: "getBalance" } // ask the host for the wallet's native SOL balance
+  | { type: "airdrop" } // devnet only: ask the host to fund this wallet from the faucet
   | { type: "setHeliusKey" } // host opens a native input to capture + save the key
   | { type: "useDefaultRpc" } // clear any key, fall back to the default
   | { type: "getRpcStatus" } // ask the host to (re)send rpcStatus
@@ -126,7 +127,9 @@ export type MarketEvent =
   | { type: "searchError"; message: string } // search threw (RPC/DAS failure) — show why, don't hang
   | { type: "skillDetail"; detail: SkillDetail } // full detail for the opened item (includes notes)
   | { type: "skillDoc"; name: string; text: string | null } // installed skill's SKILL.md (null = not found)
-  | { type: "buyResult"; skillId: string; ok: boolean; slug?: string; error?: string }
+  // code "insufficient_funds" lets the UI open the fund prompt (Get devnet SOL) instead of
+  // only toasting a raw chain error, so a broke wallet gets an actionable path, not a dead end.
+  | { type: "buyResult"; skillId: string; ok: boolean; slug?: string; error?: string; code?: "insufficient_funds" }
   | { type: "disposeResult"; skillId: string; ok: boolean; slug?: string; error?: string }
   | { type: "reEquipResult"; skillId: string; ok: boolean; slug?: string; error?: string }
   // installed skill names (panel fill) + slug->mint for bought NFTs (reuse market detail) +
@@ -135,6 +138,7 @@ export type MarketEvent =
   // holdings from chain (ownedSkillCards); absent on the names-only emits (chat panel/buy).
   | { type: "ownedSkills"; names: string[]; mints?: Record<string, string>; disposedMints?: Record<string, string>; cards?: SkillCard[] }
   | { type: "balance"; lamports: number | null } // wallet SOL balance (null = read failed)
+  | { type: "airdropResult"; ok: boolean; lamports?: number; error?: string } // devnet faucet result (lamports = the new balance)
   | { type: "skillActive"; name: string } // a skill fired -> "Casting <name>" cue
   | { type: "rpcStatus"; status: RpcStatus } // DAS-ready? which source? (issue #23)
   // issue #34: comment write result + refreshed comment list

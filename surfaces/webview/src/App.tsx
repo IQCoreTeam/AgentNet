@@ -9,6 +9,7 @@ import { ChatScreen } from "./chat/ChatScreen";
 import { MarketScreen } from "./market/MarketScreen";
 import { BuyCelebration } from "./market/BuyCelebration";
 import { PublishCelebration } from "./market/PublishCelebration";
+import { FundModal } from "./market/FundModal";
 import { Sessions } from "./chat/Sessions";
 import { TabBar } from "./shell/TabBar";
 import { Toast } from "./Toast";
@@ -97,7 +98,7 @@ export function App() {
   return (
     <>
       <div className="app-viewport">
-        {state.phase === "connecting" && <Splash />}
+        {(state.phase === "connecting" || state.phase === "restoring") && <Splash />}
         {state.phase === "onboarding" && <ConnectWallet />}
         {state.phase === "storageSelect" && <ConnectStorage />}
         {state.phase === "engineSelect" && <PickEngine />}
@@ -107,6 +108,7 @@ export function App() {
       </div>
       <Toast />
       {state.buyCelebrate && <BuyCelebration />}
+      {state.fundOpen && <FundModal />}
       {publishCelebrate && <PublishCelebration kind={state.publishKind ?? "skill"} onDone={() => setPublishCelebrate(false)} />}
     </>
   );

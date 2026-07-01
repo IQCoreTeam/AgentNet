@@ -14,7 +14,7 @@ import {
 } from "react";
 import { Transport } from "../transport/client";
 import { openExternalUrl } from "../platform/openExternalUrl";
-import { isAndroidWallet, signAndroidTransaction } from "../onboarding/androidWallet";
+import { isAndroidWallet, signAndroidTransaction, restoreAndroidWallet } from "../onboarding/androidWallet";
 import { providerSignBase64 } from "@iqlabs-official/agent-sdk/account/webWallet";
 import type {
   AgentProfile,
@@ -38,6 +38,7 @@ export type EngineStatus = "ok" | "no-login" | "missing";
 export interface State {
   phase:
     | "connecting"
+    | "restoring" // Android cold boot: attempting a silent Keystore reconnect (shows Splash, not the signup screen)
     | "onboarding"
     | "storageSelect"
     | "engineSelect"
@@ -58,6 +59,10 @@ export interface State {
   marketOwnedCards: SkillCard[]; // wallet's on-chain owned skill cards (My Skills grid)
   marketDisposed: Record<string, string>;
   marketBalance: number | null;
+  // Fund prompt (Get devnet SOL): opened when a buy fails for insufficient funds; `funding`
+  // is the in-flight airdrop so the button can spin. See FundModal.
+  fundOpen: boolean;
+  funding: boolean;
   rpcStatus: RpcStatus | null;
   publishResult: { ok: boolean; mint?: string; error?: string } | null;
   // Live publish progress while a multi-signature publish runs (web wallet); null when idle.
@@ -161,6 +166,8 @@ const initialState: State = {
   marketOwnedCards: [],
   marketDisposed: {},
   marketBalance: null,
+  fundOpen: false,
+  funding: false,
   rpcStatus: null,
   publishResult: null,
   publishProgress: null,
@@ -253,6 +260,9 @@ type LocalAction =
   | { type: "__setToast"; text: string }
   | { type: "__openingSession"; sessionId: string }
   | { type: "__newChat" }
+  | { type: "__closeFund" }
+  | { type: "__funding" }
+  | { type: "__restoreFailed" }
   | { type: "__clearCelebrate" };
 type Action = ServerMessage | LocalAction;
 
@@ -281,7 +291,11 @@ function reducer(state: State, ev: Action): State {
       // preserve the current wallet-derived phase. If the server explicitly says it has
       // no wallet, the app/server process restarted and the local wallet state is stale:
       // clear it so sends don't get stuck in a chat UI backed by an onboarding handler.
-      if (ev.hasWallet === false) return { ...state, walletAddress: null, phase: "onboarding" };
+      // No wallet on the server (cold boot / restart). On the Android shell a silent Keystore
+      // reconnect may still succeed, so land on a neutral "restoring" splash and let the boot
+      // effect try it — only fall to the signup screen if it returns nothing (or on web, where
+      // there is no silent restore). Prevents the signup UI from flashing as a loading screen.
+      if (ev.hasWallet === false) return { ...state, walletAddress: null, phase: isAndroidWallet() ? "restoring" : "onboarding" };
       if (state.walletAddress) return state;
       return { ...state, phase: "onboarding" };
     case "walletConnected":
@@ -480,6 +494,9 @@ function reducer(state: State, ev: Action): State {
         marketOwned: ev.ok ? [...state.marketOwned, ev.slug ?? ev.skillId] : state.marketOwned,
         buyCelebrate: ev.ok ? true : state.buyCelebrate,
         buyCelebrateLabel: ev.ok ? (ev.slug ?? ev.skillId) : state.buyCelebrateLabel,
+        // Broke wallet -> open the fund prompt so the buyer can top up and retry, instead of
+        // only flashing a transient error toast that leaves them stuck.
+        fundOpen: !ev.ok && ev.code === "insufficient_funds" ? true : state.fundOpen,
       };
     case "disposeResult":
       return {
@@ -509,6 +526,10 @@ function reducer(state: State, ev: Action): State {
       };
     case "balance":
       return { ...state, marketBalance: ev.lamports };
+    case "airdropResult":
+      return ev.ok
+        ? { ...state, funding: false, fundOpen: false, marketBalance: ev.lamports ?? state.marketBalance, toast: "Funded. Try the purchase again." }
+        : { ...state, funding: false, toast: `Get SOL failed: ${ev.error ?? "unknown"}` };
     case "rpcStatus":
       return { ...state, rpcStatus: ev.status };
     case "skillActive": {
@@ -574,6 +595,13 @@ function reducer(state: State, ev: Action): State {
       };
     case "__clearFiringSkill":
       return { ...state, firingSkills: [] };
+    case "__closeFund":
+      return { ...state, fundOpen: false };
+    case "__funding":
+      return { ...state, funding: true };
+    case "__restoreFailed":
+      // Silent Android reconnect found nothing (or failed) — show the signup screen now.
+      return { ...state, phase: "onboarding" };
     case "__clearCelebrate":
       return { ...state, buyCelebrate: false, buyCelebrateLabel: null };
     default:
@@ -606,6 +634,9 @@ interface Store {
   clearAgentProfile: () => void;
   clearFiringSkill: () => void;
   clearCelebrate: () => void;
+  // Fund prompt (Get devnet SOL): close it, or request a faucet grant (spins until airdropResult).
+  closeFund: () => void;
+  requestAirdrop: () => void;
   // Current SSE client id — native (Android) notification actions POST to /rpc with it.
   getClientId: () => string | null;
   // Show a transient toast locally (e.g. the foreground-only turn-off notice, #53).
@@ -674,6 +705,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       t.close();
     };
   }, []);
+
+  // Android cold boot: while phase is "restoring", try a SILENT Keystore reconnect off the
+  // splash. Success -> post connectWallet (the server rebuilds the runtime and flips us toward
+  // chat); nothing saved / failure -> fall to the signup screen. Prevents the signup UI from
+  // showing as the loading screen for an already-signed-in user. Runs once per entry.
+  useEffect(() => {
+    if (state.phase !== "restoring") return;
+    let cancelled = false;
+    void (async () => {
+      const creds = await restoreAndroidWallet().catch(() => null);
+      if (cancelled) return;
+      if (creds) void transportRef.current?.post({ type: "connectWallet", address: creds.address, signature: creds.signature });
+      else raw({ type: "__restoreFailed" });
+    })();
+    return () => { cancelled = true; };
+  }, [state.phase]);
 
   // Keep busyRef in sync so send() (stable closure) can read current busy state.
   useEffect(() => { busyRef.current = state.typing; }, [state.typing]);
@@ -790,6 +837,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       clearAgentProfile: () => raw({ type: "__clearAgentProfile" }),
       clearFiringSkill: () => raw({ type: "__clearFiringSkill" }),
       clearCelebrate: () => raw({ type: "__clearCelebrate" }),
+      closeFund: () => raw({ type: "__closeFund" }),
+      requestAirdrop: () => {
+        raw({ type: "__funding" });
+        void transportRef.current?.post({ type: "airdrop" });
+      },
       getClientId: () => transportRef.current?.getClientId() ?? null,
       notify: (text) => raw({ type: "__setToast", text }),
       markCompacting: () => raw({ type: "__compactStart" }),
