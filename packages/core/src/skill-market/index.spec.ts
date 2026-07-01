@@ -28,6 +28,7 @@ vi.mock("../core/seed.js", () => ({
   getSkillsCollectionMint: vi.fn().mockReturnValue("skillsCollection111"),
   getWorkflowsCollectionMint: vi.fn().mockReturnValue("workflowsCollection111"),
   getIndexerUrl: vi.fn().mockReturnValue("https://nft-index.example"),
+  getNetwork: vi.fn().mockReturnValue("devnet"),
 }));
 
 describe("skill-market", () => {
@@ -147,11 +148,21 @@ describe("skill-market", () => {
   });
 
   it("should handle buy_skill errors", async () => {
+    // A broke-wallet error is translated to friendly, actionable copy (friendlyBuyError):
+    // the raw "insufficient funds" / "no record of a prior credit" chain error is not shown.
     vi.mocked(buySkill).mockRejectedValue(new Error("Insufficient funds"));
     vi.mocked(readSkillMintMetadata).mockResolvedValue(null as any);
     const result = await handleToolCall(mockConn, signer, "defaultCreator", "buy_skill", { skillId: "skill1" });
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("Insufficient funds");
+    expect(result.content[0].text).toContain("Not enough SOL");
+  });
+
+  it("should pass through a non-funds buy error verbatim", async () => {
+    vi.mocked(buySkill).mockRejectedValue(new Error("mint account not found"));
+    vi.mocked(readSkillMintMetadata).mockResolvedValue(null as any);
+    const result = await handleToolCall(mockConn, signer, "defaultCreator", "buy_skill", { skillId: "skill1" });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("mint account not found");
   });
 
   it("should handle post_skill_comment tool call", async () => {
