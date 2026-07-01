@@ -1024,7 +1024,9 @@ export function chatHtml(): string {
   .an-ac:active { transform: scale(0.99); }
   .an-ac.is-self { border-color: color-mix(in srgb, var(--accent) 55%, #34343a);
                    box-shadow: 0 6px 22px rgba(0,0,0,0.55), inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent); }
-  .an-ac-in { position: relative; height: 100%; border: 1px solid #34343a; padding: 7px 9px; display: flex; flex-direction: column; }
+  /* No height:100% — the card is auto-height now, so a 100% here only invited a sub-pixel
+     clip of the foot under the card's overflow:hidden. Extra bottom padding gives EARNED air. */
+  .an-ac-in { position: relative; border: 1px solid #34343a; padding: 7px 9px 9px; display: flex; flex-direction: column; }
   .an-ac-top { display: flex; justify-content: space-between; align-items: center; font-size: 8px; letter-spacing: 0.5px; color: #82828c; }
   .an-ac-hand { color: #ececf0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .an-ac-sig { display: flex; align-items: center; gap: 5px; flex: none; }
@@ -1033,8 +1035,11 @@ export function chatHtml(): string {
   .an-ac-batt i { position: absolute; left: 1px; top: 1px; bottom: 1px; background: #82828c; }
   .an-ac-namerow { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid #34343a; padding: 6px 0 8px; }
   .an-ac-kana { font-size: 8px; color: #82828c; letter-spacing: 3px; margin-bottom: 2px; }
+  /* padding-bottom + a slightly taller line-height: the gradient is clipped to the text, and
+     background paints only inside the box, so a tight 0.82 line-height left italic descenders
+     (the Q tail) below the box unpainted, i.e. transparent. Extend the box to cover them. */
   .an-ac-name { font-family: "Saira Condensed", "Space Grotesk", ui-sans-serif, sans-serif; font-weight: 800;
-                font-style: italic; font-size: 30px; line-height: 0.82; letter-spacing: 1px;
+                font-style: italic; font-size: 30px; line-height: 0.9; letter-spacing: 1px; padding-bottom: 5px;
                 background: linear-gradient(178deg, #ffffff 0%, #d4d4db 36%, #6f6f78 54%, #b8b8c0 70%, #efeff3 100%);
                 -webkit-background-clip: text; background-clip: text; color: transparent; }
   .an-ac-access { text-align: right; font-size: 8px; color: #82828c; letter-spacing: 1.5px; line-height: 1.55; flex: none; }
@@ -1045,7 +1050,7 @@ export function chatHtml(): string {
   .an-ac-ava { position: relative; border: 1px solid #34343a; overflow: hidden; background: #08080a; }
   .an-ac-ava svg { position: absolute; inset: 0; width: 100%; height: 100%; }
   .an-ac-attr { display: flex; flex-direction: column; justify-content: center; gap: 8px; min-width: 0; }
-  .an-ac-rank { font-size: 7.5px; color: #82828c; letter-spacing: 2px; margin-bottom: -3px; }
+  .an-ac-rank { font-size: 7.5px; color: #82828c; letter-spacing: 2px; margin-bottom: 4px; }
   .an-ac-gauge { display: flex; align-items: center; gap: 8px; }
   .an-ac-gauge .lab { font-size: 9px; letter-spacing: 1px; color: #ececf0; white-space: nowrap; }
   .an-ac-segs { display: flex; gap: 2px; flex: 1; min-width: 0; }
