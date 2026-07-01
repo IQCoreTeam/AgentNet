@@ -57,6 +57,29 @@ function MenuRow({ icon, label, subtitle, onClick, accent = false }: {
   );
 }
 
+// One row in the Storage radio picker: a filled dot marks the active backend, tap to switch.
+// Compact + token-styled to sit naturally in the settings drawer (no emoji / em-dash).
+function StorageOption({ active, title, subtitle, onClick }: { active: boolean; title: string; subtitle: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left transition active:scale-[0.98]"
+      style={{
+        borderColor: active ? "var(--an-green-line)" : "#18181b",
+        background: active ? "var(--an-green-dim)" : "rgba(24,24,27,0.2)",
+      }}
+    >
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border" style={{ borderColor: active ? "var(--an-green)" : "#3f3f46" }}>
+        {active && <span className="h-2 w-2 rounded-full" style={{ background: "var(--an-green)" }} />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-xs font-semibold" style={{ color: "var(--an-fg)" }}>{title}</span>
+        <span className="block text-[10px] mt-0.5" style={{ color: "var(--an-fg-mute)" }}>{subtitle}</span>
+      </span>
+    </button>
+  );
+}
+
 export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: () => void; embedded?: boolean; onOpenAgent?: () => void }) {
   const { state, send, getClientId, notify } = useStore();
   const { storage, cloudSync, googleLoginUrl, googleLoginError } = state;
@@ -381,41 +404,54 @@ export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: 
             <div>
               <div className="mb-4 flex items-center justify-between border-b border-zinc-900 pb-2">
                 <span className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">
-                  Connect Cloud
+                  Storage
                 </span>
                 <button
-                  onClick={() => setSettingsMode("list")}
+                  onClick={() => setSettingsMode("configure")}
                   className="text-xs text-zinc-400 hover:text-zinc-200"
                 >
                   Back
                 </button>
               </div>
               <div className="flex flex-col gap-2.5">
-                <button
+                {/* Radio picker: the filled dot = the active backend. Local = disconnect any
+                    cloud; gdrive/custom open their existing connect flow. */}
+                <StorageOption
+                  active={!cloudConnected}
+                  title="This device only"
+                  subtitle="Sessions stay local. No cloud mirror."
+                  onClick={() => {
+                    if (cloudConnected) send({ type: "disconnectCloud" });
+                    setSettingsMode("configure");
+                  }}
+                />
+                <StorageOption
+                  active={info?.kind === "gdrive" && !!info?.connected}
+                  title="Google Drive"
+                  subtitle={
+                    info?.kind === "gdrive" && info?.connected
+                      ? `Connected${info.account ? ` · ${info.account}` : ""}`
+                      : "Mirror sessions to your own Google account"
+                  }
                   onClick={() => setSettingsMode("gdrive")}
-                  className="w-full text-left rounded-lg border border-zinc-900 bg-zinc-900/20 px-3 py-3 text-xs text-zinc-300 hover:bg-zinc-900/40 active:scale-[0.98] transition"
-                >
-                  <div className="font-semibold text-zinc-200">Google Drive</div>
-                  <div className="text-[10px] text-zinc-500 mt-0.5">
-                    Mirror sessions to your own Google account
-                  </div>
-                </button>
-                <button
+                />
+                <StorageOption
+                  active={info?.kind === "custom" && !!info?.connected}
+                  title="Custom Storage"
+                  subtitle={
+                    info?.kind === "custom" && info?.connected
+                      ? `Connected${info.location ? ` · ${info.location}` : ""}`
+                      : "Mirror to an S3 / WebDAV / HTTP endpoint"
+                  }
                   onClick={() => setSettingsMode("custom")}
-                  className="w-full text-left rounded-lg border border-zinc-900 bg-zinc-900/20 px-3 py-3 text-xs text-zinc-300 hover:bg-zinc-900/40 active:scale-[0.98] transition"
-                >
-                  <div className="font-semibold text-zinc-200">Custom Storage</div>
-                  <div className="text-[10px] text-zinc-500 mt-0.5">
-                    Mirror sessions to a custom S3/WebDAV/HTTP endpoint
-                  </div>
-                </button>
+                />
               </div>
             </div>
             <button
               onClick={() => setSettingsMode("configure")}
               className="w-full rounded-lg bg-zinc-800 hover:bg-zinc-700 py-2.5 text-xs text-zinc-200"
             >
-              Cancel
+              Done
             </button>
           </div>
         ) : settingsMode === "custom" ? (
