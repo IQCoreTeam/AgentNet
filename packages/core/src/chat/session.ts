@@ -82,6 +82,13 @@ export interface ChatEnv {
   // devnet-only: fund the wallet from the faucet (manual "Get devnet SOL" on an insufficient-
   // funds buy). Returns the new balance so the UI refreshes and lets the buyer retry.
   airdrop?(): Promise<{ ok: boolean; lamports?: number; error?: string }>;
+  // GitHub verified-work registration (issue #93 parity). getGithubStatus reports whether a
+  // token is saved; submitGithubToken stores one; registerWorkRepo commits + indexes an
+  // owner/name repo against the given skill mints. All three defer to core (rpc.ts token
+  // store + verifiedWork.ts). A surface that can't do this simply omits them.
+  getGithubStatus?(): Promise<{ hasToken: boolean; masked?: string }>;
+  submitGithubToken?(token: string): Promise<{ hasToken: boolean; masked?: string }>;
+  registerWorkRepo?(repo: string, skillMints: string[]): Promise<{ ok: boolean; count?: number; repo?: string; error?: string }>;
   // make-skill: publish a new skill from the UI. priceSol is the human SOL string; the
   // host converts to lamports and calls core publishSkill. Returns the new mint on success.
   publishSkill?(input: {
@@ -727,6 +734,26 @@ export function createChatSession(
         if (!env.airdrop) break; // another handler owns this on some surfaces (e.g. localhost)
         const res = await env.airdrop();
         sendMarket({ type: "airdropResult", ...res });
+        break;
+      }
+      // ── GitHub verified-work registration (issue #93 parity) ──
+      // Each guards on the capability so surfaces that own this on their own handler
+      // (e.g. localhost) fall through instead of getting a phantom response here.
+      case "getGithubStatus": {
+        if (!env.getGithubStatus) break;
+        sendMarket({ type: "githubStatus", ...(await env.getGithubStatus()) });
+        break;
+      }
+      case "submitGithubToken": {
+        const req = m as Extract<MarketRequest, { type: "submitGithubToken" }>;
+        if (!env.submitGithubToken) break;
+        sendMarket({ type: "githubStatus", ...(await env.submitGithubToken(req.token)) });
+        break;
+      }
+      case "registerWorkRepo": {
+        const req = m as Extract<MarketRequest, { type: "registerWorkRepo" }>;
+        if (!env.registerWorkRepo) break;
+        sendMarket({ type: "workRepoRegistered", ...(await env.registerWorkRepo(req.repo, req.skillMints)) });
         break;
       }
       // ── RPC config (issue #23): set/clear the Helius key, report status ──

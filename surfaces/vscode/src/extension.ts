@@ -32,6 +32,10 @@ import {
   hasDasRpc,
   maskedHeliusKey,
   getNetwork,
+  saveGithubToken,
+  loadGithubToken,
+  maskedGithubToken,
+  registerVerifiedWork,
   TransportApprovalChannel,
   withTimeout,
   chatHtml,
@@ -381,6 +385,29 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
       return { dasReady: await hasDasRpc(), hasKey: !!masked, masked, network: getNetwork() };
     },
     walletAddress: () => wallet?.address ?? null,
+    // GitHub verified-work registration (issue #93 parity). Token is stored locally by core
+    // (rpc.ts, 0600 file — never through the webview); registerVerifiedWork commits the marker
+    // + indexes the repo against the skill mints. Mirrors the localhost surface's handler.
+    getGithubStatus: async () => {
+      const masked = await maskedGithubToken();
+      return { hasToken: !!masked, masked: masked ?? undefined };
+    },
+    submitGithubToken: async (token: string) => {
+      await saveGithubToken(token);
+      const masked = await maskedGithubToken();
+      return { hasToken: !!masked, masked: masked ?? undefined };
+    },
+    registerWorkRepo: async (repo: string, skillMints: string[]) => {
+      try {
+        const stored = await loadGithubToken();
+        if (!stored?.token) return { ok: false, error: "Add a GitHub token first." };
+        if (!wallet?.address) return { ok: false, error: "Connect a wallet first." };
+        const res = await registerVerifiedWork({ token: stored.token, repo, skillMints, walletAddress: wallet.address });
+        return { ok: true, count: res.count, repo: res.repo };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "Registration failed." };
+      }
+    },
     storageInfo: async () => ({ info: await getStorageInfo(), options: STORAGE_OPTIONS }),
     // passive skill-shopping toggle (issue #21): persisted in config.json by the SDK.
     getSkillShopping: () => getSkillShopping(),

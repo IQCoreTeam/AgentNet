@@ -98,6 +98,12 @@ export type MarketRequest =
   | { type: "setHeliusKey" } // host opens a native input to capture + save the key
   | { type: "useDefaultRpc" } // clear any key, fall back to the default
   | { type: "getRpcStatus" } // ask the host to (re)send rpcStatus
+  // GitHub verified-work registration (issue #93 parity): save a token, check whether one
+  // is stored, and register an owner/name repo linked to skill mints. The heavy lifting is
+  // core (rpc.ts token store + verifiedWork.ts commit/index); a surface just wires these.
+  | { type: "submitGithubToken"; token: string }
+  | { type: "getGithubStatus" }
+  | { type: "registerWorkRepo"; repo: string; skillMints: string[] }
   // issue #34: post a comment on a skill (holder-gated client-side)
   | { type: "postNote"; skillId: string; skillType?: "skill" | "workflow"; text: string; gitLink?: string }
   // issue #35: agent directory + profile
@@ -139,6 +145,9 @@ export type MarketEvent =
   | { type: "ownedSkills"; names: string[]; mints?: Record<string, string>; disposedMints?: Record<string, string>; cards?: SkillCard[] }
   | { type: "balance"; lamports: number | null } // wallet SOL balance (null = read failed)
   | { type: "airdropResult"; ok: boolean; lamports?: number; error?: string } // devnet faucet result (lamports = the new balance)
+  // GitHub verified-work registration results (issue #93 parity)
+  | { type: "githubStatus"; hasToken: boolean; masked?: string }
+  | { type: "workRepoRegistered"; ok: boolean; count?: number; repo?: string; error?: string }
   | { type: "skillActive"; name: string } // a skill fired -> "Casting <name>" cue
   | { type: "rpcStatus"; status: RpcStatus } // DAS-ready? which source? (issue #23)
   // issue #34: comment write result + refreshed comment list
