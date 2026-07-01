@@ -70,6 +70,17 @@ export function chatHtml(): string {
     --an-bg-2: color-mix(in srgb, var(--vscode-foreground) 7%, transparent);
     --an-line: color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
     --an-line-soft: color-mix(in srgb, var(--vscode-foreground) 7%, transparent);
+    /* corner-tick brackets for the terminal button treatment (SYSTEM // COMMON BUTTON),
+       shared as a variable so every restyled button draws the same 8 corner marks. */
+    --an-ticks:
+      linear-gradient(#6e6e72,#6e6e72) left top / 7px 1.5px no-repeat,
+      linear-gradient(#6e6e72,#6e6e72) left top / 1.5px 7px no-repeat,
+      linear-gradient(#6e6e72,#6e6e72) right top / 7px 1.5px no-repeat,
+      linear-gradient(#6e6e72,#6e6e72) right top / 1.5px 7px no-repeat,
+      linear-gradient(#6e6e72,#6e6e72) left bottom / 7px 1.5px no-repeat,
+      linear-gradient(#6e6e72,#6e6e72) left bottom / 1.5px 7px no-repeat,
+      linear-gradient(#6e6e72,#6e6e72) right bottom / 7px 1.5px no-repeat,
+      linear-gradient(#6e6e72,#6e6e72) right bottom / 1.5px 7px no-repeat;
     /* collectible tier ramp (verified-work stars) — agent directory + profile, issue #35.
        Literal rarity hues (a sanctioned multi-hue exception to the green brand accent). */
     --an-tier-bronze: #cd7f32;
@@ -744,13 +755,69 @@ export function chatHtml(): string {
   .an-sd-big { font-size: 14px; font-weight: 700; color: #2a0f06; line-height: 1; }
   .an-sd-meta { font-size: 6px; line-height: 1.3; color: #3a160a; font-weight: 700; letter-spacing: 0.2px; }
 
+  /* ── Skeleton loaders (shimmer) ─────────────────────────────────────────
+     Shown the instant a grid or profile starts fetching, so the first paint
+     reads as "this shape is loading" instead of a bare "Loading…" line. Each
+     skeleton mirrors the footprint of the real card it stands in for (.an-sd
+     cartridge, .an-ac agent card, .an-id id card) so the swap to real content
+     does not jump. Reduced-motion safe. */
+  @keyframes an-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  .sk-sh { position: relative; overflow: hidden;
+           background: linear-gradient(90deg, var(--an-bg-1) 25%, var(--an-bg-2) 50%, var(--an-bg-1) 75%);
+           background-size: 200% 100%; animation: an-shimmer 1.4s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) { .sk-sh { animation: none; } }
+  .sk-sd { aspect-ratio: 108 / 150; border-radius: 11px;
+           clip-path: polygon(0 0, 79% 0, 100% 13%, 100% 100%, 0 100%); }
+  .sk-ac { width: 100%; height: 158px; border-radius: 4px; border: 1px solid var(--an-line-soft); }
+  .sk-id { width: 100%; height: 208px; border-radius: 4px; border: 1px solid var(--an-line-soft); margin-bottom: 12px; }
+
+  /* ===== SYSTEM // COMMON BUTTON ==========================================
+     Ported from the mobile .an-btn at desktop density (padding 20->8px, font
+     13->11px, letter-spacing 2->1.2px). Transparent button + corner-tick
+     brackets (8 corner gradients) with a solid accent block inset; only
+     --acc/--ink swap per variant. .sm is the compact inline variant for
+     per-card / search-row buttons. */
+  .an-btn { --tk: #6e6e72; --acc: #4ade80; --ink: #06140c;
+            position: relative; isolation: isolate; display: inline-flex; align-items: center;
+            justify-content: center; gap: 6px; padding: 8px 14px; border: 0; background: transparent;
+            cursor: pointer; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700;
+            font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--ink);
+            transition: opacity 0.12s; white-space: nowrap; }
+  .an-btn::before { content: ""; position: absolute; inset: 0; z-index: -2; background: var(--an-ticks); }
+  .an-btn::after { content: ""; position: absolute; inset: 5px; z-index: -1; background: var(--acc); }
+  .an-btn:hover { opacity: 0.92; }
+  .an-btn:active { opacity: 0.82; }
+  .an-btn:disabled, .an-btn[disabled] { opacity: 0.4; cursor: default; }
+  .an-btn-green  { --acc: #4ade80; --ink: #06140c; }
+  .an-btn-orange { --acc: #f0913e; --ink: #1a0f06; }
+  .an-btn-violet { --acc: #8b5cf6; --ink: #0c0618; }
+  .an-btn.sm { padding: 6px 11px; font-size: 10px; letter-spacing: 1px; }
+  .an-btn.sm::after { inset: 4px; }
+  /* secondary — plain outline, no brackets/fill (ports .an-btn-outline) */
+  .an-btn-outline { color: #bdbdbd; border: 1px solid #34343a; }
+  .an-btn-outline::before, .an-btn-outline::after { display: none; }
+
+  /* terminal form field + FORM // SECTION header (ports mobile .an-term-field). */
+  .an-field { width: 100%; box-sizing: border-box; background: #0d0d10; color: #e8e8ea;
+              border: 1px solid #2a2a30; border-radius: 4px; padding: 8px 10px;
+              font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.84em;
+              outline: none; transition: border-color 0.12s; }
+  .an-field:focus { border-color: #4ade80; }
+  .an-field.v-focus:focus { border-color: #8b5cf6; }
+  .an-field::placeholder { color: #5a5a5d; }
+  .an-field:disabled { opacity: 0.5; cursor: not-allowed; }
+  textarea.an-field { resize: vertical; line-height: 1.5; }
+  .an-formhead { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; font-weight: 700;
+                 letter-spacing: 1.4px; text-transform: uppercase; color: #7a7a7f; margin: 2px 0 9px; }
+  .an-formhead b { color: #c7c8d0; font-weight: 700; }
+
   /* Markets full-screen view */
   .mktHead { margin-bottom: 14px; }
   .mktTitle { display: flex; align-items: center; gap: 8px; font-size: 1.15em; font-weight: 700; }
   .mktTitle .wand { width: 18px; height: 18px; color: var(--an-green); }
   .mktSearchRow { display: flex; gap: 8px; margin-bottom: 16px; }
   #mktSearch { flex: 1; min-width: 0; background: var(--an-bg); border: 1px solid var(--an-line);
-               border-radius: var(--an-radius); color: inherit; padding: 9px 12px; font-size: 0.92em; outline: none; }
+               border-radius: 0; color: inherit; padding: 9px 12px; font-size: 0.92em; outline: none; }
   #mktSearch:focus { border-color: var(--an-green-line); }
   #mktSearchBtn { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
                   border-radius: var(--an-radius); padding: 9px 16px; font-size: 0.92em; font-weight: 600; cursor: pointer; }
@@ -786,12 +853,21 @@ export function chatHtml(): string {
   #mktDetailBody .dt-img.workflow { background: color-mix(in srgb, #e0a23a 18%, transparent); }
   #mktDetailBody .dt-img.workflow .wand { color: #e0a23a; }
   #mktDetailBody .dt-kind.workflow { color: #e0a23a; opacity: 1; }
-  /* Skills / Workflows segmented tabs */
-  .mktTabs { display: inline-flex; gap: 2px; padding: 2px; margin-bottom: 12px;
-             background: var(--an-bg); border: 1px solid var(--an-line); border-radius: 999px; }
-  .mktTab { background: transparent; border: none; color: var(--vscode-foreground); opacity: 0.6;
-            border-radius: 999px; padding: 4px 16px; font-size: 0.85em; cursor: pointer; }
-  .mktTab.on { background: var(--an-green-dim); color: var(--an-green); opacity: 1; font-weight: 600; }
+  /* Skills / Workflows tabs — flat underline marker (ported from the mobile tab bar):
+     active = 2px light underline + light mono label; inactive = 1px faint underline + grey. */
+  .mktTabRow { display: flex; align-items: flex-end; gap: 0; margin-bottom: 12px; }
+  .mktTabs { display: inline-flex; gap: 0; }
+  .mktTab { background: transparent; border: none; border-bottom: 1px solid #1d1d20; color: #5a5a5d;
+            padding: 10px 22px 12px; font-size: 0.9em; font-weight: 700; letter-spacing: 1.5px;
+            text-transform: uppercase; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            cursor: pointer; transition: color 0.12s, border-color 0.12s; }
+  .mktTab:hover { color: #9a9a9f; }
+  .mktTab.on { border-bottom: 2px solid #f2f2f2; color: #f2f2f2; }
+  /* market "hide owned" toggle: right-aligned beside the tabs, on by default so the grid surfaces NEW skills */
+  .mktFilter { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; opacity: 0.85;
+               font-size: 0.82em; cursor: pointer; user-select: none; white-space: nowrap; }
+  .mktFilter:hover { opacity: 1; }
+  .mktFilter input { margin: 0; accent-color: var(--an-green); cursor: pointer; }
   /* detail sub-view */
   #mktDetailBody .dt-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
   #mktDetailBody .dt-img { width: 56px; height: 56px; border-radius: 10px; background: var(--an-green-dim);
@@ -837,9 +913,12 @@ export function chatHtml(): string {
   #mktDetailBody .dt-comment .cm-git { font-size: 0.72em; opacity: 0.6; margin-top: 4px; }
   #mktDetailBody .dt-comment .cm-git a { color: var(--an-green); text-decoration: none; }
   #mktDetailBody .dt-note-input { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
-  #mktDetailBody .dt-note-input textarea { background: var(--an-bg); color: var(--vscode-foreground);
-                                          border: 1px solid var(--an-line); border-radius: var(--an-radius);
-                                          padding: 8px 10px; font-size: 0.85em; resize: vertical; min-height: 60px; }
+  #mktDetailBody .dt-note-input textarea { background: #0d0d10; color: #e8e8ea;
+                                          border: 1px solid #2a2a30; border-radius: 4px;
+                                          font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                                          padding: 8px 10px; font-size: 0.82em; line-height: 1.5; resize: vertical; min-height: 60px; outline: none; }
+  #mktDetailBody .dt-note-input textarea:focus { border-color: #4ade80; }
+  #mktDetailBody .dt-note-input textarea::placeholder { color: #5a5a5d; }
   #mktDetailBody .dt-note-input .dt-note-submit { align-self: flex-end; background: var(--an-green-dim);
                                                   border: 1px solid var(--an-green-line); color: var(--an-green);
                                                   border-radius: var(--an-radius); padding: 5px 14px; cursor: pointer; font-size: 0.85em; }
@@ -1182,8 +1261,9 @@ export function chatHtml(): string {
   .an-tfolder-gauge { display: flex; gap: 2px; align-items: center; }
   .an-tfolder-gauge i { width: 4px; height: 14px; transform: skewX(-12deg); background: var(--e); }
   .an-tfolder-gauge i.on { background: var(--c); }
-  .pr-sec { font-size:0.78em; font-weight:600; text-transform:uppercase;
-            letter-spacing:.04em; color:var(--an-muted,#888); margin:14px 0 6px; }
+  .pr-sec { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.72em; font-weight:700;
+            text-transform:uppercase; letter-spacing:1.4px; color:#7a7a7f; margin:14px 0 8px; }
+  .pr-sec b { color:#c7c8d0; font-weight:700; }
   /* Blog = horizontal snap-scroll carousel: newest card leftmost, scroll right for older.
      Also click-and-drag to scroll (enableDragScroll) — cursor:grab signals it. */
   .pr-blog { display:flex; gap:10px; overflow-x:auto; scroll-snap-type:x proximity;
@@ -1218,13 +1298,16 @@ export function chatHtml(): string {
   .pr-note-tx { white-space:nowrap; text-decoration:none; color:var(--an-green); opacity:.85; }
   .pr-note-tx:hover { opacity:1; text-decoration:underline; }
   .pr-compose { margin-top:10px; }
-  .pr-compose textarea { width:100%; box-sizing:border-box; min-height:60px; padding:8px;
-                         background:var(--an-bg-2); color:var(--vscode-foreground);
-                         border:1px solid var(--an-line); border-radius:6px; resize:vertical;
-                         font-family:inherit; font-size:0.92em; }
-  .pr-compose input[type=text] { width:100%; box-sizing:border-box; padding:6px 8px; margin-top:5px;
-                                  background:var(--an-bg-2); color:var(--vscode-foreground);
-                                  border:1px solid var(--an-line); border-radius:6px; font-size:0.88em; }
+  .pr-compose textarea { width:100%; box-sizing:border-box; min-height:60px; padding:8px 10px;
+                         background:#0d0d10; color:#e8e8ea; outline:none;
+                         border:1px solid #2a2a30; border-radius:4px; resize:vertical;
+                         font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.84em; line-height:1.5; }
+  .pr-compose input[type=text] { width:100%; box-sizing:border-box; padding:8px 10px; margin-top:6px;
+                                  background:#0d0d10; color:#e8e8ea; outline:none;
+                                  border:1px solid #2a2a30; border-radius:4px;
+                                  font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.82em; }
+  .pr-compose textarea:focus, .pr-compose input[type=text]:focus { border-color:#4ade80; }
+  .pr-compose textarea::placeholder, .pr-compose input[type=text]::placeholder { color:#5a5a5d; }
   .pr-compose button { margin-top:6px; padding:5px 14px; }
   .pr-compose .pr-err { color:#e05252; font-size:0.82em; margin-top:4px; display:none; }
   .pr-compose .pr-err.ok { color:var(--an-green,#3fb950); }
@@ -1258,12 +1341,42 @@ export function chatHtml(): string {
   .pr-rep-stat { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
   .pr-rep-stat .v { font-size:1.05em; font-weight:700; color:var(--an-green); }
   .pr-rep-stat .l { font-size:0.78em; opacity:0.6; }
-  /* Skills / Notes segmented tabs (same shape as the market tabs) */
-  .pr-tabs { display:inline-flex; gap:2px; padding:2px; margin:2px 0 12px;
-             background:var(--an-bg); border:1px solid var(--an-line); border-radius:999px; }
-  .pr-tab { background:transparent; border:none; color:var(--vscode-foreground); opacity:0.6;
-            border-radius:999px; padding:4px 16px; font-size:0.85em; cursor:pointer; }
-  .pr-tab.on { background:var(--an-green-dim); color:var(--an-green); opacity:1; font-weight:600; }
+  /* Agent / Community tabs — full-width flat underline marker + kana subtitle (ported
+     from the mobile profile tab bar). flex:1 halves form one continuous straight baseline. */
+  .pr-tabs { display:flex; gap:0; margin:8px 0 16px; }
+  .pr-tab { flex:1; background:transparent; border:none; border-bottom:1px solid #1d1d20; color:#5a5a5d;
+            padding:11px 8px 13px; text-align:center; cursor:pointer;
+            transition:color 0.12s, border-color 0.12s; }
+  .pr-tab .t { font-size:0.9em; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
+               font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .pr-tab .k { font-size:0.6em; margin-top:4px; letter-spacing:0.5px; color:#34343a; }
+  .pr-tab:hover { color:#9a9a9f; }
+  .pr-tab.on { border-bottom:2px solid #f2f2f2; color:#f2f2f2; }
+  .pr-tab.on .k { color:#5a5a5d; }
+  /* GitHub verified-work registration (own profile): entry button + modal form */
+  .pr-repo-add { display:inline-flex; align-items:center; gap:6px; margin:0 0 12px; background:transparent;
+                 border:1px solid var(--an-green-line); color:var(--an-green); border-radius:var(--an-radius);
+                 padding:7px 13px; font-size:0.82em; font-weight:600; cursor:pointer; }
+  .pr-repo-add:hover { background:var(--an-green-dim); }
+  .rr-title { font-size:1.1em; font-weight:700; margin-bottom:10px; }
+  .rr-hint { opacity:0.7; font-size:0.85em; line-height:1.5; margin-bottom:10px; }
+  .rr-input { width:100%; box-sizing:border-box; padding:8px 10px; margin-bottom:8px; background:#0d0d10;
+              color:#e8e8ea; border:1px solid #2a2a30; border-radius:4px; outline:none;
+              font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.86em; }
+  .rr-input:focus { border-color:var(--an-green-line); }
+  .rr-input::placeholder { color:#5a5a5d; }
+  .rr-link { display:inline-block; margin-bottom:10px; font-size:0.8em; color:var(--an-green); text-decoration:none; }
+  .rr-link:hover { text-decoration:underline; }
+  .rr-sublabel { font-size:0.72em; text-transform:uppercase; letter-spacing:0.05em; opacity:0.5; margin:6px 0; }
+  .rr-skills { display:flex; flex-direction:column; gap:4px; max-height:180px; overflow:auto; margin-bottom:10px; }
+  .rr-skill { display:flex; align-items:center; gap:8px; font-size:0.86em; cursor:pointer; }
+  .rr-skill input { accent-color:var(--an-green); }
+  .rr-err { color:#e05252; font-size:0.82em; margin-bottom:8px; display:none; }
+  .rr-btn { width:100%; box-sizing:border-box; text-align:center; background:var(--an-green-dim);
+            border:1px solid var(--an-green-line); color:var(--an-green); border-radius:var(--an-radius);
+            padding:8px 14px; font-size:0.9em; font-weight:600; cursor:pointer; }
+  .rr-btn:hover { background:var(--an-green-line); }
+  .rr-btn:disabled { opacity:0.5; cursor:default; }
   .pr-empty { opacity:0.5; font-size:0.85em; padding:10px 2px; }
   /* a skill card in the profile — same language as the market .mktCard */
   .pr-skill { display:flex; align-items:center; gap:12px; padding:10px 12px; margin-bottom:8px;
@@ -1318,12 +1431,14 @@ export function chatHtml(): string {
   .mktMake:hover, .skMake:hover { background: var(--an-green-line); }
   .pubForm { display: flex; flex-direction: column; }
   .pubLabel { font-size: 0.8em; font-weight: 600; margin: 12px 0 4px; color: var(--vscode-foreground); }
-  .pubLabel .req { color: var(--an-green); margin-left: 2px; }
+  .pubLabel .req { color: #8b5cf6; margin-left: 2px; }
   .pubForm input[type=text], .pubForm textarea {
-    width: 100%; box-sizing: border-box; padding: 8px 10px; background: var(--an-bg-2);
-    color: var(--vscode-foreground); border: 1px solid var(--an-line);
-    border-radius: var(--an-radius); font-family: inherit; font-size: 0.9em; resize: vertical; }
-  .pubForm textarea { font-family: var(--vscode-editor-font-family, monospace); }
+    width: 100%; box-sizing: border-box; padding: 8px 10px; background: #0d0d10;
+    color: #e8e8ea; border: 1px solid #2a2a30; outline: none;
+    border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.84em; resize: vertical; }
+  .pubForm input[type=text]:focus, .pubForm textarea:focus { border-color: #8b5cf6; }
+  .pubForm input[type=text]::placeholder, .pubForm textarea::placeholder { color: #5a5a5d; }
+  .pubForm textarea { line-height: 1.5; }
   .pubHint { font-size: 0.76em; opacity: 0.55; margin-top: 4px; }
   /* on-chain badge — mirrors iq-wide-web's OnChainBadge (◆ ON-CHAIN) */
   .pubBadge { display: inline-block; margin-top: 6px; font-size: 0.7em; font-weight: 700;
@@ -1334,6 +1449,30 @@ export function chatHtml(): string {
                color: #06231a; font-weight: 700; border: none; border-radius: var(--an-radius);
                padding: 8px 20px; cursor: pointer; font-size: 0.92em; }
   .pubSubmit:disabled { opacity: 0.5; cursor: default; }
+
+  /* ── SYSTEM // COMMON BUTTON applied to the live market/form action buttons.
+     Restyled in place (selectors kept so JS hooks and specificity hold): transparent
+     body + shared corner ticks (--an-ticks) + accent fill. Publish takes the violet
+     accent; the rest stay green. Layout-only props on the originals (margin, align-self)
+     survive since this block does not set them. */
+  #mktSearchBtn, #mktDetailBody .dt-buy, #skillModalBody .dt-buy, #mktDetailBody .dt-note-input .dt-note-submit,
+  .pr-buyall, .pr-compose button, .pubSubmit {
+    --acc: #4ade80; --ink: #06140c;
+    position: relative; isolation: isolate; display: inline-flex; align-items: center; justify-content: center;
+    gap: 6px; padding: 7px 13px; border: 0; background: transparent; border-radius: 0; cursor: pointer;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; font-size: 10px;
+    letter-spacing: 1px; text-transform: uppercase; color: var(--ink); white-space: nowrap; transition: opacity 0.12s; }
+  #mktSearchBtn::before, #mktDetailBody .dt-buy::before, #skillModalBody .dt-buy::before, #mktDetailBody .dt-note-input .dt-note-submit::before,
+  .pr-buyall::before, .pr-compose button::before, .pubSubmit::before {
+    content: ""; position: absolute; inset: 0; z-index: -2; background: var(--an-ticks); }
+  #mktSearchBtn::after, #mktDetailBody .dt-buy::after, #skillModalBody .dt-buy::after, #mktDetailBody .dt-note-input .dt-note-submit::after,
+  .pr-buyall::after, .pr-compose button::after, .pubSubmit::after {
+    content: ""; position: absolute; inset: 4px; z-index: -1; background: var(--acc); }
+  #mktSearchBtn:hover, #mktDetailBody .dt-buy:hover, #skillModalBody .dt-buy:hover, .pr-buyall:hover, .pr-compose button:hover,
+  #mktDetailBody .dt-note-input .dt-note-submit:hover, .pubSubmit:hover { opacity: 0.92; background: transparent; }
+  #mktSearchBtn:disabled, #mktDetailBody .dt-buy[disabled], #skillModalBody .dt-buy[disabled], .pr-buyall:disabled,
+  #mktDetailBody .dt-note-input .dt-note-submit[disabled], .pubSubmit:disabled { opacity: 0.4; cursor: default; }
+  .pubSubmit { --acc: #8b5cf6; --ink: #0c0618; }
 
   /* ---- skill-acquired celebration: a popup that bursts in when a buy succeeds.
        Centered card (wand + "Skill acquired" + name) over a soft backdrop, with a
@@ -1439,6 +1578,12 @@ export function chatHtml(): string {
   .buyErrClose { flex: none; background: none; border: none; color: var(--an-fg); opacity: 0.5;
                  cursor: pointer; font-size: 1.1em; line-height: 1; padding: 0 2px; }
   .buyErrClose:hover { opacity: 1; }
+  /* devnet fund action inside the buy-error banner (insufficient_funds only) */
+  .buyErrFund { display: inline-block; margin-top: 7px; background: color-mix(in srgb, var(--an-amber) 18%, transparent);
+                border: 1px solid var(--an-amber); color: var(--an-amber); border-radius: var(--an-radius-sm);
+                padding: 4px 12px; font-size: 0.92em; font-weight: 600; cursor: pointer; }
+  .buyErrFund:hover { background: color-mix(in srgb, var(--an-amber) 28%, transparent); }
+  .buyErrFund:disabled { opacity: 0.6; cursor: default; }
 </style>
 </head>
 <body>
@@ -1631,19 +1776,13 @@ export function chatHtml(): string {
   <div id="walletView" class="panel" style="display:none">
     <div class="page">
       <div id="backToChat" class="muted" style="cursor:pointer;margin-bottom:10px">‹ Back to chat</div>
-      <!-- hero: the mobile .an-id ID card (tier ladder + stars gauge) + verified-work folders -->
+      <!-- hero: the mobile .an-id ID card (tier ladder + stars gauge). Verified work now
+           lives inside the Agent tab (below), matching the mobile profile layout. -->
       <div id="agentIdCard"></div>
-      <div id="agentVerifiedWork"></div>
       <!-- hidden compat stubs: showProfile + the wallet-sync handler still set these shared ids -->
       <div style="display:none">
         <span id="wAvatarBig"></span><span id="walletAddr"></span>
         <span id="profileSubtitle"></span><span id="profileRep"></span>
-      </div>
-      <div id="profileSelfOnly">
-        <div class="card">
-          <div class="muted">Storage</div>
-          <div id="walletStorage">…</div>
-        </div>
       </div>
       <div id="profileBody"></div>
       <div id="profileSelfOnly2">
@@ -1679,6 +1818,7 @@ export function chatHtml(): string {
         <div class="muted small">Publish a skill others can buy. It mints a soulbound NFT and the body is stored on-chain.</div>
       </div>
       <div class="pubForm">
+        <div class="an-formhead">FORM // <b>PUBLISH SKILL</b></div>
         <label class="pubLabel">Name<span class="req">*</span></label>
         <input id="pubName" type="text" placeholder="clean-code-refactor" />
 
@@ -1725,9 +1865,14 @@ export function chatHtml(): string {
           </div>
           <div class="muted small">Popular first. Buy an item (soulbound) and your agent equips it.</div>
         </div>
-        <div class="mktTabs">
-          <button class="mktTab on" data-kind="skill">Skills</button>
-          <button class="mktTab" data-kind="workflow">Workflows</button>
+        <div class="mktTabRow">
+          <div class="mktTabs">
+            <button class="mktTab on" data-kind="skill">Skills</button>
+            <button class="mktTab" data-kind="workflow">Workflows</button>
+          </div>
+          <label class="mktFilter" title="Hide skills your wallet already owns">
+            <input type="checkbox" id="mktHideOwned" /> Hide owned
+          </label>
         </div>
         <div class="mktSearchRow">
           <input id="mktSearch" type="text" placeholder="Search…" />
@@ -3367,10 +3512,18 @@ export function chatHtml(): string {
     });
   });
 
+  // ---- skeleton loaders ----
+  // Footprints mirror the real cards so swapping skeleton -> content does not jump.
+  // skSd fills an SD-card grid (skills / workflows / profile skills); skAc fills the
+  // agent directory list; skId stands in for the profile id-card while it fetches.
+  function skSd(n) { let s = ''; for (let i = 0; i < n; i++) s += '<div class="sk-sd sk-sh"></div>'; return s; }
+  function skAc(n) { let s = ''; for (let i = 0; i < n; i++) s += '<div class="sk-ac sk-sh"></div>'; return s; }
+  const skId = '<div class="sk-id sk-sh"></div>';
+
   // ---- agent directory + profile (issue #35) ----
   let currentProfileWallet = null;
   function openAgents() {
-    document.getElementById('agentsList').innerHTML = '<div class="mktEmpty">Loading…</div>';
+    document.getElementById('agentsList').innerHTML = skAc(4);
     vscode.postMessage({ type: 'listAgents' });
   }
   function showProfile(walletAddr) {
@@ -3382,11 +3535,9 @@ export function chatHtml(): string {
     document.getElementById('walletAddr').textContent = walletAddr;
     document.getElementById('profileSubtitle').textContent = 'Loading profile…';
     document.getElementById('profileRep').innerHTML = '';
-    document.getElementById('agentIdCard').innerHTML = '<div class="muted" style="padding:18px 4px">Loading profile…</div>';
-    document.getElementById('agentVerifiedWork').innerHTML = '';
-    document.getElementById('profileSelfOnly').style.display = 'none';
+    document.getElementById('agentIdCard').innerHTML = skId;
     document.getElementById('profileSelfOnly2').style.display = 'none';
-    document.getElementById('profileBody').innerHTML = '<div class="pr-empty">Loading…</div>';
+    document.getElementById('profileBody').innerHTML = '<div class="an-sd-grid">' + skSd(6) + '</div>';
     showView('wallet');
     vscode.postMessage({ type: 'getAgentProfile', wallet: walletAddr });
   }
@@ -3501,7 +3652,7 @@ export function chatHtml(): string {
   let postFeedback = null; // { wallet, text, ok, ts } — survives the immediate profile re-render
   // Active profile tab — persisted across renders so the post-and-re-push (which rebuilds
   // the whole pane) doesn't yank the user from Notes back to Skills ("bounce to top").
-  let profileTab = 'skills';
+  let profileTab = 'agent';
   function mergeOptimistic(profile) {
     const now = Date.now();
     recentlyPosted = recentlyPosted.filter((p) => now - p.ts < 60000);
@@ -3650,11 +3801,11 @@ export function chatHtml(): string {
   function profRepoFill(stars) { const next = [3, 10, 50, 250].find((t) => stars < t); if (!next) return 10; return Math.max(0, Math.min(10, Math.round((stars / next) * 10))); }
   const GH_MARK_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" width="26" height="22" style="color:#cfcfcf"><path d="M12 1.5A10.5 10.5 0 0 0 8.68 22c.52.1.71-.23.71-.5v-1.76c-2.92.64-3.54-1.41-3.54-1.41-.48-1.21-1.16-1.53-1.16-1.53-.95-.65.07-.64.07-.64 1.05.07 1.6 1.08 1.6 1.08.94 1.6 2.46 1.14 3.06.87.1-.68.37-1.14.66-1.4-2.33-.27-4.78-1.17-4.78-5.18 0-1.15.41-2.08 1.08-2.82-.11-.27-.47-1.34.1-2.79 0 0 .88-.28 2.88 1.07a10 10 0 0 1 5.24 0c2-1.35 2.88-1.07 2.88-1.07.57 1.45.21 2.52.1 2.79.68.74 1.08 1.67 1.08 2.82 0 4.02-2.46 4.9-4.8 5.16.38.33.71.97.71 1.96v2.9c0 .28.19.61.72.5A10.5 10.5 0 0 0 12 1.5Z"/></svg>';
   const FOLDER_BINARY = '01010100101010100101001010101001010010110100101010010101001010010101001010010110101001010010100100101001010101001010';
-  function renderVerifiedWork(profile) {
-    const el = document.getElementById('agentVerifiedWork');
-    if (!el) return;
+  // Verified-work folders (GitHub repos). Returns an HTML fragment so the Agent tab can
+  // build it fresh each render inside the pane (profileBody is wiped on every renderProfile).
+  function verifiedWorkHtml(profile) {
     const repos = (profile.verifiedRepos || []).slice().sort((a, b) => (b.stars || 0) - (a.stars || 0));
-    if (!repos.length) { el.innerHTML = ''; return; }
+    if (!repos.length) return '';
     let cards = '';
     repos.forEach((r) => {
       const stars = r.stars || 0;
@@ -3675,41 +3826,129 @@ export function chatHtml(): string {
           '</div></div>' +
         '</div>';
     });
-    el.innerHTML = '<div class="pr-sec" style="margin-top:14px">Verified work</div><div class="an-vwork">' + cards + '</div>';
+    return '<div class="pr-sec" style="margin-top:14px">Verified work</div><div class="an-vwork">' + cards + '</div>';
   }
+
+  // ── GitHub verified-work registration (issue #93 parity) ──
+  // Own-profile "+ Register GitHub work" opens this modal: a token form when none is saved
+  // (the token stays on the host, never in the webview), then a repo form (owner/name + which
+  // owned skills it backs). getGithubStatus / submitGithubToken / registerWorkRepo round-trip
+  // to the host (session.ts), which defers to core (rpc.ts + verifiedWork.ts).
+  let repoModalEl = null;
+  function closeRepoRegister() { if (repoModalEl) { repoModalEl.remove(); repoModalEl = null; } }
+  function openRepoRegister() {
+    closeRepoRegister();
+    const ov = document.createElement('div'); ov.className = 'skModal'; ov.id = 'repoModal';
+    ov.addEventListener('click', (e) => { if (e.target === ov) closeRepoRegister(); });
+    const card = document.createElement('div'); card.className = 'skModal-card';
+    card.innerHTML =
+      '<button class="skModal-close" title="Close">\\u00d7</button>'
+      + '<div class="rr-title">Register GitHub work</div>'
+      + '<div class="rr-body"><div class="rr-hint">Loading…</div></div>';
+    ov.appendChild(card); document.body.appendChild(ov);
+    card.querySelector('.skModal-close').addEventListener('click', closeRepoRegister);
+    repoModalEl = ov;
+    vscode.postMessage({ type: 'getGithubStatus' });
+  }
+  function renderRepoModalBody(status) {
+    if (!repoModalEl) return;
+    const body = repoModalEl.querySelector('.rr-body'); if (!body) return;
+    body.innerHTML = '';
+    if (!status || !status.hasToken) {
+      // no token yet: capture one (repo scope). password field so it isn't shoulder-read.
+      const p = document.createElement('div'); p.className = 'rr-hint';
+      p.textContent = 'Add a GitHub token (repo scope) to register your work. Stored locally on this device, never synced.';
+      const inp = document.createElement('input'); inp.type = 'password'; inp.className = 'rr-input';
+      inp.placeholder = 'ghp_… (GitHub personal access token)';
+      const link = document.createElement('a'); link.className = 'rr-link';
+      link.href = 'https://github.com/settings/tokens/new?scopes=repo&description=AgentNet';
+      link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'Create a token ↗';
+      const err = document.createElement('div'); err.className = 'rr-err';
+      const btn = document.createElement('button'); btn.className = 'rr-btn'; btn.textContent = 'Save token';
+      btn.addEventListener('click', () => {
+        const t = inp.value.trim(); if (!t) return;
+        btn.disabled = true; btn.textContent = 'Saving…'; err.style.display = 'none';
+        vscode.postMessage({ type: 'submitGithubToken', token: t });
+      });
+      body.appendChild(p); body.appendChild(inp); body.appendChild(link); body.appendChild(err); body.appendChild(btn);
+    } else {
+      // token present: register an owner/name repo, optionally linking owned on-chain skills.
+      const p = document.createElement('div'); p.className = 'rr-hint';
+      p.textContent = 'Register a public GitHub repo as verified work' + (status.masked ? ' (token ' + status.masked + ')' : '') + '.';
+      const inp = document.createElement('input'); inp.type = 'text'; inp.className = 'rr-input';
+      inp.placeholder = 'owner/name or github.com URL';
+      body.appendChild(p); body.appendChild(inp);
+      const owned = ownedSkills.filter((n) => !!skillMints[n]);
+      const checks = [];
+      if (owned.length) {
+        const lbl = document.createElement('div'); lbl.className = 'rr-sublabel'; lbl.textContent = 'Link skills (optional)';
+        body.appendChild(lbl);
+        const list = document.createElement('div'); list.className = 'rr-skills';
+        owned.forEach((n) => {
+          const row = document.createElement('label'); row.className = 'rr-skill';
+          const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = skillMints[n];
+          const nm = document.createElement('span'); nm.textContent = n;
+          row.appendChild(cb); row.appendChild(nm); list.appendChild(row); checks.push(cb);
+        });
+        body.appendChild(list);
+      }
+      const err = document.createElement('div'); err.className = 'rr-err';
+      const btn = document.createElement('button'); btn.className = 'rr-btn'; btn.textContent = 'Register repo';
+      btn.addEventListener('click', () => {
+        const repo = inp.value.trim();
+        if (!repo) { err.textContent = 'Enter a repo (owner/name).'; err.style.display = ''; return; }
+        const mints = checks.filter((c) => c.checked).map((c) => c.value);
+        btn.disabled = true; btn.textContent = 'Registering…'; err.style.display = 'none';
+        vscode.postMessage({ type: 'registerWorkRepo', repo: repo, skillMints: mints });
+      });
+      body.appendChild(err); body.appendChild(btn);
+    }
+  }
+
   function renderProfile(profile) {
     profile = mergeOptimistic(profile);
     const self = profile.self;
     const wallet = profile.wallet;
-    // self-only sections (storage + disconnect) only show on your own profile
-    document.getElementById('profileSelfOnly').style.display = self ? '' : 'none';
+    // self-only section (disconnect) only shows on your own profile. Storage moved to the
+    // wallet dropdown only (removed from the profile page to avoid duplication).
     document.getElementById('profileSelfOnly2').style.display = self ? '' : 'none';
-    if (self) renderWalletStorage();
 
-    // ── hero: the .an-id ID card + verified-work folders (ported from mobile) ──
+    // ── hero: the .an-id ID card (verified work now lives in the Agent tab below) ──
     renderAgentIdCard(profile);
-    renderVerifiedWork(profile);
 
     const body = document.getElementById('profileBody');
     body.innerHTML = '';
 
-    // ── tabs: Skills / Notes ──
+    // ── tabs: Agent / Community (full-width flat underline + kana, ported from mobile) ──
     const tabs = document.createElement('div'); tabs.className = 'pr-tabs';
-    const tabSkills = document.createElement('button'); tabSkills.className = 'pr-tab on'; tabSkills.textContent = 'Skills';
-    const tabNotes = document.createElement('button'); tabNotes.className = 'pr-tab'; tabNotes.textContent = 'Notes';
-    tabs.appendChild(tabSkills); tabs.appendChild(tabNotes);
+    const tabAgent = document.createElement('button'); tabAgent.className = 'pr-tab on';
+    tabAgent.innerHTML = '<div class="t">Agent</div><div class="k">エージェント</div>';
+    const tabCommunity = document.createElement('button'); tabCommunity.className = 'pr-tab';
+    tabCommunity.innerHTML = '<div class="t">Community</div><div class="k">コミュニティ</div>';
+    tabs.appendChild(tabAgent); tabs.appendChild(tabCommunity);
     body.appendChild(tabs);
-    const paneSkills = document.createElement('div');
-    const paneNotes = document.createElement('div'); paneNotes.style.display = 'none';
-    body.appendChild(paneSkills); body.appendChild(paneNotes);
+    const paneAgent = document.createElement('div');
+    const paneCommunity = document.createElement('div'); paneCommunity.style.display = 'none';
+    body.appendChild(paneAgent); body.appendChild(paneCommunity);
     function selectTab(which) {
-      const onSkills = which === 'skills';
-      profileTab = onSkills ? 'skills' : 'notes'; // remember across re-renders
-      tabSkills.classList.toggle('on', onSkills); tabNotes.classList.toggle('on', !onSkills);
-      paneSkills.style.display = onSkills ? '' : 'none'; paneNotes.style.display = onSkills ? 'none' : '';
+      const onAgent = which === 'agent';
+      profileTab = onAgent ? 'agent' : 'community'; // remember across re-renders
+      tabAgent.classList.toggle('on', onAgent); tabCommunity.classList.toggle('on', !onAgent);
+      paneAgent.style.display = onAgent ? '' : 'none'; paneCommunity.style.display = onAgent ? 'none' : '';
     }
-    tabSkills.addEventListener('click', () => selectTab('skills'));
-    tabNotes.addEventListener('click', () => selectTab('notes'));
+    tabAgent.addEventListener('click', () => selectTab('agent'));
+    tabCommunity.addEventListener('click', () => selectTab('community'));
+
+    // ── AGENT pane leads with verified work (GitHub folders), then skills — mobile order ──
+    // own profile gets a "Register GitHub work" entry (issue #93 parity) above the folders.
+    if (self) {
+      const rr = document.createElement('button'); rr.className = 'pr-repo-add';
+      rr.textContent = '+ Register GitHub work';
+      rr.addEventListener('click', openRepoRegister);
+      paneAgent.appendChild(rr);
+    }
+    const vwHtml = verifiedWorkHtml(profile);
+    if (vwHtml) { const vw = document.createElement('div'); vw.innerHTML = vwHtml; paneAgent.appendChild(vw); }
 
     // ── helper: pretty skill card (click body → popup; Buy stops propagation) ──
     function skillCard(card) {
@@ -3722,30 +3961,30 @@ export function chatHtml(): string {
     // ── SKILLS pane: created (with buy-all) + owned ──
     if (profile.createdSkills.length) {
       const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Created skills';
-      paneSkills.appendChild(sec);
+      paneAgent.appendChild(sec);
       if (!self) {
         const notOwned = profile.createdSkills.filter(c => ownedSkills.indexOf(c.name) < 0).length;
         if (notOwned > 0) {
           const buyAll = document.createElement('button'); buyAll.className = 'pr-buyall';
           buyAll.textContent = 'Buy all · ' + notOwned + ' not owned';
           buyAll.addEventListener('click', () => showBuyAllConfirm(profile));
-          paneSkills.appendChild(buyAll);
+          paneAgent.appendChild(buyAll);
         }
       }
       const cg = document.createElement('div'); cg.className = 'an-sd-grid';
       profile.createdSkills.forEach(c => cg.appendChild(skillCard(c)));
-      paneSkills.appendChild(cg);
+      paneAgent.appendChild(cg);
     }
     const ownedNotCreated = profile.ownedSkills.filter(o => !profile.createdSkills.some(c => c.id === o.id));
     if (ownedNotCreated.length) {
       const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Owned skills';
-      paneSkills.appendChild(sec);
+      paneAgent.appendChild(sec);
       const og = document.createElement('div'); og.className = 'an-sd-grid';
       ownedNotCreated.forEach(o => og.appendChild(skillCard(o)));
-      paneSkills.appendChild(og);
+      paneAgent.appendChild(og);
     }
-    if (!profile.createdSkills.length && !ownedNotCreated.length) {
-      const e = document.createElement('div'); e.className = 'pr-empty'; e.textContent = 'No skills yet.'; paneSkills.appendChild(e);
+    if (!profile.createdSkills.length && !ownedNotCreated.length && !vwHtml) {
+      const e = document.createElement('div'); e.className = 'pr-empty'; e.textContent = 'No work or skills yet.'; paneAgent.appendChild(e);
     }
 
     // ── helper: a note/comment card (date + on-chain tx link in the footer) ──
@@ -3795,7 +4034,7 @@ export function chatHtml(): string {
     const selfNotes = profile.notes.filter(n => n.isSelfNote);
     if (selfNotes.length) {
       const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Blog';
-      paneNotes.appendChild(sec);
+      paneCommunity.appendChild(sec);
       const blog = document.createElement('div'); blog.className = 'pr-blog';
       blog.tabIndex = 0; blog.setAttribute('role', 'list'); blog.setAttribute('aria-label', 'Blog posts');
       blog.addEventListener('keydown', (e) => {
@@ -3805,7 +4044,7 @@ export function chatHtml(): string {
       });
       selfNotes.forEach(n => blog.appendChild(noteCard(n, false)));
       enableDragScroll(blog);
-      paneNotes.appendChild(blog);
+      paneCommunity.appendChild(blog);
     }
     // Compose box — ALWAYS shown so the action is discoverable. Self → post to blog;
     // otherwise → write a comment, enabled only when the connected wallet holds ≥1 of
@@ -3815,11 +4054,20 @@ export function chatHtml(): string {
       const canPost = self || !!profile.canComment;
       const feedback = feedbackFor(wallet);
       const sec = document.createElement('div'); sec.className = 'pr-sec';
-      sec.textContent = self ? 'Post to blog' : 'Write a comment';
-      paneNotes.appendChild(sec);
+      sec.innerHTML = self ? 'FORM // <b>POST TO BLOG</b>' : 'FORM // <b>WRITE A COMMENT</b>';
+      paneCommunity.appendChild(sec);
       const compose = document.createElement('div'); compose.className = 'pr-compose';
+      // blog posts (self) carry an optional Title; comments do not — matches the mobile composer.
+      let titleInput = null;
+      if (self) {
+        titleInput = document.createElement('input'); titleInput.type = 'text';
+        titleInput.placeholder = 'Title (optional)';
+      }
       const ta = document.createElement('textarea');
       ta.placeholder = self ? 'Write a blog post or update…' : 'Share your experience with this agent…';
+      // optional image: an http link, an on-chain address, or a tx id (same as mobile).
+      const imgInput = document.createElement('input'); imgInput.type = 'text';
+      imgInput.placeholder = 'Image link / on-chain address / tx id (optional)';
       const gitInput = document.createElement('input'); gitInput.type = 'text'; gitInput.placeholder = 'GitHub / git URL (optional)';
       const errEl = document.createElement('div'); errEl.className = 'pr-err';
       if (feedback) {
@@ -3829,7 +4077,8 @@ export function chatHtml(): string {
       }
       const btn = document.createElement('button'); btn.textContent = self ? 'Post' : 'Comment';
       if (!canPost) {
-        ta.disabled = true; gitInput.disabled = true; btn.disabled = true;
+        ta.disabled = true; gitInput.disabled = true; imgInput.disabled = true; btn.disabled = true;
+        if (titleInput) titleInput.disabled = true;
         const hint = document.createElement('div'); hint.className = 'pr-hint';
         hint.textContent = 'Own ≥1 of this agent’s skills to comment.';
         compose.appendChild(hint);
@@ -3837,31 +4086,38 @@ export function chatHtml(): string {
       btn.addEventListener('click', () => {
         const text = ta.value.trim(); if (!text) return;
         const gitLink = gitInput.value.trim() || undefined;
+        const image = imgInput.value.trim() || undefined;
+        const title = titleInput ? (titleInput.value.trim() || undefined) : undefined;
         postFeedback = null;
         btn.disabled = true; btn.textContent = self ? 'Posting…' : 'Commenting…'; errEl.style.display = 'none'; errEl.classList.remove('ok');
         pendingPost = { wallet, text, gitLink, self };
-        vscode.postMessage({ type: 'postAgentNote', agentWallet: wallet, text, gitLink });
+        const out = { type: 'postAgentNote', agentWallet: wallet, text, gitLink };
+        if (image) out.image = image;
+        if (title) out.title = title;
+        vscode.postMessage(out);
       });
-      compose.appendChild(ta); compose.appendChild(gitInput); compose.appendChild(errEl); compose.appendChild(btn);
-      paneNotes.appendChild(compose);
+      if (titleInput) compose.appendChild(titleInput);
+      compose.appendChild(ta); compose.appendChild(imgInput); compose.appendChild(gitInput);
+      compose.appendChild(errEl); compose.appendChild(btn);
+      paneCommunity.appendChild(compose);
       // stash refs for the agentNoteResult handler (success clears them + confirms)
       body._postBtn = btn; body._postErr = errEl; body._postLabel = self ? 'Post' : 'Comment';
-      body._postTa = ta; body._postGit = gitInput;
+      body._postTa = ta; body._postGit = gitInput; body._postImg = imgInput; body._postTitle = titleInput;
     }
     const comments = profile.notes.filter(n => !n.isSelfNote);
     if (comments.length) {
       const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Comments (' + comments.length + ')';
-      paneNotes.appendChild(sec);
-      comments.forEach(n => paneNotes.appendChild(noteCard(n, true)));
+      paneCommunity.appendChild(sec);
+      comments.forEach(n => paneCommunity.appendChild(noteCard(n, true)));
     } else {
       const e = document.createElement('div'); e.className = 'pr-empty';
       e.textContent = self ? 'No comments yet.' : 'No comments yet — be the first.';
-      paneNotes.appendChild(e);
+      paneCommunity.appendChild(e);
     }
 
-    // Restore the tab the user was on (default Skills). After posting, the host re-pushes
+    // Restore the tab the user was on (default Agent). After posting, the host re-pushes
     // a fresh profile and we rebuild this whole pane — without this the user is yanked
-    // from Notes (where they just posted) back to Skills.
+    // from Community (where they just posted) back to Agent.
     selectTab(profileTab);
   }
 
@@ -4127,14 +4383,26 @@ export function chatHtml(): string {
   let lastMarketResults = []; // last search results, kept to re-render on owned-list change
   let currentKind = 'skill';  // active tab: Skills | Workflows
   let currentDetail = null;   // { id, type } of the open detail — for comments refresh
+  // "Hide owned" market filter: default ON (uiGet is undefined on first run) so the grid
+  // surfaces NEW skills, matching mobile. Persisted, so the choice sticks across reloads.
+  let hideOwnedMarket = uiGet('hideOwnedMarket'); if (hideOwnedMarket === undefined) hideOwnedMarket = true;
+  const mktHideOwnedCb = document.getElementById('mktHideOwned');
+  if (mktHideOwnedCb) {
+    mktHideOwnedCb.checked = hideOwnedMarket;
+    mktHideOwnedCb.addEventListener('change', () => {
+      hideOwnedMarket = mktHideOwnedCb.checked;
+      uiSet('hideOwnedMarket', hideOwnedMarket);
+      renderMarketResults(lastMarketResults);
+    });
+  }
   function runMarketSearch() {
-    mktResults.innerHTML = '<div class="mktEmpty">Searching…</div>';
+    mktResults.innerHTML = skSd(8);
     vscode.postMessage({ type: 'searchSkills', query: mktSearch.value.trim(), kind: currentKind });
   }
   function openMarket() {
     showMktList();
     // first open (and re-open) loads the popular list (empty query = supply-sorted)
-    mktResults.innerHTML = '<div class="mktEmpty">Loading…</div>';
+    mktResults.innerHTML = skSd(8);
     vscode.postMessage({ type: 'searchSkills', query: '', kind: currentKind });
     vscode.postMessage({ type: 'ownedSkills' });
     vscode.postMessage({ type: 'getBalance' }); // show funds in the market header
@@ -4294,6 +4562,8 @@ export function chatHtml(): string {
     // comment input
     const inputWrap = document.createElement('div'); inputWrap.className = 'dt-note-input';
     if (owned) {
+      const fh = document.createElement('div'); fh.className = 'an-formhead'; fh.innerHTML = 'FORM // <b>WRITE A COMMENT</b>';
+      inputWrap.appendChild(fh);
       const ta = document.createElement('textarea'); ta.placeholder = 'Write a comment…';
       const errEl = document.createElement('div'); errEl.className = 'dt-note-error'; errEl.style.display = 'none';
       const submit = document.createElement('button'); submit.className = 'dt-note-submit'; submit.textContent = 'Post';
@@ -4418,11 +4688,19 @@ export function chatHtml(): string {
         : '<div class="mktEmpty">No skills found. The default RPC can\\'t read the marketplace. Add a Helius key (free devnet tier) in the wallet menu \\u2192 RPC.</div>';
       return;
     }
+    let shown = 0, hidden = 0;
     for (const r of results) {
       // The whole SD card opens the detail view (where Buy lives) — an already-owned card
       // reads muted (dim). Workflows get the mint cartridge via is-workflow inside skillSdCard.
       const owned = ownedSkills.indexOf(r.name) >= 0;
+      // "Hide owned" (on by default): you came to find NEW skills, so drop the ones you hold.
+      if (hideOwnedMarket && owned) { hidden++; continue; }
       mktResults.appendChild(skillSdCard(r, { owned: owned, dim: owned, onOpen: (c) => openDetail(c.id) }));
+      shown++;
+    }
+    // everything matched but all of it is already owned and filtered out — say why the grid is empty.
+    if (!shown && hidden) {
+      mktResults.innerHTML = '<div class="mktEmpty">You already own all ' + hidden + ' matching skill' + (hidden > 1 ? 's' : '') + '. Uncheck "Hide owned" to see them.</div>';
     }
   }
 
@@ -4544,18 +4822,28 @@ export function chatHtml(): string {
   // ---- buy-failure banner: orange-bordered box with an (i) icon, auto-dismiss ----
   const buyErrEl = document.getElementById('buyErr');
   let buyErrTimer = null;
-  function showBuyError(msg) {
+  function showBuyError(msg, fundable) {
     buyErrEl.innerHTML =
       '<div class="buyErrBox">'
       + '<span class="buyErrIcon">i</span>'
       + '<div class="buyErrText"><span class="t">Purchase failed</span>'
-      + '<span class="m">' + escapeHtml(msg || 'Something went wrong. Please try again.') + '</span></div>'
+      + '<span class="m">' + escapeHtml(msg || 'Something went wrong. Please try again.') + '</span>'
+      + (fundable ? '<button class="buyErrFund">Get devnet SOL</button>' : '')
+      + '</div>'
       + '<button class="buyErrClose" title="Dismiss">\\u00d7</button>'
       + '</div>';
     buyErrEl.classList.add('show'); buyErrEl.style.display = 'block';
     buyErrEl.querySelector('.buyErrClose').addEventListener('click', hideBuyError);
+    // devnet-only: a broke wallet can request faucet SOL right from the banner (airdrop →
+    // airdropResult), then retry the buy. The host owns the faucet call (session.ts).
+    const fundBtn = buyErrEl.querySelector('.buyErrFund');
+    if (fundBtn) fundBtn.addEventListener('click', () => {
+      fundBtn.disabled = true; fundBtn.textContent = 'Requesting devnet SOL…';
+      vscode.postMessage({ type: 'airdrop' });
+    });
     clearTimeout(buyErrTimer);
-    buyErrTimer = setTimeout(hideBuyError, 7000); // long enough to read, then fade
+    // give time to click the fund button before auto-dismiss
+    buyErrTimer = setTimeout(hideBuyError, fundable ? 20000 : 7000);
   }
   function hideBuyError() {
     clearTimeout(buyErrTimer);
@@ -4680,7 +4968,9 @@ export function chatHtml(): string {
 
   // My Wallet: storage summary mirrors the pill; address comes from the extension.
   function renderWalletStorage() {
+    // Storage line was removed from the profile page (kept only in the wallet dropdown).
     const el = document.getElementById('walletStorage');
+    if (!el) return;
     el.textContent = cloudConnected ? 'Local + cloud mirror (connected)' : 'Local only (no cloud)';
   }
   document.getElementById('disconnectWalletBtn').addEventListener('click', () => {
@@ -4805,7 +5095,6 @@ export function chatHtml(): string {
       // a failed getAgentProfile doesn't leave the profile stuck on "Loading…".
       if (currentProfileWallet) {
         document.getElementById('agentIdCard').innerHTML = '<div class="pr-empty">Could not load profile.</div>';
-        document.getElementById('agentVerifiedWork').innerHTML = '';
         document.getElementById('profileBody').innerHTML = '<div class="pr-empty">' + msg + '</div>';
       }
     }
@@ -4843,11 +5132,40 @@ export function chatHtml(): string {
       } else {
         // a failed buy must NOT wipe the catalog: show the reason in a dismissible
         // orange (i) banner and just re-enable the buttons that were mid-"Buying…".
-        showBuyError(m.error);
+        // On devnet, an insufficient_funds failure offers a "Get devnet SOL" faucet button.
+        showBuyError(m.error, m.code === 'insufficient_funds' && rpcNetwork !== 'mainnet');
         if (detailBuyBtn) { detailBuyBtn.disabled = false; detailBuyBtn.textContent = 'Buy'; }
         if (skillModalBuyBtn) { skillModalBuyBtn.disabled = false; skillModalBuyBtn.textContent = 'Buy'; }
         renderMarketResults(lastMarketResults); // restore any card stuck on "Buying…"
         renderSkillResults(lastMarketResults);
+      }
+    }
+    // devnet faucet result for the "Get devnet SOL" banner button (PR #92 fund flow)
+    else if (m.type === 'airdropResult') {
+      if (m.ok) {
+        renderNotice('Funded. Try the purchase again.');
+        vscode.postMessage({ type: 'getBalance' }); // reflect the new balance in the header
+        hideBuyError();
+      } else {
+        renderNotice('Get SOL failed: ' + (m.error || 'unknown'));
+        const fb = buyErrEl.querySelector('.buyErrFund');
+        if (fb) { fb.disabled = false; fb.textContent = 'Get devnet SOL'; }
+      }
+    }
+    // GitHub verified-work registration (issue #93): token status flips the modal form;
+    // a register result closes on success (+ refresh) or shows the error inline.
+    else if (m.type === 'githubStatus') { renderRepoModalBody(m); }
+    else if (m.type === 'workRepoRegistered') {
+      if (m.ok) {
+        renderNotice('Registered ' + (m.repo || 'your repo') + (m.count ? ' \\u00b7 ' + m.count + ' skill' + (m.count !== 1 ? 's' : '') + ' linked' : ''));
+        closeRepoRegister();
+        if (currentProfileWallet) vscode.postMessage({ type: 'getAgentProfile', wallet: currentProfileWallet });
+      } else if (repoModalEl) {
+        const b = repoModalEl.querySelector('.rr-body');
+        const err = b && b.querySelector('.rr-err');
+        const btn = b && b.querySelector('.rr-btn');
+        if (err) { err.textContent = m.error || 'Registration failed.'; err.style.display = ''; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Register repo'; }
       }
     }
     // dispose / re-equip results: the ownedSkills message that follows updates disposedMints
@@ -4912,6 +5230,8 @@ export function chatHtml(): string {
           body._postBtn.disabled = false; body._postBtn.textContent = label;
           if (body._postTa) body._postTa.value = '';
           if (body._postGit) body._postGit.value = '';
+          if (body._postImg) body._postImg.value = '';
+          if (body._postTitle) body._postTitle.value = '';
           if (body._postErr) { body._postErr.textContent = label === 'Post' ? 'Posted to blog.' : 'Comment posted.'; body._postErr.style.display = ''; body._postErr.classList.add('ok'); }
         }
       }
