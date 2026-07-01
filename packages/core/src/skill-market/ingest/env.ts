@@ -317,17 +317,22 @@ export async function marketplaceEnv(wallet: Wallet) {
     async publishSkill(input: {
       name: string; description: string; text: string;
       category?: string; hashtags?: string[]; priceSol: string; image?: string;
+      kind?: "skill" | "workflow"; requiredSkills?: string[];
     }, onProgress?: (p: PublishProgress) => void): Promise<{ ok: boolean; mint?: string; error?: string }> {
       try {
         const lamports = solToLamports(input.priceSol);
         if (lamports === null) return { ok: false, error: "Enter a valid price in SOL (e.g. 0.1)" };
-        const frontmatter = publishFrontmatter(input.text);
-        if (frontmatter.type === "workflow") {
+        // Prefer the explicit kind/requiredSkills a form sends; fall back to sniffing the
+        // body's own frontmatter only when kind is absent, for back-compat with hand-typed
+        // YAML bodies (chat/agent callers, older UI builds) that predate these fields.
+        const frontmatter = input.kind ? {} : publishFrontmatter(input.text);
+        const isWorkflow = input.kind === "workflow" || frontmatter.type === "workflow";
+        if (isWorkflow) {
           const mint = await corePublishWorkflow(conn, wallet, {
             name: input.name,
             description: input.description,
             text: input.text,
-            requiredSkills: frontmatter.requiredSkills ?? [],
+            requiredSkills: input.requiredSkills ?? frontmatter.requiredSkills ?? [],
             category: input.category,
             hashtags: input.hashtags,
             price: lamports,

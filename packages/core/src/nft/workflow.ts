@@ -44,7 +44,27 @@ export async function publishWorkflow(
   input: PublishWorkflowInput,
   onProgress?: (p: PublishProgress) => void,
 ): Promise<string> {
-  const format = checkWorkflowFormat(input.text);
+  // Validate the workflow the way it will actually exist: a SKILL.md whose frontmatter
+  // (name/description/type/requiredSkills) comes from the separate form fields, mirroring
+  // publishSkill's synthesis (skill.ts) so a clean form — no hand-typed YAML — can publish.
+  // A legacy body that already carries its own frontmatter is validated verbatim.
+  const hasOwnFrontmatter = /^﻿?---\s*\n[\s\S]*?\n---\s*(\n|$)/.test(input.text);
+  const descLine = input.description.replace(/\s*\n\s*/g, " ").trim();
+  const mdToCheck = hasOwnFrontmatter
+    ? input.text
+    : [
+        "---",
+        `name: ${input.name}`,
+        `description: ${descLine}`,
+        "type: workflow",
+        `requiredSkills: [${input.requiredSkills.join(", ")}]`,
+        ...(input.category ? [`category: ${input.category}`] : []),
+        ...(input.hashtags?.length ? [`hashtags: [${input.hashtags.join(", ")}]`] : []),
+        "---",
+        "",
+        input.text,
+      ].join("\n");
+  const format = checkWorkflowFormat(mdToCheck);
   if (!format.ok) {
     throw new FormatError(format.errors);
   }

@@ -17,7 +17,7 @@ export interface MarketApi {
   solBalance(): Promise<number | null>;
   postNote(skillId: string, skillType: "skill" | "workflow" | undefined, text: string, gitLink?: string): Promise<{ ok: boolean; error?: string }>;
   publishSkill(
-    input: { name: string; description: string; text: string; category?: string; hashtags?: string[]; priceSol: string; image?: string },
+    input: { name: string; description: string; text: string; category?: string; hashtags?: string[]; priceSol: string; image?: string; kind?: "skill" | "workflow"; requiredSkills?: string[] },
     onProgress?: (p: PublishProgress) => void,
   ): Promise<{ ok: boolean; mint?: string; error?: string }>;
   listAgents(): Promise<Reputation[]>;
@@ -27,6 +27,7 @@ export interface MarketApi {
   disposeSkill(skillId: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
   reEquipSkill(skillId: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
   disposedSkillMints?(): Promise<Record<string, string>>;
+  ownedSkillMints?(): Promise<Record<string, string>>;
 }
 
 type Stage =
@@ -40,9 +41,10 @@ type Stage =
   | "helius"
   | "blogCompose";
 
-// Publish form fields in order — tab/arrow cycles through them.
-type PublishField = "name" | "desc" | "text" | "category" | "hashtags" | "price" | "image";
-const PUBLISH_FIELDS: PublishField[] = ["name", "desc", "text", "category", "hashtags", "price", "image"];
+// Publish form fields in order — tab/arrow cycles through them. "kind" is a two-state
+// toggle (not free text); "requiredSkills" only appears in the cycle for a workflow.
+type PublishField = "kind" | "name" | "desc" | "text" | "category" | "hashtags" | "requiredSkills" | "price" | "image";
+const ALL_PUBLISH_FIELDS: PublishField[] = ["kind", "name", "desc", "text", "category", "hashtags", "requiredSkills", "price", "image"];
 
 type BlogField = "title" | "text" | "image" | "gitLink";
 const BLOG_FIELDS: BlogField[] = ["title", "text", "image", "gitLink"];
@@ -96,16 +98,22 @@ export function SkillMarket({
   const [commentField, setCommentField] = useState<"text" | "gitLink">("text");
 
   // publish stage
-  const [pubField, setPubField] = useState<PublishField>("name");
+  const [pubField, setPubField] = useState<PublishField>("kind");
+  const [pubKind, setPubKind] = useState<"skill" | "workflow">("skill");
   const [pubName, setPubName] = useState("");
   const [pubDesc, setPubDesc] = useState("");
   const [pubText, setPubText] = useState("");
   const [pubCategory, setPubCategory] = useState("");
   const [pubHashtags, setPubHashtags] = useState("");
+  const [pubRequiredSkills, setPubRequiredSkills] = useState(""); // comma-separated owned skill names
   const [pubPrice, setPubPrice] = useState("0.1");
   const [pubImage, setPubImage] = useState("");
   const [pubResult, setPubResult] = useState<string | null>(null);
   const [pubProgress, setPubProgress] = useState<PublishProgress | null>(null);
+  const [ownedMints, setOwnedMints] = useState<Record<string, string>>({}); // name -> mint
+
+  // Fields actually shown/cycled: requiredSkills only makes sense for a workflow.
+  const PUBLISH_FIELDS = ALL_PUBLISH_FIELDS.filter((f) => f !== "requiredSkills" || pubKind === "workflow");
 
   // agents stage
   const [agents, setAgents] = useState<Reputation[]>([]);
@@ -162,6 +170,7 @@ export function SkillMarket({
     void api.solBalance().then(setBalance).catch(() => setBalance(null));
     void refreshRpcStatus();
     void api.disposedSkillMints?.().then((m) => setDisposedNames(new Set(Object.keys(m)))).catch(() => {});
+    void api.ownedSkillMints?.().then(setOwnedMints).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -268,6 +277,14 @@ export function SkillMarket({
 
   async function doPublish() {
     if (!pubName.trim() || !pubDesc.trim() || !pubText.trim()) return;
+    let requiredSkills: string[] | undefined;
+    if (pubKind === "workflow") {
+      const names = pubRequiredSkills.split(",").map((s) => s.trim()).filter(Boolean);
+      if (names.length === 0) { setPubResult("failed: enter at least one required skill name"); return; }
+      const unresolved = names.filter((n) => !ownedMints[n]);
+      if (unresolved.length > 0) { setPubResult(`failed: unknown skill name(s): ${unresolved.join(", ")}`); return; }
+      requiredSkills = names.map((n) => ownedMints[n]);
+    }
     setBusy(true);
     setPubProgress(null);
     const res = await api.publishSkill(
@@ -279,6 +296,8 @@ export function SkillMarket({
         hashtags: pubHashtags.trim() ? pubHashtags.split(",").map((h) => h.trim()).filter(Boolean) : undefined,
         priceSol: pubPrice.trim() || "0.1",
         image: pubImage.trim() || undefined,
+        kind: pubKind,
+        requiredSkills,
       },
       (p) => setPubProgress(p),
     );
@@ -362,12 +381,15 @@ export function SkillMarket({
     setHeliusFlash(key ? "key saved" : "key cleared");
   }
 
-  // get/set helpers for publish form fields
+  // get/set helpers for publish form fields. "kind" is read-only here — it's a two-state
+  // toggle flipped by the useInput handler below, not free text.
   function pubGet(f: PublishField) {
-    return { name: pubName, desc: pubDesc, text: pubText, category: pubCategory, hashtags: pubHashtags, price: pubPrice, image: pubImage }[f];
+    if (f === "kind") return pubKind;
+    return { name: pubName, desc: pubDesc, text: pubText, category: pubCategory, hashtags: pubHashtags, requiredSkills: pubRequiredSkills, price: pubPrice, image: pubImage }[f];
   }
   function pubSet(f: PublishField, v: string) {
-    ({ name: setPubName, desc: setPubDesc, text: setPubText, category: setPubCategory, hashtags: setPubHashtags, price: setPubPrice, image: setPubImage }[f])(v);
+    if (f === "kind") return;
+    ({ name: setPubName, desc: setPubDesc, text: setPubText, category: setPubCategory, hashtags: setPubHashtags, requiredSkills: setPubRequiredSkills, price: setPubPrice, image: setPubImage }[f])(v);
   }
 
   function blogGet(f: BlogField) {
@@ -467,7 +489,14 @@ export function SkillMarket({
         setPubField(PUBLISH_FIELDS[(fi + PUBLISH_FIELDS.length - 1) % PUBLISH_FIELDS.length]);
         return;
       }
+      // "kind" is a two-state toggle, not free text: left/right (or space) flips it without
+      // advancing; Enter (below) flips it AND advances, matching Enter's existing semantics.
+      if (pubField === "kind" && (key.leftArrow || key.rightArrow || input === " ")) {
+        setPubKind((k) => (k === "skill" ? "workflow" : "skill"));
+        return;
+      }
       if (key.return) {
+        if (pubField === "kind") setPubKind((k) => (k === "skill" ? "workflow" : "skill"));
         if (fi < PUBLISH_FIELDS.length - 1) {
           setPubField(PUBLISH_FIELDS[fi + 1]);
         } else {
@@ -475,6 +504,7 @@ export function SkillMarket({
         }
         return;
       }
+      if (pubField === "kind") return; // no character input on the toggle field
       if (key.backspace || key.delete) { pubSet(pubField, pubGet(pubField).slice(0, -1)); return; }
       if (input && !key.ctrl && !key.meta) { pubSet(pubField, pubGet(pubField) + input); return; }
       return;
@@ -550,7 +580,7 @@ export function SkillMarket({
     }
     if (input === "/") return setTyping(true);
     if (input === "a") { setStage("agents"); void loadAgents(); return; }
-    if (input === "p") { setPubResult(null); setPubProgress(null); setPubField("name"); setStage("publish"); return; }
+    if (input === "p") { setPubResult(null); setPubProgress(null); setPubField("kind"); setStage("publish"); return; }
     if (input === "r") { setHeliusFlash(null); setHeliusKeyInput(""); setStage("helius"); return; }
     if (input === "h") { setHideOwned((v) => !v); setIdx(0); return; }
     if (key.tab) {
@@ -663,19 +693,34 @@ export function SkillMarket({
       );
     }
     const fieldLabels: Record<PublishField, string> = {
-      name: "name      ", desc: "desc      ", text: "skill text",
-      category: "category  ", hashtags: "hashtags  ", price: "price (SOL)", image: "image     ",
+      kind: "kind      ", name: "name      ", desc: "desc      ", text: "skill text",
+      category: "category  ", hashtags: "hashtags  ", requiredSkills: "required  ",
+      price: "price (SOL)", image: "image     ",
     };
     const fieldValues: Record<PublishField, string> = {
-      name: pubName, desc: pubDesc, text: pubText.slice(0, 60) + (pubText.length > 60 ? "…" : ""),
-      category: pubCategory, hashtags: pubHashtags, price: pubPrice, image: pubImage,
+      kind: pubKind, name: pubName, desc: pubDesc, text: pubText.slice(0, 60) + (pubText.length > 60 ? "…" : ""),
+      category: pubCategory, hashtags: pubHashtags, requiredSkills: pubRequiredSkills,
+      price: pubPrice, image: pubImage,
     };
+    const kindTint = pubKind === "workflow" ? colors.warn : colors.iqViolet;
     return (
-      <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
-        <Text bold color={colors.iqMagenta}>❖ publish skill</Text>
+      <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={kindTint}>
+        <Text bold color={colors.iqMagenta}>❖ publish {pubKind}</Text>
         <Box flexDirection="column" marginTop={1}>
           {PUBLISH_FIELDS.map((f) => {
             const on = f === pubField;
+            if (f === "kind") {
+              return (
+                <Box key={f}>
+                  <Text color={on ? colors.iqCyan : colors.dim}>{on ? "▸ " : "  "}</Text>
+                  <Box width={12}><Text color={on ? colors.iqCyan : colors.dim} bold={on}>{fieldLabels[f]}</Text></Box>
+                  <Text color={pubKind === "workflow" ? colors.warn : undefined} bold>
+                    {pubKind === "skill" ? "‹ skill ›" : "‹ workflow ›"}
+                  </Text>
+                  {on ? <Text inverse> </Text> : null}
+                </Box>
+              );
+            }
             return (
               <Box key={f}>
                 <Text color={on ? colors.iqCyan : colors.dim}>{on ? "▸ " : "  "}</Text>
@@ -688,9 +733,12 @@ export function SkillMarket({
         </Box>
         {busy ? <PublishProgressView progress={pubProgress} /> : null}
         <Box marginTop={1}>
-          <Text dimColor>↑/↓/[tab] field · ↵ next / submit on image · esc cancel</Text>
+          <Text dimColor>↑/↓/[tab] field · ←/→ toggle kind · ↵ next / submit on image · esc cancel</Text>
         </Box>
         <Box><Text dimColor>hashtags = comma-separated · image = link or on-chain ref, optional</Text></Box>
+        {pubKind === "workflow" ? (
+          <Box><Text dimColor>required = comma-separated names of skills YOU own</Text></Box>
+        ) : null}
       </Box>
     );
   }

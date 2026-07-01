@@ -27,6 +27,7 @@ import type { Connection } from "@solana/web3.js";
 import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
 import { searchSkills } from "../search/search.js";
 import { publishSkill } from "../nft/skill.js";
+import { publishWorkflow } from "../nft/workflow.js";
 import { readSkillText } from "../nft/token2022.js";
 import { SkillSync } from "./ingest/index.js";
 import { postNote, postAgentNote } from "../notes/notes.js";
@@ -225,15 +226,16 @@ const SKILL_TOOLS: { name: string; description: string; schema: z.ZodRawShape }[
   {
     name: "publish_skill",
     description:
-      "Publish a new skill to the marketplace: mint it as a soulbound Token-2022 NFT and store the SKILL.md body on-chain (you, the creator, auto-receive 1 copy). This is the raw publish action — it does NOT decide WHETHER something is worth becoming a skill; call it once you've authored the SKILL.md content and chosen a name/price.",
+      "Publish a new skill OR workflow to the marketplace: mint it as a soulbound Token-2022 NFT and store the SKILL.md body on-chain (you, the creator, auto-receive 1 copy). Pass requiredSkills (non-empty) to publish a WORKFLOW instead of a plain skill — a workflow gates its mint on the buyer holding every listed prerequisite skill. This is the raw publish action — it does NOT decide WHETHER something is worth becoming a skill/workflow; call it once you've authored the SKILL.md content and chosen a name/price.",
     schema: {
-      name: z.string().describe("Short skill name / slug, e.g. 'clean-code-refactor'."),
-      description: z.string().describe("One or two lines on what the skill does."),
-      text: z.string().describe("The full SKILL.md body the agent reads when this skill fires."),
+      name: z.string().describe("Short skill/workflow name / slug, e.g. 'clean-code-refactor'."),
+      description: z.string().describe("One or two lines on what it does."),
+      text: z.string().describe("The full SKILL.md body the agent reads when this fires."),
       category: z.string().optional().describe("Optional single category, e.g. 'clean-code'."),
       hashtags: z.array(z.string()).optional().describe("Optional tags, e.g. ['refactoring','testing']."),
       priceSol: z.string().optional().describe("Price in SOL a buyer pays (e.g. '0.1'). Use '0' for a free skill. Defaults to 0.1 if omitted."),
       image: z.string().optional().describe("Cover image, ONLY if the user explicitly gave you an image URL or on-chain (base58) address. Pass it through verbatim. Do NOT generate, invent, or ask for one, and NEVER pass raw/base64 image data — omit this field entirely when the user didn't provide a link."),
+      requiredSkills: z.array(z.string()).optional().describe("Base58 skill mint addresses this item requires the buyer to already hold. Non-empty = publish a WORKFLOW (gated); omitted/empty = publish a plain skill (no gate)."),
     },
   },
 ];
@@ -425,21 +427,35 @@ export async function handleToolCall(
     if (lamports === null) {
       return { isError: true, content: [{ type: "text", text: `Invalid priceSol "${priceSol}" — use a SOL amount like "0.1" or "0".` }] };
     }
+    // Non-empty requiredSkills IS the workflow signal — no separate kind param needed for
+    // this structured-args tool (unlike the freeform-text UI forms, which sniff/toggle it).
+    const requiredSkills = (args?.requiredSkills as string[] | undefined)?.filter(Boolean) ?? [];
+    const isWorkflow = requiredSkills.length > 0;
     try {
-      const mint = await publishSkill(conn, signer, {
-        name: skillName,
-        description,
-        text,
-        category: args?.category as string | undefined,
-        hashtags: args?.hashtags as string[] | undefined,
-        price: lamports,
-        image: args?.image as string | undefined,
-      }, (p) => emit({ type: "publishProgress", phase: p.phase, signed: p.signed, percent: p.percent, kind: p.kind }));
+      const mint = isWorkflow
+        ? await publishWorkflow(conn, signer, {
+            name: skillName,
+            description,
+            text,
+            requiredSkills,
+            category: args?.category as string | undefined,
+            hashtags: args?.hashtags as string[] | undefined,
+            price: lamports,
+          }, (p) => emit({ type: "publishProgress", phase: p.phase, signed: p.signed, percent: p.percent, kind: p.kind }))
+        : await publishSkill(conn, signer, {
+            name: skillName,
+            description,
+            text,
+            category: args?.category as string | undefined,
+            hashtags: args?.hashtags as string[] | undefined,
+            price: lamports,
+            image: args?.image as string | undefined,
+          }, (p) => emit({ type: "publishProgress", phase: p.phase, signed: p.signed, percent: p.percent, kind: p.kind }));
       emit({ type: "publishResult", ok: true, mint });
-      return { content: [{ type: "text", text: `Published skill "${skillName}" — mint: ${mint}` }] };
+      return { content: [{ type: "text", text: `Published ${isWorkflow ? "workflow" : "skill"} "${skillName}" — mint: ${mint}` }] };
     } catch (err: any) {
       emit({ type: "publishResult", ok: false, error: err.message });
-      return { isError: true, content: [{ type: "text", text: `Failed to publish skill: ${err.message}` }] };
+      return { isError: true, content: [{ type: "text", text: `Failed to publish ${isWorkflow ? "workflow" : "skill"}: ${err.message}` }] };
     }
   }
 

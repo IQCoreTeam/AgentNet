@@ -110,4 +110,61 @@ Some skill body`;
     }, undefined);
     expect(corePublishWorkflow).not.toHaveBeenCalled();
   });
+
+  it("prefers explicit kind/requiredSkills over frontmatter-sniffing (plain body, no frontmatter at all)", async () => {
+    const text = "Pure markdown without frontmatter";
+
+    const env = await marketplaceEnv(mockWallet);
+    const result = await env.publishSkill({
+      name: "My Workflow",
+      description: "A workflow",
+      text,
+      category: "testing",
+      hashtags: ["test", "workflow"],
+      priceSol: "0.25",
+      kind: "workflow",
+      requiredSkills: ["skillMint1", "skillMint2"],
+    });
+
+    expect(result).toEqual({ ok: true, mint: "mockWorkflowMint" });
+    expect(corePublishWorkflow).toHaveBeenCalledWith(expect.any(Object), mockWallet, {
+      name: "My Workflow",
+      description: "A workflow",
+      text,
+      requiredSkills: ["skillMint1", "skillMint2"],
+      category: "testing",
+      hashtags: ["test", "workflow"],
+      price: 250000000n,
+    }, undefined);
+    expect(corePublishSkill).not.toHaveBeenCalled();
+  });
+
+  it("explicit kind: 'skill' takes the skill path even if the body happens to embed workflow frontmatter", async () => {
+    const text = `---
+type: workflow
+requiredSkills: [skillMint1]
+---
+Some body`;
+
+    const env = await marketplaceEnv(mockWallet);
+    const result = await env.publishSkill({
+      name: "My Skill",
+      description: "A skill",
+      text,
+      priceSol: "0.1",
+      kind: "skill",
+    });
+
+    expect(result).toEqual({ ok: true, mint: "mockSkillMint" });
+    expect(corePublishSkill).toHaveBeenCalledWith(expect.any(Object), mockWallet, {
+      name: "My Skill",
+      description: "A skill",
+      text,
+      category: undefined,
+      hashtags: undefined,
+      price: 100000000n,
+      image: undefined,
+    }, undefined);
+    expect(corePublishWorkflow).not.toHaveBeenCalled();
+  });
 });

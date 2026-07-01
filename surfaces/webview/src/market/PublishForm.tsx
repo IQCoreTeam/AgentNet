@@ -67,6 +67,7 @@ interface Props {
 
 export function PublishForm({ onBack }: Props) {
   const { send, state, clearPublishResult } = useStore();
+  const [kind, setKind] = useState<"skill" | "workflow">("skill");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [text, setText] = useState("");
@@ -74,15 +75,24 @@ export function PublishForm({ onBack }: Props) {
   const [hashtags, setHashtags] = useState("");
   const [priceSol, setPriceSol] = useState("0");
   const [imageUrl, setImageUrl] = useState(""); // http/on-chain link only — no file upload
+  const [requiredSkills, setRequiredSkills] = useState<Record<string, boolean>>({}); // mint -> selected
   const [submitting, setSubmitting] = useState(false);
 
   const result = state.publishResult;
+  const theme = PUBLISH_THEME[kind];
+
+  // Belt-and-suspenders: MarketScreen already sends this on tab mount, but a future entry
+  // point that skips it would otherwise leave the required-skills picker empty.
+  useEffect(() => { send({ type: "ownedSkills" }); }, []);
 
   // A result (success OR failure) ends the in-flight state so the form/button come back.
   useEffect(() => { if (result) setSubmitting(false); }, [result]);
 
+  const chosenSkills = Object.keys(requiredSkills).filter((m) => requiredSkills[m]);
+
   function handleSubmit() {
     if (!name.trim() || !text.trim()) return;
+    if (kind === "workflow" && chosenSkills.length === 0) return;
     setSubmitting(true);
     clearPublishResult();
     // Image is a link ONLY (http URL or on-chain address). The app can't attach/upload a
@@ -96,6 +106,8 @@ export function PublishForm({ onBack }: Props) {
       hashtags: hashtags.split(",").map((h) => h.trim()).filter(Boolean),
       priceSol: priceSol || "0",
       image: imageUrl.trim() || undefined,
+      kind,
+      requiredSkills: kind === "workflow" ? chosenSkills : undefined,
     });
     setTimeout(() => setSubmitting(false), 15000);
   }
@@ -107,11 +119,11 @@ export function PublishForm({ onBack }: Props) {
       <div className="flex flex-col h-full">
         <header className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2 shrink-0">
           <button onClick={() => { clearPublishResult(); onBack(); }} className="text-zinc-400 active:text-zinc-200 px-1 text-lg">←</button>
-          <span className="font-medium text-sm">Publish Skill</span>
+          <span className="font-medium text-sm">Publish {kind === "workflow" ? "Workflow" : "Skill"}</span>
         </header>
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center bg-gradient-to-b from-purple-900/25 to-transparent">
-          <SkillIcon className="h-10 w-10 text-purple-400" />
-          <p className="text-purple-300 font-semibold">Skill minted!</p>
+        <div className={`flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center bg-gradient-to-b ${theme.wash} to-transparent`}>
+          <SkillIcon className={`h-10 w-10 ${theme.icon}`} />
+          <p className={`${theme.onText} font-semibold`}>{kind === "workflow" ? "Workflow" : "Skill"} minted!</p>
           {result.mint && <p className="font-mono text-xs text-zinc-500">{result.mint}</p>}
           <button onClick={() => { clearPublishResult(); onBack(); }} className="mt-2 text-sm text-zinc-400 underline">Back to market</button>
         </div>
@@ -144,10 +156,27 @@ export function PublishForm({ onBack }: Props) {
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 6l-6 6 6 6" /></svg>
         </button>
-        <span className="an-term-title text-[16px]">Publish Skill</span>
+        <span className="an-term-title text-[16px]">Publish {kind === "workflow" ? "Workflow" : "Skill"}</span>
       </header>
 
       <div className="flex-1 overflow-y-auto p-3.5 space-y-4">
+        <div className="flex items-center gap-2">
+          {(["skill", "workflow"] as const).map((k) => {
+            const t = PUBLISH_THEME[k];
+            const on = kind === k;
+            return (
+              <button
+                key={k}
+                onClick={() => setKind(k)}
+                className={`an-term-mono px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider border rounded-md transition-colors ${
+                  on ? `${t.border} ${t.onText} bg-gradient-to-b ${t.wash} to-transparent` : "border-zinc-800 text-zinc-500"
+                }`}
+              >
+                {k}
+              </button>
+            );
+          })}
+        </div>
         <Field label="Name *">
           <input
             className="an-term-field"
@@ -228,6 +257,42 @@ export function PublishForm({ onBack }: Props) {
             </p>
           )}
         </Field>
+        {kind === "workflow" && (
+          <Field label="Required skills * (owned skills this workflow needs)">
+            {state.marketOwned.length === 0 ? (
+              <p className="an-term-mono text-[10px]" style={{ color: "#5a5a5d" }}>
+                You don&apos;t own any skills yet — buy at least one before publishing a workflow.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2 max-h-40 overflow-y-auto">
+                {state.marketOwned.map((skillName) => {
+                  const mint = state.marketOwnedMints[skillName];
+                  if (!mint) return null;
+                  const on = !!requiredSkills[mint];
+                  return (
+                    <label key={mint} className="flex items-center gap-3 cursor-pointer active:opacity-80">
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={() => setRequiredSkills((s) => ({ ...s, [mint]: !s[mint] }))}
+                        className="sr-only"
+                      />
+                      <span
+                        className="flex h-[18px] w-[18px] shrink-0 items-center justify-center"
+                        style={{ border: on ? "1px solid #2f6b46" : "1px solid #3a3a3d", background: on ? "#0d160f" : "#0c0c0d" }}
+                      >
+                        {on && (
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                        )}
+                      </span>
+                      <span className="an-term-mono truncate text-[12px] font-bold" style={{ color: on ? "#f2f2f2" : "#cfcfcf" }}>{skillName}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </Field>
+        )}
       </div>
 
       <div className="shrink-0 bg-transparent p-3 an-tabbar-inset">
@@ -240,10 +305,10 @@ export function PublishForm({ onBack }: Props) {
         )}
         <button
           onClick={handleSubmit}
-          disabled={submitting || !name.trim() || !text.trim() || !imageValid}
-          className="an-btn an-btn-violet"
+          disabled={submitting || !name.trim() || !text.trim() || !imageValid || (kind === "workflow" && chosenSkills.length === 0)}
+          className={kind === "workflow" ? "an-btn an-btn-amber" : "an-btn an-btn-violet"}
         >
-          {submitting ? "Minting NFT…" : "Mint & Publish"}
+          {submitting ? "Minting NFT…" : `Mint & Publish ${kind === "workflow" ? "Workflow" : "Skill"}`}
         </button>
       </div>
     </div>
