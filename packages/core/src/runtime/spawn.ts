@@ -306,6 +306,10 @@ function claudeEngine(opts: SpawnOpts): Engine {
     if (opts.ephemeral) {
       return { behavior: "deny" as const, message: "Tool use is disabled for side-channel (/btw) queries." };
     }
+    // Claudex team fan-out: always allowed, including in PLAN mode ("team plan mode" —
+    // dispatch read-only Codex researchers to inform the plan). The workers self-gate
+    // (read-only in plan mode; the tool's own approval covers writes), so no extra prompt.
+    if (toolName.endsWith("spawn_codex_subagents")) return { behavior: "allow" as const, updatedInput: input };
     if (READONLY.has(toolName)) return { behavior: "allow" as const, updatedInput: input };
     if (currentMode === "bypassPermissions") return { behavior: "allow" as const, updatedInput: input };
     if (currentMode === "acceptEdits" && EDIT_TOOLS.has(toolName)) {

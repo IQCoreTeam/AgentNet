@@ -44,6 +44,7 @@ async function buildPassiveSpawn(
   cli: Cli,
   wallet: Wallet,
   cwd: string,
+  mode: string | undefined,
   claudexHooks: ClaudexHooks,
   onMarketEvent?: (e: import("../chat/marketMessages.js").MarketEvent) => void,
 ): Promise<{ mcpServers?: Record<string, unknown>; allowedTools?: string[]; codexMcp?: { name: string; command: string; args: string[] } }> {
@@ -86,8 +87,11 @@ async function buildPassiveSpawn(
   // fan-out tool so it can spawn parallel Codex workers. Workers are spawned via spawnCli
   // directly, so they never get this tool back — depth guard is automatic, no recursion.
   // The claudex ENGINE → workers may EDIT files; plain claude → read-only researchers and
-  // Claude applies any changes itself. (Both get the tool; only the engine flips write.)
-  const claudex = createClaudexMcpServer(cwd, cli === "claudex", claudexHooks);
+  // Claude applies any changes itself. In PLAN mode even claudex workers stay read-only —
+  // that's "team plan mode": dispatch Codex researchers, gather reports, then propose a plan
+  // without touching the repo. (Both engines get the tool; write flips off for plan.)
+  const claudexWrite = cli === "claudex" && mode !== "plan";
+  const claudex = createClaudexMcpServer(cwd, claudexWrite, claudexHooks);
   return {
     mcpServers: { [AGENTNET_MCP_SERVER]: server, [CLAUDEX_MCP_SERVER]: claudex },
     allowedTools: [...agentNetAllowedTools(), ...claudexAllowedTools()],
@@ -166,7 +170,7 @@ export function createRuntime(
       // toggle + (Claude, ON) wire the marketplace MCP tools. Best-effort.
       let passive: Awaited<ReturnType<typeof buildPassiveSpawn>> = {};
       try {
-        passive = await buildPassiveSpawn(opts.cli, wallet, opts.cwd, claudexHooks, opts.onMarketEvent);
+        passive = await buildPassiveSpawn(opts.cli, wallet, opts.cwd, opts.mode, claudexHooks, opts.onMarketEvent);
       } catch (e) {
         console.warn("[skill-shopping] setup failed:", e);
       }

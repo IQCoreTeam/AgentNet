@@ -182,7 +182,10 @@ export function runCodexTasks(tasks: CodexTask[], defaultCwd: string, write: boo
 export function createClaudexMcpServer(defaultCwd: string, write: boolean, hooks?: ClaudexHooks) {
   const capability = write
     ? "Each worker can READ and EDIT files in the working directory."
-    : "Each worker is READ-ONLY: it researches and reports, but cannot edit files — YOU apply any changes yourself afterward.";
+    : "Each worker is READ-ONLY: it researches and reports, but cannot edit files — YOU apply any changes yourself afterward. " +
+      "This tool is SAFE and ENCOURAGED during Plan mode: when planning, split the investigation " +
+      "into parts and dispatch parallel researchers (e.g. 'map the auth flow', 'list the build scripts'), " +
+      "wait for their reports, THEN write your plan from what they found — instead of exploring everything yourself.";
   const spawnTool = tool(
     CLAUDEX_SPAWN_TOOL,
     "Spawn 1–4 Codex worker subagents that run IN PARALLEL, then return each worker's " +
