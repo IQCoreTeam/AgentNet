@@ -482,6 +482,9 @@ function attachMarketHandlers(c: Client) {
       case "getBalance":
         c.send({ type: "balance", lamports: null });
         return;
+      case "airdrop":
+        c.send({ type: "airdropResult", ok: false, error: message });
+        return;
       case "ownedSkills":
         c.send({ type: "ownedSkills", names: [] });
         return;
@@ -600,6 +603,17 @@ function attachMarketHandlers(c: Client) {
           const lamports = await mkt.solBalance();
           c.send({ type: "balance", lamports });
         } catch { c.send({ type: "balance", lamports: null }); }
+        return;
+      }
+      case "airdrop": {
+        // Manual "Get devnet SOL" from the fund prompt (mobile/web wallet has no keypair here,
+        // but a faucet grant needs no signature). mkt.airdrop already reports its own failures.
+        try {
+          const r = await mkt.airdrop();
+          c.send({ type: "airdropResult", ...r });
+        } catch (e) {
+          c.send({ type: "airdropResult", ok: false, error: (e as Error).message });
+        }
         return;
       }
       case "publishSkill": {

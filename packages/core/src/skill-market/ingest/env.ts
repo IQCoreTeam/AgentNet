@@ -8,7 +8,7 @@
 // dirs (SkillSync) so it's discovered next session — search/buy were built yesterday,
 // this is the wiring that makes a purchase actually equip the skill.
 
-import { Connection } from "@solana/web3.js";
+import { Connection, PublicKey } from "@solana/web3.js";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Wallet } from "../../runtime/contract.js";
@@ -26,7 +26,7 @@ import { init as initChain } from "../../core/chain.js";
 import type { AgentProfile, Reputation, SkillCard, SkillDetail, VerifiedRepo } from "../../chat/marketMessages.js";
 import type { Skill } from "../../core/types.js";
 import { readNotes, postNote as corePostNote, readAgentNotes, postAgentNote as corePostAgentNote } from "../../notes/notes.js";
-import { getSkillsCollectionMint, getWorkflowsCollectionMint, getIndexerUrl } from "../../core/seed.js";
+import { getSkillsCollectionMint, getWorkflowsCollectionMint, getIndexerUrl, getNetwork, type Network } from "../../core/seed.js";
 import { getLeaderboard, getReputation } from "../../reputation/reputation.js";
 import { SkillSync } from "./index.js";
 
@@ -126,6 +126,34 @@ export function solToLamports(sol: string): bigint | null {
   if (frac.length > 9) return null; // more precision than a lamport can hold
   return BigInt(whole) * LAMPORTS_PER_SOL + BigInt(frac.padEnd(9, "0") || "0");
 }
+
+// A wallet with no SOL on the active cluster fails fee payment before any program runs,
+// surfacing as "Attempt to debit an account but found no record of a prior credit. Logs: []"
+// (or a bare "insufficient lamports"). To a person these all mean one thing: not enough SOL.
+const INSUFFICIENT_FUNDS_RE = /no record of a prior credit|attempt to debit|insufficient lamports|insufficient funds/i;
+
+/** True when a buy error is really "the wallet is out of SOL" (so the UI can offer to fund). */
+export function isInsufficientFundsError(err: unknown): boolean {
+  return INSUFFICIENT_FUNDS_RE.test(err instanceof Error ? err.message : String(err));
+}
+
+// Turn an opaque buy/simulation error into one line a buyer can act on. Anything we don't
+// recognise is passed through verbatim so real errors stay debuggable. Shared by the UI buy
+// (env.buySkill) and the agent buy (buy_skill tool) so both explain a broke wallet the same
+// way. No emoji / em-dash (UI copy rules).
+export function friendlyBuyError(err: unknown, network: Network = getNetwork()): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  if (INSUFFICIENT_FUNDS_RE.test(raw)) {
+    return network === "devnet"
+      ? "Not enough SOL on devnet to cover this purchase and the network fee. Fund this wallet with devnet SOL, then try again."
+      : "Not enough SOL to cover this purchase and the network fee. Add funds to this wallet, then try again.";
+  }
+  return raw;
+}
+
+// One devnet faucet grant. 1 SOL is comfortably above any skill price + fees and within the
+// per-request devnet cap; the public faucet is rate-limited, so a request can still fail.
+const AIRDROP_LAMPORTS = 1_000_000_000;
 
 function publishFrontmatter(text: string): { type?: string; requiredSkills?: string[] } {
   const lines = text.split("\n");
@@ -233,9 +261,13 @@ export async function marketplaceEnv(wallet: Wallet) {
         // buy on-chain + equip (install SKILL.md) in one shared call — the SAME path the
         // agent's buy_skill MCP tool uses, so a UI buy and an agent buy equip identically.
         const { slug } = await skills.buyAndEquip(wallet, skillId, creatorWallet || wallet.address);
-        return { ok: true, slug: slug ?? undefined };
+        return { ok: true as const, slug: slug ?? undefined };
       } catch (e) {
-        return { ok: false, error: e instanceof Error ? e.message : String(e) };
+        return {
+          ok: false as const,
+          error: friendlyBuyError(e),
+          code: isInsufficientFundsError(e) ? ("insufficient_funds" as const) : undefined,
+        };
       }
     },
 
@@ -337,6 +369,24 @@ export async function marketplaceEnv(wallet: Wallet) {
         return await getSolBalance(conn, wallet.address);
       } catch {
         return null;
+      }
+    },
+
+    // Manual "Get devnet SOL": request one faucet grant to the connected wallet, wait for
+    // it, and report the new balance so the UI can refresh and let the buyer retry. Devnet
+    // only, since mainnet has no faucet. The public devnet faucet is rate-limited, so a
+    // failure here is expected sometimes; we surface the reason rather than swallowing it.
+    async airdrop(): Promise<{ ok: boolean; lamports?: number; error?: string }> {
+      if (getNetwork() !== "devnet") {
+        return { ok: false, error: "Airdrop is available on devnet only. Add SOL to this wallet to continue." };
+      }
+      try {
+        const sig = await conn.requestAirdrop(new PublicKey(wallet.address), AIRDROP_LAMPORTS);
+        await conn.confirmTransaction(sig, "confirmed");
+        const lamports = await getSolBalance(conn, wallet.address).catch(() => undefined);
+        return { ok: true, lamports };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) };
       }
     },
 

@@ -131,6 +131,7 @@ export type ClientMessage =
   | { type: "reEquipSkill"; skillId: string }
   | { type: "ownedSkills" }
   | { type: "getBalance" }
+  | { type: "airdrop" }
   | { type: "getRpcStatus" }
   | { type: "submitHeliusKey"; key: string }
   | { type: "useDefaultRpc" }
@@ -207,11 +208,12 @@ export type ServerMessage =
   | { type: "searchResults"; results: import("@iqlabs-official/agent-sdk").SkillCard[] }
   | { type: "searchError"; message: string }
   | { type: "skillDetail"; detail: import("@iqlabs-official/agent-sdk").SkillDetail }
-  | { type: "buyResult"; skillId: string; ok: boolean; slug?: string; error?: string }
+  | { type: "buyResult"; skillId: string; ok: boolean; slug?: string; error?: string; code?: "insufficient_funds" }
   | { type: "disposeResult"; skillId: string; ok: boolean; slug?: string; error?: string }
   | { type: "reEquipResult"; skillId: string; ok: boolean; slug?: string; error?: string }
   | { type: "ownedSkills"; names: string[]; mints?: Record<string, string>; disposedMints?: Record<string, string>; cards?: import("@iqlabs-official/agent-sdk").SkillCard[] }
   | { type: "balance"; lamports: number | null }
+  | { type: "airdropResult"; ok: boolean; lamports?: number; error?: string }
   | { type: "skillActive"; name: string }
   | { type: "rpcStatus"; status: import("@iqlabs-official/agent-sdk").RpcStatus }
   | { type: "postNoteResult"; skillId: string; ok: boolean; error?: string }
