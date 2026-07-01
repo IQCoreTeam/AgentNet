@@ -185,6 +185,7 @@ const initialState: State = {
   modeByCli: {
     claude: "acceptEdits",
     codex: "auto",
+    claudex: "acceptEdits",
   },
 };
 
@@ -281,9 +282,11 @@ function reducer(state: State, ev: Action): State {
       // wait (PickEngine re-fires when it arrives). ok -> chat; otherwise (no-login or
       // missing) -> the engine's own auth screen handles sign-in / install.
       if (!state.cliReport) return state;
-      const status = state.cliReport[ev.cli];
+      // claudex runs the claude binary → its install/login state IS claude's.
+      const bin = ev.cli === "codex" ? "codex" : "claude";
+      const status = state.cliReport[bin];
       if (status === "ok") return { ...state, cli: ev.cli, phase: "chat" };
-      return { ...state, cli: ev.cli, phase: ev.cli === "claude" ? "claudeAuth" : "codexAuth" };
+      return { ...state, cli: ev.cli, phase: bin === "claude" ? "claudeAuth" : "codexAuth" };
     }
     case "init":
       // `init` means this SSE client is attached to onboarding, not chat. If the server
@@ -308,10 +311,11 @@ function reducer(state: State, ev: Action): State {
       // After wallet: don't force claude. Record both engines' status and show the engine
       // picker so the user chooses which one to activate. The chosen engine then runs its
       // own gate (claude/codex login if needed) via __selectEngine.
-      if (state.phase === "chat" && ev[state.cli] === "no-login") {
-        return { ...state, cliReport: { claude: ev.claude, codex: ev.codex }, phase: state.cli === "claude" ? "claudeAuth" : "codexAuth" };
+      const statusCli = state.cli === "codex" ? "codex" : "claude"; // claudex → claude binary
+      if (state.phase === "chat" && ev[statusCli] === "no-login") {
+        return { ...state, cliReport: { claude: ev.claude, codex: ev.codex }, phase: statusCli === "claude" ? "claudeAuth" : "codexAuth" };
       }
-      if (state.phase === "chat" && ev[state.cli] === "missing") {
+      if (state.phase === "chat" && ev[statusCli] === "missing") {
         return { ...state, cliReport: { claude: ev.claude, codex: ev.codex }, phase: "engineSelect" };
       }
       return { ...state, cliReport: { claude: ev.claude, codex: ev.codex } };

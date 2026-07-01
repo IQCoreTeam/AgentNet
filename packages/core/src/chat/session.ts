@@ -11,7 +11,8 @@
 // reading a workspace cwd, persisting the "onboarded" flag, opening external URLs.
 // Those are injected as `env` callbacks so this file stays platform-free.
 
-import type { AgentRuntime, SessionHandle } from "../runtime/contract.js";
+import type { AgentRuntime, SessionHandle, Cli } from "../runtime/contract.js";
+import { engineBinary } from "../runtime/contract.js";
 import type { ApprovalChannel } from "../runtime/approval/channel.js";
 import type { SkillCard, MarketRequest } from "./marketMessages.js";
 import { access, writeFile } from "node:fs/promises";
@@ -108,7 +109,7 @@ export interface ChatEnv {
   rpcStatus?(): Promise<import("./marketMessages.js").RpcStatus>;
   // Optional model catalog override from the host. VSCode uses this for Codex so the
   // picker can show the actual models exposed by the logged-in app-server account.
-  modelOptions?(cli: "claude" | "codex"): Promise<ChatModelOption[] | null>;
+  modelOptions?(cli: "claude" | "codex" | "claudex"): Promise<ChatModelOption[] | null>;
   // OPTIONAL multi-tab guard: vscode can open the same session in two panels (two
   // tabs writing one log races), so it claims a session before opening and yields
   // false to abort if another panel already holds it. One-socket surfaces (server,
@@ -143,7 +144,7 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-async function initInstructionsFile(cli: "claude" | "codex", cwd: string): Promise<{ file: string; created: boolean }> {
+async function initInstructionsFile(cli: "claude" | "codex" | "claudex", cwd: string): Promise<{ file: string; created: boolean }> {
   const file = cli === "codex" ? "AGENTS.md" : "CLAUDE.md";
   const path = join(cwd, file);
   if (await exists(path)) return { file, created: false };
@@ -200,11 +201,14 @@ export function createChatSession(
     lastUsage?: number;
     lastWindow?: number;
   };
-  const slots: Record<"claude" | "codex", Slot> = {
+  const slots: Record<Cli, Slot> = {
     claude: { handle: null, parked: new Set(), mode: "acceptEdits", restage: null },
     codex: { handle: null, parked: new Set(), mode: "auto", restage: null },
+    // claudex = its own engine (Team mode); runs the claude binary with parallel-Codex
+    // fan-out forced on. Default mode acceptEdits so the lead's merge edits auto-apply.
+    claudex: { handle: null, parked: new Set(), mode: "acceptEdits", restage: null },
   };
-  let cli: "claude" | "codex" = "claude"; // which tab is showing
+  let cli: Cli = "claude"; // which tab is showing
   const slot = () => slots[cli];
 
   // Handles with a turn in flight (set in ensureHandle when a turn starts, cleared in
@@ -215,7 +219,7 @@ export function createChatSession(
   // from a busy session). Cleared if you switch back before that turn ends.
   const retire = new Set<SessionHandle>();
 
-  function isVisibleHandle(forCli: "claude" | "codex", h: SessionHandle): boolean {
+  function isVisibleHandle(forCli: Cli, h: SessionHandle): boolean {
     return cli === forCli && slots[forCli].handle === h;
   }
 
@@ -245,7 +249,7 @@ export function createChatSession(
   // background reply doesn't bleed into the other tab's log). The message already
   // carries its own .cli (stamped by the runtime), so the UI badges the real engine
   // per-message — correct even for a cross-CLI session.
-  function wire(forCli: "claude" | "codex", h: SessionHandle) {
+  function wire(forCli: Cli, h: SessionHandle) {
     h.onMessage((msg) => { if (isVisibleHandle(forCli, h)) transport.send({ type: "message", msg }); });
     // a skill firing → the green "Casting <skill>" marquee (issue #17). Transient, not
     // persisted; only painted for the active tab.
@@ -410,9 +414,9 @@ export function createChatSession(
     transport.send({ type: "skillShopping", on });
   }
 
-  async function pushModelOptions(forCli: "claude" | "codex") {
+  async function pushModelOptions(forCli: Cli) {
     if (!env.modelOptions) return;
-    const options = await env.modelOptions(forCli).catch(() => null);
+    const options = await env.modelOptions(engineBinary(forCli)).catch(() => null);
     if (options?.length) transport.send({ type: "modelOptions", cli: forCli, options });
   }
 
@@ -468,7 +472,7 @@ export function createChatSession(
         // you on an empty screen. We show a loading flash, hand the session to the new
         // slot, and repaint — the next send resumes it (history re-injected into the
         // new cli). If nothing was open, just switch to a blank chat as before.
-        if ((m.cli === "claude" || m.cli === "codex") && m.cli !== cli) {
+        if ((m.cli === "claude" || m.cli === "codex" || m.cli === "claudex") && m.cli !== cli) {
           const carry = slot().pendingId; // the session the OLD engine was showing
           cli = m.cli;
           void pushModelOptions(cli);

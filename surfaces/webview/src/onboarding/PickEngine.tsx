@@ -31,10 +31,12 @@ export function PickEngine() {
   }, [report]);
   if ((!report && !waited) || anyReady) return <Splash />;
 
-  // Fresh user, neither engine signed in -> offer both.
+  // Fresh user, neither engine signed in → choose which to set up. Claudex (Team mode)
+  // is shown too, but it needs BOTH engines, so it's locked until claude + codex are ready.
   const ENGINES = [
-    { cli: "claude" as const, label: "Claude", accent: "var(--claude)", desc: "Anthropic · sign in with your Claude plan" },
-    { cli: "codex" as const, label: "Codex", accent: "var(--an-green)", desc: "OpenAI · sign in with your Codex/ChatGPT plan" },
+    { cli: "claude" as const, label: "Claude", accent: "var(--claude)", desc: "Anthropic · sign in with your Claude plan", locked: false },
+    { cli: "codex" as const, label: "Codex", accent: "var(--an-green)", desc: "OpenAI · sign in with your Codex/ChatGPT plan", locked: false },
+    { cli: "claudex" as const, label: "Claudex", accent: "var(--claudex)", desc: "Team mode · Claude leads a team of Codex workers — set up both first", locked: !(claudeOk && codexOk) },
   ];
   return (
     <div className="flex h-full flex-col items-center justify-center px-6" style={{ background: "var(--an-bg-0)" }}>
@@ -44,12 +46,22 @@ export function PickEngine() {
         {ENGINES.map((e) => (
           <button
             key={e.cli}
-            onClick={() => selectEngine(e.cli)}
-            className="rounded-xl px-4 py-3 text-left transition active:scale-[0.99]"
-            style={{ background: "var(--an-bg-1)", border: `1px solid color-mix(in srgb, ${e.accent} 45%, var(--an-line))` }}
+            onClick={() => { if (!e.locked) selectEngine(e.cli); }}
+            disabled={e.locked}
+            title={e.locked ? "Sign in to both Claude and Codex to unlock Claudex" : undefined}
+            className="flex items-center gap-3 rounded-xl px-4 py-3 text-left transition active:scale-[0.99]"
+            style={{ background: "var(--an-bg-1)", border: `1px solid color-mix(in srgb, ${e.accent} 45%, var(--an-line))`, opacity: e.locked ? 0.4 : 1 }}
           >
-            <span className="block text-base font-bold" style={{ color: e.accent }}>{e.label}</span>
-            <span className="mt-0.5 block text-xs" style={{ color: "var(--an-fg-mute)" }}>{e.desc}</span>
+            {e.cli === "claudex" && (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={e.accent} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flex: "none" }}>
+                <circle cx="5" cy="12" r="2.2" /><circle cx="18" cy="6" r="2.2" /><circle cx="18" cy="18" r="2.2" />
+                <path d="M7.1 11 15.6 6.9M7.1 13 15.6 17.1" />
+              </svg>
+            )}
+            <span className="min-w-0">
+              <span className="block text-base font-bold" style={{ color: e.accent }}>{e.label}</span>
+              <span className="mt-0.5 block text-xs" style={{ color: "var(--an-fg-mute)" }}>{e.desc}</span>
+            </span>
           </button>
         ))}
       </div>

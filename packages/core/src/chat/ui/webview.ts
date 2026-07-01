@@ -57,6 +57,7 @@ export function chatHtml(): string {
   :root {
     --an-green:      #3ac07a;          /* brand accent (codex/brand) */
     --claude:        #e9883a;          /* claude engine accent (orange) */
+    --claudex:       #a98bff;          /* claudex/Team engine accent (purple) */
     --an-green-soft: rgba(58,192,122,0.16);
     --an-green-line: rgba(58,192,122,0.38);
     --an-green-dim:  rgba(58,192,122,0.08);
@@ -264,6 +265,7 @@ export function chatHtml(): string {
   /* engine accent for the unread state — keyed off data-cli, same source the send button uses */
   #jumpBtn[data-cli="claude"] { --eng: var(--claude); }
   #jumpBtn[data-cli="codex"]  { --eng: var(--an-green); }
+  #jumpBtn[data-cli="claudex"] { --eng: var(--claudex); }
   /* when there's a NEW message while scrolled up: outline + icon glow in the engine accent
      (claude=orange / codex=green), background stays black/white per theme. */
   #jumpBtn.hasNew { color: var(--eng); border-color: color-mix(in srgb, var(--eng) 88%, transparent);
@@ -587,6 +589,7 @@ export function chatHtml(): string {
   /* per-engine accent: a single var the composer themes off of */
   #composer { --eng: var(--an-green); --engSoft: var(--an-green-dim); --engLine: var(--an-green-line); }
   #composer[data-cli="claude"] { --eng: var(--claude); --engSoft: rgba(233,136,58,0.12); --engLine: rgba(233,136,58,0.45); }
+  #composer[data-cli="claudex"] { --eng: var(--claudex); --engSoft: rgba(169,139,255,0.14); --engLine: rgba(169,139,255,0.48); }
 
   /* composer top row: skills (left) ←→ engine tabs (right) */
   #composerTop { display: flex; align-items: flex-end; justify-content: space-between; }
@@ -877,9 +880,13 @@ export function chatHtml(): string {
           border-radius: var(--an-radius-sm) var(--an-radius-sm) 0 0; position: relative; top: 1px;
           transition: opacity 0.12s, background 0.12s; }
   .etab:hover { opacity: 0.8; }
+  /* claudex needs BOTH claude + codex signed in (lead + workers); dulled until then */
+  .etab.locked { opacity: 0.28; cursor: default; }
+  .etab.locked:hover { opacity: 0.3; }
   .etab .ed { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.5; }
   .etab[data-cli="claude"] { color: var(--claude); }
   .etab[data-cli="codex"]  { color: var(--an-green); }
+  .etab[data-cli="claudex"] { color: var(--claudex); }
   /* the ACTIVE tab pops forward: full opacity, raised, merged into the input box */
   .etab.active { opacity: 1; background: var(--an-bg-2); border-color: var(--engLine);
                  border-bottom: 1px solid var(--an-bg-2); top: 2px; z-index: 2; font-weight: 600; }
@@ -1588,6 +1595,7 @@ export function chatHtml(): string {
           <div id="engineTabs">
             <div class="etab active" data-cli="claude"><span class="ed"></span>claude</div>
             <div class="etab" data-cli="codex"><span class="ed"></span>codex</div>
+            <div class="etab" data-cli="claudex"><span class="ed"></span>claudex</div>
           </div>
         </div>
         <div id="inputWrap">
@@ -2072,6 +2080,13 @@ export function chatHtml(): string {
       { value: 'full',     label: 'Full access', title: 'Full disk + network access, never ask (use with care)' },
     ],
   };
+  // claudex is its own engine (Team mode) but runs the claude binary, so it shares
+  // claude's model + permission-mode catalogs.
+  MODES.claudex = MODES.claude;
+  MODELS.claudex = MODELS.claude;
+  // Claudex mark: one lead node fanning out to two workers (line-art, currentColor so the
+  // accent color drives it). No emoji anywhere in the UI — this is the engine's glyph.
+  const CLAUDEX_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="2.2"/><circle cx="18" cy="6" r="2.2"/><circle cx="18" cy="18" r="2.2"/><path d="M7.1 11 15.6 6.9M7.1 13 15.6 17.1"/></svg>';
   // reasoning effort levels (applies to both engines; labels mirror CLI EffortPicker)
   const EFFORTS = [
     { value: 'default', label: 'default',  title: 'Engine default (usually medium)' },
@@ -2082,9 +2097,9 @@ export function chatHtml(): string {
     { value: 'max',     label: 'max',      title: 'Maximum effort (select models)' },
   ];
   // remember the chosen mode + model + effort per engine so switching tabs restores them
-  const modeByCli = { claude: 'acceptEdits', codex: 'auto' };
-  const modelByCli = { claude: 'default', codex: 'default' };
-  const effortByCli = { claude: 'default', codex: 'default' };
+  const modeByCli = { claude: 'acceptEdits', codex: 'auto', claudex: 'acceptEdits' };
+  const modelByCli = { claude: 'default', codex: 'default', claudex: 'default' };
+  const effortByCli = { claude: 'default', codex: 'default', claudex: 'default' };
   let cli = 'claude';
   let cliReport = null;
 
@@ -2214,7 +2229,7 @@ export function chatHtml(): string {
     effortMenu.style.bottom = (window.innerHeight - r.top + 6) + 'px';
   }
   function setTab(next) {
-    if (next !== 'claude' && next !== 'codex') return;
+    if (next !== 'claude' && next !== 'codex' && next !== 'claudex') return;
     cli = next;
     tabs.forEach(t => t.classList.toggle('active', t.dataset.cli === cli));
     composer.dataset.cli = cli;                       // tints the input (claude=orange/codex=green)
@@ -2224,16 +2239,34 @@ export function chatHtml(): string {
     fillModes();
     fillEfforts();
   }
+  // claudex (Team mode) needs BOTH engines signed in: claude leads, codex does the work.
+  function claudexReady() { return !!(cliReport && cliReport.claude === 'ok' && cliReport.codex === 'ok'); }
+  // Dull the claudex tab until both engines are ready, so it reads as not-yet-available.
+  function refreshEngineTabs() {
+    const cxTab = tabs.find(t => t.dataset.cli === 'claudex');
+    if (cxTab) {
+      cxTab.classList.toggle('locked', !claudexReady());
+      cxTab.title = claudexReady() ? 'Claudex — a team of Codex workers led by Claude' : 'Sign in to BOTH Claude and Codex to use Claudex (Team mode)';
+    }
+  }
   function selectTab(next) {
     if (next === cli) return;
+    // claudex is gated on both engines — block + explain instead of switching.
+    if (next === 'claudex' && !claudexReady()) {
+      renderNotice('Claudex (Team mode) needs BOTH Claude and Codex signed in — Claude leads, Codex does the work. Sign in to whichever is missing, then try again.');
+      return;
+    }
     setTab(next);
-    const status = cliReport && cliReport[next];
+    // claudex runs the claude binary, so its install/login state IS claude's.
+    const statusCli = next === 'claudex' ? 'claude' : next;
+    const label = next === 'claudex' ? 'Claudex (Claude)' : next === 'claude' ? 'Claude' : 'Codex';
+    const status = cliReport && cliReport[statusCli];
     if (status === 'missing') {
-      renderNotice((next === 'claude' ? 'Claude' : 'Codex') + ' is not installed.');
+      renderNotice(label + ' is not installed.');
       return;
     }
     if (status === 'no-login') {
-      renderNotice((next === 'claude' ? 'Claude' : 'Codex') + ' is not signed in. Type /login to connect it.');
+      renderNotice(label + ' is not signed in. Type /login to connect it.');
       return;
     }
     vscode.postMessage({ type: 'platform', cli });
@@ -2242,6 +2275,7 @@ export function chatHtml(): string {
     vscode.postMessage({ type: 'effort', effort: currentEffort() === 'default' ? undefined : currentEffort() });
   }
   tabs.forEach(t => t.addEventListener('click', () => selectTab(t.dataset.cli)));
+  refreshEngineTabs();
   // each chip toggles its own popover; clicking it again (while open) closes it
   modelBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -2504,6 +2538,38 @@ export function chatHtml(): string {
   // prepend. Returns the bash card if it's awaiting output (so the caller can track it).
   function renderToolInto(row, msg) {
     const t = msg.tool || {};
+    if (t.name === 'Claudex') {
+      // Claudex Team mode (plans/claudex-team-mode.md): a war-room card — one tile per
+      // Codex worker. output = {goals:[…]}. ponytail: post-hoc tiles, no live bars yet.
+      let goals = [];
+      try { const p = JSON.parse(t.output || '{}'); if (Array.isArray(p.goals)) goals = p.goals.map(String); } catch (e) {}
+      const card = document.createElement('div'); card.className = 'toolCard';
+      const head = document.createElement('div'); head.className = 'toolHead';
+      head.innerHTML = '<span class="tk" style="color:var(--claudex);display:inline-flex">' + CLAUDEX_ICON + '</span>';
+      const title = document.createElement('span');
+      title.textContent = 'Team — ' + goals.length + ' Codex worker' + (goals.length === 1 ? '' : 's') + ' in parallel';
+      head.appendChild(title); card.appendChild(head);
+      const grid = document.createElement('div');
+      grid.style.cssText = 'display:grid;gap:6px;padding:8px;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));';
+      goals.forEach((g, i) => {
+        const tile = document.createElement('div');
+        tile.style.cssText = 'border:1px solid var(--an-line);border-radius:var(--an-radius-sm);padding:7px;min-width:0;overflow:hidden;';
+        const lab = document.createElement('div');
+        lab.style.cssText = 'font-family:var(--vscode-editor-font-family);font-size:0.7em;text-transform:uppercase;letter-spacing:1px;color:var(--claudex);margin-bottom:3px;';
+        lab.textContent = 'codex #' + (i + 1);
+        const goal = document.createElement('div');
+        goal.style.cssText = 'overflow-wrap:anywhere;word-break:break-word;';
+        goal.textContent = g;
+        tile.appendChild(lab); tile.appendChild(goal); grid.appendChild(tile);
+      });
+      card.appendChild(grid);
+      const foot = document.createElement('div');
+      foot.style.cssText = 'border-top:1px solid var(--an-line-soft);padding:6px 11px;font-size:0.72em;opacity:0.6;';
+      foot.textContent = 'Built by a team of rival AIs — Claude + Codex';
+      card.appendChild(foot);
+      row.appendChild(card);
+      return null;
+    }
     if (t.command !== undefined) {
       const card = document.createElement('div'); card.className = 'toolCard bash';
       const head = document.createElement('div'); head.className = 'toolHead';
@@ -2540,7 +2606,7 @@ export function chatHtml(): string {
   function renderTool(msg, prepend) {
     const t = msg.tool || {};
     // output-only result (claude) → fold into the open bash card
-    if (t.command === undefined && t.diff === undefined && t.output && openBash && !prepend) {
+    if (t.name !== 'Claudex' && t.command === undefined && t.diff === undefined && t.output && openBash && !prepend) {
       setOutput(openBash, t.output, t.exitCode);
       openBash = null;
       return;
@@ -4934,6 +5000,7 @@ export function chatHtml(): string {
     else if (m.type === 'platform') setTab(m.cli); // extension switched CLI (e.g. on session open)
     else if (m.type === 'cliStatus') {
       cliReport = { claude: m.claude, codex: m.codex };
+      refreshEngineTabs();
       const status = cliReport[cli];
       if (status === 'no-login') renderNotice((cli === 'claude' ? 'Claude' : 'Codex') + ' is not signed in. Type /login to connect it.');
       else if (status === 'missing') renderNotice((cli === 'claude' ? 'Claude' : 'Codex') + ' is not installed.');
@@ -4944,6 +5011,7 @@ export function chatHtml(): string {
     else if (m.type === 'claudeLoginStatus') {
       if (m.status === 'done') {
         cliReport = Object.assign({}, cliReport || {}, { claude: 'ok' });
+        refreshEngineTabs();
         renderNotice('Claude sign-in complete.');
         if (cli === 'claude') vscode.postMessage({ type: 'platform', cli: 'claude' });
       } else {
@@ -4956,6 +5024,7 @@ export function chatHtml(): string {
     else if (m.type === 'codexLoginStatus') {
       if (m.status === 'done') {
         cliReport = Object.assign({}, cliReport || {}, { codex: 'ok' });
+        refreshEngineTabs();
         renderNotice('Codex sign-in complete.');
         if (cli === 'codex') vscode.postMessage({ type: 'platform', cli: 'codex' });
       } else {

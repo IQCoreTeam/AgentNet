@@ -13,11 +13,14 @@ import { MemorySync, updateSkillsSection } from "../memory/index.js";
 import { setSkillShoppingActive } from "../skill-market/passive.js";
 import { setMakeSkillActive } from "../skill-market/makeSkill.js";
 import { createAgentSdkMcpServer, newVerifyGuard, agentNetAllowedTools, AGENTNET_MCP_SERVER } from "../skill-market/index.js";
+import { createClaudexMcpServer, claudexAllowedTools, CLAUDEX_MCP_SERVER, isLimitError, type ClaudexHooks } from "./codexSubagent.js";
 import { resolveRpcUrl, hasDasRpc, loadGithubToken } from "../core/rpc.js";
 import { getCodexApiKey } from "../account/codexAuth.js";
 import type { ApprovalChannel } from "./approval/channel.js";
+import { engineBinary } from "./contract.js";
 import type {
   AgentRuntime,
+  Cli,
   ChatMessage,
   SessionHandle,
   SessionMeta,
@@ -38,8 +41,11 @@ import type {
 // surface has bundled the standalone entry and points AGENTNET_MCP_STDIO at it. Trading
 // (buy/publish) stays Claude-only until Codex's MCP-tool approval is routed to the card.
 async function buildPassiveSpawn(
-  cli: "claude" | "codex",
+  cli: Cli,
   wallet: Wallet,
+  cwd: string,
+  mode: string | undefined,
+  claudexHooks: ClaudexHooks,
   onMarketEvent?: (e: import("../chat/marketMessages.js").MarketEvent) => void,
 ): Promise<{ mcpServers?: Record<string, unknown>; allowedTools?: string[]; codexMcp?: { name: string; command: string; args: string[] } }> {
   // Skill-shopping is a BUILT-IN now: always on and hidden from the UI toggle. Every spawn
@@ -61,7 +67,8 @@ async function buildPassiveSpawn(
 
   // Codex (Phase 1): a separate `node <entry>` stdio MCP server, read-only. Needs the
   // surface to have bundled the entry (AGENTNET_MCP_STDIO) AND a readable catalog (DAS).
-  if (cli === "codex") {
+  // (claudex runs the claude binary, so it takes the Claude branch below.)
+  if (engineBinary(cli) === "codex") {
     const entry = process.env.AGENTNET_MCP_STDIO;
     if (!entry || !(await hasDasRpc())) return {};
     // command = "node" (PATH-resolved by codex when it spawns the server), NOT
@@ -76,7 +83,19 @@ async function buildPassiveSpawn(
   // falls back to the public RPC) directly. A stored Helius key still upgrades search to DAS.
   const conn = new Connection(await resolveRpcUrl(), "confirmed");
   const server = createAgentSdkMcpServer(conn, wallet, wallet.address, newVerifyGuard(), onMarketEvent);
-  return { mcpServers: { [AGENTNET_MCP_SERVER]: server }, allowedTools: agentNetAllowedTools() };
+  // Claudex "Team mode" (plans/claudex-team-mode.md): give the lead Claude session the
+  // fan-out tool so it can spawn parallel Codex workers. Workers are spawned via spawnCli
+  // directly, so they never get this tool back — depth guard is automatic, no recursion.
+  // The claudex ENGINE → workers may EDIT files; plain claude → read-only researchers and
+  // Claude applies any changes itself. In PLAN mode even claudex workers stay read-only —
+  // that's "team plan mode": dispatch Codex researchers, gather reports, then propose a plan
+  // without touching the repo. (Both engines get the tool; write flips off for plan.)
+  const claudexWrite = cli === "claudex" && mode !== "plan";
+  const claudex = createClaudexMcpServer(cwd, claudexWrite, claudexHooks);
+  return {
+    mcpServers: { [AGENTNET_MCP_SERVER]: server, [CLAUDEX_MCP_SERVER]: claudex },
+    allowedTools: [...agentNetAllowedTools(), ...claudexAllowedTools()],
+  };
 }
 
 // `approval` is the swappable decision source (webview buttons / auto / push). The
@@ -94,13 +113,16 @@ export function createRuntime(
   return {
     async startSession(opts): Promise<SessionHandle> {
       const device = await getDeviceProfile();
+      // claudex is an identity, not a binary — talk to the claude CLI for resume/memory/
+      // skills/spawn, but keep opts.cli ("claudex") for stored-session identity + badges.
+      const engine = engineBinary(opts.cli);
       // RESUME: opts.sessionId is the CANONICAL id. Rewrite its history into the
       // target cli's native jsonl and resume under the NATIVE id (claude/codex only
       // accept their own ids) — this is what lets a session cross between CLIs.
       // FRESH: no sessionId; the cli mints its own, which becomes the canonical id.
       const resuming = !!opts.sessionId;
       const resumeResult = resuming
-        ? await prepareResume(store, opts.cli, opts.cwd, opts.sessionId!, opts.ephemeral)
+        ? await prepareResume(store, engine, opts.cwd, opts.sessionId!, opts.ephemeral)
         : undefined;
       const nativeId = resumeResult?.nativeId;
 
@@ -123,21 +145,32 @@ export function createRuntime(
       // effort — a memory/storage hiccup must not block starting the session.
       let enabledSkills: string[] | undefined;
       try {
-        await memory.injectAtStart(opts.cli, opts.cwd);
+        await memory.injectAtStart(engine, opts.cwd);
         // After memory is written, refresh the managed "your skills" line so the agent
         // passively knows which skills are installed (no system-prompt nudge, no RPC).
         // Must run AFTER injectAtStart, which regenerates MEMORY.md / AGENTS.md.
-        const skills = await updateSkillsSection(opts.cli, opts.cwd);
-        if (opts.cli === "claude" && skills.length) enabledSkills = skills.map((s) => s.name);
+        const skills = await updateSkillsSection(engine, opts.cwd);
+        if (engine === "claude" && skills.length) enabledSkills = skills.map((s) => s.name);
       } catch (e) {
         console.warn("[memory] inject failed:", e);
       }
+
+      // Claudex Team mode hooks: let the in-process fan-out tool talk to THIS live session.
+      // notify → the skill marquee (live war-room cue); approval → the one merge gate before
+      // workers touch files; sessionId → tag that approval. The closures read sessionId/
+      // skillCbs which are declared just below — they're only CALLED later (during a turn),
+      // so this forward reference is safe.
+      const claudexHooks = {
+        notify: (text: string) => { for (const cb of skillCbs) cb(text); },
+        approval: opts.approval ?? approval,
+        sessionId: () => sessionId,
+      };
 
       // Skill-shopping (plans/skill-shopping.md): install/remove the bundled skill per the
       // toggle + (Claude, ON) wire the marketplace MCP tools. Best-effort.
       let passive: Awaited<ReturnType<typeof buildPassiveSpawn>> = {};
       try {
-        passive = await buildPassiveSpawn(opts.cli, wallet, opts.onMarketEvent);
+        passive = await buildPassiveSpawn(opts.cli, wallet, opts.cwd, opts.mode, claudexHooks, opts.onMarketEvent);
       } catch (e) {
         console.warn("[skill-shopping] setup failed:", e);
       }
@@ -208,7 +241,7 @@ export function createRuntime(
         });
         // Capture any memory Claude wrote this turn back to Drive (stock Codex never
         // writes memory, so only Claude is captured). Fire-and-forget; best effort.
-        if (opts.cli === "claude") {
+        if (engine === "claude") {
           void memory.captureFromClaude(opts.cwd).catch((e) =>
             console.warn("[memory] capture failed:", e),
           );
@@ -220,7 +253,12 @@ export function createRuntime(
       let stopped = false; // we asked it to stop (tab/model switch) → not an error
       cli.onError((text: string) => {
         if (stopped) return;
-        emit({ role: "tool", text, ts: Date.now() });
+        // A usage/rate limit on the LEAD engine is common and actionable — show a clean,
+        // human message (keep the raw text appended for debugging) instead of a raw stack.
+        const shown = isLimitError(text)
+          ? `${opts.cli} hit a usage/rate limit — try again in a bit, or switch engine. (${text.trim().slice(0, 200)})`
+          : text;
+        emit({ role: "tool", text: shown, ts: Date.now() });
         void flush().then(() => {
           for (const cb of turnCbs) cb();
         });

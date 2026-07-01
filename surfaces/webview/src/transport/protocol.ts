@@ -10,7 +10,7 @@ export type { SkillCard, SkillDetail, MarketRequest, MarketEvent, RpcStatus, Age
 
 // ── shared payload shapes ──
 
-export type Cli = "claude" | "codex";
+export type Cli = "claude" | "codex" | "claudex";
 
 export interface ChatMessage {
   role: "user" | "assistant" | "thinking" | "tool" | "summary";

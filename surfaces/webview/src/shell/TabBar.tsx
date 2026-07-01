@@ -65,7 +65,7 @@ export function TabBar({ position, instant, onChange }: { position: number; inst
   const navRef = useRef<HTMLElement>(null);
   useElementHeightVariable(navRef, "--tabbar-height");
   const { state } = useStore();
-  const accent = state.cli === "claude" ? "var(--claude)" : "var(--an-green)";
+  const accent = state.cli === "claude" ? "var(--claude)" : state.cli === "claudex" ? "var(--claudex)" : "var(--an-green)";
   const activeIndex = Math.round(position);
   return (
     <nav ref={navRef} className="an-tabbar-shell an-navdock-shell" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)" }}>
