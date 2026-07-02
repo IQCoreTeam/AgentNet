@@ -41,6 +41,7 @@ import {
   chatHtml,
   onboardingHtml,
   listCodexModelOptions,
+  listClaudeModelOptions,
   type ClaudeLogin,
   type CodexLogin,
   type StorageConfig,
@@ -337,11 +338,13 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
   // resolved inside (registered Helius key wins; else env; else public-devnet default).
   const marketPromise = marketplaceEnv(wallet!);
   const codexModelOptionsPromise = listCodexModelOptions().catch(() => null);
+  const claudeModelOptionsPromise = listClaudeModelOptions(getCwd()).catch(() => null);
   const chat = createChatSession(runtime!, transport, {
     cwd: getCwd,
     approval,
     claimSession,
-    modelOptions: async (cli) => (cli === "codex" ? await codexModelOptionsPromise : null),
+    modelOptions: async (cli) =>
+      cli === "codex" ? await codexModelOptionsPromise : await claudeModelOptionsPromise,
     searchSkills: async (query, kind) => (await marketPromise).searchSkills(query, kind),
     getSkillDetail: async (mint) => (await marketPromise).getSkillDetail(mint),
     // local SKILL.md body for the equipped-skill popup (mint-less skills); without this

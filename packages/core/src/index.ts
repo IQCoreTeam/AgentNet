@@ -90,6 +90,7 @@ export { createRuntime } from "./runtime/index.js";
 export { detectCli } from "./runtime/detect.js";
 export type { CliStatus, CliReport } from "./runtime/detect.js";
 export { listCodexModelOptions } from "./runtime/codexModels.js";
+export { listClaudeModelOptions } from "./runtime/claudeModels.js";
 export {
   solanaDefaultKeypairPath,
   inspectKeypair,

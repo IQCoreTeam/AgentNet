@@ -29,6 +29,8 @@ import { dirname, join, normalize, extname } from "node:path";
 import {
   connect,
   createChatSession,
+  listClaudeModelOptions,
+  listCodexModelOptions,
   TransportApprovalChannel,
   withTimeout,
   webWallet,
@@ -706,9 +708,21 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
     onRecv: (cb: (m: any) => void) => { c.recvs.push(cb); },
   };
   const approval = withTimeout(new TransportApprovalChannel(transport));
+  // claude lister is nullable (probe can fail); reuse its type for both caches so the
+  // codex `.catch(() => null)` widening is allowed too.
+  type ModelOpts = Awaited<ReturnType<typeof listClaudeModelOptions>>;
+  let codexModelOptionsPromise: Promise<ModelOpts> | null = null;
+  let claudeModelOptionsPromise: Promise<ModelOpts> | null = null;
   const chat = createChatSession(rt, transport, {
     cwd: () => process.cwd(),
     approval,
+    // Live model catalog from the installed CLI (same auth, no extra cost); the picker
+    // falls back to the static baseline when the probe returns null. Cached per engine so
+    // the subprocess spins up once, not on every picker open.
+    modelOptions: async (cli) =>
+      cli === "codex"
+        ? await (codexModelOptionsPromise ??= listCodexModelOptions().catch(() => null))
+        : await (claudeModelOptionsPromise ??= listClaudeModelOptions(process.cwd()).catch(() => null)),
     walletAddress: () => walletAddress,
     storageInfo: async () => ({ info: await getStorageInfo(), options: STORAGE_OPTIONS, googleCredsConfigured: await hasGoogleCreds() }),
     connectCloud: async (cfg) => {

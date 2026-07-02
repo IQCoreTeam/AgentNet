@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Box, Text, useInput } from "ink";
-import { MODELS } from "../models.js";
+import { MODELS, loadModelOptions } from "../models.js";
 import { colors } from "../theme.js";
 
 // Pick a model for the current engine (↑/↓ + ↵, esc cancels). Built by hand to match the
@@ -16,14 +16,28 @@ export function ModelPicker({
   onPick: (value?: string) => void;
   onClose: () => void;
 }) {
-  const opts = MODELS[cli];
-  const [idx, setIdx] = useState(Math.max(0, opts.findIndex((o) => o.value === current)));
+  // Show the static baseline instantly, then upgrade to the live CLI catalog when it
+  // arrives (a new model like a fresh Sonnet appears with no code change here).
+  const [opts, setOpts] = useState(MODELS[cli]);
+  useEffect(() => {
+    let alive = true;
+    setOpts(MODELS[cli]);
+    loadModelOptions(cli).then((live) => {
+      if (alive) setOpts(live);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [cli]);
+  const [idx, setIdx] = useState(Math.max(0, MODELS[cli].findIndex((o) => o.value === current)));
 
+  // opts can shrink/grow when the live catalog replaces the baseline; keep idx in range.
+  const safeIdx = Math.min(idx, opts.length - 1);
   useInput((_i, key) => {
     if (key.escape) return onClose();
-    if (key.upArrow) setIdx((i) => Math.max(0, i - 1));
+    if (key.upArrow) setIdx((i) => Math.max(0, Math.min(i, opts.length - 1) - 1));
     else if (key.downArrow) setIdx((i) => Math.min(opts.length - 1, i + 1));
-    else if (key.return) onPick(opts[idx].value);
+    else if (key.return) onPick(opts[safeIdx]?.value);
   });
 
   return (
@@ -32,7 +46,7 @@ export function ModelPicker({
         ❖ model · {cli}
       </Text>
       {opts.map((o, i) => {
-        const on = i === idx;
+        const on = i === safeIdx;
         const value = o.value;
         return (
           <Box key={o.value ?? "default"}>
