@@ -57,6 +57,9 @@ export interface State {
   marketOwned: string[];
   marketOwnedMints: Record<string, string>;
   marketOwnedCards: SkillCard[]; // wallet's on-chain owned skill cards (My Skills grid)
+  // Of the owned mints, which are workflows (ground-truth on-chain read, not `card.type`).
+  // The workflow-publish picker excludes these — a workflow can't require another workflow.
+  marketOwnedWorkflowMints: string[];
   marketDisposed: Record<string, string>;
   marketBalance: number | null;
   // Fund prompt (Get devnet SOL): opened when a buy fails for insufficient funds; `funding`
@@ -164,6 +167,7 @@ const initialState: State = {
   marketOwned: [],
   marketOwnedMints: {},
   marketOwnedCards: [],
+  marketOwnedWorkflowMints: [],
   marketDisposed: {},
   marketBalance: null,
   fundOpen: false,
@@ -522,6 +526,9 @@ function reducer(state: State, ev: Action): State {
         // Only chain-sourced emits carry `cards`; keep the existing grid on a names-only
         // emit (chat panel / post-buy refresh) instead of blanking My Skills.
         marketOwnedCards: ev.cards ?? state.marketOwnedCards,
+        // Only a chain-sourced emit carries workflowMints; keep the existing set on a
+        // names-only emit instead of wrongly clearing it back to [].
+        marketOwnedWorkflowMints: ev.workflowMints ?? state.marketOwnedWorkflowMints,
         marketDisposed: ev.disposedMints ?? {},
       };
     case "balance":

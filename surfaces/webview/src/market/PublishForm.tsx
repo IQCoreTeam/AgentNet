@@ -63,10 +63,18 @@ function PublishProgressView({ progress }: { progress: { phase: "store" | "mint"
 
 interface Props {
   onBack: () => void;
+  // Which kind the form opens to — e.g. hitting Publish from the Workflow browse tab should
+  // land straight in workflow mode, same as the VSCode builder. Defaults to "skill".
+  initialKind?: "skill" | "workflow";
 }
 
-export function PublishForm({ onBack }: Props) {
+// A workflow can require at most 16 skills (MAX_REQUIRED_SKILLS in the agent-workflow-nft
+// contract) and at least 1 — the on-chain gate that gives a workflow meaning.
+const MAX_REQUIRED_SKILLS = 16;
+
+export function PublishForm({ onBack, initialKind = "skill" }: Props) {
   const { send, state, clearPublishResult } = useStore();
+  const [kind, setKind] = useState<"skill" | "workflow">(initialKind);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [text, setText] = useState("");
@@ -75,27 +83,59 @@ export function PublishForm({ onBack }: Props) {
   const [priceSol, setPriceSol] = useState("0");
   const [imageUrl, setImageUrl] = useState(""); // http/on-chain link only — no file upload
   const [submitting, setSubmitting] = useState(false);
+  // Required-skills picker (workflow mode only): mint -> selected.
+  const [reqSel, setReqSel] = useState<Record<string, boolean>>({});
 
+  const t = PUBLISH_THEME[kind];
   const result = state.publishResult;
+
+  // Skills the wallet actually owns and can require: must have a resolvable mint, and must
+  // NOT itself be a workflow (the on-chain gate rejects a workflow as a required_skill).
+  const ownedSkillNames = state.marketOwned.filter((n) => {
+    const mint = state.marketOwnedMints[n];
+    return !!mint && !state.marketOwnedWorkflowMints.includes(mint);
+  });
+  const chosenReqMints = Object.keys(reqSel).filter((m) => reqSel[m]);
 
   // A result (success OR failure) ends the in-flight state so the form/button come back.
   useEffect(() => { if (result) setSubmitting(false); }, [result]);
 
   function handleSubmit() {
-    if (!name.trim() || !text.trim()) return;
+    if (!name.trim()) return;
+    if (kind === "skill" && !text.trim()) return;
+    if (kind === "workflow" && (chosenReqMints.length === 0 || chosenReqMints.length > MAX_REQUIRED_SKILLS)) return;
     setSubmitting(true);
     clearPublishResult();
+    // Workflow mode: synthesize the SKILL.md frontmatter (type: workflow + requiredSkills) so
+    // the current backend's frontmatter sniff (env.ts) mints it as a workflow — same trick the
+    // VSCode webview builder uses. No SKILL.md body to author; the workflow IS its required skills.
+    const body = kind === "workflow"
+      ? [
+          "---",
+          `name: ${name.trim()}`,
+          `description: ${description.trim().replace(/\s*\n\s*/g, " ")}`,
+          "type: workflow",
+          `requiredSkills: [${chosenReqMints.join(", ")}]`,
+          "---",
+          "",
+          `# ${name.trim()}`,
+          "",
+          description.trim(),
+          "",
+        ].join("\n")
+      : text.trim();
     // Image is a link ONLY (http URL or on-chain address). The app can't attach/upload a
     // file, and a link stays tiny so the body doesn't chunk on-chain (keeps signatures low).
     send({
       type: "publishSkill",
       name: name.trim(),
       description: description.trim(),
-      text: text.trim(),
+      text: body,
       category: category.trim() || undefined,
       hashtags: hashtags.split(",").map((h) => h.trim()).filter(Boolean),
       priceSol: priceSol || "0",
       image: imageUrl.trim() || undefined,
+      ...(kind === "workflow" ? { kind: "workflow" as const, requiredSkills: chosenReqMints } : {}),
     });
     setTimeout(() => setSubmitting(false), 15000);
   }
@@ -105,13 +145,13 @@ export function PublishForm({ onBack }: Props) {
   if (result?.ok) {
     return (
       <div className="flex flex-col h-full">
-        <header className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2 shrink-0">
+        <header className={`flex items-center gap-2 border-b ${t.border} px-3 py-2 shrink-0`}>
           <button onClick={() => { clearPublishResult(); onBack(); }} className="text-zinc-400 active:text-zinc-200 px-1 text-lg">←</button>
-          <span className="font-medium text-sm">Publish Skill</span>
+          <span className="font-medium text-sm">Publish {kind === "workflow" ? "Workflow" : "Skill"}</span>
         </header>
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center bg-gradient-to-b from-purple-900/25 to-transparent">
-          <SkillIcon className="h-10 w-10 text-purple-400" />
-          <p className="text-purple-300 font-semibold">Skill minted!</p>
+        <div className={`flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center bg-gradient-to-b ${t.wash} to-transparent`}>
+          <SkillIcon className={`h-10 w-10 ${t.icon}`} />
+          <p className={`${t.label} font-semibold`}>{kind === "workflow" ? "Workflow minted!" : "Skill minted!"}</p>
           {result.mint && <p className="font-mono text-xs text-zinc-500">{result.mint}</p>}
           <button onClick={() => { clearPublishResult(); onBack(); }} className="mt-2 text-sm text-zinc-400 underline">Back to market</button>
         </div>
@@ -144,14 +184,33 @@ export function PublishForm({ onBack }: Props) {
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 6l-6 6 6 6" /></svg>
         </button>
-        <span className="an-term-title text-[16px]">Publish Skill</span>
+        <span className="an-term-title text-[16px]">Publish {kind === "workflow" ? "Workflow" : "Skill"}</span>
       </header>
 
       <div className="flex-1 overflow-y-auto p-3.5 space-y-4">
+        {/* Skill/workflow toggle: a workflow is defined by the skills it requires (the
+            on-chain gate), so workflow mode swaps the SKILL.md box below for a checklist. */}
+        <div className="flex gap-2">
+          {(["skill", "workflow"] as const).map((k) => {
+            const active = kind === k;
+            const kt = PUBLISH_THEME[k];
+            return (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setKind(k)}
+                className={`flex-1 rounded-lg border py-2 text-[10px] font-bold uppercase tracking-wider transition-colors ${active ? `${kt.border} ${kt.onText}` : "border-zinc-800 text-zinc-500"}`}
+                style={active ? { background: k === "skill" ? "rgba(139,92,246,0.12)" : "rgba(240,145,62,0.12)" } : undefined}
+              >
+                {k}
+              </button>
+            );
+          })}
+        </div>
         <Field label="Name *">
           <input
             className="an-term-field"
-            placeholder="My Skill"
+            placeholder={kind === "workflow" ? "My Workflow" : "My Skill"}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
@@ -159,20 +218,57 @@ export function PublishForm({ onBack }: Props) {
         <Field label="Description">
           <input
             className="an-term-field"
-            placeholder="What does this skill do?"
+            placeholder={kind === "workflow" ? "What does this workflow do?" : "What does this skill do?"}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
         </Field>
-        <Field label="SKILL.md content *">
-          <textarea
-            className="an-term-field"
-            rows={8}
-            placeholder="# My Skill&#10;&#10;## Description&#10;…"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-          />
-        </Field>
+        {kind === "workflow" ? (
+          <Field label="Required skills *">
+            <p className="mb-1.5 text-[10px] leading-relaxed text-zinc-600">
+              Pick the skills you own that this workflow combines. Buyers must hold every one to unlock it (max {MAX_REQUIRED_SKILLS}).
+            </p>
+            {ownedSkillNames.length === 0 ? (
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-xs text-zinc-600">
+                You don&apos;t own any skills yet. Buy at least one before publishing a workflow.
+              </div>
+            ) : (
+              <>
+                <div className="flex max-h-[220px] flex-col gap-0.5 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950 p-2">
+                  {ownedSkillNames.map((n) => {
+                    const mint = state.marketOwnedMints[n];
+                    return (
+                      <label key={mint} className="flex items-center gap-2.5 py-1 text-[13px] text-zinc-300 active:opacity-80">
+                        <input
+                          type="checkbox"
+                          checked={!!reqSel[mint]}
+                          onChange={(e) => setReqSel((s) => ({ ...s, [mint]: e.target.checked }))}
+                          className="h-4 w-4 shrink-0 accent-amber-500"
+                        />
+                        <span className="truncate">{n}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {chosenReqMints.length > 0 && (
+                  <p className="mt-1.5 font-mono text-[10px] text-zinc-500">
+                    {chosenReqMints.length} selected{chosenReqMints.length > MAX_REQUIRED_SKILLS ? ` — max ${MAX_REQUIRED_SKILLS}, deselect some` : ""}
+                  </p>
+                )}
+              </>
+            )}
+          </Field>
+        ) : (
+          <Field label="SKILL.md content *">
+            <textarea
+              className="an-term-field"
+              rows={8}
+              placeholder="# My Skill&#10;&#10;## Description&#10;…"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+            />
+          </Field>
+        )}
         <Field label="Category">
           <input
             className="an-term-field"
@@ -240,10 +336,15 @@ export function PublishForm({ onBack }: Props) {
         )}
         <button
           onClick={handleSubmit}
-          disabled={submitting || !name.trim() || !text.trim() || !imageValid}
-          className="an-btn an-btn-violet"
+          disabled={
+            submitting ||
+            !name.trim() ||
+            !imageValid ||
+            (kind === "skill" ? !text.trim() : chosenReqMints.length === 0 || chosenReqMints.length > MAX_REQUIRED_SKILLS)
+          }
+          className={`an-btn ${kind === "workflow" ? "an-btn-orange" : "an-btn-violet"}`}
         >
-          {submitting ? "Minting NFT…" : "Mint & Publish"}
+          {submitting ? "Minting NFT…" : `Mint & Publish${kind === "workflow" ? " Workflow" : ""}`}
         </button>
       </div>
     </div>
