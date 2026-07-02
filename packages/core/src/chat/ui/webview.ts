@@ -48,6 +48,12 @@ export function chatHtml(): string {
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<!-- Doto: dot-matrix face for the COMPLETE plaque. Progressive enhancement — if the
+     network/CSP blocks it, the plaque falls back to a bold monospace and the radial-dot
+     texture still reads as an LED sign. -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Doto:wght@700;900&display=swap" rel="stylesheet" />
 <style>
   /* ── AgentNet tone system ──────────────────────────────────────────────
      One green accent threaded through the whole UI (the codex badge green,
@@ -1439,6 +1445,22 @@ export function chatHtml(): string {
   .pubForm input[type=text]:focus, .pubForm textarea:focus { border-color: #8b5cf6; }
   .pubForm input[type=text]::placeholder, .pubForm textarea::placeholder { color: #5a5a5d; }
   .pubForm textarea { line-height: 1.5; }
+  /* workflow builder: skill/workflow toggle + owned-skill picker. A workflow IS the skills
+     it requires (the on-chain gate), so workflow mode swaps the SKILL.md box for a checklist.
+     Skill keeps the violet publish accent; workflow takes amber. */
+  .pubKind { display: flex; gap: 8px; margin: 2px 0 8px; }
+  .pubKind button { background: transparent; border: 1px solid #2a2a2e; border-radius: 0; color: #7a7a7f;
+                    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; font-weight: 700;
+                    letter-spacing: 1.2px; text-transform: uppercase; padding: 6px 14px; cursor: pointer; }
+  .pubKind button[data-k=skill].on { border-color: #8b5cf6; color: #c9b6ff; background: rgba(139,92,246,0.12); }
+  .pubKind button[data-k=workflow].on { border-color: #f0913e; color: #f3b483; background: rgba(240,145,62,0.12); }
+  .pubReq { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto;
+            border: 1px solid #1d1d20; border-radius: 0; padding: 8px; background: #0d0d10; }
+  .pubReq label { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.86em; color: #cfcfcf; }
+  .pubReq .empty { color: #5a5a5d; font-size: 0.82em; }
+  .pubReqCount { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.72em; color: #7a7a7f; margin-top: 5px; }
+  .pubForm.wf input[type=text]:focus, .pubForm.wf textarea:focus { border-color: #f0913e; }
+  .pubForm.wf .pubSubmit { --acc: #f0913e; --ink: #1a0f03; }
   .pubHint { font-size: 0.76em; opacity: 0.55; margin-top: 4px; }
   /* on-chain badge — mirrors iq-wide-web's OnChainBadge (◆ ON-CHAIN) */
   .pubBadge { display: inline-block; margin-top: 6px; font-size: 0.7em; font-weight: 700;
@@ -1474,71 +1496,42 @@ export function chatHtml(): string {
   #mktDetailBody .dt-note-input .dt-note-submit[disabled], .pubSubmit:disabled { opacity: 0.4; cursor: default; }
   .pubSubmit { --acc: #8b5cf6; --ink: #0c0618; }
 
-  /* ---- skill-acquired celebration: a popup that bursts in when a buy succeeds.
-       Centered card (wand + "Skill acquired" + name) over a soft backdrop, with a
-       ring shockwave and sparkle particles flying out, then auto-fades. ---- */
+  /* ---- COMPLETE overlay: a green LED dot-matrix plaque that pops in on a success
+       (buy / publish / comment / GitHub register), then auto-fades. Design "OVERLAY //
+       COMPLETE" — one plaque; only the [CONTEXT] sub-label swaps. Literal design green
+       (not a theme var) so the LED reads the same in every VS Code theme. ---- */
   #celebrate { position: fixed; inset: 0; z-index: 999; display: none; align-items: center;
                justify-content: center; cursor: pointer;
                background: rgba(6,9,11,0.74); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
-  #celebrate.show { display: flex; animation: celebFade 0.28s ease; }
-  #celebrate.out { animation: celebFadeOut 0.4s ease forwards; }
-  /* confetti layer: colorful pieces raining down behind the card (the delight cue) */
-  .celebConfetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-  .cfetti { position: absolute; top: -18px; width: 9px; height: 14px; border-radius: 2px; opacity: 0;
-            animation: cfettiFall var(--dur) cubic-bezier(0.25,0.5,0.45,1) var(--del) forwards; }
-  .celebCard { position: relative; display: flex; flex-direction: column; align-items: center;
-               gap: 12px; padding: 30px 46px 26px; border-radius: 20px;
-               background: linear-gradient(180deg, color-mix(in srgb, var(--an-green) 7%, var(--an-bg-1)), var(--an-bg-0));
-               border: 1px solid var(--an-green-line);
-               box-shadow: 0 0 0 1px var(--an-green-dim), 0 22px 70px rgba(0,0,0,0.6),
-                           0 0 60px var(--an-green-soft);
-               animation: celebPop 0.55s cubic-bezier(0.18,0.9,0.28,1.3); }
-  /* medal badge: a glowing disc holding the wand, ringed by a slow-rotating conic halo */
-  .celebBadge { position: relative; width: 78px; height: 78px; display: flex; align-items: center;
-                justify-content: center; border-radius: 50%; margin-top: 4px;
-                background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--an-green) 34%, var(--an-bg-1)), var(--an-bg-1));
-                box-shadow: inset 0 0 0 1.5px var(--an-green-line), 0 0 26px var(--an-green-soft); }
-  .celebHalo { position: absolute; inset: -9px; border-radius: 50%; z-index: -1; filter: blur(6px); opacity: 0.55;
-               background: conic-gradient(from 0deg, transparent, var(--an-green), transparent 48%, #e9c46a, transparent);
-               animation: celebSpin 3.4s linear infinite; }
-  .celebRing { position: absolute; width: 78px; height: 78px; border-radius: 50%;
-               border: 2px solid var(--an-green); opacity: 0.8;
-               animation: celebRing 0.85s ease-out forwards; }
-  .celebRing.r2 { animation-delay: 0.14s; border-color: #e9c46a; }
-  .celebWand { width: 46px; height: auto; color: var(--an-green); display: inline-flex; align-items: center;
-               filter: drop-shadow(0 0 8px var(--an-green));
-               animation: celebWand 0.9s ease-out; }
-  .celebWand svg { width: 100%; height: 100%; }
-  .celebKicker { font-size: 0.72em; letter-spacing: 0.2em; text-transform: uppercase;
-                 color: var(--an-green); font-weight: 800; opacity: 0.95; }
-  .celebName { font-size: 1.4em; font-weight: 800; color: var(--vscode-foreground);
-               text-align: center; max-width: 320px; line-height: 1.15; }
-  .celebSub { font-size: 0.8em; color: var(--vscode-descriptionForeground); opacity: 0.85;
-              display: inline-flex; align-items: center; gap: 5px; }
-  .celebSub::before { content: '\\2713'; color: var(--an-green); font-weight: 700; }
-  .celebSpark { position: absolute; left: 50%; top: 38%; width: 6px; height: 6px; border-radius: 50%;
-                background: var(--an-green); pointer-events: none;
-                box-shadow: 0 0 8px var(--an-green);
-                animation: celebSpark 0.95s ease-out forwards; }
-  @keyframes celebFade { from { opacity: 0; } to { opacity: 1; } }
-  @keyframes celebFadeOut { to { opacity: 0; } }
-  @keyframes celebPop { 0% { transform: scale(0.72) translateY(8px); opacity: 0; }
-                        60% { transform: scale(1.04) translateY(0); opacity: 1; }
-                        100% { transform: scale(1); } }
-  @keyframes celebSpin { to { transform: rotate(360deg); } }
-  @keyframes celebRing { 0% { transform: scale(0.45); opacity: 0.85; }
-                         100% { transform: scale(2.5); opacity: 0; } }
-  @keyframes celebWand { 0% { transform: scale(0.5) rotate(-18deg); }
-                         55% { transform: scale(1.18) rotate(6deg); }
-                         100% { transform: scale(1) rotate(0); } }
-  @keyframes celebSpark { 0% { transform: translate(-50%,-50%) translate(0,0) scale(1); opacity: 1; }
-                          100% { transform: translate(-50%,-50%) translate(var(--dx),var(--dy)) scale(0.2);
-                                 opacity: 0; } }
-  @keyframes cfettiFall { 0% { opacity: 0; transform: translateY(0) rotate(var(--rot)); }
-                          12% { opacity: 1; }
-                          100% { opacity: 0.9; transform: translateY(102vh) rotate(calc(var(--rot) + var(--spin))); } }
+  #celebrate.show { display: flex; animation: cmpFade 0.24s ease; }
+  #celebrate.out { animation: cmpFadeOut 0.4s ease forwards; }
+  .cmpWrap { display: flex; flex-direction: column; align-items: center; padding: 0 16px;
+             animation: cmpPop 0.5s cubic-bezier(0.18,0.9,0.28,1.3); }
+  /* outer bezel: green frame + outer glow over a dark inset */
+  .cmpPlaque { border: 3px solid #46e06a; border-radius: 6px; padding: 6px; background: #0a140c;
+               box-shadow: 0 0 30px rgba(70,224,106,0.5), inset 0 0 14px rgba(70,224,106,0.22); }
+  /* inner LED panel: bright green with a dot-matrix radial texture */
+  .cmpLed { position: relative; overflow: hidden; background: #46e06a;
+            padding: 12px clamp(20px, 7vw, 46px); }
+  .cmpLed::before { content: ''; position: absolute; inset: 0;
+                    background-image: radial-gradient(rgba(4,20,8,0.5) 1.1px, transparent 1.2px);
+                    background-size: 5px 5px; }
+  .cmpLed span { position: relative; display: block; line-height: 1; color: #06180b;
+                 letter-spacing: 0.07em; font-weight: 900; font-size: clamp(34px, 11vw, 58px);
+                 font-family: 'Doto', ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .cmpLabel { margin-top: 18px; text-align: center; color: #6fbf88; letter-spacing: 0.18em;
+              font-weight: 700; font-size: clamp(12px, 3.4vw, 17px);
+              font-family: 'Doto', ui-monospace, SFMono-Regular, Menlo, monospace;
+              animation: cmpRise 0.5s ease 0.1s both; }
+  @keyframes cmpFade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes cmpFadeOut { to { opacity: 0; } }
+  @keyframes cmpPop { 0% { transform: scale(0.4); opacity: 0; }
+                      60% { transform: scale(1.12); }
+                      100% { transform: scale(1); opacity: 1; } }
+  @keyframes cmpRise { 0% { transform: translateY(8px); opacity: 0; }
+                       100% { transform: translateY(0); opacity: 1; } }
   @media (prefers-reduced-motion: reduce) {
-    .celebCard, .celebWand, .celebRing, .celebSpark, .celebHalo, .cfetti { animation-duration: 0.01ms; }
+    .cmpWrap, .cmpLabel { animation-duration: 0.01ms; }
   }
 
   /* ---- wallet balance (dropdown) + market balance chip ---- */
@@ -1587,7 +1580,7 @@ export function chatHtml(): string {
 </style>
 </head>
 <body>
-  <!-- skill-acquired celebration overlay (filled + shown by celebrateSkill on buy success) -->
+  <!-- COMPLETE overlay: green LED plaque, filled + shown by showComplete on a success -->
   <div id="celebrate"></div>
   <!-- buy-failure banner (orange-bordered, (i) icon) — filled + shown by showBuyError -->
   <div id="buyErr" class="buyErr" style="display:none"></div>
@@ -1814,11 +1807,15 @@ export function chatHtml(): string {
     <div class="page">
       <div id="backToChatP" class="muted" style="cursor:pointer;margin-bottom:10px">‹ Back to chat</div>
       <div class="mktHead">
-        <div class="mktTitle"><span class="wand">${WAND_SVG}</span> Make a skill</div>
-        <div class="muted small">Publish a skill others can buy. It mints a soulbound NFT and the body is stored on-chain.</div>
+        <div class="mktTitle"><span class="wand">${WAND_SVG}</span> <span id="pubViewTitle">Make a skill</span></div>
+        <div class="muted small" id="pubViewDesc">Publish a skill others can buy. It mints a soulbound NFT and the body is stored on-chain.</div>
       </div>
-      <div class="pubForm">
-        <div class="an-formhead">FORM // <b>PUBLISH SKILL</b></div>
+      <div class="pubForm" id="pubForm">
+        <div class="an-formhead" id="pubFormHead">FORM // <b>PUBLISH SKILL</b></div>
+        <div class="pubKind">
+          <button data-k="skill" class="on">Skill</button>
+          <button data-k="workflow">Workflow</button>
+        </div>
         <label class="pubLabel">Name<span class="req">*</span></label>
         <input id="pubName" type="text" placeholder="clean-code-refactor" />
 
@@ -1836,9 +1833,17 @@ export function chatHtml(): string {
         <div id="pubImageBadge" class="pubBadge" style="display:none">◆ ON-CHAIN</div>
         <div class="pubHint">A direct image URL, or an on-chain address. Leave empty for the default art. (Uploading an image on-chain: see the IQLabs SDK at https://x.com/spacebuneth/status/2064477269871960574)</div>
 
+        <div id="pubTextWrap">
         <label class="pubLabel">Skill text<span class="req">*</span></label>
         <textarea id="pubText" rows="10" placeholder="# Skill name&#10;&#10;The SKILL.md body only — what the agent reads when this skill fires.&#10;No --- frontmatter: name & description come from the fields above."></textarea>
         <div class="pubHint">Body only — don't add a <code>---</code> name/description block; it's built from the fields above.</div>
+        </div>
+        <div id="pubReqWrap" style="display:none">
+        <label class="pubLabel">Required skills<span class="req">*</span></label>
+        <div class="pubHint">Pick the skills you own that this workflow combines. Buyers must hold every one to unlock it (max 16).</div>
+        <div class="pubReq" id="pubReq"></div>
+        <div class="pubReqCount" id="pubReqCount"></div>
+        </div>
 
         <label class="pubLabel">Price (SOL)<span class="req">*</span></label>
         <input id="pubPrice" type="text" value="0.1" placeholder="0.1" />
@@ -3464,11 +3469,12 @@ export function chatHtml(): string {
   document.getElementById('marketsBtn').addEventListener('click', () => { closeMenus(); showView('market'); });
   document.getElementById('agentsBtn').addEventListener('click', () => { closeMenus(); showView('agents'); });
   // make-skill: three entry points (topbar, market header, skills panel) → publish view
-  document.getElementById('makeSkillBtn').addEventListener('click', () => { closeMenus(); showView('publish'); });
-  document.getElementById('mktMakeSkillBtn').addEventListener('click', () => showView('publish'));
+  document.getElementById('makeSkillBtn').addEventListener('click', () => { closeMenus(); openPublish('skill'); });
+  // the market button follows the active tab: on the Workflows tab it opens the workflow builder
+  document.getElementById('mktMakeSkillBtn').addEventListener('click', () => openPublish(currentKind === 'workflow' ? 'workflow' : 'skill'));
   document.getElementById('panelMakeSkillBtn').addEventListener('click', () => {
     document.getElementById('skillsPanel').style.display = 'none'; // close the panel popover
-    showView('publish');
+    openPublish('skill');
   });
 
   // ---- make-skill: publish form (issue: author + publish a skill from the UI) ----
@@ -3476,6 +3482,60 @@ export function chatHtml(): string {
   const pubImageBadge = document.getElementById('pubImageBadge');
   const pubSubmit = document.getElementById('pubSubmit');
   const pubError = document.getElementById('pubError');
+  // ── workflow builder: skill/workflow toggle + owned-skill picker ──────────
+  // A workflow is defined by the skills it requires (the on-chain gate). Workflow mode hides
+  // the SKILL.md body and shows a checklist of skills you own; on submit we synthesize the
+  // frontmatter (type: workflow + requiredSkills) so the current backend mints it as a
+  // workflow, and also send kind/requiredSkills for the newer contract path (forward-compat).
+  let pubKind = 'skill';
+  const pubFormEl = document.getElementById('pubForm');
+  const pubTextWrap = document.getElementById('pubTextWrap');
+  const pubReqWrap = document.getElementById('pubReqWrap');
+  const pubReqEl = document.getElementById('pubReq');
+  const pubReqCountEl = document.getElementById('pubReqCount');
+  const pubReqSel = {}; // mint -> selected
+  function chosenReqMints() { return Object.keys(pubReqSel).filter((m) => pubReqSel[m]); }
+  function updatePubReqCount() {
+    const c = chosenReqMints().length;
+    pubReqCountEl.textContent = c ? (c + ' selected' + (c > 16 ? ' \\u2014 max 16, deselect some' : '')) : '';
+  }
+  function renderPubReq() {
+    // Only real on-chain SKILLS qualify: the gate requires official-skills-collection members, so
+    // a mint must exist AND not itself be a workflow (a workflow can't require another workflow).
+    const owned = ownedSkills.filter((n) => !!skillMints[n] && !workflowMintSet.has(skillMints[n]));
+    if (!owned.length) {
+      pubReqEl.innerHTML = '<div class="empty">You don\\'t own any skills yet. Buy at least one before publishing a workflow.</div>';
+      pubReqCountEl.textContent = '';
+      return;
+    }
+    pubReqEl.innerHTML = '';
+    for (const n of owned) {
+      const mint = skillMints[n];
+      const lab = document.createElement('label');
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = mint; cb.checked = !!pubReqSel[mint];
+      cb.addEventListener('change', () => { pubReqSel[mint] = cb.checked; updatePubReqCount(); });
+      const span = document.createElement('span'); span.textContent = n;
+      lab.appendChild(cb); lab.appendChild(span); pubReqEl.appendChild(lab);
+    }
+    updatePubReqCount();
+  }
+  function setPubKind(k) {
+    pubKind = (k === 'workflow') ? 'workflow' : 'skill';
+    const wf = pubKind === 'workflow';
+    for (const b of document.querySelectorAll('.pubKind button')) b.classList.toggle('on', b.getAttribute('data-k') === pubKind);
+    pubFormEl.classList.toggle('wf', wf);
+    pubTextWrap.style.display = wf ? 'none' : '';
+    pubReqWrap.style.display = wf ? '' : 'none';
+    document.getElementById('pubFormHead').innerHTML = 'FORM // <b>PUBLISH ' + (wf ? 'WORKFLOW' : 'SKILL') + '</b>';
+    document.getElementById('pubViewTitle').textContent = wf ? 'Make a workflow' : 'Make a skill';
+    document.getElementById('pubViewDesc').textContent = wf
+      ? 'Bundle skills you own into one workflow. Buyers must hold every skill it requires to unlock it.'
+      : 'Publish a skill others can buy. It mints a soulbound NFT and the body is stored on-chain.';
+    if (!pubSubmit.disabled) pubSubmit.textContent = wf ? 'Publish workflow' : 'Publish skill';
+    if (wf) renderPubReq();
+  }
+  for (const b of document.querySelectorAll('.pubKind button')) b.addEventListener('click', () => setPubKind(b.getAttribute('data-k')));
+  function openPublish(kind) { setPubKind(kind); showView('publish'); }
   // an on-chain image value is a base58 txid/PDA — NOT an http url and NOT a *.png/etc.
   // (skill-nft-json §3: the value's shape says where it lives, no isOnchain flag).
   function looksOnChain(v) {
@@ -3491,7 +3551,6 @@ export function chatHtml(): string {
   pubSubmit.addEventListener('click', () => {
     const name = document.getElementById('pubName').value.trim();
     const description = document.getElementById('pubDesc').value.trim();
-    const text = document.getElementById('pubText').value.trim();
     const priceSol = document.getElementById('pubPrice').value.trim();
     const category = document.getElementById('pubCategory').value.trim();
     const hashtags = document.getElementById('pubHashtags').value.split(',').map(h => h.trim()).filter(Boolean);
@@ -3500,16 +3559,34 @@ export function chatHtml(): string {
     const fail = (msg) => { pubError.textContent = msg; pubError.style.display = 'block'; };
     if (!name) return fail('Name is required.');
     if (!description) return fail('Description is required.');
-    if (!text) return fail('Skill text is required.');
+    let text; let reqMints = [];
+    if (pubKind === 'workflow') {
+      // Drop any workflow mint that slipped through (the gate rejects a workflow as a required skill).
+      reqMints = chosenReqMints().filter((m) => !workflowMintSet.has(m));
+      if (!reqMints.length) return fail('Pick at least one skill this workflow requires.');
+      if (reqMints.length > 16) return fail('A workflow can require at most 16 skills.');
+      // Synthesize the SKILL.md so the current backend (frontmatter sniff) mints a workflow;
+      // requiredSkills carries the chosen skill mints (base58) the on-chain gate checks.
+      const fm = ['---', 'name: ' + name, 'description: ' + description.replace(/\\s*\\n\\s*/g, ' '),
+                  'type: workflow', 'requiredSkills: [' + reqMints.join(', ') + ']'];
+      if (category) fm.push('category: ' + category);
+      if (hashtags.length) fm.push('hashtags: [' + hashtags.join(', ') + ']');
+      text = fm.concat(['---', '', '# ' + name, '', description, '']).join('\\n');
+    } else {
+      text = document.getElementById('pubText').value.trim();
+      if (!text) return fail('Skill text is required.');
+    }
     if (!priceSol) return fail('Enter a price in SOL (use 0 for free).');
     if (!/^\\d+(\\.\\d+)?$/.test(priceSol)) return fail('Price must be a number in SOL (e.g. 0.1).');
     pubSubmit.disabled = true; pubSubmit.textContent = 'Publishing…';
-    vscode.postMessage({
+    const msg = {
       type: 'publishSkill', name, description, text, priceSol,
       category: category || undefined,
       hashtags: hashtags.length ? hashtags : undefined,
       image: image || undefined,
-    });
+    };
+    if (pubKind === 'workflow') { msg.kind = 'workflow'; msg.requiredSkills = reqMints; }
+    vscode.postMessage(msg);
   });
 
   // ---- skeleton loaders ----
@@ -4313,9 +4390,12 @@ export function chatHtml(): string {
     // keep the inline wallet list fresh if it's currently expanded
     const wsl = document.getElementById('walletSkillList');
     if (wsl && wsl.style.display !== 'none') renderWalletSkillList();
+    // keep the workflow builder's required-skills picker fresh if it's currently open
+    if (pubReqWrap && pubReqWrap.style.display !== 'none') renderPubReq();
   }
   let ownedSkills = [];
   let skillMints = {}; // slug/name -> mint for bought NFT skills (reuse market detail)
+  let workflowMintSet = new Set(); // owned mints that are workflows (excluded from the workflow picker)
   let disposedMints = {}; // slug -> mint for un-pinned skills (greyed in the panel)
   let disposedMintSet = new Set(); // the mints above, for isDisposed() detail checks
   // small view prefs persist via the VSCode webview state; the browser fallback has no
@@ -4723,55 +4803,15 @@ export function chatHtml(): string {
   // the detail offers a free Re-equip instead of a paid re-Buy.
   function isDisposed(id) { return !!id && disposedMintSet.has(id); }
 
-  // ---- skill-acquired celebration: pop the overlay, fire sparkles, auto-dismiss ----
+  // ---- COMPLETE overlay: pop the green LED plaque with a [CONTEXT] sub-label, auto-dismiss.
+  // Design "OVERLAY // COMPLETE": one plaque, only the label swaps per action.
   const celebrateEl = document.getElementById('celebrate');
   let celebTimer = null;
-  function celebrateSkill(name) {
-    celebrate('Skill acquired', name || 'New skill', 'Equipped \\u2014 ready to cast');
-  }
-  // Blog/comment success — same confetti overlay, different copy. Stays on the profile
-  // (no navigation): you just posted to your blog, so the new card is right there.
-  function celebrateBlog(isSelf) {
-    celebrate(isSelf ? 'Posted' : 'Comment posted', isSelf ? 'Your post is live' : 'Thanks for sharing', 'Saved on-chain');
-  }
-  function celebrate(kicker, name, sub) {
-    const safe = escapeHtml(name || 'Done');
-    // confetti: colorful pieces raining from the top, each with its own column, speed,
-    // delay, start-rotation and spin so the burst looks organic (green + gold + white).
-    const COLORS = ['var(--an-green)', '#e9c46a', '#ffffff', '#7ad6a0', 'var(--an-green)'];
-    let confetti = '';
-    const C = 32;
-    for (let i = 0; i < C; i++) {
-      const left = Math.round(Math.random() * 100);
-      const dur = (1.7 + Math.random() * 1.1).toFixed(2);
-      const del = (Math.random() * 0.5).toFixed(2);
-      const rot = Math.round(Math.random() * 360);
-      const spin = (180 + Math.round(Math.random() * 600)) + 'deg';
-      const w = 6 + Math.round(Math.random() * 6);
-      confetti += '<span class="cfetti" style="left:' + left + '%;--dur:' + dur + 's;--del:' + del
-        + 's;--rot:' + rot + 'deg;--spin:' + spin + ';width:' + w + 'px;background:' + COLORS[i % COLORS.length] + '"></span>';
-    }
-    // a ring of sparkles flung outward from the badge at varied angles/distances
-    let sparks = '';
-    const N = 14;
-    for (let i = 0; i < N; i++) {
-      const ang = (i / N) * Math.PI * 2 + Math.random() * 0.5;
-      const dist = 64 + Math.random() * 64;
-      const dx = Math.round(Math.cos(ang) * dist);
-      const dy = Math.round(Math.sin(ang) * dist);
-      const delay = (Math.random() * 0.12).toFixed(2);
-      sparks += '<span class="celebSpark" style="--dx:' + dx + 'px;--dy:' + dy + 'px;animation-delay:' + delay + 's"></span>';
-    }
+  function showComplete(label) {
     celebrateEl.innerHTML =
-      '<div class="celebConfetti">' + confetti + '</div>'
-      + '<div class="celebCard">'
-      + sparks
-      + '<div class="celebBadge"><span class="celebHalo"></span>'
-      + '<span class="celebRing"></span><span class="celebRing r2"></span>'
-      + '<span class="celebWand">' + ${JSON.stringify(IQ_LOGO_SVG)} + '</span></div>'
-      + '<div class="celebKicker">' + escapeHtml(kicker || '') + '</div>'
-      + '<div class="celebName">' + safe + '</div>'
-      + '<div class="celebSub">' + escapeHtml(sub || '') + '</div>'
+      '<div class="cmpWrap">'
+      + '<div class="cmpPlaque"><div class="cmpLed"><span>COMPLETE</span></div></div>'
+      + '<div class="cmpLabel">[' + escapeHtml(label || 'DONE') + ']</div>'
       + '</div>';
     celebrateEl.classList.remove('out');
     celebrateEl.classList.add('show');
@@ -4779,7 +4819,7 @@ export function chatHtml(): string {
     celebTimer = setTimeout(() => {
       celebrateEl.classList.add('out');
       setTimeout(() => { celebrateEl.classList.remove('show', 'out'); celebrateEl.innerHTML = ''; }, 450);
-    }, 2400);
+    }, 2200);
   }
   celebrateEl.addEventListener('click', () => { // click to dismiss early
     clearTimeout(celebTimer);
@@ -5115,6 +5155,7 @@ export function chatHtml(): string {
     else if (m.type === 'ownedSkills') {
       disposedMints = m.disposedMints || {};         // slug->mint, greyed in the panel
       disposedMintSet = new Set(Object.values(disposedMints)); // mints, for isDisposed()
+      workflowMintSet = new Set(m.workflowMints || []); // owned workflows, kept out of the picker
       setSkills(m.names || [], m.mints || {});  // updates ownedSkills used by both renders
       // flip Buy → Owned everywhere the item can appear: list cards, small panel, open detail
       if (panels.market.style.display !== 'none') renderMarketResults(lastMarketResults);
@@ -5124,10 +5165,9 @@ export function chatHtml(): string {
     }
     else if (m.type === 'buyResult') {
       if (m.ok) {
-        // celebrate wherever the buy came from: prefer the bought item's catalog name,
-        // fall back to the open detail's name, then the slug. (the ownedSkills message
-        // that follows flips every Buy button to "Owned".)
-        celebrateSkill(nameForId(m.skillId) || currentDetailName || m.slug);
+        // COMPLETE plaque; label reflects whether the open detail is a workflow or a skill.
+        // (the ownedSkills message that follows flips every Buy button to "Owned".)
+        showComplete(currentDetail && currentDetail.type === 'workflow' ? 'WORKFLOW PURCHASED' : 'SKILL PURCHASED');
         vscode.postMessage({ type: 'getBalance' }); // funds dropped after a buy — refresh
       } else {
         // a failed buy must NOT wipe the catalog: show the reason in a dismissible
@@ -5157,7 +5197,7 @@ export function chatHtml(): string {
     else if (m.type === 'githubStatus') { renderRepoModalBody(m); }
     else if (m.type === 'workRepoRegistered') {
       if (m.ok) {
-        renderNotice('Registered ' + (m.repo || 'your repo') + (m.count ? ' \\u00b7 ' + m.count + ' skill' + (m.count !== 1 ? 's' : '') + ' linked' : ''));
+        showComplete('GITHUB REGISTERED');
         closeRepoRegister();
         if (currentProfileWallet) vscode.postMessage({ type: 'getAgentProfile', wallet: currentProfileWallet });
       } else if (repoModalEl) {
@@ -5225,7 +5265,7 @@ export function chatHtml(): string {
           ok: true,
           ts: Date.now(),
         };
-        celebrateBlog(label === 'Post'); // confetti overlay — clear success, stays on the profile
+        showComplete(label === 'Post' ? 'POST PUBLISHED' : 'COMMENT POSTED'); // stays on the profile
         if (body && body._postBtn) {
           body._postBtn.disabled = false; body._postBtn.textContent = label;
           if (body._postTa) body._postTa.value = '';
@@ -5239,13 +5279,16 @@ export function chatHtml(): string {
     else if (m.type === 'balance') { solLamports = m.lamports; renderBalance(); }
     // make-skill: publish finished — reset the button, then on success celebrate + go to market
     else if (m.type === 'publishResult') {
-      pubSubmit.disabled = false; pubSubmit.textContent = 'Publish skill';
+      pubSubmit.disabled = false; pubSubmit.textContent = pubKind === 'workflow' ? 'Publish workflow' : 'Publish skill';
       if (m.ok) {
         const nm = document.getElementById('pubName').value.trim();
         ['pubName','pubDesc','pubCategory','pubHashtags','pubImage','pubText'].forEach(id => { document.getElementById(id).value = ''; });
         document.getElementById('pubPrice').value = '0.1';
         pubImageBadge.style.display = 'none';
-        celebrateSkill(nm || 'your skill');
+        for (const k in pubReqSel) delete pubReqSel[k]; // clear the workflow picker
+        const wasWorkflow = pubKind === 'workflow';
+        setPubKind('skill');
+        showComplete(wasWorkflow ? 'WORKFLOW BUILT' : 'SKILL CREATED');
         showView('market'); // see it listed (it's owned by you now)
       } else {
         pubError.textContent = m.error || 'Publish failed.'; pubError.style.display = 'block';

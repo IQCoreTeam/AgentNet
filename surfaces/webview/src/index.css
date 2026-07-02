@@ -1458,3 +1458,67 @@ html[data-keyboard="open"] .an-chat-float { bottom: 0; }
   background: var(--an-green);
   animation: an-typing 1.3s ease-in-out infinite;
 }
+
+/* ---- COMPLETE overlay: green LED dot-matrix plaque (design "OVERLAY // COMPLETE").
+   Shared by Buy/Publish celebrations; mirrors the VS Code webview plaque. Literal design
+   green (#46e06a) so the LED reads the same regardless of theme. Doto = dot-matrix face
+   (loaded in index.html); falls back to Space Mono + the radial-dot texture when blocked. */
+.cmp-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 16px;
+  animation: cmpPop 0.5s cubic-bezier(0.18, 0.9, 0.28, 1.3);
+}
+.cmp-plaque {
+  border: 3px solid #46e06a;
+  border-radius: 6px;
+  padding: 6px;
+  background: #0a140c;
+  box-shadow: 0 0 30px rgba(70, 224, 106, 0.5), inset 0 0 14px rgba(70, 224, 106, 0.22);
+}
+.cmp-led {
+  position: relative;
+  overflow: hidden;
+  background: #46e06a;
+  padding: 12px clamp(20px, 7vw, 46px);
+}
+.cmp-led::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(4, 20, 8, 0.5) 1.1px, transparent 1.2px);
+  background-size: 5px 5px;
+}
+.cmp-led span {
+  position: relative;
+  display: block;
+  line-height: 1;
+  color: #06180b;
+  letter-spacing: 0.07em;
+  font-weight: 900;
+  font-size: clamp(38px, 13vw, 62px);
+  font-family: "Doto", ui-monospace, "Space Mono", monospace;
+}
+.cmp-label {
+  margin-top: 18px;
+  text-align: center;
+  color: #6fbf88;
+  letter-spacing: 0.18em;
+  font-weight: 700;
+  font-size: clamp(13px, 3.6vw, 18px);
+  font-family: "Doto", ui-monospace, "Space Mono", monospace;
+  animation: cmpRise 0.5s ease 0.1s both;
+}
+@keyframes cmpPop {
+  0%   { transform: scale(0.4); opacity: 0; }
+  60%  { transform: scale(1.12); }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes cmpRise {
+  0%   { transform: translateY(8px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cmp-wrap, .cmp-label { animation-duration: 0.01ms; }
+}
