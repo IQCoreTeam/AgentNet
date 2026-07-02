@@ -113,9 +113,12 @@ export type MarketRequest =
   // buy a specific set of skills in one go (e.g. a workflow's required skills)
   | { type: "buyRequiredSkills"; items: { skillId: string; creatorWallet?: string }[] }
   | { type: "postAgentNote"; agentWallet: string; text: string; gitLink?: string; title?: string; image?: string }
-  // publish a skill from the UI (make-skill). priceSol is the human SOL amount as a
-  // string ("0.1"); the host converts to lamports. image is optional — an http URL
-  // or a base58 on-chain txid/PDA (the UI badges on-chain values), see skill-nft-json §3.
+  // publish a skill (or workflow) from the UI (make-skill). priceSol is the human SOL
+  // amount as a string ("0.1"); the host converts to lamports. image is optional — an
+  // http URL or a base58 on-chain txid/PDA (the UI badges on-chain values), see
+  // skill-nft-json §3. kind picks the item type (default "skill" when omitted, for
+  // back-compat with older clients); requiredSkills (workflow only) are the prerequisite
+  // skill mint ids the buyer must already hold.
   | {
       type: "publishSkill";
       name: string;
@@ -125,6 +128,8 @@ export type MarketRequest =
       hashtags?: string[];
       priceSol: string;
       image?: string;
+      kind?: "skill" | "workflow";
+      requiredSkills?: string[];
     };
 
 // ── host -> UI (responses / pushes) ─────────────────────────────────────────

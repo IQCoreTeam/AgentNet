@@ -150,6 +150,8 @@ export type ClientMessage =
       hashtags?: string[];
       priceSol: string;
       image?: string;
+      kind?: "skill" | "workflow";
+      requiredSkills?: string[];
     }
   | { type: "submitGithubToken"; token: string }
   | { type: "clearGithubToken" }

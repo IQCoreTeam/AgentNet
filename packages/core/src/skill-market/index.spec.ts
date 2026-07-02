@@ -9,12 +9,14 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { readSkillManifest } from "./registry.js";
 import { searchSkills } from "../search/search.js";
 import { buySkill, publishSkill } from "../nft/skill.js";
+import { publishWorkflow } from "../nft/workflow.js";
 import { postNote, postAgentNote } from "../notes/notes.js";
 import { readSkillText, readSkillMintMetadata } from "../nft/token2022.js";
 import { Keypair } from "@solana/web3.js";
 
 vi.mock("../search/search.js", () => ({ searchSkills: vi.fn() }));
 vi.mock("../nft/skill.js", () => ({ buySkill: vi.fn(), publishSkill: vi.fn() }));
+vi.mock("../nft/workflow.js", () => ({ publishWorkflow: vi.fn() }));
 vi.mock("../nft/token2022.js", () => ({ readSkillText: vi.fn(), readSkillMintMetadata: vi.fn() }));
 vi.mock("../notes/notes.js", () => ({
   postNote: vi.fn(),
@@ -110,6 +112,37 @@ describe("skill-market", () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("Invalid priceSol");
     expect(publishSkill).not.toHaveBeenCalled();
+  });
+
+  it("publish_skill routes to publishWorkflow when requiredSkills is non-empty", async () => {
+    vi.mocked(publishWorkflow).mockResolvedValue("workflowMint123");
+    const result = await handleToolCall(mockConn, signer, "defaultCreator", "publish_skill", {
+      name: "chain-refactor",
+      description: "Chains two skills together.",
+      text: "# Chain refactor\n...",
+      requiredSkills: ["skillMint1", "skillMint2"],
+    });
+    expect(result.content[0].text).toContain("workflow");
+    expect(result.content[0].text).toContain("workflowMint123");
+    expect(publishWorkflow).toHaveBeenCalledWith(mockConn, signer, expect.objectContaining({
+      name: "chain-refactor",
+      requiredSkills: ["skillMint1", "skillMint2"],
+      price: 100_000_000n,
+    }), expect.any(Function));
+    expect(publishSkill).not.toHaveBeenCalled();
+  });
+
+  it("publish_skill still takes the skill path when requiredSkills is omitted/empty", async () => {
+    vi.mocked(publishSkill).mockResolvedValue("mintAddr123");
+    const result = await handleToolCall(mockConn, signer, "defaultCreator", "publish_skill", {
+      name: "clean-code",
+      description: "Refactor toward clean code.",
+      text: "# Clean code\n...",
+      requiredSkills: [],
+    });
+    expect(result.content[0].text).toContain("mintAddr123");
+    expect(publishWorkflow).not.toHaveBeenCalled();
+    expect(publishSkill).toHaveBeenCalled();
   });
 
   it("search_skills returns empty when there are no results", async () => {

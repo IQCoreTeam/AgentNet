@@ -89,6 +89,39 @@ Workflow body here, long enough to pass the body length check easily.`;
     expect(mockConn.sendRawTransaction).toHaveBeenCalled();
   });
 
+  // A clean form (separate name/description/requiredSkills/category fields, no hand-typed
+  // YAML) must be able to publish — publishWorkflow should synthesize frontmatter for
+  // validation ONLY, and still store the raw plain body on-chain (mirrors publishSkill's
+  // synthesis in skill.spec.ts).
+  it("publishes a workflow from a plain body with no own frontmatter (synthesizes for validation only)", async () => {
+    const plainBody = "Workflow body here, long enough to pass the body length check easily.";
+
+    const mintAddr = await publishWorkflow(mockConn as any, signer, {
+      name: "test-workflow",
+      description: "This is a test workflow that chains skills",
+      text: plainBody,
+      requiredSkills: ["So11111111111111111111111111111111111111112"],
+      category: "ai",
+    });
+
+    expect(typeof mintAddr).toBe("string");
+    const json = JSON.parse(vi.mocked(chain.codeIn).mock.calls[0][1] as string);
+    // The stored body is the raw plain text, NOT the synthesized frontmatter+body.
+    expect(json.skillText).toBe(plainBody);
+  });
+
+  it("rejects a plain body missing requiredSkills (synthesis can't invent prerequisites)", async () => {
+    await expect(
+      publishWorkflow(mockConn as any, signer, {
+        name: "test-workflow",
+        description: "This is a test workflow that chains skills",
+        text: "Workflow body here, long enough to pass the body length check easily.",
+        requiredSkills: [],
+        category: "ai",
+      }),
+    ).rejects.toThrow(FormatError);
+  });
+
   it("rejects publish if the workflow MD is invalid (type not workflow)", async () => {
     const invalidMd = VALID_WORKFLOW_MD.replace("type: workflow", "type: skill");
     await expect(

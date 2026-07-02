@@ -963,6 +963,7 @@ body {
 .an-btn-green { --acc: #4ade80; --ink: #06140c; }
 .an-btn-orange { --acc: #f0913e; --ink: #1a0f06; }
 .an-btn-violet { --acc: #8b5cf6; --ink: #0c0618; }
+.an-btn-amber { --acc: #fbbf24; --ink: #1a1206; }
 /* secondary — plain outline, no brackets/fill */
 .an-btn-outline { padding: 13px 14px; color: #bdbdbd; border: 1px solid #34343a; }
 .an-btn-outline::before, .an-btn-outline::after { display: none; }
