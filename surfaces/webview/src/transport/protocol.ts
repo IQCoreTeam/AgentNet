@@ -150,6 +150,10 @@ export type ClientMessage =
       hashtags?: string[];
       priceSol: string;
       image?: string;
+      // forward-compat with the newer contract path (#95): current backend ignores these
+      // and instead sniffs `type: workflow` / `requiredSkills` out of the frontmatter in `text`.
+      kind?: "skill" | "workflow";
+      requiredSkills?: string[];
     }
   | { type: "submitGithubToken"; token: string }
   | { type: "clearGithubToken" }
@@ -211,7 +215,7 @@ export type ServerMessage =
   | { type: "buyResult"; skillId: string; ok: boolean; slug?: string; error?: string; code?: "insufficient_funds" }
   | { type: "disposeResult"; skillId: string; ok: boolean; slug?: string; error?: string }
   | { type: "reEquipResult"; skillId: string; ok: boolean; slug?: string; error?: string }
-  | { type: "ownedSkills"; names: string[]; mints?: Record<string, string>; disposedMints?: Record<string, string>; cards?: import("@iqlabs-official/agent-sdk").SkillCard[] }
+  | { type: "ownedSkills"; names: string[]; mints?: Record<string, string>; disposedMints?: Record<string, string>; cards?: import("@iqlabs-official/agent-sdk").SkillCard[]; workflowMints?: string[] }
   | { type: "balance"; lamports: number | null }
   | { type: "airdropResult"; ok: boolean; lamports?: number; error?: string }
   | { type: "skillActive"; name: string }

@@ -131,11 +131,12 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
     );
   }
 
-  // Publish form (market tab)
+  // Publish form (market tab) — opens pre-set to whichever kind you were browsing (skill
+  // or workflow tab), same as the VSCode builder.
   if (view === "publish") {
     return (
       <div className="flex flex-col h-full bg-zinc-950">
-        <PublishForm onBack={() => setView("browse")} />
+        <PublishForm initialKind={state.marketTab} onBack={() => setView("browse")} />
       </div>
     );
   }

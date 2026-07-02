@@ -68,6 +68,7 @@ import {
   maskedGithubToken,
   loadGithubToken,
   registerVerifiedWork,
+  workflowMintsAmong,
 } from "@iqlabs-official/agent-sdk";
 
 const PORT = Number(process.env.AGENTNET_PORT ?? 4317);
@@ -476,7 +477,13 @@ function attachMarketHandlers(c: Client) {
     ]);
     const names = cards.map((card) => card.name);
     const mints = Object.fromEntries(cards.map((card) => [card.name, card.id]));
-    c.send({ type: "ownedSkills", names, mints, disposedMints, cards });
+    // Ground-truth which owned mints are workflows (not `card.type`: a mint missing from
+    // the indexer catalog falls back to type "skill" even when it's actually a workflow —
+    // see ownedSkillCards). The workflow-publish picker needs this to keep owned workflows
+    // out of the required-skills checklist (a workflow can't require another workflow).
+    const allMints = [...Object.values(mints), ...Object.values(disposedMints)];
+    const workflowMints = allMints.length ? await workflowMintsAmong(allMints).catch(() => [] as string[]) : [];
+    c.send({ type: "ownedSkills", names, mints, disposedMints, cards, workflowMints });
   }
   // `quiet` = expected transient (no wallet yet): answer reads with empty results and
   // skip every toast, so the market just shows clean empty states until the wallet lands.
