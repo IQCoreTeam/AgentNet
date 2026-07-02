@@ -857,7 +857,7 @@ export function chatHtml(): string {
      active = 2px light underline + light mono label; inactive = 1px faint underline + grey. */
   .mktTabRow { display: flex; align-items: flex-end; gap: 0; margin-bottom: 12px; }
   .mktTabs { display: inline-flex; gap: 0; }
-  .mktTab { background: transparent; border: none; border-bottom: 1px solid #1d1d20; color: #5a5a5d;
+  .mktTab { background: transparent; border: none; border-radius: 0; border-bottom: 1px solid #1d1d20; color: #5a5a5d;
             padding: 10px 22px 12px; font-size: 0.9em; font-weight: 700; letter-spacing: 1.5px;
             text-transform: uppercase; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
             cursor: pointer; transition: color 0.12s, border-color 0.12s; }
@@ -1344,7 +1344,7 @@ export function chatHtml(): string {
   /* Agent / Community tabs — full-width flat underline marker + kana subtitle (ported
      from the mobile profile tab bar). flex:1 halves form one continuous straight baseline. */
   .pr-tabs { display:flex; gap:0; margin:8px 0 16px; }
-  .pr-tab { flex:1; background:transparent; border:none; border-bottom:1px solid #1d1d20; color:#5a5a5d;
+  .pr-tab { flex:1; background:transparent; border:none; border-radius:0; border-bottom:1px solid #1d1d20; color:#5a5a5d;
             padding:11px 8px 13px; text-align:center; cursor:pointer;
             transition:color 0.12s, border-color 0.12s; }
   .pr-tab .t { font-size:0.9em; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
