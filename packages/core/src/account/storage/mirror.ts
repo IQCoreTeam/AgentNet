@@ -137,5 +137,50 @@ export function mirrorStorage(
       await local.remove(sessionId);
       await tryCloud(() => cloud!.remove(sessionId));
     },
+
+    // One-shot reconciliation: upload local keys the cloud is missing (sessions written
+    // while the cloud sign-in was dead never got mirrored). Deliberately frugal — a
+    // surface calls this ONLY right after an explicit (re)connect, never on a timer or
+    // passive startup, so it can't become a cloud storm:
+    //   - exactly ONE cloud.list() (local.list is offline) to compute the diff;
+    //   - uploads ONLY the genuinely-missing keys (0 when already in sync);
+    //   - bounded concurrency so a large first sync trickles instead of bursting;
+    //   - aborts immediately if the cloud is dead again (no hammering a bad token).
+    // local and cloud share one keyspace (that is what list()'s union relies on), so a
+    // plain key diff is correct regardless of paging granularity.
+    async backfill() {
+      if (!cloud) return { uploaded: 0, missing: 0 };
+      let cloudKeys: string[];
+      try {
+        cloudKeys = await withCloudTimeout(cloud.list());
+      } catch {
+        return { uploaded: 0, missing: 0 }; // cloud unreachable/dead — nothing to do now
+      }
+      const inCloud = new Set(cloudKeys);
+      const missing = (await local.list()).filter((k) => !inCloud.has(k));
+      let uploaded = 0;
+      const CONCURRENCY = 4;
+      for (let i = 0; i < missing.length; i += CONCURRENCY) {
+        const batch = missing.slice(i, i + CONCURRENCY);
+        let deadSignIn = false;
+        await Promise.all(
+          batch.map(async (key) => {
+            const blob = await local.get(key);
+            if (!blob) return;
+            try {
+              await withCloudTimeout(cloud.put(key, blob));
+              uploaded++;
+            } catch (e) {
+              // A dead sign-in mid-run means the whole rest is pointless — stop, don't
+              // grind through hundreds of doomed uploads. Transient misses just stay
+              // missing; the next reconnect (or a future write) picks them up.
+              if (isReauthError(e instanceof Error ? e.message : String(e))) deadSignIn = true;
+            }
+          }),
+        );
+        if (deadSignIn) break;
+      }
+      return { uploaded, missing: missing.length };
+    },
   };
 }

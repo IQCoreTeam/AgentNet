@@ -43,6 +43,12 @@ export interface StorageAdapter {
   // stalled cloud (a hung Drive read must never wedge the "Resuming…" spinner). Single-tier
   // adapters omit it and callers fall back to get().
   getLocal?(sessionId: string): Promise<Uint8Array | null>;
+  // OPTIONAL one-shot reconciliation: push local keys the cloud is missing (e.g. sessions
+  // written while the cloud sign-in was dead). Only the mirror implements it. It is
+  // deliberately NOT run on passive startup — a surface calls it ONLY right after an
+  // explicit (re)connect, so it never turns into a per-launch cloud storm. Uploads only
+  // the genuinely-missing keys (0 when already in sync) and aborts if the cloud is dead.
+  backfill?(): Promise<{ uploaded: number; missing: number }>;
 }
 
 // ── chat message ────────────────────────────────────────
@@ -173,6 +179,12 @@ export interface AgentRuntime {
 
   // delete a saved session (all its pages). The UI removes it from the list.
   deleteSession(sessionId: string): Promise<void>;
+
+  // Push local sessions the cloud is missing (one-shot). A surface calls this ONLY right
+  // after an explicit (re)connect — never on passive startup — so it can never become a
+  // per-launch cloud storm. No-op (0 uploads) when the storage has no cloud tier or is
+  // already in sync. See StorageAdapter.backfill.
+  syncCloud(): Promise<{ uploaded: number; missing: number }>;
 }
 
 // paginated read result (newest-first; cursor walks toward older pages)

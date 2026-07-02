@@ -66,6 +66,14 @@ function cloudStatusCb(s: { ok: boolean; error?: string; reason?: "reauth" | "tr
   lastCloudStatus = s;
   onCloudStatusChange?.();
 }
+// Fire-and-forget one-shot backfill after an explicit (re)connect: push local sessions
+// the cloud is missing. Never blocks the reconnect response and never runs on startup, so
+// it can't become a per-launch cloud storm; the mirror uploads only what's actually absent.
+function backfillCloud(): void {
+  void runtime?.syncCloud()
+    .then((r) => { if (r.uploaded) console.error(`[cloud] backfilled ${r.uploaded}/${r.missing} missing sessions`); })
+    .catch(() => { /* best-effort; a later write or reconnect re-syncs */ });
+}
 
 export function activate(context: vscode.ExtensionContext) {
   // Point the runtime at our bundled stdio MCP server (dist/mcp-stdio.js, beside this
@@ -433,6 +441,7 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
     connectCloud: async (c) => {
       await switchStorage(wallet!, { kind: c.kind, location: c.location, authHeader: c.authHeader } as StorageConfig, openExternal);
       runtime = await connect(wallet!, cloudStatusCb);
+      backfillCloud(); // one-shot: push local history now that cloud is on
     },
     // Re-run sign-in for the SAME backend after a dead token (invalid_grant). Google
     // requires interactive consent to reissue a refresh token, so the webview's one-tap
@@ -440,6 +449,7 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
     reconnectCloud: async (c) => {
       await switchStorage(wallet!, { kind: c.kind || "gdrive" } as StorageConfig, openExternal);
       runtime = await connect(wallet!, cloudStatusCb);
+      backfillCloud(); // one-shot: push whatever drifted while the sign-in was dead
     },
     // turn the cloud mirror OFF; local sessions stay
     disconnectCloud: async () => {

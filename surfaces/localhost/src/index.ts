@@ -157,6 +157,12 @@ async function connectGoogleDriveStorage() {
   if (!wallet) return;
   await switchStorage(wallet, { kind: "gdrive" });
   runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
+  // One-shot: push local sessions the cloud is missing, now that Drive is (re)connected.
+  // Fire-and-forget so the login response is not blocked; runs only on this explicit
+  // connect, never on passive startup, so it can't become a per-launch cloud storm.
+  void runtime.syncCloud()
+    .then((r) => { if (r.uploaded) console.error(`[cloud] backfilled ${r.uploaded}/${r.missing} missing sessions`); })
+    .catch(() => { /* best-effort */ });
 }
 
 function broadcastGoogleLoginStatus(ok: boolean, error?: string) {

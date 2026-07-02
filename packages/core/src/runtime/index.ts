@@ -291,5 +291,12 @@ export function createRuntime(
     async deleteSession(sessionId: string): Promise<void> {
       await store.remove(sessionId);
     },
+
+    // Push any local sessions the cloud is missing. Delegates to the mirror's frugal
+    // backfill (single cloud.list + only-missing uploads); no-op when storage has no
+    // cloud tier. Surfaces call this ONLY after an explicit (re)connect.
+    async syncCloud(): Promise<{ uploaded: number; missing: number }> {
+      return (await storage.backfill?.()) ?? { uploaded: 0, missing: 0 };
+    },
   };
 }
