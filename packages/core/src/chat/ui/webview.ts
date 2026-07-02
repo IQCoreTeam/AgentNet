@@ -3412,10 +3412,12 @@ export function chatHtml(): string {
   const cloudBtn = document.getElementById('cloudBtn');
   let storageOptions = [];
   let cloudConnected = false;
+  let cloudKind = ''; // which backend is connected, so a reauth prompt can reconnect the right one
 
   function renderStorage(info, options) {
     storageOptions = options || storageOptions;
     cloudConnected = !!(info && info.connected);
+    if (info && info.kind) cloudKind = info.kind;
     if (cloudConnected) {
       const label = (info.kind === 'gdrive' ? 'Google Drive'
                   : info.kind === 'icloud' ? 'iCloud'
@@ -5001,9 +5003,19 @@ export function chatHtml(): string {
   function renderCloudSync(status) {
     const el = document.getElementById('cloudSync');
     if (!el) return;
+    el.onclick = null; el.style.cursor = '';
     if (!status || !cloudConnected) { el.textContent = ''; el.className = ''; el.title = ''; return; }
     if (status.ok) { el.textContent = '✓'; el.className = 'ok'; el.title = 'Synced to Drive'; }
-    else { el.textContent = '⚠'; el.className = 'err'; el.title = 'Drive sync failed: ' + (status.error || 'unknown'); }
+    else if (status.reason === 'reauth') {
+      // Dead cloud sign-in (token expired/revoked). Google requires interactive consent,
+      // so we can't fix it silently — surface a one-tap reconnect right on the indicator.
+      el.textContent = '⚠ reconnect';
+      el.className = 'err';
+      el.title = 'Cloud sign-in expired. Click to reconnect ' + (cloudKind === 'gdrive' ? 'Google Drive' : 'cloud') + '.';
+      el.style.cursor = 'pointer';
+      el.onclick = () => vscode.postMessage({ type: 'reconnectCloud', kind: cloudKind || 'gdrive' });
+    }
+    else { el.textContent = '⚠'; el.className = 'err'; el.title = 'Drive sync failed (auto-retrying): ' + (status.error || 'unknown'); }
   }
 
   // My Wallet: storage summary mirrors the pill; address comes from the extension.

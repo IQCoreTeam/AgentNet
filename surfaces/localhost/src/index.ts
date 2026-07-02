@@ -407,6 +407,11 @@ function attachAuthHandlers(c: Client) {
       case "startGoogleLogin":
         beginGoogleLogin(c);
         return;
+      // One-tap reconnect after a dead cloud sign-in (mirror reports reason:"reauth").
+      // Re-runs the same Google flow (native on Android, fixed-redirect on web).
+      case "reconnectCloud":
+        beginGoogleLogin(c);
+        return;
       case "googleAuthCode":
         if (typeof m.code === "string") await submitGoogleAuthCode(c, m.code);
         return;

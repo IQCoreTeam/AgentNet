@@ -46,6 +46,11 @@ export interface ChatEnv {
   pickCloud?(): Promise<void>;
   connectCloud?(cfg: { kind: string; location?: string; authHeader?: string }): Promise<void>;
   disconnectCloud?(): Promise<void>;
+  // Re-run sign-in for the ALREADY-configured backend after a dead token (invalid_grant).
+  // Optional: a surface that reconnects via its own flow (e.g. localhost's Google login,
+  // which needs the client to stream the auth URL back) leaves this unset and handles the
+  // reconnectCloud message itself; its no-op here is harmless.
+  reconnectCloud?(cfg: { kind?: string }): Promise<void>;
   disconnectWallet?(): Promise<void>;
   openCloud?(kind: string, location?: string): Promise<void>;
   walletAddress(): string | null; // for the "My Wallet" view
@@ -183,7 +188,7 @@ export function createChatSession(
   rt: AgentRuntime,
   transport: ChatTransport,
   env: ChatEnv,
-): { stop: () => void; pushCloudStatus: (s: { ok: boolean; error?: string } | null) => void } {
+): { stop: () => void; pushCloudStatus: (s: { ok: boolean; error?: string; reason?: "reauth" | "transient" } | null) => void } {
   // Both CLIs stay "on" at once: each has its OWN slot (handle + which session +
   // model), so claude and codex never step on each other. A handle is spawned lazily
   // on first send (spawn costs ~2s); codex re-spawns per turn internally anyway.
@@ -666,6 +671,7 @@ export function createChatSession(
       case "pickCloud":       await env.pickCloud?.(); await pushStorage(); await pushSessions(); break;
       case "connectCloud":    await env.connectCloud?.({ kind: m.kind, location: m.location, authHeader: m.authHeader }); await pushStorage(); await pushSessions(); break;
       case "disconnectCloud": await env.disconnectCloud?.(); await pushStorage(); await pushSessions(); break;
+      case "reconnectCloud":  await env.reconnectCloud?.({ kind: m.kind }); await pushStorage(); await pushSessions(); break;
       case "disconnectWallet": await env.disconnectWallet?.(); break;
       case "openCloud":       await env.openCloud?.(m.kind, m.location); break;
       case "wallet":          transport.send({ type: "wallet", address: env.walletAddress() }); break;
@@ -887,7 +893,7 @@ export function createChatSession(
     // core → UI push for the drive-mirror sync pill. The host wires this to its
     // per-write cloud-status callback (writes are otherwise silent). Not part of the
     // UI→HOST switch — it's an out-of-band event the host originates.
-    pushCloudStatus(status: { ok: boolean; error?: string } | null) {
+    pushCloudStatus(status: { ok: boolean; error?: string; reason?: "reauth" | "transient" } | null) {
       transport.send({ type: "cloudSync", status });
     },
   };

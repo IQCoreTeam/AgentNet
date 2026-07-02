@@ -383,7 +383,16 @@ export async function getAccessToken(): Promise<string> {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
   });
-  if (!res.ok) throw new Error(`oauth refresh failed: ${res.status}`);
+  if (!res.ok) {
+    // Keep Google's error CODE in the message so callers can tell a DEAD sign-in
+    // (invalid_grant = refresh token expired/revoked → user must re-consent) apart
+    // from a transient failure. The old code dropped the body, so the mirror could
+    // not classify it and swallowed a dead Drive connection silently for days.
+    const errText = await res.text().catch(() => "");
+    let code = "";
+    try { code = (JSON.parse(errText) as { error?: string }).error ?? ""; } catch { /* non-JSON body */ }
+    throw new Error(`oauth refresh failed: ${res.status}${code ? ` ${code}` : ""}`);
+  }
   const t = (await res.json()) as { access_token: string; expires_in: number };
   const updated: StoredToken = {
     access_token: t.access_token,

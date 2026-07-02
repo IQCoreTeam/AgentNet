@@ -11,24 +11,66 @@ import type { StorageAdapter } from "../../runtime/contract.js";
 // success, "error" + message on failure. The UI uses it to show whether the drive
 // mirror is actually working (cloud writes are best-effort and otherwise silent, so
 // a misconfig looked like "nothing uploaded" with no signal).
-export type CloudStatus = { ok: true } | { ok: false; error: string };
+// reason lets the UI react precisely: "reauth" = the cloud sign-in is DEAD (Google
+// invalid_grant — refresh token expired/revoked); only the user reconnecting fixes it
+// (Google mandates interactive consent, no silent recovery). "transient" = a network /
+// 5xx / timeout that auto-retry could not clear this round (will re-sync on a later write
+// or reconnect). Splitting these is what turns a silently-drifting mirror into a visible,
+// actionable state. See memory: agentnet-gdrive-testing-token-expiry.
+export type CloudStatus =
+  | { ok: true }
+  | { ok: false; error: string; reason: "reauth" | "transient" };
+
+// A dead sign-in can't be retried away (needs the user); everything else is worth a few
+// quick silent retries. Match Google's OAuth error codes plus a generic "reauth" marker.
+function isReauthError(msg: string): boolean {
+  return /invalid_grant|invalid_client|unauthorized_client|\breauth\b/i.test(msg);
+}
+
+// A cloud op with no timeout can hang forever (Drive fetches set none), wedging the write
+// path. Bound each attempt so a stalled upload fails fast and the retry/report can proceed.
+const CLOUD_OP_TIMEOUT_MS = 30_000;
+function withCloudTimeout<T>(p: Promise<T>): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error("cloud op timed out")), CLOUD_OP_TIMEOUT_MS),
+    ),
+  ]);
+}
 
 export function mirrorStorage(
   local: StorageAdapter,
   cloud?: StorageAdapter,
   onCloudStatus?: (s: CloudStatus) => void,
 ): StorageAdapter {
-  // cloud writes are best-effort; swallow errors so local stays the source of truth,
-  // but report the outcome so the UI can surface a broken mirror.
+  // Cloud writes are best-effort (local is the source of truth), but "best-effort" must
+  // not mean "fail silently" — that hid a dead Drive sign-in for days. Now: retry a
+  // TRANSIENT failure a few times (a network hiccup self-heals), NEVER retry a REAUTH
+  // failure (pointless — the token is dead), and always report the CLASSIFIED outcome so
+  // the UI can prompt a reconnect instead of drifting out of sync unnoticed.
   const tryCloud = async (fn: () => Promise<void>) => {
     if (!cloud) return;
-    try {
-      await fn();
-      onCloudStatus?.({ ok: true });
-    } catch (e) {
-      onCloudStatus?.({ ok: false, error: e instanceof Error ? e.message : String(e) });
-      /* offline / not connected — local already succeeded */
+    const MAX = 3;
+    let lastErr = "";
+    for (let attempt = 1; attempt <= MAX; attempt++) {
+      try {
+        await withCloudTimeout(fn());
+        onCloudStatus?.({ ok: true });
+        return;
+      } catch (e) {
+        lastErr = e instanceof Error ? e.message : String(e);
+        if (isReauthError(lastErr)) {
+          onCloudStatus?.({ ok: false, error: lastErr, reason: "reauth" });
+          return; // dead sign-in: retrying can't help — surface it for reconnect now
+        }
+        if (attempt < MAX) {
+          await new Promise((r) => setTimeout(r, 300 * attempt * attempt)); // 300ms, 1.2s
+        }
+      }
     }
+    onCloudStatus?.({ ok: false, error: lastErr, reason: "transient" });
+    /* local already succeeded; a later write or a reconnect re-syncs the cloud */
   };
 
   return {

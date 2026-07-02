@@ -58,11 +58,11 @@ let runtime: AgentRuntime | null = null;
 
 // Latest drive-mirror sync result + a hook the chat panel sets so it can show it.
 // connect() reports per-write success/failure here (otherwise cloud writes are silent).
-let lastCloudStatus: { ok: boolean; error?: string } | null = null;
+let lastCloudStatus: { ok: boolean; error?: string; reason?: "reauth" | "transient" } | null = null;
 let onCloudStatusChange: (() => void) | null = null;
 let claudeLogin: ClaudeLogin | null = null;
 let codexLogin: CodexLogin | null = null;
-function cloudStatusCb(s: { ok: boolean; error?: string }) {
+function cloudStatusCb(s: { ok: boolean; error?: string; reason?: "reauth" | "transient" }) {
   lastCloudStatus = s;
   onCloudStatusChange?.();
 }
@@ -432,6 +432,13 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
     // connect / change the cloud mirror (local stays on regardless)
     connectCloud: async (c) => {
       await switchStorage(wallet!, { kind: c.kind, location: c.location, authHeader: c.authHeader } as StorageConfig, openExternal);
+      runtime = await connect(wallet!, cloudStatusCb);
+    },
+    // Re-run sign-in for the SAME backend after a dead token (invalid_grant). Google
+    // requires interactive consent to reissue a refresh token, so the webview's one-tap
+    // "reconnect" lands here and re-opens the provider's consent flow.
+    reconnectCloud: async (c) => {
+      await switchStorage(wallet!, { kind: c.kind || "gdrive" } as StorageConfig, openExternal);
       runtime = await connect(wallet!, cloudStatusCb);
     },
     // turn the cloud mirror OFF; local sessions stay
