@@ -142,7 +142,9 @@ export type MarketEvent =
   // disposedMints = slug->mint for un-pinned skills (UI greys them, offers a free Re-equip).
   // cards = the wallet's on-chain owned skill cards (My Skills), present when the host read
   // holdings from chain (ownedSkillCards); absent on the names-only emits (chat panel/buy).
-  | { type: "ownedSkills"; names: string[]; mints?: Record<string, string>; disposedMints?: Record<string, string>; cards?: SkillCard[] }
+  // workflowMints = the subset of owned mints that are workflows (not skills), so the workflow
+  // builder can keep them out of its required-skills picker (a workflow can't require a workflow).
+  | { type: "ownedSkills"; names: string[]; mints?: Record<string, string>; disposedMints?: Record<string, string>; cards?: SkillCard[]; workflowMints?: string[] }
   | { type: "balance"; lamports: number | null } // wallet SOL balance (null = read failed)
   | { type: "airdropResult"; ok: boolean; lamports?: number; error?: string } // devnet faucet result (lamports = the new balance)
   // GitHub verified-work registration results (issue #93 parity)

@@ -199,6 +199,26 @@ async function onChainGroups(rpcUrl: string, mints: string[]): Promise<Map<strin
 }
 
 /**
+ * Of the given mints, which belong to the official WORKFLOWS collection (by their
+ * on-chain TokenGroupMember group — the ground truth). Used to keep workflows out of
+ * a "pick your owned skills" picker: the publish contract rejects a required_skill
+ * that is itself a workflow (NotInOfficialCollection), and locally-installed workflow
+ * mints are otherwise indistinguishable from skill mints (the manifest records neither
+ * a type). Best-effort: returns [] when the collection is unconfigured or the RPC read
+ * fails, so callers degrade to "no filtering" rather than breaking.
+ */
+export async function workflowMintsAmong(mints: string[]): Promise<string[]> {
+  const clean = [...new Set(mints.filter(Boolean))];
+  if (clean.length === 0) return [];
+  const { getWorkflowsCollectionMint } = await import("./seed.js");
+  const workflows = getWorkflowsCollectionMint();
+  if (!workflows) return [];
+  const rpcUrl = await resolveRpcUrl();
+  const groups = await onChainGroups(rpcUrl, clean).catch(() => new Map<string, string>());
+  return clean.filter((m) => groups.get(m) === workflows);
+}
+
+/**
  * For the skills a wallet HOLDS (in our collections), each skill's on-chain creator
  * — the TokenMetadata `updateAuthority`, i.e. the publisher who minted it.
  *

@@ -134,11 +134,20 @@ async function ownedNames(env: ChatEnv): Promise<string[]> {
 
 // Full "ownedSkills" message: names for the panel + slug->mint so a bought skill's
 // card can reuse the market's on-chain getSkillDetail(mint) instead of a local file.
-async function ownedSkillsMsg(env: ChatEnv): Promise<{ type: "ownedSkills"; names: string[]; mints?: Record<string, string>; disposedMints?: Record<string, string> }> {
+async function ownedSkillsMsg(env: ChatEnv): Promise<{ type: "ownedSkills"; names: string[]; mints?: Record<string, string>; disposedMints?: Record<string, string>; workflowMints?: string[] }> {
   const names = await ownedNames(env);
-  const mints = env.ownedSkillMints ? await env.ownedSkillMints().catch(() => ({})) : {};
-  const disposedMints = env.disposedSkillMints ? await env.disposedSkillMints().catch(() => ({})) : {};
-  return { type: "ownedSkills", names, mints, disposedMints };
+  const mints = env.ownedSkillMints ? await env.ownedSkillMints().catch(() => ({}) as Record<string, string>) : {};
+  const disposedMints = env.disposedSkillMints ? await env.disposedSkillMints().catch(() => ({}) as Record<string, string>) : {};
+  // Which owned mints are actually workflows (not skills). A workflow can't be a
+  // required_skill of another workflow (the publish contract rejects it), and a
+  // locally-installed workflow mint is indistinguishable from a skill mint here, so
+  // the workflow builder needs this to keep them out of its picker. Best-effort: one
+  // batched on-chain read; empty on any failure so the common path never blocks.
+  const allMints = [...Object.values(mints), ...Object.values(disposedMints)];
+  const workflowMints = allMints.length
+    ? await import("../core/skillSource.js").then((m) => m.workflowMintsAmong(allMints)).catch(() => [] as string[])
+    : [];
+  return { type: "ownedSkills", names, mints, disposedMints, workflowMints };
 }
 
 async function exists(path: string): Promise<boolean> {

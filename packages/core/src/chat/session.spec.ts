@@ -390,6 +390,7 @@ describe("chat/session — slash commands", () => {
       names: ["clean-code"],
       mints: {},
       disposedMints: {},
+      workflowMints: [],
     });
   });
 
