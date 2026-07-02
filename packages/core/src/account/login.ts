@@ -131,7 +131,10 @@ export interface StorageInfo {
 
 export async function getStorageInfo(): Promise<StorageInfo | null> {
   const cfg = await readConfig();
-  if (!cfg) return null;
+  // A config with OAuth creds but no `kind` (the state left behind by disconnectCloud)
+  // is NOT a connection. Report it as "no cloud" so the pill shows connect, not a
+  // phantom "disconnect" for an undefined backend. Matches login()/isCloudConnected().
+  if (!cfg || !cfg.kind) return null;
   const connected = cfg.kind === "gdrive" ? await isSignedIn() : true;
   const account = cfg.kind === "gdrive" && connected ? (await googleAccount()) ?? undefined : undefined;
   return { kind: cfg.kind, location: cfg.location, connected, account };
