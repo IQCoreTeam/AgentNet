@@ -24,20 +24,22 @@ import { type SkillSource } from "../core/skillSource.js";
 import type { Note, Row } from "../core/types.js";
 import { heldSkillMints, heldSkillCreators } from "./holdings.js";
 
-/** The stored row shape — derived fields (subject/isSelfNote) are NOT included. */
+/** The stored row shape — derived fields (subject/isSelfNote) are NOT included.
+ *  title/image are NOT top-level (REVIEW_COLUMNS has no such columns — see
+ *  seed.ts) — they're folded into `meta` by buildNote and pulled back out by
+ *  hydrateNotes. */
 interface StoredNote {
   id: string;
   author: string;
   text: string;
-  title?: string;
   gitLink?: string;
-  image?: string;
   timestamp: number;
   meta?: Record<string, unknown>;
 }
 
-/** Build the trimmed row + a collision-resistant id (author:ts:nonce). Optional fields
- *  (title/gitLink/image/meta) are only written when present, so old + new rows coexist. */
+/** Build the trimmed row + a collision-resistant id (author:ts:nonce). `gitLink`/`meta`
+ *  are only written when present, so old + new rows coexist. title/image ride inside
+ *  `meta` (no top-level column for them — writeRow rejects unknown keys). */
 function buildNote(
   author: string,
   text: string,
@@ -53,10 +55,11 @@ function buildNote(
     text,
     timestamp: Date.now(),
   };
-  if (title !== undefined) row.title = title;
   if (gitLink !== undefined) row.gitLink = gitLink;
-  if (image !== undefined) row.image = image;
-  if (meta !== undefined) row.meta = meta;
+  const mergedMeta = { ...meta };
+  if (title !== undefined) mergedMeta.title = title;
+  if (image !== undefined) mergedMeta.image = image;
+  if (Object.keys(mergedMeta).length > 0) row.meta = mergedMeta;
   return row;
 }
 
@@ -64,11 +67,18 @@ function buildNote(
  * Map stored rows → Note[], deriving the non-stored fields from the subject
  * (the table key): `subject` = subject, `isSelfNote` = author == subject.
  * Drops non-row entries (metadata shapes from readTableRows have no `id`).
+ * Pulls title/image back out of `meta` (falling back to legacy top-level
+ * values, for any pre-fix rows written before the columns existed).
  */
 function hydrateNotes(rows: Row[], subject: string): Note[] {
   return (rows as unknown as Note[])
     .filter((n) => typeof n.id === "string")
-    .map((n) => ({ ...n, subject, isSelfNote: n.author === subject }));
+    .map((n) => {
+      const meta = (n as { meta?: Record<string, unknown> }).meta;
+      const title = n.title ?? (meta?.title as string | undefined);
+      const image = n.image ?? (meta?.image as string | undefined);
+      return { ...n, title, image, subject, isSelfNote: n.author === subject };
+    });
 }
 
 export interface PostNoteInput {
