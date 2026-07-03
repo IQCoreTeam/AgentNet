@@ -16,6 +16,15 @@ import type { WalletSigner } from "@iqlabs-official/solana-sdk/utils";
 import type { ApprovalChannel } from "./approval/channel.js";
 import type { MarketEvent } from "../chat/marketMessages.js";
 
+// The user-visible engines. "claudex" (Team mode) is NOT a separate CLI binary — it runs
+// the CLAUDE binary with parallel-Codex fan-out forced on. So it's its own engine for
+// IDENTITY (tabs, stored sessions, badges, accent) but maps to the claude binary wherever
+// we actually talk to a CLI. Use engineBinary() at every binary-facing boundary.
+export type Cli = "claude" | "codex" | "claudex";
+export function engineBinary(cli: Cli): "claude" | "codex" {
+  return cli === "codex" ? "codex" : "claude"; // claude & claudex → claude binary
+}
+
 export interface Wallet extends WalletSigner {
   address: string; // base58 (== publicKey.toBase58())
   // used to derive the encryption key (iqlabs deriveX25519Keypair)
@@ -67,7 +76,7 @@ export interface ChatMessage {
   // which CLI produced this message. Stored per-message so a session continued
   // across CLIs renders each turn with the RIGHT engine badge — independent of
   // which tab is currently open. Optional for back-compat with older logs.
-  cli?: "claude" | "codex";
+  cli?: Cli;
   // For role:"tool" — structured action so the UI can render it nicely (a bash
   // block, a diff, a file op) instead of opaque text. `text` still holds a short
   // human summary for fallback/older readers. All fields optional per tool kind.
@@ -105,7 +114,7 @@ export interface ToolAction {
 // ── a running session (the handle the UI drives) ────────
 export interface SessionHandle {
   readonly sessionId: string; // from the CLI's system/init
-  readonly cli: "claude" | "codex";
+  readonly cli: Cli;
   send(userText: string, images?: ImageInput[]): void; // user input (+ attached images) → CLI
   runSlashCommand?(command: string, arg?: string): void; // native CLI slash command, not a chat turn
   onMessage(cb: (msg: ChatMessage) => void): void; // CLI output (UI renders)
@@ -130,7 +139,7 @@ export interface AgentRuntime {
   // spawn claude/codex and start a session. Pass sessionId to resume an old one.
   // The runtime auto-saves (encrypt → storage) on every turn end — the UI does nothing.
   startSession(opts: {
-    cli: "claude" | "codex";
+    cli: Cli;
     cwd: string;
     sessionId?: string; // present = resume, absent = new
     model?: string;
@@ -198,7 +207,7 @@ export interface PageResult {
 export interface SessionMeta {
   sessionId: string;
   title: string; // derived (e.g. first user line)
-  cli: "claude" | "codex";
+  cli: Cli;
   ts: number; // last updated
   lastDevice?: { id: string; label: string };
 }
@@ -206,7 +215,7 @@ export interface SessionMeta {
 // what gets encrypted to storage (CLI-neutral, so codex↔claude + cross-device)
 export interface CanonicalSession {
   sessionId: string;
-  cli: "claude" | "codex";
+  cli: Cli;
   title: string;
   messages: ChatMessage[];
   ts: number;

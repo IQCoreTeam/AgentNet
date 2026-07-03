@@ -65,6 +65,7 @@
   --an-green-line: rgba(58, 192, 122, 0.42);
   --an-green-dim: rgba(58, 192, 122, 0.10);
   --claude: var(--color-claude);
+  --claudex: #a98bff;
   --an-amber: var(--color-an-amber);
   --an-violet: var(--color-an-violet);
   --an-red: var(--color-an-red);

@@ -45,9 +45,12 @@ function CtxDot({ tokens, window: win, compacting }: { tokens: number; window: n
 // The shared model catalog (same one vscode/cli use) — gives versioned chip labels
 // (Opus 4.8, Sonnet 4.6, GPT-5.5 Codex…) + a description, instead of bare aliases.
 // `value` is undefined for the engine default; the picker treats that as "default".
+const CLAUDE_MODELS = CHAT_MODEL_OPTIONS.claude.map((o) => ({ value: o.value ?? "default", label: o.chipLabel, desc: o.description }));
 const MODELS: Record<Cli, { value: string; label: string; desc: string }[]> = {
-  claude: CHAT_MODEL_OPTIONS.claude.map((o) => ({ value: o.value ?? "default", label: o.chipLabel, desc: o.description })),
+  claude: CLAUDE_MODELS,
   codex: CHAT_MODEL_OPTIONS.codex.map((o) => ({ value: o.value ?? "default", label: o.chipLabel, desc: o.description })),
+  // claudex (Team mode) runs the claude binary → shares claude's models.
+  claudex: CLAUDE_MODELS,
 };
 
 const EFFORTS = [
@@ -59,17 +62,20 @@ const EFFORTS = [
   { value: "max",    label: "max" },
 ];
 
+const CLAUDE_MODES = [
+  { value: "acceptEdits", label: "Auto edit",  title: "Auto-accept file edits; still ask for other tools" },
+  { value: "default",     label: "Ask edits",  title: "Ask before each file edit (default)" },
+  { value: "plan",        label: "Plan",        title: "Plan mode: read-only until you approve the plan" },
+];
 const MODES: Record<Cli, { value: string; label: string; title: string }[]> = {
-  claude: [
-    { value: "acceptEdits", label: "Auto edit",  title: "Auto-accept file edits; still ask for other tools" },
-    { value: "default",     label: "Ask edits",  title: "Ask before each file edit (default)" },
-    { value: "plan",        label: "Plan",        title: "Plan mode: read-only until you approve the plan" },
-  ],
+  claude: CLAUDE_MODES,
   codex: [
     { value: "auto",     label: "Auto accept", title: "Auto-accept edits + run inside the workspace (default)" },
     { value: "readonly", label: "Read only",   title: "Read-only sandbox; ask before edits, commands, network" },
     { value: "full",     label: "Full access", title: "Full disk + network access, never ask (use with care)" },
   ],
+  // claudex shares claude's permission modes (it IS claude under the hood).
+  claudex: CLAUDE_MODES,
 };
 
 function slashCommandsForCli(cli: Cli): { name: string; desc: string; insert: string }[] {
@@ -128,7 +134,7 @@ export function Composer() {
   const mode = state.modeByCli[state.cli] ?? MODES[state.cli][0].value;
   // The active engine tints the composer border (claude = orange, codex = green) so the
   // input itself shows which platform you're talking to — vscode's folder-tab idea.
-  const engineAccent = state.cli === "claude" ? "var(--claude)" : "var(--an-green)";
+  const engineAccent = state.cli === "claude" ? "var(--claude)" : state.cli === "claudex" ? "var(--claudex)" : "var(--an-green)";
 
   // Voice dictation via the platform Web Speech API (Android WebView / Chrome support it).
   // Interim results stream into the textarea; a second tap stops. Silent no-op if absent.
@@ -424,14 +430,20 @@ export function Composer() {
           live in the popover so the bar stays clean on a phone) */}
       <div className="relative mb-2 flex items-center gap-1.5 text-xs">
         <div className="an-term-seg">
-          {(["claude", "codex"] as Cli[]).map((c) => {
+          {(["claude", "codex", "claudex"] as Cli[]).map((c) => {
             const on = state.cli === c;
-            const accent = c === "claude" ? "var(--claude)" : "var(--an-green)";
+            const accent = c === "claude" ? "var(--claude)" : c === "claudex" ? "var(--claudex)" : "var(--an-green)";
+            // claudex needs BOTH engines signed in (claude leads, codex works) → dull + block until then.
+            const locked = c === "claudex" && !(state.cliReport?.claude === "ok" && state.cliReport?.codex === "ok");
             return (
               <button
                 key={c}
-                onClick={() => selectEngine(c)}
-                style={on ? { background: accent, color: "var(--an-bg-0)" } : undefined}
+                onClick={() => {
+                  if (locked) { setSlashNotice("Claudex (Team mode) needs both Claude and Codex signed in."); return; }
+                  selectEngine(c);
+                }}
+                title={locked ? "Sign in to both Claude and Codex to use Claudex" : undefined}
+                style={on ? { background: accent, color: "var(--an-bg-0)" } : locked ? { opacity: 0.3 } : undefined}
               >
                 {c}
               </button>

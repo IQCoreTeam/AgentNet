@@ -20,7 +20,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { configFile, rootDir } from "../core/paths.js";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import type { ChatMessage, ImageInput } from "./contract.js";
+import type { ChatMessage, ImageInput, Cli } from "./contract.js";
+import { engineBinary } from "./contract.js";
 import { mapClaudeMessage } from "./convert/claude.js";
 import { skillFromPath } from "./convert/codex.js";
 import { codexFileChangeMessage } from "./convert/toolFormatting.js";
@@ -95,7 +96,7 @@ export interface Engine {
 }
 
 export interface SpawnOpts {
-  cli: "claude" | "codex";
+  cli: Cli;
   cwd: string;
   sessionId?: string; // NATIVE resume id (inject/prepareResume resolved it already)
   model?: string;
@@ -156,7 +157,9 @@ function claudePermissionMode(
 }
 
 export function spawnCli(opts: SpawnOpts): Engine {
-  return opts.cli === "claude" ? claudeEngine(opts) : codexEngine(opts);
+  // claudex is an identity, not a binary — it runs the claude engine (with the fan-out
+  // tool + Task disabled, wired in the runtime). Only codex maps to the codex engine.
+  return engineBinary(opts.cli) === "codex" ? codexEngine(opts) : claudeEngine(opts);
 }
 
 // small typed callback bag so each engine doesn't re-implement listener plumbing.
@@ -303,6 +306,10 @@ function claudeEngine(opts: SpawnOpts): Engine {
     if (opts.ephemeral) {
       return { behavior: "deny" as const, message: "Tool use is disabled for side-channel (/btw) queries." };
     }
+    // Claudex team fan-out: always allowed, including in PLAN mode ("team plan mode" —
+    // dispatch read-only Codex researchers to inform the plan). The workers self-gate
+    // (read-only in plan mode; the tool's own approval covers writes), so no extra prompt.
+    if (toolName.endsWith("spawn_codex_subagents")) return { behavior: "allow" as const, updatedInput: input };
     if (READONLY.has(toolName)) return { behavior: "allow" as const, updatedInput: input };
     if (currentMode === "bypassPermissions") return { behavior: "allow" as const, updatedInput: input };
     if (currentMode === "acceptEdits" && EDIT_TOOLS.has(toolName)) {
@@ -362,6 +369,10 @@ function claudeEngine(opts: SpawnOpts): Engine {
       // NOT injected here anymore — it's a managed memory section (skillsSection.ts).
       ...(opts.mcpServers ? { mcpServers: opts.mcpServers as never } : {}),
       ...(opts.allowedTools ? { allowedTools: opts.allowedTools } : {}),
+      // Claudex Team mode: remove Claude's built-in subagent tool so the ONLY way to fan
+      // out is our spawn_codex_subagents (real Codex workers). Otherwise Claude prefers
+      // its native Task tool and spawns Claude subagents — never touching Codex.
+      ...(opts.cli === "claudex" ? { disallowedTools: ["Task", "Agent"] } : {}),
       ...(opts.enabledSkills?.length ? { skills: opts.enabledSkills } : {}),
       // Give the agent's git the configured GitHub token. The SDK `env` REPLACES the
       // subprocess environment, so spread process.env to keep PATH / ANTHROPIC creds / etc.
