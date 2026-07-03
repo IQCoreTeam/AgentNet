@@ -2,6 +2,8 @@
 
 For new devs testing the CLI surface (`surfaces/cli`).
 
+> Pre-release (devnet). Once released, this becomes a plain `npm install`.
+
 ---
 
 ## Prerequisites

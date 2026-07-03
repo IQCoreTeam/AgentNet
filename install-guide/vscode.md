@@ -3,6 +3,8 @@
 How to run the AgentNet **VS Code extension** — the agent inside your editor. No prior
 extension-development experience needed.
 
+> Pre-release (devnet). Once released, install it straight from the VS Code Marketplace.
+
 - [How this differs from the phone app](#how-this-differs-from-the-phone-app)
 - [What you need](#what-you-need)
 - [Step 1 — Install the agent CLIs](#step-1--install-the-agent-clis)

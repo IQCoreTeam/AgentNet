@@ -1,4 +1,8 @@
-# Running AgentNet on a Phone
+# Android Dev / Debugging Build
+
+> **Most users don't need this.** Just install the app from **[android-latest](https://github.com/IQCoreTeam/AgentNet/releases/tag/android-latest)**.
+> This guide is for **developers** who want to build the Android app from source and run a
+> debug build on a real phone.
 
 A step-by-step guide for a **first-timer** to build the AgentNet Android app and run it on
 a real phone. No prior Android experience needed.

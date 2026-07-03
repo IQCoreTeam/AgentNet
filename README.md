@@ -3,6 +3,18 @@
 > ⚠️ **Heads up:** this README was written at the very early planning stage. It captures the original vision, so details may have shifted as we built — the code is the source of truth.
 
 
+## Install & run
+
+See the **[Install Guide](install-guide/README.md)** for every surface:
+
+- **Android app** — install the latest APK from [android-latest](https://github.com/IQCoreTeam/AgentNet/releases/tag/android-latest) (developers: [build from source](install-guide/android.md))
+- **VS Code extension** — [install-guide/vscode.md](install-guide/vscode.md)
+- **CLI** — [install-guide/cli.md](install-guide/cli.md)
+
+> Pre-release: all surfaces run on **devnet**. Once released these switch to `npm install` (CLI),
+> the VS Code Marketplace link, the app link, and the **Seeker store** (Android).
+
+
 ## 0. What this doc says (TL;DR)
 
 Agents like Hermes and OpenClaw turned "giving an AI new abilities" into a unit called a **"skill"**, opening AI capabilities up even to non-engineers — a genuinely great invention.
