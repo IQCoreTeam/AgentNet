@@ -82,7 +82,7 @@ export interface ChatEnv {
   listAgents?(): Promise<import("./marketMessages.js").Reputation[]>;
   getAgentProfile?(wallet: string): Promise<import("./marketMessages.js").AgentProfile>;
   buyAllSkills?(wallet: string): Promise<{ ok: boolean; bought: number; failed: number; error?: string }>;
-  postAgentNote?(agentWallet: string, text: string, gitLink?: string, title?: string, image?: string): Promise<{ ok: boolean; notes?: import("./marketMessages.js").Note[]; error?: string }>;
+  postAgentNote?(agentWallet: string, text: string, gitLink?: string, title?: string, image?: string, parentId?: string): Promise<{ ok: boolean; notes?: import("./marketMessages.js").Note[]; error?: string }>;
   solBalance?(): Promise<number | null>; // wallet's native SOL balance (lamports), for the UI funds display
   // devnet-only: fund the wallet from the faucet (manual "Get devnet SOL" on an insufficient-
   // funds buy). Returns the new balance so the UI refreshes and lets the buyer retry.
@@ -850,7 +850,7 @@ export function createChatSession(
       case "postAgentNote": {
         const req = m as Extract<MarketRequest, { type: "postAgentNote" }>;
         if (!env.postAgentNote) break; // another handler owns this on some surfaces — don't emit a phantom failure
-        const res = await env.postAgentNote(req.agentWallet, req.text, req.gitLink, req.title, req.image);
+        const res = await env.postAgentNote(req.agentWallet, req.text, req.gitLink, req.title, req.image, req.parentId);
         sendMarket({ type: "agentNoteResult", agentWallet: req.agentWallet, ok: res.ok, error: res.ok ? undefined : (res as { ok: false; error?: string }).error });
         if (res.ok && env.getAgentProfile) {
           // re-push refreshed profile so blog updates without a manual reload

@@ -140,7 +140,7 @@ export type ClientMessage =
   | { type: "buyAllSkills"; wallet: string }
   | { type: "buyRequiredSkills"; items: { skillId: string; creatorWallet?: string }[] }
   | { type: "postNote"; skillId: string; skillType?: "skill" | "workflow"; text: string; gitLink?: string }
-  | { type: "postAgentNote"; agentWallet: string; text: string; gitLink?: string; title?: string; image?: string }
+  | { type: "postAgentNote"; agentWallet: string; text: string; gitLink?: string; title?: string; image?: string; parentId?: string }
   | {
       type: "publishSkill";
       name: string;

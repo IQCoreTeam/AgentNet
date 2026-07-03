@@ -112,7 +112,7 @@ export type MarketRequest =
   | { type: "buyAllSkills"; wallet: string }
   // buy a specific set of skills in one go (e.g. a workflow's required skills)
   | { type: "buyRequiredSkills"; items: { skillId: string; creatorWallet?: string }[] }
-  | { type: "postAgentNote"; agentWallet: string; text: string; gitLink?: string; title?: string; image?: string }
+  | { type: "postAgentNote"; agentWallet: string; text: string; gitLink?: string; title?: string; image?: string; parentId?: string }
   // publish a skill from the UI (make-skill). priceSol is the human SOL amount as a
   // string ("0.1"); the host converts to lamports. image is optional — an http URL
   // or a base58 on-chain txid/PDA (the UI badges on-chain values), see skill-nft-json §3.

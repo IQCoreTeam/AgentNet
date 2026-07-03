@@ -181,7 +181,16 @@ export async function writeRow(
   hint: string,
   rowJson: string,
 ): Promise<string> {
-  return sdkWriteRow(conn(), asSolana(signer), AGENTNET_ROOT_ID, hint, rowJson);
+  const txSig = await sdkWriteRow(conn(), asSolana(signer), AGENTNET_ROOT_ID, hint, rowJson);
+  // Push the new row into the gateway cache so the next read sees it right away
+  // (GH #101). Best-effort; parse guarded so a non-JSON row can't break the write.
+  try {
+    const row = JSON.parse(rowJson);
+    notifyGatewayWrite(tablePda(hint), txSig, row, asSolana(signer).publicKey.toBase58());
+  } catch {
+    // row wasn't JSON, or signer had no pubkey — skip the notify, write still stands
+  }
+  return txSig;
 }
 
 // Read decoded table rows via the IQ gateway's `/table/{pda}/rows` — ONE HTTP call
@@ -194,6 +203,17 @@ export async function writeRow(
 // `limit` at 100/page, so we follow `nextCursor` until we've gathered the requested
 // count (or the table ends). Throws on any non-2xx / network error so readRows can
 // fall back to the on-chain SDK read and always resolve the same Row[] shape.
+// Per-URL ETag + last-body cache (GH #101, borrowed from iq-chan's gateway.ts).
+// Lets a re-read of the same page send `If-None-Match`; on a 304 the gateway
+// skips re-sending the body and we reuse the cached page. Turns polling loops
+// (a thread refreshing) from "re-decode every row" into "one conditional GET".
+// Unbounded is fine in practice — one entry per distinct (pda, limit, before)
+// page, and the set of live tables a session touches is small.
+// ponytail: plain Map, no LRU. Add eviction if a long-lived host ever churns
+// through thousands of tables.
+type GwPage = { rows: Row[]; nextCursor?: string | null };
+const rowsEtagCache = new Map<string, { etag: string; page: GwPage }>();
+
 async function readRowsViaGateway(pda: PublicKey, options?: ReadOptions): Promise<Row[]> {
   const want = options?.limit ?? 100;
   const base = `${gatewayUrl()}/table/${pda.toBase58()}/rows`;
@@ -202,15 +222,40 @@ async function readRowsViaGateway(pda: PublicKey, options?: ReadOptions): Promis
   while (out.length < want) {
     const pageLimit = Math.min(100, want - out.length);
     const url = `${base}?limit=${pageLimit}${before ? `&before=${encodeURIComponent(before)}` : ""}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`gateway /table/rows → HTTP ${res.status}`);
-    const json = (await res.json()) as { rows?: Row[]; nextCursor?: string | null };
-    const rows = json.rows ?? [];
+
+    const cached = rowsEtagCache.get(url);
+    const res = await fetch(url, cached ? { headers: { "If-None-Match": cached.etag } } : undefined);
+
+    let page: GwPage;
+    if (res.status === 304 && cached) {
+      page = cached.page; // unchanged — reuse the body the gateway didn't resend
+    } else if (res.ok) {
+      page = (await res.json()) as GwPage;
+      const etag = res.headers.get("etag");
+      if (etag) rowsEtagCache.set(url, { etag, page });
+    } else {
+      throw new Error(`gateway /table/rows → HTTP ${res.status}`);
+    }
+
+    const rows = page.rows ?? [];
     out.push(...rows);
-    if (rows.length === 0 || !json.nextCursor) break; // table exhausted
-    before = json.nextCursor;
+    if (rows.length === 0 || !page.nextCursor) break; // table exhausted
+    before = page.nextCursor;
   }
   return out.slice(0, want);
+}
+
+/** Tell the gateway about a freshly-written row so its cache serves it
+ *  immediately instead of waiting for the next chain poll (GH #101, iq-chan's
+ *  notifyPost). Fire-and-forget: a failure just means the row appears on the
+ *  gateway's normal poll cadence, so we never block or throw the write on it. */
+function notifyGatewayWrite(pda: PublicKey, txSignature: string, row: unknown, signer: string): void {
+  const url = `${gatewayUrl()}/table/${pda.toBase58()}/notify`;
+  void fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ txSignature, row, signer }),
+  }).catch(() => {});
 }
 
 export async function readRows(hint: string, options?: ReadOptions): Promise<Row[]> {

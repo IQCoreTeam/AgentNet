@@ -457,6 +457,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   const [fabOpen, setFabOpen] = useState(false);
   const [composeMode, setComposeMode] = useState<null | "blog" | "repo">(null);
   const [posting, setPosting] = useState(false);
+  const [replyTo, setReplyTo] = useState<string | null>(null); // GH #101: id of the comment being replied to
   const [celebrate, setCelebrate] = useState<{ label: string } | null>(null);
   const [showAllRepos, setShowAllRepos] = useState(false);
   const [repoSkills, setRepoSkills] = useState<VRepo | null>(null);
@@ -474,13 +475,15 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
 
   // Post a blog entry (self) or a comment (holder). Success is detected via the store's
   // "Note posted." toast (see below), which then fires the celebration + haptic.
-  function submitNote(f: NoteFields) {
+  // parentId (GH #101) makes this a reply to another note; omit for a top-level
+  // blog post / comment. Same on-chain path either way — one extra field.
+  function submitNote(f: NoteFields, parentId?: string) {
     const text = f.text.trim();
     const title = f.title?.trim() || undefined;
     if ((!text && !title) || (!profile.self && !profile.canComment)) return; // no empty posts
     awaitingPost.current = true;
     setPosting(true);
-    send({ type: "postAgentNote", agentWallet: profile.wallet, text, gitLink: f.gitLink, title, image: f.image });
+    send({ type: "postAgentNote", agentWallet: profile.wallet, text, gitLink: f.gitLink, title, image: f.image, parentId });
   }
 
   // Blog/comment success: the reducer sets toast "Note posted." on agentNoteResult.ok.
@@ -492,6 +495,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
       awaitingPost.current = false;
       setPosting(false);
       setComposeMode(null);
+      setReplyTo(null);
       setCelebrate({ label: "Posted to AgentNet" });
     } else if (typeof state.toast === "string" && state.toast.startsWith("Note failed")) {
       awaitingPost.current = false;
@@ -546,6 +550,45 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   const blogNotes = (profile.notes ?? []).filter((n) => n.isSelfNote);
   const comments = (profile.notes ?? []).filter((n) => !n.isSelfNote);
   const canPost = profile.self || profile.canComment;
+
+  // parentId rides in the on-chain note's meta and is surfaced by core's
+  // hydrateNotes, but isn't in the published AgentProfile note type yet — widen
+  // it locally so the threading below is typed.
+  type ProfileNote = NonNullable<typeof profile.notes>[number] & { parentId?: string; timestamp?: number };
+
+  // Thread the flat comment list by meta.parentId (GH #101). Render policy is a
+  // flat 2 levels: every reply collapses under its top-level ancestor, keeping
+  // `parentAuthor` so a deeper reply can @-reference who it answered. Mirrors
+  // core's threadReplies (packages/core notes.ts) — kept small + local here
+  // because the webview bundle can't import the host-only core package.
+  // ponytail: parent lookups are among `comments` only, so a reply pointing at
+  // a blog post falls through to top-level — fine until blog replies are wired.
+  const commentThreads = useMemo(() => {
+    const byId = new Map(comments.map((c) => [c.id, c]));
+    const rootOf = (n: ProfileNote): ProfileNote => {
+      let cur = n;
+      for (let i = 0; i < byId.size; i++) {
+        const p = cur.parentId ? byId.get(cur.parentId) : undefined;
+        if (!p) return cur;
+        cur = p;
+      }
+      return cur;
+    };
+    const nodes = new Map<string, { note: ProfileNote; replies: (ProfileNote & { parentAuthor?: string })[] }>();
+    const order: string[] = [];
+    const ensure = (note: ProfileNote) => {
+      let node = nodes.get(note.id);
+      if (!node) { node = { note, replies: [] }; nodes.set(note.id, node); order.push(note.id); }
+      return node;
+    };
+    for (const n of comments) {
+      const root = rootOf(n);
+      if (root.id === n.id) ensure(n);
+      else ensure(root).replies.push({ ...n, parentAuthor: n.parentId ? byId.get(n.parentId)?.author : undefined });
+    }
+    for (const node of nodes.values()) node.replies.sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
+    return order.map((id) => nodes.get(id)!);
+  }, [comments]);
 
   // ID-card stats, in the design's order (CREATED / COPIES / OWNED), zero-padded to two digits.
   const pad2 = (n: number) => (n < 10 ? `0${n}` : String(n));
@@ -804,24 +847,51 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                 </div>
               )}
 
-              {/* COMMENTS — flat stack (replies deferred). Each: commenter avatar + wallet + date + body */}
-              {comments.length > 0 && (
+              {/* COMMENTS — threaded (GH #101). Top-level comments each with their
+                  replies collapsed to one indented level; Reply opens an inline composer. */}
+              {commentThreads.length > 0 && (
                 <div>
                   <p className="mb-2 text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>Comments</p>
                   <div className="space-y-2">
-                    {comments.map((n) => (
-                      <div key={n.id} className="rounded-xl border p-3.5 text-sm" style={{ background: "var(--an-bg-1)", borderColor: "var(--an-line)", color: "var(--an-fg-dim)" }}>
-                        <div className="mb-2 flex items-center gap-2.5">
-                          <div className="h-8 w-8 shrink-0 overflow-hidden rounded-full" style={{ background: "var(--an-bg-2)", border: "1px solid var(--an-line)" }} aria-hidden="true" dangerouslySetInnerHTML={{ __html: walletAvatarSvg(n.author) }} />
-                          <span className="font-mono text-xs" style={{ color: "var(--an-fg-dim)" }}>{shortWallet(n.author)}</span>
-                          {noteDate(n.timestamp) && <span className="ml-auto text-[11px]" style={{ color: "var(--an-fg-mute)" }}>{noteDate(n.timestamp)}</span>}
+                    {commentThreads.map(({ note: n, replies }) => {
+                      const replyingHere = replyTo === n.id || replies.some((r) => r.id === replyTo);
+                      const card = (nn: ProfileNote & { parentAuthor?: string }, compact: boolean) => (
+                        <div className={`rounded-xl border ${compact ? "p-3" : "p-3.5"} text-sm`} style={{ background: "var(--an-bg-1)", borderColor: "var(--an-line)", color: "var(--an-fg-dim)" }}>
+                          <div className="mb-2 flex items-center gap-2.5">
+                            <div className="h-8 w-8 shrink-0 overflow-hidden rounded-full" style={{ background: "var(--an-bg-2)", border: "1px solid var(--an-line)" }} aria-hidden="true" dangerouslySetInnerHTML={{ __html: walletAvatarSvg(nn.author) }} />
+                            <span className="font-mono text-xs" style={{ color: "var(--an-fg-dim)" }}>{shortWallet(nn.author)}</span>
+                            {noteDate(nn.timestamp) && <span className="ml-auto text-[11px]" style={{ color: "var(--an-fg-mute)" }}>{noteDate(nn.timestamp)}</span>}
+                          </div>
+                          {nn.parentAuthor && nn.parentAuthor !== n.author && (
+                            <p className="mb-1 text-[11px]" style={{ color: "var(--an-fg-mute)" }}>↳ replying to {shortWallet(nn.parentAuthor)}</p>
+                          )}
+                          {mediaUrl(nn.image) && <img src={mediaUrl(nn.image)} alt="" referrerPolicy="no-referrer" className="mb-2 max-h-32 w-full rounded-lg object-cover" />}
+                          {nn.title && <p className="mb-0.5 text-sm font-bold" style={{ color: "var(--an-fg)" }}>{nn.title}</p>}
+                          {nn.text && <p className="whitespace-pre-wrap break-words leading-relaxed">{nn.text}</p>}
+                          {nn.gitLink && <GithubCard url={nn.gitLink} />}
+                          {canPost && (
+                            <button onClick={() => setReplyTo(replyTo === nn.id ? null : nn.id)} className="mt-2 text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>
+                              {replyTo === nn.id ? "Cancel" : "Reply"}
+                            </button>
+                          )}
                         </div>
-                        {mediaUrl(n.image) && <img src={mediaUrl(n.image)} alt="" referrerPolicy="no-referrer" className="mb-2 max-h-32 w-full rounded-lg object-cover" />}
-                        {n.title && <p className="mb-0.5 text-sm font-bold" style={{ color: "var(--an-fg)" }}>{n.title}</p>}
-                        {n.text && <p className="whitespace-pre-wrap break-words leading-relaxed">{n.text}</p>}
-                        {n.gitLink && <GithubCard url={n.gitLink} />}
-                      </div>
-                    ))}
+                      );
+                      return (
+                        <div key={n.id} className="space-y-2">
+                          {card(n, false)}
+                          {replies.length > 0 && (
+                            <div className="ml-4 space-y-2 border-l pl-3" style={{ borderColor: "var(--an-line)" }}>
+                              {replies.map((r) => card(r, true))}
+                            </div>
+                          )}
+                          {replyingHere && canPost && (
+                            <div className="ml-4">
+                              <NoteComposer placeholder="Write a reply..." submitLabel="Reply" posting={posting} onSubmit={(f) => submitNote(f, replyTo ?? n.id)} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

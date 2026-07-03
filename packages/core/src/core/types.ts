@@ -62,6 +62,7 @@ export interface Note {
   image?: string; // optional image (https link or on-chain ref; viewer resolves via gateway)
   timestamp: number;
   meta?: Record<string, unknown>; // optional free-form extras (one column, JSON)
+  parentId?: string; // GH #101: id of the note this replies to (stored in meta); absent → top-level
   subject?: string; // derived on read: the table key (skill mint / agent wallet)
   isSelfNote?: boolean; // derived on read: author == subject (owner post)
 }
