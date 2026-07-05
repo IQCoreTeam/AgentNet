@@ -599,11 +599,11 @@ export async function marketplaceEnv(wallet: Wallet) {
     },
 
     // issue #35: post a self-note (blog) or comment on an agent's profile.
-    async postAgentNote(agentWallet: string, text: string, gitLink?: string, title?: string, image?: string) {
+    async postAgentNote(agentWallet: string, text: string, gitLink?: string, title?: string, image?: string, parentId?: string) {
       try {
         let source;
         try { source = indexerSource(INDEXER_URL); } catch { source = dasSource; }
-        await corePostAgentNote(conn, wallet, { agentWallet, text, gitLink, title, image, source });
+        await corePostAgentNote(conn, wallet, { agentWallet, text, gitLink, title, image, parentId, source });
         const notes = await readAgentNotes(agentWallet).catch(() => []);
         return { ok: true as const, notes };
       } catch (e) {

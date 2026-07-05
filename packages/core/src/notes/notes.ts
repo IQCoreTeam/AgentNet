@@ -47,6 +47,7 @@ function buildNote(
   meta?: Record<string, unknown>,
   title?: string,
   image?: string,
+  parentId?: string,
 ): StoredNote {
   const nonce = Math.random().toString(36).slice(2, 8);
   const row: StoredNote = {
@@ -59,6 +60,12 @@ function buildNote(
   const mergedMeta = { ...meta };
   if (title !== undefined) mergedMeta.title = title;
   if (image !== undefined) mergedMeta.image = image;
+  // Threading (GH #101): a reply is an ordinary row carrying one new fact —
+  // meta.parentId = id of the row it replies to. No parentId → top-level.
+  // Stored only inside meta (no column change); tree/depth/counts are derived
+  // at read time by threadReplies (single source of truth — nothing derivable
+  // is stored).
+  if (parentId !== undefined) mergedMeta.parentId = parentId;
   if (Object.keys(mergedMeta).length > 0) row.meta = mergedMeta;
   return row;
 }
@@ -77,7 +84,8 @@ function hydrateNotes(rows: Row[], subject: string): Note[] {
       const meta = (n as { meta?: Record<string, unknown> }).meta;
       const title = n.title ?? (meta?.title as string | undefined);
       const image = n.image ?? (meta?.image as string | undefined);
-      return { ...n, title, image, subject, isSelfNote: n.author === subject };
+      const parentId = n.parentId ?? (meta?.parentId as string | undefined);
+      return { ...n, title, image, parentId, subject, isSelfNote: n.author === subject };
     });
 }
 
@@ -89,6 +97,7 @@ export interface PostNoteInput {
   gitLink?: string;
   image?: string;
   meta?: Record<string, unknown>;
+  parentId?: string; // GH #101: id of the note this replies to; omit for top-level
 }
 
 export async function postNote(
@@ -123,7 +132,7 @@ export async function postNote(
   }
 
   const hint = reviewsHint(input.collectionId, input.skillId);
-  const note = buildNote(author, input.text, input.gitLink, input.meta, input.title, input.image);
+  const note = buildNote(author, input.text, input.gitLink, input.meta, input.title, input.image, input.parentId);
 
   // Open table (no native gate — see the Token-2022 incompatibility above).
   await ensureTable(signer, hint, REVIEW_COLUMNS, "id");
@@ -154,6 +163,7 @@ export interface PostAgentNoteInput {
   gitLink?: string;
   image?: string;
   meta?: Record<string, unknown>;
+  parentId?: string; // GH #101: id of the note this replies to; omit for top-level
   /** Skill source to enumerate the agent's skills for the comment gate. */
   source?: SkillSource;
 }
@@ -201,7 +211,7 @@ export async function postAgentNote(
   }
 
   const hint = reviewsAgentHint(input.agentWallet);
-  const note = buildNote(author, input.text, input.gitLink, input.meta, input.title, input.image);
+  const note = buildNote(author, input.text, input.gitLink, input.meta, input.title, input.image, input.parentId);
 
   // Open table (no native gate — see the module header).
   await ensureTable(signer, hint, REVIEW_COLUMNS, "id");
@@ -233,4 +243,79 @@ export async function deleteNote(
 ): Promise<void> {
   // Future: implement via deletion marker row or separate deletion table
   throw new Error("deleteNote not yet implemented");
+}
+
+// ===== Threading (GH #101) — read-time derivation, nothing stored but parentId =====
+
+/** A reply flattened under its top-level ancestor. `parentAuthor` is the author
+ *  of the *immediate* parent, so replies pushed past the 2-level render cap can
+ *  still show an `@author` reference to whoever they actually answered. */
+export interface ThreadedReply extends Note {
+  parentAuthor?: string;
+}
+
+/** A top-level note plus its replies. Render policy is a flat 2 levels: every
+ *  descendant (reply, reply-to-reply, …) collapses into this one `replies`
+ *  list. Storage stays a true tree via parentId — the cap is presentation only
+ *  and can change with no migration. */
+export interface ThreadNode {
+  note: Note;
+  replies: ThreadedReply[];
+}
+
+/**
+ * Group a flat note list into threads (GH #101). Derives the tree at read time
+ * from `parentId` alone — no threadRoot/depth/count is stored (single source of
+ * truth). Rules (owner-locked, comment #4870…):
+ *   - No `parentId`, or a `parentId` that isn't in this list (orphan) → the note
+ *     is top-level. Read-side resilience: a reply whose parent didn't load still
+ *     shows up rather than vanishing.
+ *   - Every reply collapses under its nearest top-level ancestor (2-level render
+ *     cap); `parentAuthor` preserves who it actually replied to.
+ *   - Top-level order follows input order (callers pass newest-first); replies
+ *     within a thread are sorted oldest-first (natural reading order).
+ * Pure — safe to run client-side or in the indexer.
+ */
+export function threadReplies(notes: Note[]): ThreadNode[] {
+  const byId = new Map<string, Note>();
+  for (const n of notes) byId.set(n.id, n);
+
+  // Walk parentId up to the top-level ancestor. Bounded by note count so a
+  // malformed cycle (a→b→a) can't spin forever — it just resolves to itself.
+  const rootOf = (n: Note): Note => {
+    let cur = n;
+    for (let hops = 0; hops < byId.size; hops++) {
+      const parent = cur.parentId ? byId.get(cur.parentId) : undefined;
+      if (!parent) return cur; // no/orphan parent → this is the top
+      cur = parent;
+    }
+    return cur;
+  };
+
+  const nodes = new Map<string, ThreadNode>();
+  const order: string[] = [];
+  const ensure = (note: Note): ThreadNode => {
+    let node = nodes.get(note.id);
+    if (!node) {
+      node = { note, replies: [] };
+      nodes.set(note.id, node);
+      order.push(note.id);
+    }
+    return node;
+  };
+
+  for (const n of notes) {
+    const root = rootOf(n);
+    if (root.id === n.id) {
+      ensure(n); // top-level
+    } else {
+      const parentAuthor = n.parentId ? byId.get(n.parentId)?.author : undefined;
+      ensure(root).replies.push({ ...n, parentAuthor });
+    }
+  }
+
+  for (const node of nodes.values()) {
+    node.replies.sort((a, b) => a.timestamp - b.timestamp);
+  }
+  return order.map((id) => nodes.get(id)!);
 }
