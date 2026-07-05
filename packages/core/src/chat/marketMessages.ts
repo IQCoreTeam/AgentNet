@@ -25,6 +25,7 @@ export interface SkillCard {
   hashtags?: string[];
   image?: string | null; // txid / url / null (viewer infers; null -> default art)
   supply?: number; // popularity
+  stars?: number; // summed GitHub stars of repos that use this skill (issue #89)
   price?: string; // lamports as decimal string (for buy-all cost summing)
   creator?: string; // wallet (paid on a priced buy)
   requiredSkills?: string[]; // workflows only: prerequisite skill mint ids
@@ -68,6 +69,7 @@ export interface SkillDetail {
   skillText: string | null; // the SKILL.md / workflow body (readSkillText)
   requiredCards: SkillCard[]; // resolved cards for requiredSkills (workflows)
   notes?: Note[]; // skill comments, newest-first (issue #34)
+  repos?: VerifiedRepo[]; // GitHub repos that use this skill, star-ranked (issue #89)
 }
 
 export type { Note, Reputation, ThreadNode };

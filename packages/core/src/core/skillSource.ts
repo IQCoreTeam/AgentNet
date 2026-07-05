@@ -395,6 +395,7 @@ interface IndexerItem {
   supply: number;
   price: string | null; // lamports (decimal string) from the on-chain ItemConfig PDA
   attributes: { trait_type: string; value: string }[];
+  stars?: number; // summed GitHub stars per skill (issue #89); absent on an older indexer
 }
 
 /**
@@ -430,6 +431,7 @@ export function indexerSource(baseUrl: string): SkillSource {
           requiredSkills,
           price: it.price ?? undefined, // on-chain price (lamports); absent if unpriced
           supply: it.supply, // live — already hydrated by the indexer
+          stars: it.stars ?? 0, // summed GitHub stars (issue #89), 0 on an older indexer
           uriTxid: "",
           createdAt: 0,
         };

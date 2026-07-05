@@ -35,7 +35,7 @@ import { SkillSync } from "./index.js";
 function toCard(s: Skill): SkillCard {
   return {
     id: s.id, type: s.type, name: s.name, description: s.description,
-    category: s.category, hashtags: s.hashtags, supply: s.supply,
+    category: s.category, hashtags: s.hashtags, supply: s.supply, stars: s.stars,
     price: s.price, creator: s.creator, requiredSkills: s.requiredSkills,
   };
 }
@@ -78,6 +78,21 @@ async function fetchVerifiedRepos(wallet: string): Promise<VerifiedRepo[]> {
     }
   }
   return [...byRepo.values()];
+}
+
+// The repos that use a given skill, star-ranked (issue #89) — the skill-side mirror of
+// fetchVerifiedRepos. `GET /items/:mint/repos` already returns one row per repo for the
+// skill, so no grouping is needed. Best-effort: any failure yields [] so detail still opens.
+async function fetchSkillRepos(mint: string): Promise<VerifiedRepo[]> {
+  const res = await fetch(`${INDEXER_URL}/items/${encodeURIComponent(mint)}/repos`);
+  if (!res.ok) return [];
+  const data = (await res.json()) as {
+    repos?: Array<{ repo_owner: string; repo_name: string; repo_url: string; stars: number; forks: number }>;
+  };
+  return (data.repos ?? []).map((r) => ({
+    owner: r.repo_owner, name: r.repo_name, url: r.repo_url,
+    stars: r.stars ?? 0, forks: r.forks ?? 0, skillMints: [mint],
+  }));
 }
 
 // Summed verified-work stars for many wallets in ONE indexer call (the directory's reputation
@@ -214,7 +229,7 @@ export async function marketplaceEnv(wallet: Wallet) {
       // map; one search covers both kinds since they share the catalog).
       const all = await runSearch("");
       const card = all.find((s) => s.id === mint);
-      const [onChainText, notes, meta] = await Promise.all([
+      const [onChainText, notes, meta, repos] = await Promise.all([
         readSkillText(conn, mint).catch(() => null),
         collectionIdFor(card?.type).then((cid) => cid ? readNotes(cid, mint).catch(() => []) : Promise.resolve([])),
         // A held skill can be ABSENT from the indexer catalog (DAS under-reports our
@@ -222,6 +237,8 @@ export async function marketplaceEnv(wallet: Wallet) {
         // so the detail shows a real name/description — not the bare mint — and treats
         // it as a skill (its comments live in the skills collection).
         card ? Promise.resolve(null) : readSkillMintMetadata(conn, mint).catch(() => null),
+        // Repos that use this skill, star-ranked (issue #89). Best-effort.
+        fetchSkillRepos(mint).catch(() => [] as VerifiedRepo[]),
       ]);
       // On-chain body is the source of truth; if it's empty (RPC/gateway hiccup) but we
       // own this skill, show the local SKILL.md so the detail never renders bodyless.
@@ -238,6 +255,7 @@ export async function marketplaceEnv(wallet: Wallet) {
         skillText,
         requiredCards,
         notes,
+        repos,
       };
     },
 
