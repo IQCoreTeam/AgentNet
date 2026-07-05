@@ -67,6 +67,23 @@ export interface Note {
   isSelfNote?: boolean; // derived on read: author == subject (owner post)
 }
 
+/** A reply flattened under its top-level ancestor. `parentAuthor` is the author
+ *  of the *immediate* parent, so replies pushed past the 2-level render cap can
+ *  still show an `@author` reference to whoever they actually answered. */
+export interface ThreadedReply extends Note {
+  parentAuthor?: string;
+}
+
+/** A top-level note plus its replies (GH #101). Render policy is a flat 2 levels:
+ *  every descendant collapses into this one `replies` list. Storage stays a true
+ *  tree via parentId — the cap is presentation only and changes with no migration.
+ *  Grouped server-side by the gateway /threads endpoint, or locally by
+ *  threadReplies as a fallback; both obey the same rules. */
+export interface ThreadNode {
+  note: Note;
+  replies: ThreadedReply[];
+}
+
 /**
  * Agent reputation snapshot stored in `reputation:<wallet>` table.
  *

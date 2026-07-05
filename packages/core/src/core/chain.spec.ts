@@ -121,6 +121,7 @@ describe("core/chain", () => {
       const rows = [{ id: "a", author: "w", __txSignature: "s1" }];
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
         ok: true,
+        headers: { get: () => null }, // a real Response always has headers; the ETag read needs it
         json: async () => ({ rows, nextCursor: null }),
       }));
       const r = await readRows("reviews:agent:w", { limit: 100 });
@@ -147,8 +148,8 @@ describe("core/chain", () => {
 
     it("follows nextCursor to gather up to `limit` rows, then stops", async () => {
       const fetchMock = vi.fn()
-        .mockResolvedValueOnce({ ok: true, json: async () => ({ rows: [{ id: "1" }, { id: "2" }], nextCursor: "cur1" }) })
-        .mockResolvedValueOnce({ ok: true, json: async () => ({ rows: [{ id: "3" }], nextCursor: null }) });
+        .mockResolvedValueOnce({ ok: true, headers: { get: () => null }, json: async () => ({ rows: [{ id: "1" }, { id: "2" }], nextCursor: "cur1" }) })
+        .mockResolvedValueOnce({ ok: true, headers: { get: () => null }, json: async () => ({ rows: [{ id: "3" }], nextCursor: null }) });
       vi.stubGlobal("fetch", fetchMock);
       const r = await readRows("reviews:agent:w", { limit: 5 });
       expect(r.map((x: any) => x.id)).toEqual(["1", "2", "3"]);

@@ -410,8 +410,8 @@ export function SkillMarket({
     if (stage === "agentProfile") {
       const total =
         profileSub === "repos" ? (agentProfile?.verifiedRepos ?? []).length :
-        profileSub === "comments" ? (agentProfile?.notes ?? []).filter((n) => !n.isSelfNote).length :
-        profileSub === "blog" ? (agentProfile?.notes ?? []).filter((n) => n.isSelfNote).length : 0;
+        profileSub === "comments" ? (agentProfile?.threads ?? []).filter((t) => !t.note.isSelfNote).reduce((s, t) => s + 1 + t.replies.length, 0) :
+        profileSub === "blog" ? (agentProfile?.threads ?? []).filter((t) => t.note.isSelfNote).length : 0;
       const height = profileSub === "repos" ? 10 : 12;
       if (profileSub !== "main") {
         if (key.escape) { setProfileSub("main"); setProfileScroll(0); return; }

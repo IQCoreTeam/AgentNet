@@ -10,7 +10,7 @@
 //
 // Direction is in the name: *Request = UI -> host; *Event = host -> UI.
 
-import type { Note, Reputation } from "../core/types.js";
+import type { Note, Reputation, ThreadNode } from "../core/types.js";
 
 /** One item row as the UI renders it (cards + detail). Mirrors the subset of `Skill`
  *  the UI needs — kept here so host (env callbacks) and UI agree. Covers both kinds:
@@ -49,7 +49,7 @@ export interface AgentProfile {
   reputation: Reputation;
   createdSkills: SkillCard[];
   ownedSkills: SkillCard[];
-  notes: Note[]; // self-notes (blog) + holder comments, newest-first
+  threads: ThreadNode[]; // self-notes (blog) + holder comments, grouped by parentId, newest-first
   // Whether the CONNECTED wallet may comment on this agent: it holds ≥1 skill this
   // agent created (same on-chain gate as postAgentNote). The UI shows the comment box
   // either way (disabled with a hint when false) so the action is always discoverable.
@@ -70,7 +70,7 @@ export interface SkillDetail {
   notes?: Note[]; // skill comments, newest-first (issue #34)
 }
 
-export type { Note, Reputation };
+export type { Note, Reputation, ThreadNode };
 
 /** RPC status the UI shows (issue #23). `dasReady` = a DAS-capable RPC (a Helius key
  *  or explicit env) is configured; on the bare public default it's false, so reads

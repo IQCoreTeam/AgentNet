@@ -1304,6 +1304,12 @@ export function chatHtml(): string {
   .pr-note-tx { white-space:nowrap; text-decoration:none; color:var(--an-green); opacity:.85; }
   .pr-note-tx:hover { opacity:1; text-decoration:underline; }
   .pr-compose { margin-top:10px; }
+  .pr-reply { margin-left:18px; border-left:2px solid var(--an-line, #333); }
+  .pr-replyto { font-size:0.72em; opacity:0.6; margin-bottom:3px; }
+  .pr-replybar { margin-top:6px; }
+  .pr-replybtn { background:none; border:none; color:var(--an-fg-mute, #888); font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.72em; text-transform:uppercase; letter-spacing:1px; cursor:pointer; padding:0; }
+  .pr-replybtn:hover { color:var(--an-fg, #ddd); }
+  .pr-replycompose { margin-top:6px; }
   .pr-compose textarea { width:100%; box-sizing:border-box; min-height:60px; padding:8px 10px;
                          background:#0d0d10; color:#e8e8ea; outline:none;
                          border:1px solid #2a2a30; border-radius:4px; resize:vertical;
@@ -3735,11 +3741,11 @@ export function chatHtml(): string {
   function mergeOptimistic(profile) {
     const now = Date.now();
     recentlyPosted = recentlyPosted.filter((p) => now - p.ts < 60000);
-    const real = new Set((profile.notes || []).map((n) => (n.author || '') + ' ' + (n.text || '')));
+    const real = new Set((profile.threads || []).flatMap((t) => [t.note, ...(t.replies || [])]).map((n) => (n.author || '') + ' ' + (n.text || '')));
     // drop optimistic notes the real read now includes (self-heal)
     recentlyPosted = recentlyPosted.filter((p) => !(p.wallet === profile.wallet && real.has((p.note.author || '') + ' ' + (p.note.text || ''))));
-    const pending = recentlyPosted.filter((p) => p.wallet === profile.wallet).map((p) => p.note);
-    return pending.length ? { ...profile, notes: [...pending, ...(profile.notes || [])] } : profile;
+    const pending = recentlyPosted.filter((p) => p.wallet === profile.wallet && !p.note.parentId).map((p) => p.note);
+    return pending.length ? { ...profile, threads: [...pending.map((note) => ({ note, replies: [] })), ...(profile.threads || [])] } : profile;
   }
   function feedbackFor(wallet) {
     if (!postFeedback) return null;
@@ -4110,7 +4116,10 @@ export function chatHtml(): string {
     }
 
     // ── NOTES pane: blog (self-notes) + compose (own) + comments ──
-    const selfNotes = profile.notes.filter(n => n.isSelfNote);
+    // Threads arrive pre-grouped from the host (GH #101). Blog = the agent's own posts;
+    // comment threads = holder threads with replies flattened to the 2-level cap.
+    const allThreads = profile.threads || [];
+    const selfNotes = allThreads.filter(t => t.note.isSelfNote).map(t => t.note);
     if (selfNotes.length) {
       const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Blog';
       paneCommunity.appendChild(sec);
@@ -4183,11 +4192,54 @@ export function chatHtml(): string {
       body._postBtn = btn; body._postErr = errEl; body._postLabel = self ? 'Post' : 'Comment';
       body._postTa = ta; body._postGit = gitInput; body._postImg = imgInput; body._postTitle = titleInput;
     }
-    const comments = profile.notes.filter(n => !n.isSelfNote);
-    if (comments.length) {
-      const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Comments (' + comments.length + ')';
+    // Attach a Reply button + inline composer to a rendered comment card. parentId is the
+    // id of the note being answered (the gateway flattens deeper replies under the same
+    // top-level thread; parentId still records who was answered for the @author ref).
+    const canReply = self || !!profile.canComment;
+    function attachReply(cardEl, parentId) {
+      if (!canReply) return;
+      const bar = document.createElement('div'); bar.className = 'pr-replybar';
+      const toggle = document.createElement('button'); toggle.className = 'pr-replybtn'; toggle.textContent = 'Reply';
+      bar.appendChild(toggle); cardEl.appendChild(bar);
+      let box = null;
+      toggle.addEventListener('click', () => {
+        if (box) { box.remove(); box = null; toggle.textContent = 'Reply'; return; }
+        toggle.textContent = 'Cancel';
+        box = document.createElement('div'); box.className = 'pr-compose pr-replycompose';
+        const ta = document.createElement('textarea'); ta.placeholder = 'Write a reply…';
+        const err = document.createElement('div'); err.className = 'pr-err';
+        const send = document.createElement('button'); send.textContent = 'Reply';
+        send.addEventListener('click', () => {
+          const text = ta.value.trim(); if (!text) return;
+          send.disabled = true; send.textContent = 'Replying…'; err.style.display = 'none';
+          pendingPost = { wallet, text, parentId, self };
+          vscode.postMessage({ type: 'postAgentNote', agentWallet: wallet, text, parentId });
+        });
+        box.appendChild(ta); box.appendChild(err); box.appendChild(send);
+        cardEl.appendChild(box); ta.focus();
+      });
+    }
+
+    const commentThreads = allThreads.filter(t => !t.note.isSelfNote);
+    const commentCount = commentThreads.reduce((s, t) => s + 1 + (t.replies ? t.replies.length : 0), 0);
+    if (commentThreads.length) {
+      const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Comments (' + commentCount + ')';
       paneCommunity.appendChild(sec);
-      comments.forEach(n => paneCommunity.appendChild(noteCard(n, true)));
+      commentThreads.forEach(t => {
+        const opCard = noteCard(t.note, true);
+        attachReply(opCard, t.note.id);
+        paneCommunity.appendChild(opCard);
+        (t.replies || []).forEach(rep => {
+          const rc = noteCard(rep, true); rc.classList.add('pr-reply');
+          if (rep.parentAuthor) {
+            const to = document.createElement('div'); to.className = 'pr-replyto';
+            to.textContent = '↳ replying to ' + agShort(rep.parentAuthor);
+            rc.insertBefore(to, rc.firstChild);
+          }
+          attachReply(rc, rep.id);
+          paneCommunity.appendChild(rc);
+        });
+      });
     } else {
       const e = document.createElement('div'); e.className = 'pr-empty';
       e.textContent = self ? 'No comments yet.' : 'No comments yet — be the first.';
@@ -5267,7 +5319,7 @@ export function chatHtml(): string {
           recentlyPosted.push({
             wallet: pendingPost.wallet,
             ts: Date.now(),
-            note: { author: pendingPost.wallet, text: pendingPost.text, gitLink: pendingPost.gitLink, isSelfNote: pendingPost.self, timestamp: Date.now() },
+            note: { author: pendingPost.wallet, text: pendingPost.text, gitLink: pendingPost.gitLink, isSelfNote: pendingPost.self, parentId: pendingPost.parentId, timestamp: Date.now() },
           });
           pendingPost = null;
         }

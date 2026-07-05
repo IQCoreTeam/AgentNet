@@ -25,7 +25,7 @@ import { resolveRpcUrl } from "../../core/rpc.js";
 import { init as initChain } from "../../core/chain.js";
 import type { AgentProfile, Reputation, SkillCard, SkillDetail, VerifiedRepo } from "../../chat/marketMessages.js";
 import type { Skill } from "../../core/types.js";
-import { readNotes, postNote as corePostNote, readAgentNotes, postAgentNote as corePostAgentNote } from "../../notes/notes.js";
+import { readNotes, postNote as corePostNote, readAgentNotes, readAgentThreads, postAgentNote as corePostAgentNote } from "../../notes/notes.js";
 import { getSkillsCollectionMint, getWorkflowsCollectionMint, getIndexerUrl, getNetwork, type Network } from "../../core/seed.js";
 import { getLeaderboard, getReputation } from "../../reputation/reputation.js";
 import { SkillSync } from "./index.js";
@@ -512,11 +512,11 @@ export async function marketplaceEnv(wallet: Wallet) {
       // catch on the catalog: a fetch failure must NOT reject the whole profile
       // (otherwise the UI hangs on "Loading…"); degrade to empty created/owned lists.
       const all = await runSearch("").catch(() => [] as Skill[]);
-      const [reputation, notes, holdings, verifiedRepos] = await Promise.all([
+      const [reputation, threads, holdings, verifiedRepos] = await Promise.all([
         getReputation(conn, agentWallet, source, all).catch(() => ({
           wallet: agentWallet, skillsPublished: 0, totalSupply: 0, notesReceived: 0, updatedAt: Date.now(),
         })),
-        readAgentNotes(agentWallet).catch(() => []),
+        readAgentThreads(agentWallet).catch(() => []),
         // The agent's held skills mapped to their on-chain creator — DAS-FREE and
         // INDEXER-INDEPENDENT (getTokenAccountsByOwner + one batched getMultipleAccounts).
         // Gives both the owned-mints (keys) and, for created-skills, the on-chain creator
@@ -564,7 +564,7 @@ export async function marketplaceEnv(wallet: Wallet) {
         reputation,
         createdSkills,
         ownedSkills: ownedSkillCards,
-        notes,
+        threads,
         canComment,
         verifiedRepos,
       };

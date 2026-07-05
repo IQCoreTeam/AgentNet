@@ -22,7 +22,7 @@ import {
 } from "../core/chain.js";
 import { reviewsHint, reviewsAgentHint, REVIEW_COLUMNS } from "../core/seed.js";
 import { type SkillSource } from "../core/skillSource.js";
-import type { Note, Row } from "../core/types.js";
+import type { Note, Row, ThreadNode, ThreadedReply } from "../core/types.js";
 import { heldSkillMints, heldSkillCreators } from "./holdings.js";
 
 /** The stored row shape — derived fields (subject/isSelfNote) are NOT included.
@@ -247,22 +247,6 @@ export async function deleteNote(
 }
 
 // ===== Threading (GH #101) — read-time derivation, nothing stored but parentId =====
-
-/** A reply flattened under its top-level ancestor. `parentAuthor` is the author
- *  of the *immediate* parent, so replies pushed past the 2-level render cap can
- *  still show an `@author` reference to whoever they actually answered. */
-export interface ThreadedReply extends Note {
-  parentAuthor?: string;
-}
-
-/** A top-level note plus its replies. Render policy is a flat 2 levels: every
- *  descendant (reply, reply-to-reply, …) collapses into this one `replies`
- *  list. Storage stays a true tree via parentId — the cap is presentation only
- *  and can change with no migration. */
-export interface ThreadNode {
-  note: Note;
-  replies: ThreadedReply[];
-}
 
 /**
  * Group a flat note list into threads (GH #101). Derives the tree at read time

@@ -42,8 +42,11 @@ export function AgentProfileView({
   const r = profile.reputation;
   const stars = r.stars ?? 0;
   const { cur, next } = tierInfo(stars);
-  const blogNotes = (profile.notes ?? []).filter((n) => n.isSelfNote);
-  const comments = (profile.notes ?? []).filter((n) => !n.isSelfNote);
+  // Threads arrive pre-grouped from the host (GH #101). Blog = the agent's own posts;
+  // comments = holder threads with replies flattened to the 2-level cap.
+  const blogNotes = (profile.threads ?? []).filter((t) => t.note.isSelfNote).map((t) => t.note);
+  const commentThreads = (profile.threads ?? []).filter((t) => !t.note.isSelfNote);
+  const commentCount = commentThreads.reduce((sum, t) => sum + 1 + t.replies.length, 0);
   const allSkills = profile.createdSkills ?? [];
   const unowned = allSkills.filter((s) => !owned.has(s.name));
 
@@ -70,22 +73,35 @@ export function AgentProfileView({
   }
 
   if (sub === "comments") {
-    const lines = comments.map((n: Note) => (
-      <Box key={n.id} flexDirection="column">
+    // Each thread: the top-level comment, then its replies indented with an ↳ and
+    // (when the reply answered a deeper comment) a → to whom.
+    const lines = commentThreads.flatMap((t) => [
+      <Box key={t.note.id} flexDirection="column">
         <Text>
-          <Text color={colors.iqCyan}>{short(n.author)}</Text>
-          <Text dimColor>  {noteDate(n.timestamp)}</Text>
+          <Text color={colors.iqCyan}>{short(t.note.author)}</Text>
+          <Text dimColor>  {noteDate(t.note.timestamp)}</Text>
         </Text>
-        {n.title ? <Text bold>{n.title}</Text> : null}
-        <Text>  {n.text}</Text>
-        {n.gitLink ? <Text dimColor>  {glyph.sparkle} {n.gitLink}</Text> : null}
-      </Box>
-    ));
+        {t.note.title ? <Text bold>{t.note.title}</Text> : null}
+        <Text>  {t.note.text}</Text>
+        {t.note.gitLink ? <Text dimColor>  {glyph.sparkle} {t.note.gitLink}</Text> : null}
+      </Box>,
+      ...t.replies.map((rep) => (
+        <Box key={rep.id} flexDirection="column" marginLeft={2}>
+          <Text>
+            <Text dimColor>↳ </Text>
+            <Text color={colors.iqCyan}>{short(rep.author)}</Text>
+            <Text dimColor>  {noteDate(rep.timestamp)}{rep.parentAuthor ? ` → ${short(rep.parentAuthor)}` : ""}</Text>
+          </Text>
+          {rep.title ? <Text bold>{rep.title}</Text> : null}
+          <Text>  {rep.text}</Text>
+        </Box>
+      )),
+    ]);
     return (
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
-        <Text bold color={colors.iqMagenta}>❖ comments ({comments.length})</Text>
+        <Text bold color={colors.iqMagenta}>❖ comments ({commentCount})</Text>
         <Box flexDirection="column" marginTop={1}>
-          {comments.length === 0 ? <Text dimColor>no comments yet</Text> : <ScrollView lines={lines} height={12} offset={scrollOffset} />}
+          {commentCount === 0 ? <Text dimColor>no comments yet</Text> : <ScrollView lines={lines} height={12} offset={scrollOffset} />}
         </Box>
         <Box marginTop={1}><Text dimColor>↑/↓/PgUp/PgDn scroll · esc back</Text></Box>
       </Box>
@@ -138,7 +154,7 @@ export function AgentProfileView({
 
       <Box marginTop={1}>
         <Text dimColor>
-          [r] verified repos ({(profile.verifiedRepos ?? []).length}) · [k] comments ({comments.length}) · [g] blog ({blogNotes.length})
+          [r] verified repos ({(profile.verifiedRepos ?? []).length}) · [k] comments ({commentCount}) · [g] blog ({blogNotes.length})
         </Text>
       </Box>
 

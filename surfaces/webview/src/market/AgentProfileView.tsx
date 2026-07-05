@@ -547,48 +547,15 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   const repoStars = verifiedRepos.reduce((sum, r) => sum + (r.stars ?? 0), 0);
   const sortedRepos = [...verifiedRepos].sort((a, b) => (b.stars ?? 0) - (a.stars ?? 0));
   const showBuyAll = !profile.self && unownedSkills.length > 0;
-  const blogNotes = (profile.notes ?? []).filter((n) => n.isSelfNote);
-  const comments = (profile.notes ?? []).filter((n) => !n.isSelfNote);
   const canPost = profile.self || profile.canComment;
 
-  // parentId rides in the on-chain note's meta and is surfaced by core's
-  // hydrateNotes, but isn't in the published AgentProfile note type yet — widen
-  // it locally so the threading below is typed.
-  type ProfileNote = NonNullable<typeof profile.notes>[number] & { parentId?: string; timestamp?: number };
-
-  // Thread the flat comment list by meta.parentId (GH #101). Render policy is a
-  // flat 2 levels: every reply collapses under its top-level ancestor, keeping
-  // `parentAuthor` so a deeper reply can @-reference who it answered. Mirrors
-  // core's threadReplies (packages/core notes.ts) — kept small + local here
-  // because the webview bundle can't import the host-only core package.
-  // ponytail: parent lookups are among `comments` only, so a reply pointing at
-  // a blog post falls through to top-level — fine until blog replies are wired.
-  const commentThreads = useMemo(() => {
-    const byId = new Map(comments.map((c) => [c.id, c]));
-    const rootOf = (n: ProfileNote): ProfileNote => {
-      let cur = n;
-      for (let i = 0; i < byId.size; i++) {
-        const p = cur.parentId ? byId.get(cur.parentId) : undefined;
-        if (!p) return cur;
-        cur = p;
-      }
-      return cur;
-    };
-    const nodes = new Map<string, { note: ProfileNote; replies: (ProfileNote & { parentAuthor?: string })[] }>();
-    const order: string[] = [];
-    const ensure = (note: ProfileNote) => {
-      let node = nodes.get(note.id);
-      if (!node) { node = { note, replies: [] }; nodes.set(note.id, node); order.push(note.id); }
-      return node;
-    };
-    for (const n of comments) {
-      const root = rootOf(n);
-      if (root.id === n.id) ensure(n);
-      else ensure(root).replies.push({ ...n, parentAuthor: n.parentId ? byId.get(n.parentId)?.author : undefined });
-    }
-    for (const node of nodes.values()) node.replies.sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
-    return order.map((id) => nodes.get(id)!);
-  }, [comments]);
+  // Threads arrive pre-grouped from the host (server-side gateway assembly, GH #101);
+  // this view only renders. Blog = the agent's own top-level posts; comments = holder
+  // threads. Each is a ThreadNode { note, replies } with replies already flattened to
+  // the 2-level cap and carrying parentAuthor for the @author ref.
+  type ThreadReply = NonNullable<typeof profile.threads>[number]["replies"][number];
+  const blogNotes = (profile.threads ?? []).filter((t) => t.note.isSelfNote).map((t) => t.note);
+  const commentThreads = (profile.threads ?? []).filter((t) => !t.note.isSelfNote);
 
   // ID-card stats, in the design's order (CREATED / COPIES / OWNED), zero-padded to two digits.
   const pad2 = (n: number) => (n < 10 ? `0${n}` : String(n));
@@ -855,7 +822,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                   <div className="space-y-2">
                     {commentThreads.map(({ note: n, replies }) => {
                       const replyingHere = replyTo === n.id || replies.some((r) => r.id === replyTo);
-                      const card = (nn: ProfileNote & { parentAuthor?: string }, compact: boolean) => (
+                      const card = (nn: ThreadReply, compact: boolean) => (
                         <div className={`rounded-xl border ${compact ? "p-3" : "p-3.5"} text-sm`} style={{ background: "var(--an-bg-1)", borderColor: "var(--an-line)", color: "var(--an-fg-dim)" }}>
                           <div className="mb-2 flex items-center gap-2.5">
                             <div className="h-8 w-8 shrink-0 overflow-hidden rounded-full" style={{ background: "var(--an-bg-2)", border: "1px solid var(--an-line)" }} aria-hidden="true" dangerouslySetInnerHTML={{ __html: walletAvatarSvg(nn.author) }} />
@@ -915,7 +882,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                 </div>
               )}
 
-              {profile.self && blogNotes.length === 0 && comments.length === 0 && (
+              {profile.self && blogNotes.length === 0 && commentThreads.length === 0 && (
                 <p className="py-8 text-center text-xs" style={{ color: "var(--an-fg-mute)" }}>No posts or comments yet.</p>
               )}
             </>
