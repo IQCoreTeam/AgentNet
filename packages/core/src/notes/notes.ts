@@ -15,6 +15,7 @@ import { type Connection } from "@solana/web3.js";
 import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
 import {
   readRows,
+  readThreads,
   writeRow,
   ensureTable,
   signerAddress,
@@ -318,4 +319,38 @@ export function threadReplies(notes: Note[]): ThreadNode[] {
     node.replies.sort((a, b) => a.timestamp - b.timestamp);
   }
   return order.map((id) => nodes.get(id)!);
+}
+
+/**
+ * Read an agent's comments already grouped into threads (GH #101). Gateway-first:
+ * the gateway's /threads endpoint does the parentId grouping server-side (one call,
+ * shared cache), so no client re-derives the tree. Falls back to reading flat rows
+ * and grouping locally with threadReplies when the gateway is absent or errors, so
+ * an outage degrades to "slower", not "broken". Both paths return the same shape and
+ * obey the same rules (the gateway mirrors threadReplies), so consumers can adopt
+ * this seam and drop their own assembly.
+ */
+export async function readAgentThreads(
+  agentWallet: string,
+  options?: { limit?: number },
+): Promise<ThreadNode[]> {
+  const limit = options?.limit ?? 100;
+  try {
+    const threads = await readThreads(reviewsAgentHint(agentWallet), limit);
+    const nodes: ThreadNode[] = [];
+    for (const t of threads) {
+      const note = hydrateNotes([t.op], agentWallet)[0];
+      if (!note) continue; // op row missing an id (metadata shape) — skip
+      const replies: ThreadedReply[] = [];
+      for (const r of t.replies) {
+        const reply = hydrateNotes([r], agentWallet)[0];
+        if (reply) replies.push({ ...reply, parentAuthor: (r as { parentAuthor?: string }).parentAuthor });
+      }
+      nodes.push({ note, replies });
+    }
+    return nodes;
+  } catch {
+    const notes = await readAgentNotes(agentWallet, { limit });
+    return threadReplies(notes);
+  }
 }

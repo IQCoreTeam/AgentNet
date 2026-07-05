@@ -245,6 +245,33 @@ async function readRowsViaGateway(pda: PublicKey, options?: ReadOptions): Promis
   return out.slice(0, want);
 }
 
+// Gateway compound thread read (GH #101): /table/{pda}/threads returns the whole
+// reviews section already grouped by meta.parentId, so a client renders instead
+// of re-deriving the tree from a flat row list. Same ETag/304 reuse as
+// readRowsViaGateway. Throws on any non-2xx so the caller falls back to reading
+// flat rows + grouping locally (threadReplies).
+export type GatewayThread = { op: Row; replies: Row[]; totalReplies: number };
+const threadsEtagCache = new Map<string, { etag: string; threads: GatewayThread[] }>();
+
+async function readThreadsViaGateway(pda: PublicKey, limit: number): Promise<GatewayThread[]> {
+  const url = `${gatewayUrl()}/table/${pda.toBase58()}/threads?limit=${limit}`;
+  const cached = threadsEtagCache.get(url);
+  const res = await fetch(url, cached ? { headers: { "If-None-Match": cached.etag } } : undefined);
+  if (res.status === 304 && cached) return cached.threads;
+  if (!res.ok) throw new Error(`gateway /table/threads → HTTP ${res.status}`);
+  const threads = ((await res.json()) as { threads?: GatewayThread[] }).threads ?? [];
+  const etag = res.headers.get("etag");
+  if (etag) threadsEtagCache.set(url, { etag, threads });
+  return threads;
+}
+
+/** Read a reviews table's comments already grouped into threads by the gateway.
+ *  Gateway-only (the caller owns the local-grouping fallback, which lives with
+ *  threadReplies in notes.ts). */
+export async function readThreads(hint: string, limit = 100): Promise<GatewayThread[]> {
+  return readThreadsViaGateway(tablePda(hint), limit);
+}
+
 /** Tell the gateway about a freshly-written row so its cache serves it
  *  immediately instead of waiting for the next chain poll (GH #101, iq-chan's
  *  notifyPost). Fire-and-forget: a failure just means the row appears on the
