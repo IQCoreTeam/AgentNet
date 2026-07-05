@@ -78,7 +78,7 @@ export function SkillDetailView({
       <Box>
         <Text bold color={colors.iqCyan}>{c.name}</Text>
         {firing ? <Text color={colors.iqMagenta}> ✦</Text> : null}
-        <Text dimColor>  {c.type ?? "skill"} · ×{c.supply ?? 0}{isOwned ? (disposed ? " · disposed" : " · owned") : ""}</Text>
+        <Text dimColor>  {c.type ?? "skill"} · ×{c.supply ?? 0}{c.stars ? ` · ★${c.stars}` : ""}{isOwned ? (disposed ? " · disposed" : " · owned") : ""}</Text>
       </Box>
       {c.description ? <Text>{c.description}</Text> : null}
       {c.category || (c.hashtags && c.hashtags.length) ? (
@@ -107,6 +107,18 @@ export function SkillDetailView({
           {unownedRequired.length > 0 ? (
             <Text color={colors.iqCyan}>[x] collect all {unownedRequired.length}{totalSol ? ` · ${totalSol.toFixed(3)} SOL` : ""}</Text>
           ) : null}
+        </Box>
+      ) : null}
+
+      {detail.repos && detail.repos.length ? (
+        <Box flexDirection="column" marginTop={1}>
+          <Text dimColor>used by · <Text color={colors.warn}>★{c.stars ?? detail.repos.reduce((s, r) => s + (r.stars || 0), 0)}</Text></Text>
+          {detail.repos.map((r) => (
+            <Box key={r.url}>
+              <Text color={colors.iqCyan}>  {r.owner}/{r.name}</Text>
+              <Text color={colors.warn}>  ★{r.stars}</Text>
+            </Box>
+          ))}
         </Box>
       ) : null}
 

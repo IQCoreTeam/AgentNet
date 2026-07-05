@@ -79,6 +79,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
                 <span key={h} className="bg-zinc-800/60 text-zinc-500 px-1.5 py-0.5 rounded">#{h}</span>
               ))}
               {card.supply != null && <span className="text-zinc-600">↑{card.supply} holders</span>}
+              {card.stars ? <span className="text-amber-400">★{card.stars}</span> : null}
             </div>
           </div>
         </div>
@@ -87,6 +88,23 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
           <div className="rounded-lg bg-zinc-900 border border-zinc-800 p-3">
             <p className="text-[11px] text-zinc-500 mb-1 uppercase tracking-wide">SKILL.md</p>
             <pre className="text-xs text-zinc-300 whitespace-pre-wrap font-mono overflow-x-auto">{skillText}</pre>
+          </div>
+        )}
+
+        {Array.isArray(detail.repos) && detail.repos.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[11px] text-zinc-500 uppercase tracking-wide">
+              Used by · <span className="text-amber-400">★{card.stars ?? detail.repos.reduce((s, r) => s + (r.stars || 0), 0)}</span>
+            </p>
+            <div className="space-y-1.5">
+              {detail.repos.map((r) => (
+                <a key={r.url} href={r.url} target="_blank" rel="noreferrer"
+                  className="flex items-center gap-2 rounded-lg bg-zinc-900 border border-zinc-800 p-2.5 text-sm active:opacity-80">
+                  <span className="min-w-0 flex-1 truncate text-zinc-300">{r.owner}/{r.name}</span>
+                  <span className="shrink-0 text-[11px] text-amber-400">★{r.stars}</span>
+                </a>
+              ))}
+            </div>
           </div>
         )}
 

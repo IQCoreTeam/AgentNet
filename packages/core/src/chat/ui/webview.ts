@@ -907,6 +907,10 @@ export function chatHtml(): string {
   #mktDetailBody .dt-req:hover { border-color: var(--an-green-line); background: var(--an-green-dim); }
   #mktDetailBody .dt-req .rq-name { font-weight: 600; }
   #mktDetailBody .dt-req .rq-arrow { margin-left: auto; opacity: 0.5; }
+  #mktDetailBody .dt-repo { display: flex; align-items: center; gap: 8px; padding: 7px 10px; text-decoration: none;
+                            color: inherit; border: 1px solid var(--an-line); border-radius: var(--an-radius); margin-bottom: 6px; }
+  #mktDetailBody .dt-repo:hover { border-color: var(--an-green-line); background: var(--an-green-dim); }
+  #mktDetailBody .dt-repo .dt-repo-stars { margin-left: auto; color: #e0a23a; font-size: 0.85em; }
   /* comments section (issue #34) */
   #mktDetailBody .dt-comments { margin-top: 14px; }
   #mktDetailBody .dt-comment { border: 1px solid var(--an-line); border-radius: var(--an-radius);
@@ -4755,6 +4759,7 @@ export function chatHtml(): string {
     if (c.category) addTag(c.category);
     for (const h of (c.hashtags || [])) addTag('#' + h);
     if (typeof c.supply === 'number') addTag(c.supply + '\\u00d7 owned');
+    if (typeof c.stars === 'number' && c.stars > 0) addTag('\\u2605 ' + c.stars); // GH #89: summed stars
     const detailPrice = fmtPrice(c.price);
     if (detailPrice) addTag(detailPrice); // "Free" / "0.1 SOL"
     if (meta.childElementCount) mktDetailBody.appendChild(meta);
@@ -4802,6 +4807,21 @@ export function chatHtml(): string {
         row.appendChild(w); row.appendChild(rn); row.appendChild(ar);
         row.addEventListener('click', () => openDetail(rc.id)); // drill into that skill
         mktDetailBody.appendChild(row);
+      }
+    }
+    // repos that use this skill, star-ranked (GH #89). Summed stars = c.stars (same source).
+    const repos = (detail && detail.repos) || [];
+    if (repos.length) {
+      const total = repos.reduce((s, r) => s + (r.stars || 0), 0);
+      const sec = document.createElement('div'); sec.className = 'dt-sec';
+      sec.textContent = 'Used by \\u00b7 \\u2605 ' + (typeof c.stars === 'number' ? c.stars : total);
+      mktDetailBody.appendChild(sec);
+      for (const r of repos) {
+        const a = document.createElement('a'); a.className = 'dt-repo'; a.href = r.url || '#'; a.target = '_blank'; a.rel = 'noreferrer';
+        const nm = document.createElement('span'); nm.className = 'rq-name'; nm.textContent = (r.owner || '') + '/' + (r.name || '');
+        const st = document.createElement('span'); st.className = 'dt-repo-stars'; st.textContent = '\\u2605 ' + (r.stars || 0);
+        a.appendChild(nm); a.appendChild(st);
+        mktDetailBody.appendChild(a);
       }
     }
     // body (skillText)
