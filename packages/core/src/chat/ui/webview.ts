@@ -901,8 +901,10 @@ export function chatHtml(): string {
   #mktDetailBody .dt-buy[disabled] { opacity: 0.5; cursor: default; }
   /* dispose (Remove) — a quieter, destructive-tinted button beside the disabled "Owned" */
   #mktDetailBody .dt-remove { margin-left: 8px; background: transparent; border: 1px solid var(--an-line);
-                              color: var(--vscode-descriptionForeground, #999); border-radius: var(--an-radius);
-                              padding: 8px 14px; cursor: pointer; font-weight: 600; }
+                              color: var(--vscode-descriptionForeground, #999); border-radius: 0;
+                              padding: 8px 16px; cursor: pointer; font-weight: 700;
+                              font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px;
+                              letter-spacing: 1px; text-transform: uppercase; }
   #mktDetailBody .dt-remove:hover { border-color: var(--vscode-errorForeground, #f48771); color: var(--vscode-errorForeground, #f48771); }
   #mktDetailBody .dt-remove[disabled] { opacity: 0.5; cursor: default; }
   /* a required skill row inside a workflow detail — clickable, opens its detail */
@@ -911,10 +913,18 @@ export function chatHtml(): string {
   #mktDetailBody .dt-req:hover { border-color: var(--an-green-line); background: var(--an-green-dim); }
   #mktDetailBody .dt-req .rq-name { font-weight: 600; }
   #mktDetailBody .dt-req .rq-arrow { margin-left: auto; opacity: 0.5; }
-  #mktDetailBody .dt-repo { display: flex; align-items: center; gap: 8px; padding: 7px 10px; text-decoration: none;
-                            color: inherit; border: 1px solid var(--an-line); border-radius: var(--an-radius); margin-bottom: 6px; }
+  #mktDetailBody .dt-repo { display: flex; align-items: center; gap: 8px; padding: 8px 11px; text-decoration: none;
+                            color: inherit; border: 1px solid var(--an-line); border-radius: 0; margin-bottom: 6px;
+                            font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82em; }
   #mktDetailBody .dt-repo:hover { border-color: var(--an-green-line); background: var(--an-green-dim); }
-  #mktDetailBody .dt-repo .dt-repo-stars { margin-left: auto; color: #e0a23a; font-size: 0.85em; }
+  #mktDetailBody .dt-repo .dt-repo-stars { margin-left: auto; color: #e0a23a; font-weight: 700; letter-spacing: 0.5px; }
+  /* USED BY total star, as a corner-bracket ghost chip (shares --an-ticks with the OWNED chip) */
+  #mktDetailBody .dt-usedby { display: inline-flex; align-items: center; gap: 7px; position: relative; isolation: isolate;
+                              padding: 5px 12px; margin: 16px 0 8px; border: 0; background: transparent;
+                              font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px;
+                              letter-spacing: 1px; text-transform: uppercase; color: var(--vscode-foreground); opacity: 0.9; }
+  #mktDetailBody .dt-usedby::before { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--an-ticks); }
+  #mktDetailBody .dt-usedby .uc-star { color: #e0a23a; font-weight: 700; opacity: 1; }
   /* comments section (issue #34) */
   #mktDetailBody .dt-comments { margin-top: 14px; }
   #mktDetailBody .dt-comment { border: 1px solid var(--an-line); border-radius: var(--an-radius);
@@ -4831,9 +4841,11 @@ export function chatHtml(): string {
     // repos that use this skill, star-ranked (GH #89). Summed stars = c.stars (same source).
     const repos = (detail && detail.repos) || [];
     if (repos.length) {
-      const total = repos.reduce((s, r) => s + (r.stars || 0), 0);
-      const sec = document.createElement('div'); sec.className = 'dt-sec';
-      sec.textContent = 'Used by \\u00b7 \\u2605 ' + (typeof c.stars === 'number' ? c.stars : total);
+      const total = typeof c.stars === 'number' ? c.stars : repos.reduce((s, r) => s + (r.stars || 0), 0);
+      const sec = document.createElement('div'); sec.className = 'dt-usedby';
+      const lbl = document.createElement('span'); lbl.textContent = 'Used by';
+      const stt = document.createElement('span'); stt.className = 'uc-star'; stt.textContent = '\\u2605 ' + total;
+      sec.appendChild(lbl); sec.appendChild(stt);
       mktDetailBody.appendChild(sec);
       for (const r of repos) {
         const a = document.createElement('a'); a.className = 'dt-repo'; a.href = r.url || '#'; a.target = '_blank'; a.rel = 'noreferrer';
