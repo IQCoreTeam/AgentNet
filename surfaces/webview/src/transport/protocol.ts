@@ -124,7 +124,7 @@ export type ClientMessage =
   | { type: "setGoogleCredentials"; clientId: string; clientSecret?: string }
   | { type: "toast"; text: string }
   // ── market (UI→server) ──
-  | { type: "searchSkills"; query: string; kind?: "skill" | "workflow" }
+  | { type: "searchSkills"; query: string; kind?: "skill" | "workflow"; sort?: "supply" | "stars" }
   | { type: "getSkillDetail"; mint: string }
   | { type: "buySkill"; skillId: string; creatorWallet?: string }
   | { type: "disposeSkill"; skillId: string }

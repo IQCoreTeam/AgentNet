@@ -11,7 +11,7 @@ import { HeliusPanel, HeliusBadge, type RpcStatusLite } from "./market/HeliusPan
 import { PublishProgressView, type PublishProgress } from "./market/PublishProgressView.js";
 
 export interface MarketApi {
-  searchSkills(query: string, kind?: "skill" | "workflow"): Promise<SkillCard[]>;
+  searchSkills(query: string, kind?: "skill" | "workflow", sort?: "supply" | "stars"): Promise<SkillCard[]>;
   getSkillDetail(mint: string): Promise<SkillDetail>;
   buySkill(skillId: string, creatorWallet?: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
   solBalance(): Promise<number | null>;
@@ -72,6 +72,7 @@ export function SkillMarket({
 }) {
   const [stage, setStage] = useState<Stage>("list");
   const [kind, setKind] = useState<"skill" | "workflow">("skill");
+  const [marketSort, setMarketSort] = useState<"supply" | "stars">("supply"); // GH #89 ranking
   const [query, setQuery] = useState("");
   const [typing, setTyping] = useState(true);
   const [results, setResults] = useState<SkillCard[]>([]);
@@ -134,11 +135,11 @@ export function SkillMarket({
   const visibleResults = results.filter((c) => !hideOwned || !owned.has(c.name));
   const selected = results[clamped];
 
-  async function search(q: string, k: "skill" | "workflow") {
+  async function search(q: string, k: "skill" | "workflow", sort: "supply" | "stars" = marketSort) {
     setLoading(true);
     setError(null);
     try {
-      setResults(await api.searchSkills(q, k));
+      setResults(await api.searchSkills(q, k, sort));
       setIdx(0);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -553,6 +554,7 @@ export function SkillMarket({
     if (input === "p") { setPubResult(null); setPubProgress(null); setPubField("name"); setStage("publish"); return; }
     if (input === "r") { setHeliusFlash(null); setHeliusKeyInput(""); setStage("helius"); return; }
     if (input === "h") { setHideOwned((v) => !v); setIdx(0); return; }
+    if (input === "s") { const next = marketSort === "stars" ? "supply" : "stars"; setMarketSort(next); void search(query, kind, next); return; }
     if (key.tab) {
       const next = kind === "skill" ? "workflow" : "skill";
       setKind(next); void search(query, next); return;
@@ -788,6 +790,8 @@ export function SkillMarket({
         {typing ? <Text inverse> </Text> : null}
         <Text dimColor>   [h] hide owned </Text>
         <Text color={hideOwned ? colors.ok : colors.dim}>{hideOwned ? "✓" : "✗"}</Text>
+        <Text dimColor>   [s] sort </Text>
+        <Text color={marketSort === "stars" ? colors.warn : colors.dim}>{marketSort === "stars" ? "★ stars" : "popular"}</Text>
       </Box>
       {/* results */}
       <Box flexDirection="column" marginTop={1}>
@@ -824,7 +828,7 @@ export function SkillMarket({
         <Text dimColor>
           {typing
             ? "type to search · ↵ run · [tab] skills/workflows · ↓ results · esc close"
-            : "↑/↓ move · ↵ open · [b] buy · [tab] switch · [/] search · [a] agents · [p] publish · [r] rpc · [h] hide owned · esc close"}
+            : "↑/↓ move · ↵ open · [b] buy · [tab] switch · [/] search · [a] agents · [p] publish · [r] rpc · [h] hide owned · [s] sort · esc close"}
         </Text>
       </Box>
     </Box>

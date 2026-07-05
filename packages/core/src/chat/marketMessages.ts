@@ -88,7 +88,7 @@ export interface RpcStatus {
 
 // ── UI -> host (requests) ───────────────────────────────────────────────────
 export type MarketRequest =
-  | { type: "searchSkills"; query: string; kind?: "skill" | "workflow" } // kind = the active tab
+  | { type: "searchSkills"; query: string; kind?: "skill" | "workflow"; sort?: "supply" | "stars" } // kind = active tab, sort = ranking (issue #89)
   | { type: "getSkillDetail"; mint: string } // open the detail view for one item
   | { type: "getSkillDoc"; name: string } // read an installed skill's local SKILL.md by name
   | { type: "buySkill"; skillId: string; creatorWallet?: string }

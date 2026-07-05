@@ -218,8 +218,14 @@ export async function marketplaceEnv(wallet: Wallet) {
   }
 
   return {
-    async searchSkills(query: string, kind?: "skill" | "workflow"): Promise<SkillCard[]> {
-      return (await runSearch(query, kind)).map(toCard);
+    async searchSkills(query: string, kind?: "skill" | "workflow", sort?: "supply" | "stars"): Promise<SkillCard[]> {
+      const cards = (await runSearch(query, kind)).map(toCard);
+      // Search fetches the full filtered set (no server paging here), so ranking by stars
+      // is a stable re-sort of what's in hand — supply order is the indexer default (GH #89).
+      if (sort === "stars") {
+        cards.sort((a, b) => (b.stars ?? 0) - (a.stars ?? 0) || (b.supply ?? 0) - (a.supply ?? 0));
+      }
+      return cards;
     },
 
     // Full detail for one item: its card + the on-chain body (readSkillText) + — for a

@@ -873,6 +873,10 @@ export function chatHtml(): string {
   .mktFilter { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; opacity: 0.85;
                font-size: 0.82em; cursor: pointer; user-select: none; white-space: nowrap; }
   .mktFilter:hover { opacity: 1; }
+  .mktSortBtn { margin-left: 10px; background: transparent; border: 1px solid #2a2a2e; border-radius: 999px;
+                color: #9a9a9f; font-size: 0.78em; padding: 2px 10px; cursor: pointer; white-space: nowrap; }
+  .mktSortBtn:hover { color: #f2f2f2; border-color: #3a3a3e; }
+  .mktSortBtn.stars { color: #e0a23a; border-color: color-mix(in srgb, #e0a23a 45%, transparent); }
   .mktFilter input { margin: 0; accent-color: var(--an-green); cursor: pointer; }
   /* detail sub-view */
   #mktDetailBody .dt-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
@@ -1888,6 +1892,7 @@ export function chatHtml(): string {
           <label class="mktFilter" title="Hide skills your wallet already owns">
             <input type="checkbox" id="mktHideOwned" /> Hide owned
           </label>
+          <button id="mktSortBtn" class="mktSortBtn" title="Sort by popularity or GitHub stars">Popular</button>
         </div>
         <div class="mktSearchRow">
           <input id="mktSearch" type="text" placeholder="Search…" />
@@ -4533,15 +4538,29 @@ export function chatHtml(): string {
       renderMarketResults(lastMarketResults);
     });
   }
+  // Market ranking: 'supply' (popularity, indexer default) or 'stars' (summed GitHub
+  // stars of repos that use the skill, GH #89). Persisted like the other market prefs.
+  let mktSort = uiGet('mktSort') === 'stars' ? 'stars' : 'supply';
+  const mktSortBtn = document.getElementById('mktSortBtn');
+  function paintSortBtn() {
+    if (!mktSortBtn) return;
+    mktSortBtn.textContent = mktSort === 'stars' ? '\\u2605 Stars' : 'Popular';
+    mktSortBtn.classList.toggle('stars', mktSort === 'stars');
+  }
+  paintSortBtn();
+  if (mktSortBtn) mktSortBtn.addEventListener('click', () => {
+    mktSort = mktSort === 'stars' ? 'supply' : 'stars';
+    uiSet('mktSort', mktSort); paintSortBtn(); runMarketSearch();
+  });
   function runMarketSearch() {
     mktResults.innerHTML = skSd(8);
-    vscode.postMessage({ type: 'searchSkills', query: mktSearch.value.trim(), kind: currentKind });
+    vscode.postMessage({ type: 'searchSkills', query: mktSearch.value.trim(), kind: currentKind, sort: mktSort });
   }
   function openMarket() {
     showMktList();
     // first open (and re-open) loads the popular list (empty query = supply-sorted)
     mktResults.innerHTML = skSd(8);
-    vscode.postMessage({ type: 'searchSkills', query: '', kind: currentKind });
+    vscode.postMessage({ type: 'searchSkills', query: '', kind: currentKind, sort: mktSort });
     vscode.postMessage({ type: 'ownedSkills' });
     vscode.postMessage({ type: 'getBalance' }); // show funds in the market header
   }

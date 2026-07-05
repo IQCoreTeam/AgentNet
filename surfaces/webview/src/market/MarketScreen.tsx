@@ -26,6 +26,8 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
   // Hide already-owned skills from the market results by default (you came to find NEW ones);
   // untick to show them too (muted/greyed).
   const [hideOwned, setHideOwned] = useState(true);
+  // Market ranking: popularity (supply, indexer default) or GitHub stars (issue #89).
+  const [marketSort, setMarketSort] = useState<"supply" | "stars">("supply");
   // Tracks a tapped card whose detail is still loading, so we can show a skeleton in the
   // gap between the tap and `marketDetail` arriving (there's no store-level loading flag).
   const [pendingMint, setPendingMint] = useState<string | null>(null);
@@ -47,7 +49,7 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
     if (tab === "market") {
       setView("browse");
       marketSearching();
-      send({ type: "searchSkills", query: "", kind: state.marketTab });
+      send({ type: "searchSkills", query: "", kind: state.marketTab, sort: marketSort });
     }
     // Clear the shared detail/profile when LEAVING this tab so the next tab's MarketScreen
     // mounts clean — otherwise its first frame shows the previous tab's open detail/profile
@@ -76,9 +78,9 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
     if (state.marketOwnedCards !== ownedAtArm.current) setOwnedLoading(false);
   }, [state.marketOwnedCards]);
 
-  function runSearch(q: string, t?: "skill" | "workflow") {
+  function runSearch(q: string, t?: "skill" | "workflow", sort?: "supply" | "stars") {
     marketSearching();
-    send({ type: "searchSkills", query: q, kind: t ?? state.marketTab });
+    send({ type: "searchSkills", query: q, kind: t ?? state.marketTab, sort: sort ?? marketSort });
   }
   function handleTabChange(t: "skill" | "workflow") {
     setMarketTab(t);
@@ -246,6 +248,14 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
               {hideOwned && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}
             </span>
             <span className="an-term-mono text-[9px] font-bold uppercase tracking-wider" style={{ color: hideOwned ? "#9a9a9a" : "#6a6a6a" }}>Hide owned</span>
+          </button>
+          {/* SORT toggle — popularity (supply) vs GitHub stars (issue #89) */}
+          <button
+            onClick={() => { const next = marketSort === "stars" ? "supply" : "stars"; setMarketSort(next); runSearch(state.marketQuery, undefined, next); }}
+            className="ml-3 an-term-mono text-[9px] font-bold uppercase tracking-wider pb-2.5 active:opacity-80"
+            style={{ color: marketSort === "stars" ? "#e0a23a" : "#6a6a6a" }}
+          >
+            {marketSort === "stars" ? "★ Stars" : "Popular"}
           </button>
         </div>
       )}
