@@ -27,6 +27,9 @@ export interface MarketApi {
   disposeSkill(skillId: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
   reEquipSkill(skillId: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
   disposedSkillMints?(): Promise<Record<string, string>>;
+  // name -> mint for the wallet's owned skills — used to resolve a workflow's required
+  // skills (typed by name in the publish form) to the mints the on-chain gate needs.
+  ownedSkillMints?(): Promise<Record<string, string>>;
 }
 
 type Stage =
@@ -41,8 +44,10 @@ type Stage =
   | "blogCompose";
 
 // Publish form fields in order — tab/arrow cycles through them.
-type PublishField = "name" | "desc" | "text" | "category" | "hashtags" | "price" | "image";
-const PUBLISH_FIELDS: PublishField[] = ["name", "desc", "text", "category", "hashtags", "price", "image"];
+type PublishField = "kind" | "name" | "desc" | "text" | "category" | "hashtags" | "price" | "image";
+const PUBLISH_FIELDS: PublishField[] = ["kind", "name", "desc", "text", "category", "hashtags", "price", "image"];
+// a workflow can require at most 16 skills (on-chain agent-workflow-nft contract limit)
+const MAX_REQUIRED_SKILLS = 16;
 
 type BlogField = "title" | "text" | "image" | "gitLink";
 const BLOG_FIELDS: BlogField[] = ["title", "text", "image", "gitLink"];
@@ -97,7 +102,8 @@ export function SkillMarket({
   const [commentField, setCommentField] = useState<"text" | "gitLink">("text");
 
   // publish stage
-  const [pubField, setPubField] = useState<PublishField>("name");
+  const [pubField, setPubField] = useState<PublishField>("kind");
+  const [pubKind, setPubKind] = useState<"skill" | "workflow">("skill");
   const [pubName, setPubName] = useState("");
   const [pubDesc, setPubDesc] = useState("");
   const [pubText, setPubText] = useState("");
@@ -268,14 +274,41 @@ export function SkillMarket({
   }
 
   async function doPublish() {
-    if (!pubName.trim() || !pubDesc.trim() || !pubText.trim()) return;
+    if (!pubName.trim() || !pubDesc.trim()) return;
+    if (pubKind === "skill" && !pubText.trim()) return;
     setBusy(true);
     setPubProgress(null);
+
+    let text = pubText.trim();
+    if (pubKind === "workflow") {
+      const names = pubText.split(",").map((n) => n.trim()).filter(Boolean);
+      if (names.length === 0) { setBusy(false); setPubResult("failed: pick at least one required skill"); return; }
+      if (names.length > MAX_REQUIRED_SKILLS) { setBusy(false); setPubResult(`failed: max ${MAX_REQUIRED_SKILLS} required skills`); return; }
+      const owned = (await api.ownedSkillMints?.()) ?? {};
+      const missing = names.filter((n) => !owned[n]);
+      if (missing.length) { setBusy(false); setPubResult(`failed: not owned — ${missing.join(", ")}`); return; }
+      // Synthesize SKILL.md frontmatter (type: workflow + requiredSkills) — the backend
+      // mints it as a workflow by sniffing this out of `text` (env.ts publishFrontmatter).
+      text = [
+        "---",
+        `name: ${pubName.trim()}`,
+        `description: ${pubDesc.trim().replace(/\s*\n\s*/g, " ")}`,
+        "type: workflow",
+        `requiredSkills: [${names.map((n) => owned[n]).join(", ")}]`,
+        "---",
+        "",
+        `# ${pubName.trim()}`,
+        "",
+        pubDesc.trim(),
+        "",
+      ].join("\n");
+    }
+
     const res = await api.publishSkill(
       {
         name: pubName.trim(),
         description: pubDesc.trim(),
-        text: pubText.trim(),
+        text,
         category: pubCategory.trim() || undefined,
         hashtags: pubHashtags.trim() ? pubHashtags.split(",").map((h) => h.trim()).filter(Boolean) : undefined,
         priceSol: pubPrice.trim() || "0.1",
@@ -364,10 +397,10 @@ export function SkillMarket({
   }
 
   // get/set helpers for publish form fields
-  function pubGet(f: PublishField) {
+  function pubGet(f: Exclude<PublishField, "kind">) {
     return { name: pubName, desc: pubDesc, text: pubText, category: pubCategory, hashtags: pubHashtags, price: pubPrice, image: pubImage }[f];
   }
-  function pubSet(f: PublishField, v: string) {
+  function pubSet(f: Exclude<PublishField, "kind">, v: string) {
     ({ name: setPubName, desc: setPubDesc, text: setPubText, category: setPubCategory, hashtags: setPubHashtags, price: setPubPrice, image: setPubImage }[f])(v);
   }
 
@@ -468,6 +501,10 @@ export function SkillMarket({
         setPubField(PUBLISH_FIELDS[(fi + PUBLISH_FIELDS.length - 1) % PUBLISH_FIELDS.length]);
         return;
       }
+      if (pubField === "kind" && (key.leftArrow || key.rightArrow || input === " ")) {
+        setPubKind((k) => (k === "skill" ? "workflow" : "skill"));
+        return;
+      }
       if (key.return) {
         if (fi < PUBLISH_FIELDS.length - 1) {
           setPubField(PUBLISH_FIELDS[fi + 1]);
@@ -476,6 +513,7 @@ export function SkillMarket({
         }
         return;
       }
+      if (pubField === "kind") return; // toggle-only field, no free text
       if (key.backspace || key.delete) { pubSet(pubField, pubGet(pubField).slice(0, -1)); return; }
       if (input && !key.ctrl && !key.meta) { pubSet(pubField, pubGet(pubField) + input); return; }
       return;
@@ -551,7 +589,7 @@ export function SkillMarket({
     }
     if (input === "/") return setTyping(true);
     if (input === "a") { setStage("agents"); void loadAgents(); return; }
-    if (input === "p") { setPubResult(null); setPubProgress(null); setPubField("name"); setStage("publish"); return; }
+    if (input === "p") { setPubResult(null); setPubProgress(null); setPubField("kind"); setPubKind("skill"); setStage("publish"); return; }
     if (input === "r") { setHeliusFlash(null); setHeliusKeyInput(""); setStage("helius"); return; }
     if (input === "h") { setHideOwned((v) => !v); setIdx(0); return; }
     if (input === "s") { const next = marketSort === "stars" ? "supply" : "stars"; setMarketSort(next); void search(query, kind, next); return; }
@@ -665,16 +703,17 @@ export function SkillMarket({
       );
     }
     const fieldLabels: Record<PublishField, string> = {
-      name: "name      ", desc: "desc      ", text: "skill text",
+      kind: "type      ", name: "name      ", desc: "desc      ",
+      text: pubKind === "workflow" ? "req skills" : "skill text",
       category: "category  ", hashtags: "hashtags  ", price: "price (SOL)", image: "image     ",
     };
     const fieldValues: Record<PublishField, string> = {
-      name: pubName, desc: pubDesc, text: pubText.slice(0, 60) + (pubText.length > 60 ? "…" : ""),
+      kind: pubKind, name: pubName, desc: pubDesc, text: pubText.slice(0, 60) + (pubText.length > 60 ? "…" : ""),
       category: pubCategory, hashtags: pubHashtags, price: pubPrice, image: pubImage,
     };
     return (
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
-        <Text bold color={colors.iqMagenta}>❖ publish skill</Text>
+        <Text bold color={colors.iqMagenta}>❖ publish {pubKind}</Text>
         <Box flexDirection="column" marginTop={1}>
           {PUBLISH_FIELDS.map((f) => {
             const on = f === pubField;
@@ -683,16 +722,21 @@ export function SkillMarket({
                 <Text color={on ? colors.iqCyan : colors.dim}>{on ? "▸ " : "  "}</Text>
                 <Box width={12}><Text color={on ? colors.iqCyan : colors.dim} bold={on}>{fieldLabels[f]}</Text></Box>
                 <Text color={on ? undefined : colors.dim}>{fieldValues[f]}</Text>
-                {on ? <Text inverse> </Text> : null}
+                {on && f !== "kind" ? <Text inverse> </Text> : null}
               </Box>
             );
           })}
         </Box>
         {busy ? <PublishProgressView progress={pubProgress} /> : null}
         <Box marginTop={1}>
-          <Text dimColor>↑/↓/[tab] field · ↵ next / submit on image · esc cancel</Text>
+          <Text dimColor>
+            {pubField === "kind" ? "←/→/[space] toggle · " : ""}↑/↓/[tab] field · ↵ next / submit on image · esc cancel
+          </Text>
         </Box>
         <Box><Text dimColor>hashtags = comma-separated · image = link or on-chain ref, optional</Text></Box>
+        {pubKind === "workflow" ? (
+          <Box><Text dimColor>req skills = comma-separated names you own (max {MAX_REQUIRED_SKILLS})</Text></Box>
+        ) : null}
       </Box>
     );
   }
