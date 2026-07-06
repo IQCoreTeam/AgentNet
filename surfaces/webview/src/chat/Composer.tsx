@@ -4,7 +4,7 @@ import { enqueueLiveImages } from "./liveImages";
 import type { Cli, ImageInput } from "../transport/protocol";
 import { AttachIcon } from "../icons";
 import { useElementHeightVariable } from "../layoutEffects";
-import { CHAT_MODEL_OPTIONS } from "@iqlabs-official/agent-sdk/chat/modelOptions";
+import type { ChatModelOption } from "@iqlabs-official/agent-sdk/chat/modelOptions";
 import { CHAT_SLASH_COMMANDS } from "@iqlabs-official/agent-sdk/chat/slashCommands";
 
 // ── Context dot (compact donut circle for mobile, mirrors Claude Code's meter) ──
@@ -42,13 +42,13 @@ function CtxDot({ tokens, window: win, compacting }: { tokens: number; window: n
   );
 }
 
-// The shared model catalog (same one vscode/cli use) — gives versioned chip labels
-// (Opus 4.8, Sonnet 4.6, GPT-5.5 Codex…) + a description, instead of bare aliases.
-// `value` is undefined for the engine default; the picker treats that as "default".
-const MODELS: Record<Cli, { value: string; label: string; desc: string }[]> = {
-  claude: CHAT_MODEL_OPTIONS.claude.map((o) => ({ value: o.value ?? "default", label: o.chipLabel, desc: o.description })),
-  codex: CHAT_MODEL_OPTIONS.codex.map((o) => ({ value: o.value ?? "default", label: o.chipLabel, desc: o.description })),
-};
+// Map the shared model catalog (state.modelCatalog — static baseline, upgraded live from
+// the installed CLI) into the picker's {value,label,desc} rows. No bare "default": the
+// first real model is the default, shown by its actual name (Opus 4.8, GPT-5.5 Codex…).
+type ModelRow = { value: string; label: string; desc: string };
+function toModelRows(opts: readonly ChatModelOption[]): ModelRow[] {
+  return opts.map((o) => ({ value: o.value ?? "default", label: o.chipLabel, desc: o.description }));
+}
 
 const EFFORTS = [
   { value: "default", label: "default" },
@@ -126,6 +126,10 @@ export function Composer() {
   const [recording, setRecording] = useState(false);
   const recognitionRef = useRef<any>(null);
   const mode = state.modeByCli[state.cli] ?? MODES[state.cli][0].value;
+  // live model rows for the active engine (upgraded from the CLI). selectedModel falls to
+  // the first real model when `model` isn't in the list (initial, or after a live upgrade).
+  const models = toModelRows(state.modelCatalog[state.cli]);
+  const selectedModel = models.some((m) => m.value === model) ? model : (models[0]?.value ?? "default");
   // The active engine tints the composer border (claude = orange, codex = green) so the
   // input itself shows which platform you're talking to — vscode's folder-tab idea.
   const engineAccent = state.cli === "claude" ? "var(--claude)" : "var(--an-green)";
@@ -196,8 +200,7 @@ export function Composer() {
       if (m) {
         subCmd = 'model';
         const prefix = (m[1] || '').toLowerCase();
-        const list = MODELS[state.cli] || [];
-        const options = list.map(o => ({ name: o.value, desc: o.label, insert: '/model ' + o.value }));
+        const options = models.map(o => ({ name: o.value, desc: o.label, insert: '/model ' + o.value }));
         activeMatches = options.filter(opt => opt.name.toLowerCase().startsWith(prefix));
       }
     }
@@ -471,13 +474,13 @@ export function Composer() {
               <div className="flex flex-col gap-2.5">
                 <ChipGroup
                   label="Model"
-                  value={model}
-                  options={MODELS[state.cli].map((m) => ({ value: m.value, label: m.label }))}
+                  value={selectedModel}
+                  options={models.map((m) => ({ value: m.value, label: m.label }))}
                   onPick={(v) => { setModel(v); send({ type: "model", model: v === "default" ? undefined : v }); }}
                 />
                 {/* version/detail of the selected model, from the shared catalog */}
                 <p className="an-term-mono text-[9px] uppercase leading-snug" style={{ color: "#5a5a5d", letterSpacing: "0.5px" }}>
-                  {MODELS[state.cli].find((m) => m.value === model)?.desc}
+                  {models.find((m) => m.value === selectedModel)?.desc}
                 </p>
               </div>
               <ChipGroup

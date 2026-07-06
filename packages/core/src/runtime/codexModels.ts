@@ -1,24 +1,10 @@
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import readline from "node:readline";
-import { existsSync } from "node:fs";
 import type { ChatModelOption } from "../chat/modelOptions.js";
 import type { Model } from "./codex_bindings/v2/Model.js";
 import type { ModelListResponse } from "./codex_bindings/v2/ModelListResponse.js";
 import { getCodexApiKey } from "../account/codexAuth.js";
-
-const exeCache = new Map<string, string | null>();
-function resolveExecutable(name: string): string | undefined {
-  if (!exeCache.has(name)) {
-    try {
-      const cmd = process.platform === "win32" ? "where" : "which";
-      const out = execFileSync(cmd, [name], { encoding: "utf8" }).split("\n")[0]?.trim();
-      exeCache.set(name, out && existsSync(out) ? out : null);
-    } catch {
-      exeCache.set(name, null);
-    }
-  }
-  return exeCache.get(name) ?? undefined;
-}
+import { resolveExecutable } from "./resolveExecutable.js";
 
 function modelToOption(model: Model): ChatModelOption {
   const display = model.displayName?.trim() || model.model;
@@ -120,16 +106,11 @@ export async function listCodexModelOptions(): Promise<ChatModelOption[]> {
       cursor = page.nextCursor;
     }
 
-    const def = all.find((m) => m.isDefault) || all[0];
-    const options = all.map(modelToOption);
-    if (def) {
-      options.unshift({
-        chipLabel: "default",
-        label: "Default",
-        description: `Currently ${def.displayName?.trim() || def.model} · no model override`,
-      });
-    }
-    return options;
+    // Float the app-server's own default model to the front so it becomes the picker's
+    // default selection, shown by its real name (no opaque "default" pseudo-entry).
+    const def = all.find((m) => m.isDefault);
+    const ordered = def ? [def, ...all.filter((m) => m !== def)] : all;
+    return ordered.map(modelToOption);
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
     failPending(new Error("Codex model-list request aborted"));

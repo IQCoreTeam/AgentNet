@@ -814,6 +814,7 @@ export function SkillMarket({
                   </Text>
                 </Box>
                 <Text dimColor>×{c.supply ?? 0} </Text>
+                {c.stars ? <Text color={colors.warn}>★{c.stars} </Text> : null}
                 {isOwned ? <Text color={colors.ok}>owned{firingIds.has(c.id) ? " ✦" : ""} </Text> : null}
                 <Text dimColor>{(c.description ?? "").slice(0, 40)}</Text>
               </Box>

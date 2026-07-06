@@ -13,7 +13,7 @@
 // and never imports an SDK type. Output is delivered as already-mapped ChatMessages
 // (convert/* map the SDK events); the runtime just appends + paints.
 
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import readline from "node:readline";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -32,6 +32,7 @@ import type {
   ApprovalRequest,
 } from "./approval/channel.js";
 import { autoApprove } from "./approval/channel.js";
+import { resolveExecutable } from "./resolveExecutable.js";
 
 // Loosely-typed view of AskUserQuestion's raw input (the SDK hands us `unknown`-ish data).
 type ApprovalQuestionInput = {
@@ -53,20 +54,7 @@ type CodexRequestUserInputQuestion = {
 // The SDK bundles its own native CLI binary, but when we BUNDLE the extension the
 // SDK can't resolve that binary's path (it's outside the bundle) → "Native CLI binary
 // not found". The fix: point the SDK at the user's installed `claude` (which they're
-// already logged into). Resolve it once from PATH via `which`/`where`.
-const exeCache = new Map<string, string | null>();
-function resolveExecutable(name: string): string | undefined {
-  if (!exeCache.has(name)) {
-    try {
-      const cmd = process.platform === "win32" ? "where" : "which";
-      const out = execFileSync(cmd, [name], { encoding: "utf8" }).split("\n")[0]?.trim();
-      exeCache.set(name, out && existsSync(out) ? out : null);
-    } catch {
-      exeCache.set(name, null);
-    }
-  }
-  return exeCache.get(name) ?? undefined;
-}
+// already logged into), resolved from PATH — see resolveExecutable.js.
 
 // The runtime-facing engine handle. Callbacks are registered once; send() feeds a
 // user turn; stop() ends the session. sessionId(cb) fires when the engine reveals

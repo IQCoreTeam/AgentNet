@@ -184,6 +184,7 @@ export type ServerMessage =
   | { type: "page"; hasMore: boolean; cursor: number }
   | { type: "older"; messages: ChatMessage[]; hasMore: boolean; cursor: number }
   | { type: "sessions"; list: SessionMeta[]; activeId?: string }
+  | { type: "modelOptions"; cli: Cli; options: import("@iqlabs-official/agent-sdk").ChatModelOption[] }
   | { type: "loading" }
   | { type: "platform"; cli: Cli }
   | { type: "storage"; info: unknown; options: unknown; googleCredsConfigured?: boolean }

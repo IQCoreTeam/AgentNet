@@ -434,6 +434,8 @@ export function createChatSession(
   async function pushModelOptions(forCli: "claude" | "codex") {
     if (!env.modelOptions) return;
     const options = await env.modelOptions(forCli).catch(() => null);
+    // Empty/failed probe → leave the webview on its static baseline (listClaudeModelOptions
+    // already logs the reason). Only override the picker when we have a live list.
     if (options?.length) transport.send({ type: "modelOptions", cli: forCli, options });
   }
 
@@ -459,7 +461,10 @@ export function createChatSession(
     switch (m?.type) {
       case "ready":
         await pushSessions(); await pushStorage(); await pushSkillShopping(); await open();
-        void pushModelOptions("codex");
+        // Push the ACTIVE engine's live model catalog (claude by default). The old code
+        // only pushed codex, so a fresh claude session never received its dynamic list and
+        // kept showing the static baseline. Switching engines pushes the other side.
+        void pushModelOptions(cli);
         // install the wallet's owned skills so they're present + discoverable this
         // session (issue #17). Fire-and-forget: a chain hiccup must not delay the chat;
         // refresh the panel once it lands.

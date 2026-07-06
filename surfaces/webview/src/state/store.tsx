@@ -30,6 +30,8 @@ import type {
   RpcStatus,
   Reputation,
 } from "../transport/protocol";
+// leaf subpath (not the barrel) so the browser bundle doesn't drag in the Node-only SDK.
+import { CHAT_MODEL_OPTIONS, type ChatModelOption } from "@iqlabs-official/agent-sdk/chat/modelOptions";
 
 // A rendered log entry. We keep messages as-is and stream into the last assistant/
 // thinking bubble when `partial` is set, matching the HTML webview's bubble model.
@@ -113,6 +115,9 @@ export interface State {
   contextWindow?: number;
   isCompacting: boolean;
   currentModel?: string;
+  // live model catalog per engine, seeded from the static baseline and upgraded when the
+  // server pushes `modelOptions` (the installed CLI's real list, e.g. Fable/Sonnet-1M).
+  modelCatalog: Record<Cli, ChatModelOption[]>;
   queuePending: number;
   agents: Reputation[];
   agentProfile: AgentProfile | null;
@@ -178,6 +183,7 @@ const initialState: State = {
   publishKind: null,
   firingSkills: [],
   currentModel: undefined,
+  modelCatalog: { claude: CHAT_MODEL_OPTIONS.claude, codex: CHAT_MODEL_OPTIONS.codex },
   queuePending: 0,
   agents: [],
   agentProfile: null,
@@ -381,6 +387,11 @@ function reducer(state: State, ev: Action): State {
         hasMore: ev.hasMore,
         cursor: ev.cursor,
       };
+    case "modelOptions":
+      // The installed CLI's live model list for one engine, replacing that engine's static
+      // baseline. Empty lists are dropped host-side, so this is always a real upgrade.
+      if (!ev.options?.length) return state;
+      return { ...state, modelCatalog: { ...state.modelCatalog, [ev.cli]: ev.options } };
     case "sessions":
       // Only ADOPT the server's activeId when the UI has no selection yet. pushSessions()
       // runs after every open and its listMine can take 2-3s on mobile; if the user taps

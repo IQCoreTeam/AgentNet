@@ -41,6 +41,11 @@ export function SkillSdCard({ card, owned, disposed, firing, dim, onOpen }: Prop
           <span className="an-sd-big">{card.supply ?? "—"}</span>
           <span className="an-sd-meta">{priceSol ? `${priceSol}◎` : "FREE"}<br />{state}</span>
         </div>
+        {/* 3a gold grade plaque: summed GitHub stars of repos using this skill (issue #89),
+            overlapping the coral chip's corner. Hidden at 0 so plain skills stay clean. */}
+        {card.stars ? (
+          <div className="an-sd-grade"><span className="st">★</span>{card.stars}</div>
+        ) : null}
       </div>
     </button>
   );

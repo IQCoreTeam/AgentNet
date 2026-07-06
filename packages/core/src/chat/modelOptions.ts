@@ -10,13 +10,11 @@ export type ChatModelOption = {
 // One shared model catalog for every surface. The runtime only cares about the raw
 // `value` (passed as the CLI/app-server model override); surfaces use the richer
 // labels/descriptions so the picker is understandable instead of exposing bare aliases.
+// No bare "default" pseudo-entry: the first real model is the sensible default, and the
+// picker shows its actual name (e.g. "Opus 4.8") instead of an opaque "default" chip.
+// This is only the offline/fallback baseline — surfaces upgrade to the CLI's live list.
 export const CHAT_MODEL_OPTIONS: Record<EngineKey, ChatModelOption[]> = {
   claude: [
-    {
-      chipLabel: "default",
-      label: "Default",
-      description: "Currently Opus 4.8 · no --model override",
-    },
     {
       value: "opus",
       chipLabel: "Opus 4.8",
@@ -37,11 +35,6 @@ export const CHAT_MODEL_OPTIONS: Record<EngineKey, ChatModelOption[]> = {
     },
   ],
   codex: [
-    {
-      chipLabel: "default",
-      label: "Default",
-      description: "Currently GPT-5.5 Codex · no model override",
-    },
     {
       value: "gpt-5.5-codex",
       chipLabel: "GPT-5.5 Codex",

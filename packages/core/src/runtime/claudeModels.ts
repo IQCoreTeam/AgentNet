@@ -1,6 +1,7 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { ModelInfo } from "@anthropic-ai/claude-agent-sdk";
 import type { ChatModelOption } from "../chat/modelOptions.js";
+import { resolveExecutable } from "./resolveExecutable.js";
 
 // Live model catalog for the "claude" engine, pulled from the Claude Code CLI the user
 // already runs. The agent SDK's query() exposes supportedModels() over its control
@@ -12,13 +13,25 @@ import type { ChatModelOption } from "../chat/modelOptions.js";
 // baseline" — so a missing CLI, a logged-out user, or a slow probe never blocks the picker.
 
 function modelToOption(model: ModelInfo): ChatModelOption {
-  const display = model.displayName?.trim() || model.value;
   const desc = model.description?.trim();
+  let chip = model.displayName?.trim() || model.value;
+  let full = chip;
+  // The CLI's default entry is named "Default (recommended)" and hides the real model
+  // name in its description ("Opus 4.8 with 1M context · ..."). supportedModels() does not
+  // return that model as a standalone entry, so relabel the default with its actual model
+  // name instead of showing an opaque "Default" on the chip.
+  if (model.value === "default" && desc) {
+    const lead = desc.split(" · ")[0]?.trim(); // "Opus 4.8 with 1M context"
+    if (lead) {
+      full = lead;
+      chip = lead.split(" with ")[0].trim(); // "Opus 4.8"
+    }
+  }
   const extra = `Claude alias: ${model.value}`;
   return {
     value: model.value,
-    chipLabel: display,
-    label: display,
+    chipLabel: chip,
+    label: full,
     description: desc ? `${desc} · ${extra}` : extra,
   };
 }
@@ -40,6 +53,12 @@ export async function listClaudeModelOptions(cwd?: string): Promise<ChatModelOpt
       cwd,
       // read-only probe; never runs a tool or sends a turn
       permissionMode: "default",
+      // Point at the user's installed claude, exactly like the chat spawn (spawn.ts).
+      // A GUI-launched VSCode extension host has no shell PATH, so without this the SDK
+      // falls back to its unresolvable bundle-relative binary, the probe fails to spawn,
+      // and the picker silently drops to the static baseline (no Fable/Sonnet-1M). This
+      // is why codex synced but claude didn't: codexModels resolves its path, we didn't.
+      pathToClaudeCodeExecutable: resolveExecutable("claude"),
     },
   });
 
@@ -54,18 +73,17 @@ export async function listClaudeModelOptions(cwd?: string): Promise<ChatModelOpt
 
   try {
     const models = await Promise.race([q.supportedModels(), timeout]);
-    if (!models?.length) return null;
+    if (!models?.length) {
+      console.error("[claudeModels] supportedModels() returned empty; falling back to static baseline");
+      return null;
+    }
+    console.error(`[claudeModels] loaded ${models.length} models: ${models.map((m) => m.value).join(", ")}`);
 
-    const options = models.map(modelToOption);
-    // Prepend a "Default" entry (no --model override) mirroring the static baseline and
-    // the codex picker, so the user can always fall back to the CLI's own default.
-    options.unshift({
-      chipLabel: "default",
-      label: "Default",
-      description: "CLI default · no --model override",
-    });
-    return options;
-  } catch {
+    // No bare "default" entry: supportedModels() already lists the CLI's recommended model
+    // first, so the picker defaults to it and shows its real name instead of "default".
+    return models.map(modelToOption);
+  } catch (e) {
+    console.error(`[claudeModels] probe failed (${(e as Error)?.message || e}); falling back to static baseline`);
     return null;
   } finally {
     if (timeoutId) clearTimeout(timeoutId);

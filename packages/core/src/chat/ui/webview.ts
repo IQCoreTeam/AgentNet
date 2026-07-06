@@ -760,6 +760,14 @@ export function chatHtml(): string {
                 box-shadow: inset 0 -1px 0 rgba(0,0,0,0.16); }
   .an-sd-big { font-size: 14px; font-weight: 700; color: #2a0f06; line-height: 1; }
   .an-sd-meta { font-size: 6px; line-height: 1.3; color: #3a160a; font-weight: 700; letter-spacing: 0.2px; }
+  /* 3a "plaque overlap": a gold grade stamp sitting on the coral chip's top-right corner.
+     Reputation (gold stars) reads separately from commerce (coral supply/price). Hidden at 0. */
+  .an-sd-grade { position: absolute; right: 8px; bottom: 20px; z-index: 6; display: inline-flex;
+                 align-items: center; gap: 2px; padding: 1px 5px 1px 4px; border-radius: 2px;
+                 background: linear-gradient(180deg, #ffd76a, #e3a11f); color: #3a2600;
+                 font-size: 8.5px; font-weight: 800; letter-spacing: 0.2px; line-height: 1;
+                 border: 1px solid rgba(120,75,0,0.55); box-shadow: 0 1px 2px rgba(0,0,0,0.38); }
+  .an-sd-grade .st { color: #7a4a00; }
 
   /* ── Skeleton loaders (shimmer) ─────────────────────────────────────────
      Shown the instant a grid or profile starts fetching, so the first paint
@@ -2256,9 +2264,11 @@ export function chatHtml(): string {
     { value: 'xhigh',  label: 'x-high',   title: 'Extended reasoning' },
     { value: 'max',     label: 'max',      title: 'Maximum effort (select models)' },
   ];
-  // remember the chosen mode + model + effort per engine so switching tabs restores them
+  // remember the chosen mode + model + effort per engine so switching tabs restores them.
+  // model starts null (not 'default') so currentModel() falls to the first real model and
+  // the chip shows its actual name (e.g. "Opus 4.8") instead of an opaque "default".
   const modeByCli = { claude: 'acceptEdits', codex: 'auto' };
-  const modelByCli = { claude: 'default', codex: 'default' };
+  const modelByCli = { claude: null, codex: null };
   const effortByCli = { claude: 'default', codex: 'default' };
   let cli = 'claude';
   let cliReport = null;
@@ -4416,6 +4426,17 @@ export function chatHtml(): string {
     meta.textContent = priceSol ? (priceSol + '\\u25ce') : 'FREE';
     meta.appendChild(document.createElement('br'));
     meta.appendChild(document.createTextNode(state));
+    // 3a gold grade plaque: summed GitHub stars of repos using this skill, overlapping the
+    // coral chip's corner. Only when there are stars (0-star skills stay clean).
+    const stars = Number(card.stars) || 0;
+    if (stars > 0) {
+      const grade = document.createElement('div');
+      grade.className = 'an-sd-grade';
+      const st = document.createElement('span'); st.className = 'st'; st.textContent = '\\u2605';
+      grade.appendChild(st);
+      grade.appendChild(document.createTextNode(String(stars)));
+      el.querySelector('.an-sd-label').appendChild(grade);
+    }
     if (opts.onOpen) el.addEventListener('click', () => opts.onOpen(card));
     return el;
   }
