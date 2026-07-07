@@ -105,6 +105,7 @@ export function PublishForm({ onBack, initialKind = "skill" }: Props) {
     if (!name.trim()) return;
     if (kind === "skill" && !text.trim()) return;
     if (kind === "workflow" && (chosenReqMints.length === 0 || chosenReqMints.length > MAX_REQUIRED_SKILLS)) return;
+    haptics.strong();
     setSubmitting(true);
     clearPublishResult();
     // Workflow mode: synthesize the SKILL.md frontmatter (type: workflow + requiredSkills) so

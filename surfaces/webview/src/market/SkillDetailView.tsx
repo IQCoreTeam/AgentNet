@@ -37,6 +37,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
   const allRequiredOwned = ownedRequiredCount === requiredCards.length;
 
   function handleBuy() {
+    haptics.strong();
     setBuying(true);
     send({ type: "buySkill", skillId: card.id, creatorWallet: card.creator });
     setTimeout(() => setBuying(false), 5000);
@@ -44,6 +45,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
 
   function handleNote() {
     if (!noteText.trim()) return;
+    haptics.strong();
     awaitingNote.current = true;
     send({ type: "postNote", skillId: card.id, skillType: card.type, text: noteText.trim(), gitLink: noteGitLink.trim() || undefined });
     setNoteText("");
@@ -139,7 +141,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
                 {unowned.length > 0 && (
                   <button
                     type="button"
-                    onClick={() => send({ type: "buyRequiredSkills", items: unowned.map((r) => ({ skillId: r.id, creatorWallet: r.creator })) })}
+                    onClick={() => { haptics.strong(); send({ type: "buyRequiredSkills", items: unowned.map((r) => ({ skillId: r.id, creatorWallet: r.creator })) }); }}
                     className="rounded-lg bg-amber-400 px-2.5 py-1 text-[11px] font-semibold text-zinc-900 active:bg-amber-300"
                   >
                     Collect all {unowned.length}{totalSol ? ` · ${totalSol} SOL` : ""}
@@ -225,7 +227,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
 
       {owned && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-8 an-tabbar-inset" style={{ background: "linear-gradient(to top, color-mix(in srgb, var(--an-bg-0) 60%, transparent), transparent)" }}>
-          <button onClick={() => send({ type: "disposeSkill", skillId: card.id })} className="an-btn an-btn-danger">
+          <button onClick={() => { haptics.tap(); send({ type: "disposeSkill", skillId: card.id }); }} className="an-btn an-btn-danger">
             Remove Skill
           </button>
         </div>
@@ -233,7 +235,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
 
       {!owned && disposed && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-8 an-tabbar-inset" style={{ background: "linear-gradient(to top, color-mix(in srgb, var(--an-bg-0) 60%, transparent), transparent)" }}>
-          <button onClick={() => send({ type: "reEquipSkill", skillId: card.id })} className="an-btn an-btn-green">
+          <button onClick={() => { haptics.tap(); send({ type: "reEquipSkill", skillId: card.id }); }} className="an-btn an-btn-green">
             Re-equip Skill
           </button>
         </div>

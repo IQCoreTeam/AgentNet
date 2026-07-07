@@ -1,5 +1,6 @@
 import { createPortal } from "react-dom";
 import { useStore } from "../state/store";
+import { haptics } from "../haptics";
 
 // Shown when a buy fails because the wallet is out of SOL (buyResult code
 // "insufficient_funds"). On devnet it offers a one-tap faucet grant (Get devnet SOL) and
@@ -39,7 +40,7 @@ export function FundModal() {
 
           {isDevnet ? (
             <button
-              onClick={requestAirdrop}
+              onClick={() => { haptics.tap(); requestAirdrop(); }}
               disabled={state.funding}
               className="mt-4 w-full rounded-xl py-3 text-sm font-semibold active:opacity-80 disabled:opacity-60"
               style={{ background: "var(--an-green)", color: "var(--an-on-green)" }}

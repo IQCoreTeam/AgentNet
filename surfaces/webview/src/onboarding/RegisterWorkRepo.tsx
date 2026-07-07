@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
+import { haptics } from "../haptics";
 
 // One in-flight registration step: a spinner + label while the host works. Success is announced
 // by the shared COMPLETE celebration overlay (label GITHUB REGISTERED, fired at the app root), so
@@ -71,6 +72,7 @@ export function RegisterWorkRepo() {
 
   function submit() {
     if (!canSubmit) return;
+    haptics.strong();
     setError(null);
     setPhase("working");
     send({ type: "registerWorkRepo", repo: repo.trim(), skillMints: chosen });
@@ -140,7 +142,7 @@ export function RegisterWorkRepo() {
           {/* Disabled-LOOKING (opacity 0.4, matching .an-btn:disabled) but still clickable, so a
               tap explains what's missing via a toast instead of a dead, silent button. */}
           <button
-            onClick={() => { if (blockReason) { notify(blockReason); return; } submit(); }}
+            onClick={() => { if (blockReason) { haptics.error(); notify(blockReason); return; } submit(); }}
             aria-disabled={!!blockReason}
             className="an-btn an-btn-green"
             style={blockReason ? { opacity: 0.4 } : undefined}
