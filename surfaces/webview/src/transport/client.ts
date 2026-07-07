@@ -18,6 +18,7 @@ export class Transport {
   private es: EventSource | null = null;
   private listeners = new Set<Listener>();
   private closed = false;
+  private retryDelay = 1000; // reconnect backoff (ms); grows on repeat failures, resets on connect
 
   /** The SSE client id (null until the handshake lands). Native notification actions POST
    *  to /rpc?client=<id> with it, so the Android shell needs to read it. */
@@ -48,6 +49,7 @@ export class Transport {
     this.es = null;
     this.clientId = null;
     this.lastEventId = 0;
+    this.retryDelay = 1000;
     this.connect();
   }
 
@@ -55,10 +57,12 @@ export class Transport {
   async post(msg: ClientMessage): Promise<void> {
     if (!this.clientId) {
       // Shouldn't happen in normal flow (UI actions come after the stream is up), but
-      // guard so an early click doesn't 409. Wait briefly for the id, then send.
-      await this.waitForId();
+      // guard so an early click doesn't 409 — or hang forever if the handshake never
+      // lands (server down). Wait briefly; bail rather than POST with a null client.
+      const ready = await this.waitForId();
+      if (!ready || !this.clientId) return;
     }
-    await fetch(`/rpc?client=${encodeURIComponent(this.clientId!)}`, {
+    await fetch(`/rpc?client=${encodeURIComponent(this.clientId)}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(msg),
@@ -85,6 +89,7 @@ export class Transport {
     es.addEventListener("client", (e) => {
       try {
         this.clientId = JSON.parse((e as MessageEvent).data).client;
+        this.retryDelay = 1000; // stream is up — reset the reconnect backoff
       } catch {
         /* ignore malformed handshake */
       }
@@ -108,17 +113,25 @@ export class Transport {
       es.close();
       this.es = null;
       if (this.closed) return;
+      const delay = this.retryDelay;
+      // Exponential backoff, capped at 30s: a down server used to get hammered with a
+      // fresh reconnect every second. Reset to 1s once a stream reconnects (see above).
+      this.retryDelay = Math.min(this.retryDelay * 2, 30_000);
       setTimeout(() => {
         if (!this.closed) this.connect();
-      }, 1000);
+      }, delay);
     };
   }
 
-  private waitForId(): Promise<void> {
+  // Resolve true once the handshake id lands; false if the transport closes or we give up.
+  // Capped so a never-completing handshake (server down) can't hang post() forever.
+  private waitForId(): Promise<boolean> {
     return new Promise((resolve) => {
+      let waited = 0;
       const tick = () => {
-        if (this.clientId || this.closed) resolve();
-        else setTimeout(tick, 50);
+        if (this.clientId) resolve(true);
+        else if (this.closed || waited >= 10_000) resolve(false);
+        else { waited += 50; setTimeout(tick, 50); }
       };
       tick();
     });

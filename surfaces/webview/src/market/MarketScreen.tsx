@@ -21,7 +21,10 @@ export type ShellTab = "market" | "skills" | "profile";
 // Owned is no longer an internal tab (it is the Skills tab) and there is no back-to-chat
 // button (the bottom tab bar owns navigation).
 export function MarketScreen({ tab }: { tab: ShellTab }) {
-  const { state, send, setMarketTab, setMarketQuery, marketSearching, clearMarketDetail, clearAgentProfile } = useStore();
+  const { state, send, setMarketTab, marketSearching, clearMarketDetail, clearAgentProfile } = useStore();
+  // Search text is LOCAL: keying it into the global store re-rendered the whole app on every
+  // keystroke. Only MarketScreen reads it, so it lives here (matches AgentDirectory's search).
+  const [query, setQuery] = useState("");
   const [view, setView] = useState<MarketView>("browse");
   // Hide already-owned skills from the market results by default (you came to find NEW ones);
   // untick to show them too (muted/greyed).
@@ -84,7 +87,7 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
   }
   function handleTabChange(t: "skill" | "workflow") {
     setMarketTab(t);
-    runSearch(state.marketQuery, t);
+    runSearch(query, t);
   }
   function handleOpenCard(card: SkillCard) {
     setPendingMint(card.id);
@@ -251,7 +254,7 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
           </button>
           {/* SORT toggle — popularity (supply) vs GitHub stars (issue #89) */}
           <button
-            onClick={() => { const next = marketSort === "stars" ? "supply" : "stars"; setMarketSort(next); runSearch(state.marketQuery, undefined, next); }}
+            onClick={() => { const next = marketSort === "stars" ? "supply" : "stars"; setMarketSort(next); runSearch(query, undefined, next); }}
             className="ml-3 an-term-mono text-[9px] font-bold uppercase tracking-wider pb-2.5 active:opacity-80"
             style={{ color: marketSort === "stars" ? "#e0a23a" : "#6a6a6a" }}
           >
@@ -264,7 +267,7 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
       {isMarket && (
         <div className="px-3.5 py-3 shrink-0">
           <form
-            onSubmit={(e) => { e.preventDefault(); runSearch(state.marketQuery); }}
+            onSubmit={(e) => { e.preventDefault(); runSearch(query); }}
             className="flex gap-2"
           >
             <div className="flex flex-1 items-center gap-2.5 px-3" style={{ height: "40px", background: "#0b0b0c", border: "1px solid #2a2a2e" }}>
@@ -273,8 +276,8 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
                 className="an-term-mono min-w-0 flex-1 bg-transparent text-[11px] uppercase tracking-wide text-zinc-200 placeholder:uppercase placeholder:tracking-wide focus:outline-none"
                 style={{ color: "#e8e8e8" }}
                 placeholder={`Search ${state.marketTab}s…`}
-                value={state.marketQuery}
-                onChange={(e) => setMarketQuery(e.target.value)}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
               />
             </div>
             <button type="submit" className="an-term-mono text-[10px] font-bold uppercase tracking-widest active:opacity-80" style={{ padding: "0 18px", height: "40px", border: "1px solid #34343a", background: "#141416", color: "#e8e8e8" }}>
