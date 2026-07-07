@@ -110,7 +110,7 @@ export interface State {
   cursor: number;
   toast: string | null;
   buyCelebrate: boolean;
-  buyCelebrateLabel: string | null; // bought skill's slug/name for the purchase card
+  buyCelebrateLabel: string | null; // the COMPLETE plaque sub-label: "SKILL PURCHASED" / "WORKFLOW PURCHASED"
   contextTokens?: number;
   contextWindow?: number;
   isCompacting: boolean;
@@ -508,7 +508,9 @@ function reducer(state: State, ev: Action): State {
         toast: ev.ok ? `Bought! Slug: ${ev.slug ?? ev.skillId}` : `Buy failed: ${ev.error ?? "unknown"}`,
         marketOwned: ev.ok ? [...state.marketOwned, ev.slug ?? ev.skillId] : state.marketOwned,
         buyCelebrate: ev.ok ? true : state.buyCelebrate,
-        buyCelebrateLabel: ev.ok ? (ev.slug ?? ev.skillId) : state.buyCelebrateLabel,
+        // The bought item's kind picks the COMPLETE plaque label; you buy from the detail sheet,
+        // so marketDetail.type is the reliable source (buyResult itself carries no kind).
+        buyCelebrateLabel: ev.ok ? (state.marketDetail?.card?.type === "workflow" ? "WORKFLOW PURCHASED" : "SKILL PURCHASED") : state.buyCelebrateLabel,
         // Broke wallet -> open the fund prompt so the buyer can top up and retry, instead of
         // only flashing a transient error toast that leaves them stuck.
         fundOpen: !ev.ok && ev.code === "insufficient_funds" ? true : state.fundOpen,
@@ -585,9 +587,9 @@ function reducer(state: State, ev: Action): State {
         toast: ev.bought > 0
           ? `Bought ${ev.bought} skill${ev.bought === 1 ? "" : "s"}${ev.failed > 0 ? ` (${ev.failed} failed)` : ""}.`
           : `Buy failed: ${ev.error ?? "nothing purchased"}`,
-        // Fire the same purchase card as a single buy when anything landed.
+        // Fire the same COMPLETE plaque as a single buy when anything landed (a batch is skills).
         buyCelebrate: ev.bought > 0 ? true : state.buyCelebrate,
-        buyCelebrateLabel: ev.bought > 0 ? `${ev.bought} skill${ev.bought === 1 ? "" : "s"}` : state.buyCelebrateLabel,
+        buyCelebrateLabel: ev.bought > 0 ? "SKILL PURCHASED" : state.buyCelebrateLabel,
       };
     case "agentNoteResult":
       return { ...state, toast: ev.ok ? "Note posted." : `Note failed: ${ev.error ?? "unknown"}` };
@@ -662,7 +664,16 @@ interface Store {
   markCompacting: () => void;
 }
 
-const StoreContext = createContext<Store | null>(null);
+// Everything on Store except the two state-derived members is a stable action.
+type Actions = Omit<Store, "state" | "queueCount">;
+
+// State and actions live in SEPARATE contexts. The actions object is built once and never
+// changes identity, so components that only dispatch (composer controls, buttons, onboarding
+// forms) read it via useStoreActions() and DON'T re-render when state changes on every
+// streamed token. State consumers use useStoreState(); useStore() combines both for the
+// components that genuinely need state too.
+const StateContext = createContext<State | null>(null);
+const ActionsContext = createContext<Actions | null>(null);
 
 async function handleSignTransaction(t: Transport, id: string, txBase64: string): Promise<void> {
   try {
@@ -774,26 +785,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [state.phase, state.cli]);
 
-  const store = useMemo<Store>(() => {
+  // Live-state ref so the (stable) actions can read the CURRENT state without being rebuilt
+  // when state changes — the whole point of splitting the contexts.
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const actions = useMemo<Actions>(() => {
     const selectEngine = (cli: Cli) => {
-      const status = state.cliReport?.[cli];
+      const st = stateRef.current;
+      const status = st.cliReport?.[cli];
       raw({ type: "__selectEngine", cli });
-      if (!state.cliReport) {
+      if (!st.cliReport) {
         void transportRef.current?.post({ type: "getCliStatus" });
         return;
       }
-      if (status === "ok" && state.phase === "chat") {
+      if (status === "ok" && st.phase === "chat") {
         void transportRef.current?.post({ type: "platform", cli });
       }
     };
     const send = (msg: ClientMessage) => {
+      const st = stateRef.current;
       if (msg.type === "platform") {
         selectEngine(msg.cli);
         return;
       }
       if (msg.type === "send") {
-        if (!state.cliReport || state.cliReport[state.cli] !== "ok") {
-          selectEngine(state.cli);
+        if (!st.cliReport || st.cliReport[st.cli] !== "ok") {
+          selectEngine(st.cli);
           return;
         }
         if (busyRef.current) {
@@ -824,13 +842,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // Opening an agent's profile should feel instant: show a skeleton immediately instead of a
       // dead tap while the server load round-trips. Only when NAVIGATING to a different agent (or
       // none open) — a same-wallet refresh (e.g. after registering a repo) keeps the page on screen.
-      if (msg.type === "getAgentProfile" && state.agentProfile?.wallet !== msg.wallet) {
+      if (msg.type === "getAgentProfile" && st.agentProfile?.wallet !== msg.wallet) {
         raw({ type: "__loadingAgentProfile" });
       }
       void transportRef.current?.post(msg);
     };
     return {
-      state,
       send,
       startTyping: () => raw({ type: "__typing" }),
       // Drop an answered approval from the dock immediately; core won't re-send it.
@@ -850,7 +867,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       marketSearching: () => raw({ type: "__marketSearching" }),
       clearMarketDetail: () => raw({ type: "__clearMarketDetail" }),
       clearPublishResult: () => raw({ type: "__clearPublishResult" }),
-      queueCount: state.queuePending,
       loadingAgents: () => raw({ type: "__loadingAgents" }),
       clearAgentProfile: () => raw({ type: "__clearAgentProfile" }),
       clearFiringSkill: () => raw({ type: "__clearFiringSkill" }),
@@ -864,13 +880,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       notify: (text) => raw({ type: "__setToast", text }),
       markCompacting: () => raw({ type: "__compactStart" }),
     };
-  }, [state]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable: reads live state via
+    // stateRef; raw/refs are stable, so the actions object must never be rebuilt.
+  }, []);
 
-  return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
+  return (
+    <StateContext.Provider value={state}>
+      <ActionsContext.Provider value={actions}>{children}</ActionsContext.Provider>
+    </StateContext.Provider>
+  );
 }
 
-export function useStore(): Store {
-  const s = useContext(StoreContext);
-  if (!s) throw new Error("useStore must be used within StoreProvider");
+export function useStoreState(): State {
+  const s = useContext(StateContext);
+  if (!s) throw new Error("useStoreState must be used within StoreProvider");
   return s;
+}
+
+export function useStoreActions(): Actions {
+  const a = useContext(ActionsContext);
+  if (!a) throw new Error("useStoreActions must be used within StoreProvider");
+  return a;
+}
+
+// Combined view for components that need both state and actions. Re-renders on state change
+// (as it must); action-only components should prefer useStoreActions() to avoid that.
+export function useStore(): Store {
+  const state = useStoreState();
+  const actions = useStoreActions();
+  return { state, queueCount: state.queuePending, ...actions };
 }

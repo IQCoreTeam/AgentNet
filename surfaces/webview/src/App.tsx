@@ -7,9 +7,7 @@ import { ConnectClaude } from "./onboarding/ConnectClaude";
 import { ConnectCodex } from "./onboarding/ConnectCodex";
 import { ChatScreen } from "./chat/ChatScreen";
 import { MarketScreen } from "./market/MarketScreen";
-import { BuyCelebration } from "./market/BuyCelebration";
-import { PublishCelebration } from "./market/PublishCelebration";
-import { RepoRegisterCelebration } from "./market/RepoRegisterCelebration";
+import { CompleteCelebration } from "./market/CompleteCelebration";
 import { FundModal } from "./market/FundModal";
 import { Sessions } from "./chat/Sessions";
 import { TabBar } from "./shell/TabBar";
@@ -28,7 +26,7 @@ import { haptics } from "./haptics";
 //   codexAuth    → codex chosen, not logged in → device-auth (open URL, enter code)
 //   chat         → runtime ready → the tab shell
 export function App() {
-  const { state, getClientId, send, closeMarket } = useStore();
+  const { state, getClientId, send, closeMarket, clearCelebrate } = useStore();
   useVisualViewportVars();
   useKeyboardChrome();
 
@@ -120,10 +118,10 @@ export function App() {
         {state.phase === "chat" && <TabShell />}
       </div>
       <Toast />
-      {state.buyCelebrate && <BuyCelebration />}
+      {state.buyCelebrate && <CompleteCelebration label={state.buyCelebrateLabel ?? "SKILL PURCHASED"} onDone={clearCelebrate} />}
       {state.fundOpen && <FundModal />}
-      {publishCelebrate && <PublishCelebration kind={state.publishKind ?? "skill"} onDone={() => setPublishCelebrate(false)} />}
-      {repoCelebrate && <RepoRegisterCelebration onDone={() => setRepoCelebrate(false)} />}
+      {publishCelebrate && <CompleteCelebration label={state.publishKind === "workflow" ? "WORKFLOW BUILT" : "SKILL CREATED"} onDone={() => setPublishCelebrate(false)} />}
+      {repoCelebrate && <CompleteCelebration label="GITHUB REGISTERED" onDone={() => setRepoCelebrate(false)} />}
     </>
   );
 }

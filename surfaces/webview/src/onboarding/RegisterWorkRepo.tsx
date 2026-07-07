@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 
 // One in-flight registration step: a spinner + label while the host works. Success is announced
-// by the root COMPLETE celebration overlay (RepoRegisterCelebration), so these rows only ever
-// show the working state; a failure names the broken step in the error text back on the form.
+// by the shared COMPLETE celebration overlay (label GITHUB REGISTERED, fired at the app root), so
+// these rows only ever show the working state; a failure names the broken step in the error text.
 function StepRow({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-2.5">

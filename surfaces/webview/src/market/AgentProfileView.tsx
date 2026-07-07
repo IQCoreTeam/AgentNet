@@ -9,7 +9,7 @@ import { SkillIcon } from "../icons";
 type VRepo = NonNullable<AgentProfile["verifiedRepos"]>[number];
 import { walletAvatarSvg } from "./walletAvatar";
 import { mediaUrl } from "./mediaUrl";
-import { PostCelebration } from "./PostCelebration";
+import { CompleteCelebration } from "./CompleteCelebration";
 import { SkillSdCard } from "./SkillSdCard";
 import { RegisterWorkRepo } from "../onboarding/RegisterWorkRepo";
 
@@ -464,6 +464,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   const [helpOpen, setHelpOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const awaitingPost = useRef(false);
+  const postWasComment = useRef(false); // reply (parentId set) -> COMMENT POSTED, else POST PUBLISHED
   const lastToast = useRef(state.toast);
   const lastRepoAt = useRef(state.workRepoResult?.at ?? 0);
 
@@ -482,6 +483,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
     const title = f.title?.trim() || undefined;
     if ((!text && !title) || (!profile.self && !profile.canComment)) return; // no empty posts
     awaitingPost.current = true;
+    postWasComment.current = !!parentId;
     setPosting(true);
     send({ type: "postAgentNote", agentWallet: profile.wallet, text, gitLink: f.gitLink, title, image: f.image, parentId });
   }
@@ -496,16 +498,16 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
       setPosting(false);
       setComposeMode(null);
       setReplyTo(null);
-      setCelebrate({ label: "Posted to AgentNet" });
+      setCelebrate({ label: postWasComment.current ? "COMMENT POSTED" : "POST PUBLISHED" });
     } else if (typeof state.toast === "string" && state.toast.startsWith("Note failed")) {
       awaitingPost.current = false;
       setPosting(false);
     }
   }, [state.toast]);
 
-  // Verified-repo registration success: the modal's step view shows the result; here we
-  // just buzz, then after a beat refresh the profile (so the new repo + stars appear) and
-  // close the modal. No celebration overlay - that would be a second success alert.
+  // Verified-repo registration success: the shared COMPLETE plaque (fired at the app root off
+  // workRepoResult, label GITHUB REGISTERED) owns the celebration, so here we only close the
+  // modal and refresh the profile after a beat so the new repo + stars appear.
   useEffect(() => {
     const r = state.workRepoResult;
     if (!r || r.at === lastRepoAt.current) return;
@@ -513,7 +515,6 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
     if (r.ok) {
       const t = setTimeout(() => {
         setComposeMode(null);
-        setCelebrate({ label: `Registered ${r.repo ?? "your repo"}` });
         send({ type: "getAgentProfile", wallet: profile.wallet });
       }, 900);
       return () => clearTimeout(t);
@@ -1011,7 +1012,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
         </Modal>
       )}
 
-      {celebrate && <PostCelebration label={celebrate.label} onDone={() => setCelebrate(null)} />}
+      {celebrate && <CompleteCelebration label={celebrate.label} onDone={() => setCelebrate(null)} />}
     </div>
   );
 }

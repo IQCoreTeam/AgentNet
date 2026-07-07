@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import type { SkillCard, SkillDetail } from "../transport/protocol";
 import { SkillIcon } from "../icons";
 import { mediaUrl } from "./mediaUrl";
 import { walletAvatarSvg } from "./walletAvatar";
+import { CompleteCelebration } from "./CompleteCelebration";
 
 function shortAddr(w?: string) {
   return w ? `${w.slice(0, 4)}…${w.slice(-4)}` : "";
@@ -21,6 +22,9 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
   const [buying, setBuying] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [noteGitLink, setNoteGitLink] = useState("");
+  const [commentDone, setCommentDone] = useState(false);
+  const awaitingNote = useRef(false);
+  const lastToast = useRef(state.toast);
   const { card, skillText, notes } = detail;
   const priceSol = card.price ? (Number(card.price) / 1_000_000_000).toFixed(3) : null;
   const disposed = Object.values(state.marketDisposed).includes(card.id);
@@ -39,13 +43,26 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
 
   function handleNote() {
     if (!noteText.trim()) return;
+    awaitingNote.current = true;
     send({ type: "postNote", skillId: card.id, skillType: card.type, text: noteText.trim(), gitLink: noteGitLink.trim() || undefined });
     setNoteText("");
     setNoteGitLink("");
   }
 
+  // Posting a comment celebrates with the shared COMPLETE plaque (design [COMMENT POSTED]). The
+  // reducer sets toast "Comment posted." on postNoteResult.ok; fire once per our own post.
+  useEffect(() => {
+    if (state.toast === lastToast.current) return;
+    lastToast.current = state.toast;
+    if (awaitingNote.current && state.toast === "Comment posted.") {
+      awaitingNote.current = false;
+      setCommentDone(true);
+    }
+  }, [state.toast]);
+
   return (
     <div className="relative flex flex-col h-full">
+      {commentDone && <CompleteCelebration label="COMMENT POSTED" onDone={() => setCommentDone(false)} />}
       <header className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2 shrink-0">
         <button onClick={onBack} className="text-zinc-400 active:text-zinc-200 px-1 text-lg">←</button>
         {isWorkflow && (
