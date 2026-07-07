@@ -296,6 +296,26 @@ export async function ownedAssetIds(owner: string): Promise<Set<string>> {
   return ids;
 }
 
+// Briefly cache the full indexer catalog. ownedSkillMints (and thus ownedSkills) pulls the
+// whole /items list (~1000) when the caller passes no catalog; repeated owned-skill reads in
+// a short window (welcome panel + market + comment gate) would each re-fetch it. 30s is short
+// enough that a newly published skill still surfaces quickly, and the on-chain gap-rescue in
+// ownedSkillMints backstops anything a slightly-stale catalog misses.
+let catalogCache: { at: number; skills: Skill[] } | null = null;
+const CATALOG_TTL_MS = 30_000;
+async function cachedCatalog(): Promise<Skill[] | undefined> {
+  const now = Date.now();
+  if (catalogCache && now - catalogCache.at < CATALOG_TTL_MS) return catalogCache.skills;
+  try {
+    const { getIndexerUrl } = await import("./seed.js");
+    const skills = await indexerSource(getIndexerUrl()).listSkills();
+    catalogCache = { at: now, skills };
+    return skills;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * The skill/workflow NFT mints a wallet OWNS (issue #17 — auto-load owned skills at
  * session start; agent-profile owned list).
@@ -320,7 +340,7 @@ export async function ownedAssetIds(owner: string): Promise<Set<string>> {
  * Returns [] if collections aren't configured (best-effort caller).
  */
 export async function ownedSkillMints(owner: string, catalog?: Skill[]): Promise<string[]> {
-  const { getSkillsCollectionMint, getWorkflowsCollectionMint, getIndexerUrl } = await import("./seed.js");
+  const { getSkillsCollectionMint, getWorkflowsCollectionMint } = await import("./seed.js");
   const ours = new Set([getSkillsCollectionMint(), getWorkflowsCollectionMint()].filter(Boolean) as string[]);
   if (ours.size === 0) return [];
 
@@ -328,11 +348,11 @@ export async function ownedSkillMints(owner: string, catalog?: Skill[]): Promise
   if (ownedIds.size === 0) return [];
 
   // Fast path: a held mint that the catalog (collection members per the indexer)
-  // also lists IS one of our skills — cheap, no per-asset on-chain read.
+  // also lists IS one of our skills — cheap, no per-asset on-chain read. When the caller
+  // didn't hand us a catalog, use the briefly-cached full fetch instead of re-pulling ~1000
+  // items on every owned-skills read.
   let cat = catalog;
-  if (!cat) {
-    try { cat = await indexerSource(getIndexerUrl()).listSkills(); } catch { cat = undefined; }
-  }
+  if (!cat) cat = await cachedCatalog();
   const owned = new Set<string>();
   if (cat && cat.length > 0) {
     for (const s of cat) if (ownedIds.has(s.id)) owned.add(s.id);
@@ -372,14 +392,24 @@ export async function ownedSkills(
   const { Connection } = await import("@solana/web3.js");
   const { readSkillMintMetadata } = await import("../nft/token2022.js");
   const conn = new Connection(rpcUrl, "confirmed");
+  // Read each mint's metadata with BOUNDED concurrency. Serial was one round-trip per owned
+  // skill (slow for a full wallet); an UNBOUNDED fan-out 429s public RPC for large holdings
+  // (the same trap batchMintInfo was built to avoid). 8-at-a-time is fast and rate-safe, and
+  // processing batches in order keeps the output in mint order.
+  const CONCURRENCY = 8;
   const out: { id: string; name: string; description?: string }[] = [];
-  for (const id of mints) {
-    try {
-      const md = await readSkillMintMetadata(conn, id);
-      if (md) out.push({ id, name: md.name, description: md.description });
-    } catch {
-      // skip a mint we can't read rather than failing the whole list
-    }
+  for (let i = 0; i < mints.length; i += CONCURRENCY) {
+    const results = await Promise.all(
+      mints.slice(i, i + CONCURRENCY).map(async (id) => {
+        try {
+          const md = await readSkillMintMetadata(conn, id);
+          return md ? { id, name: md.name, description: md.description } : null;
+        } catch {
+          return null; // skip a mint we can't read rather than failing the whole list
+        }
+      }),
+    );
+    for (const r of results) if (r) out.push(r);
   }
   return out;
 }
