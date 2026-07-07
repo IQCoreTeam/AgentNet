@@ -84,13 +84,24 @@ jobs:
         run: |
           ID="${{ github.event.inputs.assets_run_id }}"
           if [ -z "$ID" ]; then
-            ID=$(gh run list --workflow=android-assets.yml --status success -L 1 \
-                   --json databaseId -q '.[0].databaseId' || true)
+            # Pick the newest successful android-assets run whose artifact is STILL LIVE.
+            # A run can be "success" yet have an expired artifact (retention window passed);
+            # blindly taking the latest success then fails the download with a cryptic
+            # "no valid artifacts found". Walk recent successes and take the first whose
+            # android-assets-$ABI artifact hasn't expired.
+            for cand in $(gh run list --workflow=android-assets.yml --status success -L 15 \
+                            --json databaseId -q '.[].databaseId' || true); do
+              live=$(gh api "repos/${{ github.repository }}/actions/runs/$cand/artifacts" \
+                       -q ".artifacts[] | select(.name==\"android-assets-${ABI}\" and .expired==false) | .id" \
+                       2>/dev/null | head -1 || true)
+              if [ -n "$live" ]; then ID="$cand"; break; fi
+            done
           fi
           if [ -z "$ID" ]; then
-            echo "::error::No successful android-assets run found. Run the android-assets workflow first (it builds the rootfs), then re-run this."
+            echo "::error::No android-assets run with a live android-assets-${ABI} artifact (they expire). Run the android-assets workflow to rebuild the rootfs, then re-run this."
             exit 1
           fi
+          echo "Using android-assets run $ID"
           echo "id=$ID" >> "$GITHUB_OUTPUT"
 
       - name: Download rootfs + jniLibs

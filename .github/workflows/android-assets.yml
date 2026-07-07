@@ -74,5 +74,9 @@ jobs:
           path: |
             surfaces/android/app/src/main/assets/
             surfaces/android/app/src/main/jniLibs/
-          retention-days: 7
+          # 90 days (GitHub's max default): the rootfs rarely changes, but android-apk reuses
+          # this artifact on EVERY app/UI push. A short window silently expired it (7-day
+          # retention -> apk builds broke ~1 week after the last assets run). Keep it long so
+          # day-to-day app builds never go red just because nobody rebuilt the rootfs recently.
+          retention-days: 90
           if-no-files-found: error
