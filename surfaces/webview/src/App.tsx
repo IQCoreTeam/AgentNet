@@ -137,6 +137,14 @@ const LAST = 3; // Chat(0) Skills(1) Agent(2) Market(3)
 function TabShell() {
   const { state, send } = useStore();
   const [idx, setIdx] = useState(0);
+  // Faint tick whenever the pager lands on a different tab (tap or swipe).
+  const prevIdx = useRef(0);
+  useEffect(() => {
+    if (idx !== prevIdx.current) {
+      prevIdx.current = idx;
+      haptics.tick();
+    }
+  }, [idx]);
   const [pageDrag, setPageDrag] = useState(0);
   const [paging, setPaging] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -147,9 +155,9 @@ function TabShell() {
   const vw = typeof window === "undefined" ? 360 : window.innerWidth;
   const drawerWidth = Math.min(vw * 0.86, 352);
 
-  // Light haptic when the chat slides back into place (closing) — never on opening.
+  // Light haptic when the chat drawer opens or slides back into place.
   function changeDrawer(open: boolean) {
-    if (drawerOpen && !open) haptics.tap();
+    if (drawerOpen !== open) haptics.tap();
     setDrawerOpen(open);
   }
 
