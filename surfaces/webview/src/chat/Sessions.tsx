@@ -109,7 +109,7 @@ export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: 
     pressTimer.current = window.setTimeout(() => {
       pressFired.current = true;
       pressTimer.current = null;
-      haptics.longPress();
+      haptics.press();
       setMenuFor({ id: s.sessionId, title: s.title || "(untitled)" });
     }, 480);
   }
