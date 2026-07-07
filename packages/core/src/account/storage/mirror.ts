@@ -31,12 +31,13 @@ function isReauthError(msg: string): boolean {
 // path. Bound each attempt so a stalled upload fails fast and the retry/report can proceed.
 const CLOUD_OP_TIMEOUT_MS = 30_000;
 function withCloudTimeout<T>(p: Promise<T>): Promise<T> {
-  return Promise.race([
-    p,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error("cloud op timed out")), CLOUD_OP_TIMEOUT_MS),
-    ),
-  ]);
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<T>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("cloud op timed out")), CLOUD_OP_TIMEOUT_MS);
+  });
+  // Always clear the timer once the race settles — a bare race left a live 30s timer per
+  // call, so a burst of writes piled up dozens of them (each pinning the event loop).
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
 }
 
 export function mirrorStorage(
@@ -73,27 +74,48 @@ export function mirrorStorage(
     /* local already succeeded; a later write or a reconnect re-syncs the cloud */
   };
 
+  // A cloud tier WITHOUT append (gdrive/custom) mirrors a turn by re-uploading the whole
+  // session blob. Doing that every turn is O(N^2) traffic (a 20-tool-call turn = 20 full
+  // uploads). Instead COALESCE: mark the session dirty and, a short debounce after writes
+  // settle, upload its LATEST local blob exactly once. Local (source of truth) still writes
+  // every turn; a flush missed to a crash/exit is reconciled by backfill() on reconnect.
+  const FLUSH_DEBOUNCE_MS = 2500;
+  const pendingFlush = new Map<string, ReturnType<typeof setTimeout>>();
+  const cancelFlush = (sessionId: string) => {
+    const t = pendingFlush.get(sessionId);
+    if (t) { clearTimeout(t); pendingFlush.delete(sessionId); }
+  };
+  const scheduleCloudFlush = (sessionId: string) => {
+    cancelFlush(sessionId);
+    const t = setTimeout(() => {
+      pendingFlush.delete(sessionId);
+      void tryCloud(async () => {
+        const full = await local.get(sessionId);
+        if (full) await cloud!.put(sessionId, full);
+      });
+    }, FLUSH_DEBOUNCE_MS);
+    t.unref?.();
+    pendingFlush.set(sessionId, t);
+  };
+
   return {
     async put(sessionId, blob) {
       await local.put(sessionId, blob);
+      cancelFlush(sessionId); // this full write supersedes any pending debounced flush
       await tryCloud(() => cloud!.put(sessionId, blob));
     },
 
     async append(sessionId, chunk) {
       if (local.append) await local.append(sessionId, chunk);
       else await local.put(sessionId, chunk);
-      await tryCloud(async () => {
-        if (cloud!.append) await cloud!.append(sessionId, chunk);
-        else {
-          // cloud has no append (gdrive/custom): re-upload the whole local blob.
-          // TODO(perf): re-uploads the full session every turn -> O(N^2) traffic for
-          // long sessions. Fine for short ones. When long sessions matter, batch:
-          // flush to cloud every N turns / T seconds (local stays per-turn). See
-          // STATUS.md T1-6. Function is correct as-is; this is purely efficiency.
-          const full = await local.get(sessionId);
-          if (full) await cloud!.put(sessionId, full);
-        }
-      });
+      if (!cloud) return;
+      if (cloud.append) {
+        // cloud supports append: mirror the chunk incrementally, per turn (cheap).
+        await tryCloud(() => cloud.append!(sessionId, chunk));
+      } else {
+        // no cloud append: coalesce full-blob re-uploads instead of one per turn.
+        scheduleCloudFlush(sessionId);
+      }
     },
 
     async get(sessionId) {
@@ -113,7 +135,7 @@ export function mirrorStorage(
         const t0 = Date.now();
         try {
           for (const id of await cloud.list()) ids.add(id);
-          console.error(`[perf] cloud.list ${Date.now() - t0}ms`);
+          if (process.env.AGENTNET_PERF) console.error(`[perf] cloud.list ${Date.now() - t0}ms`);
         } catch {
           /* offline — show what local has */
         }
@@ -134,6 +156,7 @@ export function mirrorStorage(
     getLocal: (sessionId) => local.get(sessionId),
 
     async remove(sessionId) {
+      cancelFlush(sessionId); // don't re-upload a session we're deleting
       await local.remove(sessionId);
       await tryCloud(() => cloud!.remove(sessionId));
     },
