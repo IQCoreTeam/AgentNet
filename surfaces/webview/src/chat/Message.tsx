@@ -1,10 +1,11 @@
+import { memo } from "react";
 import type { ChatMessage } from "../transport/protocol";
 import { Markdown } from "./Markdown";
 import { ToolCard } from "./ToolCard";
 
 // One log entry, rendered by role. Assistant text is markdown; user/thinking/summary are
 // plain; tool entries become a ToolCard. Matches the HTML webview's bubble semantics.
-export function Message({ msg }: { msg: ChatMessage }) {
+function MessageImpl({ msg }: { msg: ChatMessage }) {
   if (msg.role === "tool" && msg.tool) return <ToolCard tool={msg.tool} />;
 
   if (msg.role === "user") {
@@ -56,3 +57,8 @@ export function Message({ msg }: { msg: ChatMessage }) {
     </div>
   );
 }
+
+// Memoized on `msg` identity: while tokens stream, the reducer replaces ONLY the tail
+// bubble (appendMessage keeps every earlier message's object reference), so memo lets the
+// rest of the log skip re-render — and skip re-parsing their markdown — every frame.
+export const Message = memo(MessageImpl);

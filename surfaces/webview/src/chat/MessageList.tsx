@@ -41,17 +41,22 @@ function ImageStrip({ ts, count, onOpen }: { ts?: number; count: number; onOpen:
   );
 }
 
-function groupTurns(log: ChatMessage[]): Array<{ user: ChatMessage | null; items: ChatMessage[]; key: number }> {
-  const turns: Array<{ user: ChatMessage | null; items: ChatMessage[]; key: number }> = [];
-  let current: { user: ChatMessage | null; items: ChatMessage[]; key: number } | null = null;
+function groupTurns(log: ChatMessage[]): Array<{ user: ChatMessage | null; items: ChatMessage[]; key: string }> {
+  const turns: Array<{ user: ChatMessage | null; items: ChatMessage[]; key: string }> = [];
+  let current: { user: ChatMessage | null; items: ChatMessage[]; key: string } | null = null;
   log.forEach((msg, index) => {
+    // Stable per-turn key from the turn's first message identity (ts), NOT its array index:
+    // prepending an older page shifts every index, which would remount the entire log and
+    // re-parse all markdown. ts is set once at creation and never moves. (A still-pending
+    // user bubble has no ts yet, so it briefly falls back to index until the echo confirms.)
+    const key = msg.ts != null ? `t${msg.ts}` : `i${index}`;
     if (msg.role === "user") {
-      current = { user: msg, items: [], key: index };
+      current = { user: msg, items: [], key };
       turns.push(current);
       return;
     }
     if (!current) {
-      current = { user: null, items: [], key: index };
+      current = { user: null, items: [], key };
       turns.push(current);
     }
     current.items.push(msg);
