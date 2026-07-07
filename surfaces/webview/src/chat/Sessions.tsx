@@ -24,7 +24,6 @@ import { openExternalUrl } from "../platform/openExternalUrl";
 import { useAutoOpenExternalUrl } from "../platform/useAutoOpenExternalUrl";
 import { HeliusKeyForm } from "../settings/HeliusKeyForm";
 import { ConnectGithub } from "../onboarding/ConnectGithub";
-import { RegisterWorkRepo } from "../onboarding/RegisterWorkRepo";
 import { hasAgentService, backgroundExecEnabled, setBackgroundExecEnabled } from "../platform/agentService";
 
 // Chat list drawer — the mobile answer to vscode's multi-panel "new tab": instead of
@@ -383,20 +382,20 @@ export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: 
           </div>
         ) : settingsMode === "github" ? (
           <div className="flex flex-col h-full">
-            <div className="mb-4 flex items-center justify-between border-b border-zinc-900 pb-2">
+            <div className="mb-4 flex items-center gap-2 border-b border-zinc-900 pb-3">
+              <button
+                onClick={() => setSettingsMode("configure")}
+                aria-label="Back"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-zinc-400 transition active:bg-[color:var(--an-bg-2)] active:text-zinc-100"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+              </button>
               <span className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">
                 GitHub
               </span>
-              <button
-                onClick={() => setSettingsMode("configure")}
-                className="text-xs text-zinc-400 hover:text-zinc-200"
-              >
-                Back
-              </button>
             </div>
             <div className="flex-1 overflow-y-auto flex flex-col gap-4">
               <ConnectGithub onDone={() => setSettingsMode("list")} />
-              <RegisterWorkRepo />
             </div>
           </div>
         ) : settingsMode === "connect" ? (
