@@ -13,9 +13,10 @@ interface Props {
 
 // A skill as an "SD-card" collectible. The cartridge body is a chic deep GREY (gold for
 // workflows) so it reads like real cartridge plastic. The dark label carries a magic-circle
-// sigil generated deterministically from the name, a barcode + "CAT / SKILL" mark up top, the
-// NAME big over the sigil, and a small coral data CHIP (copies / price / state) at the bottom.
-// Used everywhere skills are listed so the whole app reads as one collection.
+// sigil generated deterministically from the name, a "[ CAT / SKILL ]" mark, an optional gold
+// star grade in the top-left slot, the NAME big over the sigil, and a small coral data CHIP
+// (copies / price / state) at the bottom. Used everywhere skills are listed so the whole app
+// reads as one collection.
 export function SkillSdCard({ card, owned, disposed, firing, dim, onOpen }: Props) {
   const isWorkflow = card.type === "workflow";
   const priceSol = card.price && card.price !== "0" ? (Number(card.price) / 1e9).toFixed(2) : null;
@@ -32,8 +33,7 @@ export function SkillSdCard({ card, owned, disposed, firing, dim, onOpen }: Prop
       <span className="an-sd-tab" />
       <div className="an-sd-label">
         <svg className="an-sd-art" viewBox="0 0 120 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true" dangerouslySetInnerHTML={{ __html: sigil }} />
-        <span className="an-sd-bar" />
-        <div className="an-sd-mark"><span className="cat">{cat}</span> <span className="ty">{ty}</span></div>
+        <div className="an-sd-mark"><span className="br">[</span><span className="cat">{cat}</span> <span className="ty">{ty}</span><span className="br">]</span></div>
         {/* the hero: the name big over the sigil, shadowed for legibility */}
         <div className="an-sd-name">{card.name}</div>
         {/* the data chip: copies big, price + state stacked small */}
@@ -41,8 +41,8 @@ export function SkillSdCard({ card, owned, disposed, firing, dim, onOpen }: Prop
           <span className="an-sd-big">{card.supply ?? "—"}</span>
           <span className="an-sd-meta">{priceSol ? `${priceSol}◎` : "FREE"}<br />{state}</span>
         </div>
-        {/* 3a gold grade plaque: summed GitHub stars of repos using this skill (issue #89),
-            overlapping the coral chip's corner. Hidden at 0 so plain skills stay clean. */}
+        {/* 3a gold star grade: summed GitHub stars of repos using this skill (issue #89), a thin
+            translucent-gold box in the barcode's old top-left slot. Hidden at 0 so plain skills stay clean. */}
         {card.stars ? (
           <div className="an-sd-grade"><span className="st">★</span>{card.stars}</div>
         ) : null}

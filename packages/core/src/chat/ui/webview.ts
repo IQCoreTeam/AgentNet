@@ -747,10 +747,9 @@ export function chatHtml(): string {
                                            linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
                          background-size: 13px 13px; }
   .an-sd.is-firing .an-sd-label { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip) 70%, transparent); }
-  .an-sd-bar { position: absolute; top: 6px; left: 7px; z-index: 3; width: 26px; height: 9px; opacity: 0.7;
-               background: repeating-linear-gradient(90deg, #d4d5ea 0 1px, transparent 1px 2px, #d4d5ea 2px 4px, transparent 4px 5px); }
-  .an-sd-mark { position: absolute; top: 20px; left: 7px; z-index: 3; font-size: 8px; font-weight: 700;
+  .an-sd-mark { position: absolute; top: 26px; left: 7px; z-index: 3; font-size: 8px; font-weight: 700;
                 letter-spacing: 0.6px; white-space: nowrap; }
+  .an-sd-mark .br { color: #9a9ca6; }
   .an-sd-mark .cat { color: #c7c8d0; }
   .an-sd-mark .ty { color: #9a9ca6; }
   .an-sd-name { position: absolute; left: 7px; right: 8px; bottom: 38px; z-index: 4;
@@ -763,14 +762,14 @@ export function chatHtml(): string {
                 box-shadow: inset 0 -1px 0 rgba(0,0,0,0.16); }
   .an-sd-big { font-size: 14px; font-weight: 700; color: #2a0f06; line-height: 1; }
   .an-sd-meta { font-size: 6px; line-height: 1.3; color: #3a160a; font-weight: 700; letter-spacing: 0.2px; }
-  /* 3a "plaque overlap": a gold grade stamp sitting on the coral chip's top-right corner.
-     Reputation (gold stars) reads separately from commerce (coral supply/price). Hidden at 0. */
-  .an-sd-grade { position: absolute; right: 8px; bottom: 20px; z-index: 6; display: inline-flex;
-                 align-items: center; gap: 2px; padding: 1px 5px 1px 4px; border-radius: 2px;
-                 background: linear-gradient(180deg, #ffd76a, #e3a11f); color: #3a2600;
-                 font-size: 8.5px; font-weight: 800; letter-spacing: 0.2px; line-height: 1;
-                 border: 1px solid rgba(120,75,0,0.55); box-shadow: 0 1px 2px rgba(0,0,0,0.38); }
-  .an-sd-grade .st { color: #7a4a00; }
+  /* 3a "gold subtle box": the star grade sits in the barcode's old top-left slot as a thin
+     translucent-gold box — gold text, 1px gold border, NO fill and NO glow so reputation reads
+     quiet and apart from the coral commerce chip. Hidden at 0 stars. */
+  .an-sd-grade { position: absolute; top: 5px; left: 5px; z-index: 6; display: inline-flex;
+                 align-items: center; gap: 3px; padding: 2px 5px; border-radius: 1px;
+                 border: 1px solid rgba(255,223,126,0.35); color: #ffdf7e;
+                 font-size: 10px; font-weight: 700; letter-spacing: 0.5px; line-height: 1.2; }
+  .an-sd-grade .st { font-size: 11px; line-height: 1; }
 
   /* ── Skeleton loaders (shimmer) ─────────────────────────────────────────
      Shown the instant a grid or profile starts fetching, so the first paint
@@ -4422,8 +4421,7 @@ export function chatHtml(): string {
       '<span class="an-sd-tab"></span>' +
       '<div class="an-sd-label">' +
         '<svg class="an-sd-art" viewBox="0 0 120 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true">' + skillSigilSvg(nm) + '</svg>' +
-        '<span class="an-sd-bar"></span>' +
-        '<div class="an-sd-mark"><span class="cat"></span> <span class="ty"></span></div>' +
+        '<div class="an-sd-mark"><span class="br">[</span><span class="cat"></span> <span class="ty"></span><span class="br">]</span></div>' +
         '<div class="an-sd-name"></div>' +
         '<div class="an-sd-chip"><span class="an-sd-big"></span><span class="an-sd-meta"></span></div>' +
       '</div>';
@@ -4435,8 +4433,8 @@ export function chatHtml(): string {
     meta.textContent = priceSol ? (priceSol + '\\u25ce') : 'FREE';
     meta.appendChild(document.createElement('br'));
     meta.appendChild(document.createTextNode(state));
-    // 3a gold grade plaque: summed GitHub stars of repos using this skill, overlapping the
-    // coral chip's corner. Only when there are stars (0-star skills stay clean).
+    // 3a gold star grade: summed GitHub stars of repos using this skill, a thin translucent-gold
+    // box in the barcode's old top-left slot. Only when there are stars (0-star skills stay clean).
     const stars = Number(card.stars) || 0;
     if (stars > 0) {
       const grade = document.createElement('div');

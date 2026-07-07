@@ -1,25 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 
-// One registration step row: a spinner while the host works, a check when the whole
-// registration succeeds. The host emits only the final outcome, so both steps flip
-// together on success; a failure names the broken step in the error text on the form.
-function StepRow({ label, done }: { label: string; done: boolean }) {
+// One in-flight registration step: a spinner + label while the host works. Success is announced
+// by the root COMPLETE celebration overlay (RepoRegisterCelebration), so these rows only ever
+// show the working state; a failure names the broken step in the error text back on the form.
+function StepRow({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-2.5">
       <span className="flex h-5 w-5 shrink-0 items-center justify-center">
-        {done ? (
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="var(--an-green)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M20 6 9 17l-5-5" />
-          </svg>
-        ) : (
-          <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" stroke="var(--an-line)" strokeWidth="3" />
-            <path d="M21 12a9 9 0 0 0-9-9" stroke="var(--an-green)" strokeWidth="3" strokeLinecap="round" />
-          </svg>
-        )}
+        <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" stroke="var(--an-line)" strokeWidth="3" />
+          <path d="M21 12a9 9 0 0 0-9-9" stroke="var(--an-green)" strokeWidth="3" strokeLinecap="round" />
+        </svg>
       </span>
-      <span className="text-sm" style={{ color: done ? "var(--an-fg)" : "var(--an-fg-dim)" }}>{label}</span>
+      <span className="text-sm" style={{ color: "var(--an-fg-dim)" }}>{label}</span>
     </div>
   );
 }
@@ -32,7 +26,7 @@ export function RegisterWorkRepo() {
   const { state, send, notify } = useStore();
   const [repo, setRepo] = useState("");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
-  const [phase, setPhase] = useState<"form" | "working" | "done">("form");
+  const [phase, setPhase] = useState<"form" | "working">("form");
   const [error, setError] = useState<string | null>(null);
   const handled = useRef(state.workRepoResult?.at ?? 0);
 
@@ -45,7 +39,8 @@ export function RegisterWorkRepo() {
     if (!r || r.at === handled.current) return;
     handled.current = r.at;
     if (r.ok) {
-      setPhase("done");
+      // Success is celebrated by the root COMPLETE overlay; just reset the form for the next one.
+      setPhase("form");
       setRepo("");
       setSelected({});
     } else {
@@ -83,10 +78,10 @@ export function RegisterWorkRepo() {
 
   return (
     <div className="flex flex-col gap-4">
-      {phase !== "form" ? (
+      {phase === "working" ? (
         <div className="space-y-3 py-1">
-          <StepRow label="Commit .agentnet marker" done={phase === "done"} />
-          <StepRow label="Register with the indexer" done={phase === "done"} />
+          <StepRow label="Commit .agentnet marker" />
+          <StepRow label="Register with the indexer" />
         </div>
       ) : (
         <>

@@ -9,6 +9,7 @@ import { ChatScreen } from "./chat/ChatScreen";
 import { MarketScreen } from "./market/MarketScreen";
 import { BuyCelebration } from "./market/BuyCelebration";
 import { PublishCelebration } from "./market/PublishCelebration";
+import { RepoRegisterCelebration } from "./market/RepoRegisterCelebration";
 import { FundModal } from "./market/FundModal";
 import { Sessions } from "./chat/Sessions";
 import { TabBar } from "./shell/TabBar";
@@ -95,6 +96,18 @@ export function App() {
     }
   }, [state.publishResult]);
 
+  // Registering a repo as verified work celebrates with the same COMPLETE plaque as buy/publish,
+  // fired once per new successful workRepoResult (so it shows even if the profile sheet closed).
+  const [repoCelebrate, setRepoCelebrate] = useState(false);
+  const celebratedRepo = useRef<unknown>(null);
+  useEffect(() => {
+    const r = state.workRepoResult;
+    if (r?.ok && r !== celebratedRepo.current) {
+      celebratedRepo.current = r;
+      setRepoCelebrate(true);
+    }
+  }, [state.workRepoResult]);
+
   return (
     <>
       <div className="app-viewport">
@@ -110,6 +123,7 @@ export function App() {
       {state.buyCelebrate && <BuyCelebration />}
       {state.fundOpen && <FundModal />}
       {publishCelebrate && <PublishCelebration kind={state.publishKind ?? "skill"} onDone={() => setPublishCelebrate(false)} />}
+      {repoCelebrate && <RepoRegisterCelebration onDone={() => setRepoCelebrate(false)} />}
     </>
   );
 }
