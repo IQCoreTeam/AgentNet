@@ -224,18 +224,35 @@ export function useChat(
   const runBash = useCallback(
     (cmd: string) => {
       setMessages((prev) => [...prev, { role: "user", text: "!" + cmd, ts: Date.now() }]);
+      // Bound both memory and time: a streaming command (`!tail -f`, `!yes`) would otherwise
+      // grow `out` without limit and never close, so the tool card never renders and the
+      // child lingers. Cap the buffer well above the 4000-char display slice, and kill the
+      // process if it hasn't exited by TIMEOUT_MS.
+      const BUFFER_CAP = 16_000;
+      const TIMEOUT_MS = 30_000;
       let out = "";
+      const append = (s: string) => { if (out.length < BUFFER_CAP) out += s; };
       try {
         const p = spawn(cmd, { shell: true, cwd: opts.cwd });
-        p.stdout?.on("data", (d) => (out += d.toString()));
-        p.stderr?.on("data", (d) => (out += d.toString()));
-        p.on("error", (e) => (out += String(e)));
-        p.on("close", (code) =>
+        let done = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const finish = (code: number, note?: string) => {
+          if (done) return;
+          done = true;
+          if (timer) clearTimeout(timer);
+          const truncated = out.length > 4000;
+          const output = out.slice(0, 4000) + (truncated ? "\n… (output truncated)" : "") + (note ? "\n" + note : "");
           setMessages((prev) => [
             ...prev,
-            { role: "tool", text: cmd, ts: Date.now(), tool: { name: "Bash", command: cmd, output: out.slice(0, 4000), exitCode: code ?? 0 } },
-          ]),
-        );
+            { role: "tool", text: cmd, ts: Date.now(), tool: { name: "Bash", command: cmd, output, exitCode: code } },
+          ]);
+        };
+        timer = setTimeout(() => { p.kill("SIGKILL"); finish(124, "[timed out after 30s — killed]"); }, TIMEOUT_MS);
+        timer.unref?.();
+        p.stdout?.on("data", (d) => append(d.toString()));
+        p.stderr?.on("data", (d) => append(d.toString()));
+        p.on("error", (e) => { append(String(e)); finish(1); });
+        p.on("close", (code) => finish(code ?? 0));
       } catch (e) {
         setMessages((prev) => [...prev, { role: "tool", text: cmd, ts: Date.now(), tool: { name: "Bash", command: cmd, output: String(e), exitCode: 1 } }]);
       }
