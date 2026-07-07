@@ -1466,6 +1466,165 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
 }
 .skill-forge.is-buy { animation: forge-glow-amber 3.2s ease-in-out infinite; }
 
+/* Approval dock: terminal treatment (design "Approvals & Questions")
+   The docked approval/question cards wear a monospace, sharp-cornered "terminal"
+   skin with L-shaped bracket corners drawn from --brk. Colours stay on the brand
+   palette via the @theme tokens (green default; danger = red frame; buy = amber,
+   publish = violet forge), so the ONE shared component reads identically on the
+   mobile webview and the vscode panel. --accent drives the primary fill; danger
+   keeps green buttons but a red frame (parity with the mockup). */
+.an-appr {
+  --brk: var(--an-green);
+  --brk-bg: color-mix(in srgb, var(--an-green) 8%, var(--an-bg-0));
+  --accent: var(--an-green);
+  --accent-ink: var(--an-on-green);
+  position: relative;
+  overflow: hidden;
+  border-radius: 2px;
+  border: 1px solid color-mix(in srgb, var(--brk) 42%, transparent);
+  font-family: "Space Mono", ui-monospace, monospace;
+  background:
+    linear-gradient(var(--brk), var(--brk)) left top    / 14px 2px no-repeat,
+    linear-gradient(var(--brk), var(--brk)) left top    / 2px 14px no-repeat,
+    linear-gradient(var(--brk), var(--brk)) right top   / 14px 2px no-repeat,
+    linear-gradient(var(--brk), var(--brk)) right top   / 2px 14px no-repeat,
+    linear-gradient(var(--brk), var(--brk)) left bottom / 14px 2px no-repeat,
+    linear-gradient(var(--brk), var(--brk)) left bottom / 2px 14px no-repeat,
+    linear-gradient(var(--brk), var(--brk)) right bottom/ 14px 2px no-repeat,
+    linear-gradient(var(--brk), var(--brk)) right bottom/ 2px 14px no-repeat,
+    var(--brk-bg);
+}
+.an-appr.is-danger {
+  --brk: var(--an-red);
+  --brk-bg: color-mix(in srgb, var(--an-red) 10%, var(--an-bg-0));
+}
+.an-appr.is-amber {
+  --brk: var(--an-amber);
+  --brk-bg: color-mix(in srgb, var(--an-amber) 9%, var(--an-bg-0));
+  --accent: var(--an-amber);
+  --accent-ink: var(--an-bg-0);
+}
+.an-appr.is-violet {
+  --brk: var(--an-violet);
+  --brk-bg: color-mix(in srgb, var(--an-violet) 11%, var(--an-bg-0));
+  --accent: var(--an-violet);
+  --accent-ink: var(--an-bg-0);
+}
+
+/* hairline divider between card sections (tinted by the card's --brk) */
+.an-appr-div { border-top: 1px solid color-mix(in srgb, var(--brk) 22%, transparent); }
+
+/* the "1 / N" queue counter above the card */
+.an-appr-count { font: 700 11px "Space Mono", ui-monospace, monospace; letter-spacing: 0.5px; }
+
+/* three-up action buttons (Approve / Always / Deny), uppercased in CSS */
+.an-appr-btn {
+  flex: 1 1 0;
+  text-align: center;
+  padding: 11px 6px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  font: 700 10px "Space Mono", ui-monospace, monospace;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--dur-2) var(--ease-standard),
+              border-color var(--dur-2) var(--ease-standard);
+}
+.an-appr-btn--primary { background: var(--accent); color: var(--accent-ink); }
+.an-appr-btn--primary:active { background: color-mix(in srgb, var(--accent) 82%, var(--an-bg-0)); }
+.an-appr-btn--always {
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  color: color-mix(in srgb, var(--accent) 72%, var(--an-fg-dim));
+}
+.an-appr-btn--always:active { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.an-appr-btn--deny {
+  border-color: color-mix(in srgb, var(--an-red) 38%, transparent);
+  color: color-mix(in srgb, var(--an-red) 72%, var(--an-fg));
+}
+.an-appr-btn--deny:active { background: color-mix(in srgb, var(--an-red) 16%, transparent); }
+
+/* full-width primary confirm (question Send, deny submit) */
+.an-appr-send {
+  width: 100%;
+  padding: 12px;
+  border: 0;
+  border-radius: 2px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: 700 12px "Space Mono", ui-monospace, monospace;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.an-appr-send:disabled { opacity: 0.4; cursor: default; }
+
+/* question header chip */
+.an-appr-chip {
+  display: inline-block;
+  padding: 3px 7px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--an-green) 18%, transparent);
+  color: color-mix(in srgb, var(--an-green) 80%, var(--an-fg));
+  font: 700 9px "Space Mono", ui-monospace, monospace;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* selectable option rows */
+.an-appr-opt {
+  width: 100%;
+  text-align: left;
+  padding: 9px 11px;
+  border-radius: 2px;
+  border: 1px solid color-mix(in srgb, var(--an-fg) 16%, transparent);
+  background: transparent;
+  cursor: pointer;
+  transition: border-color var(--dur-2) var(--ease-standard),
+              background var(--dur-2) var(--ease-standard);
+}
+.an-appr-opt.is-on {
+  border-color: var(--an-green);
+  background: color-mix(in srgb, var(--an-green) 14%, transparent);
+}
+.an-appr-check {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  border: 1px solid color-mix(in srgb, var(--an-fg-mute) 82%, transparent);
+  position: relative;
+}
+.an-appr-check.is-on {
+  border-color: var(--an-green);
+  background: color-mix(in srgb, var(--an-green) 15%, transparent);
+}
+.an-appr-check.is-on::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 1px;
+  width: 5px;
+  height: 8px;
+  border-right: 2px solid var(--an-green);
+  border-bottom: 2px solid var(--an-green);
+  transform: rotate(40deg);
+}
+
+/* text / secret entry fields (deny reason, free-text answer) */
+.an-appr-field {
+  width: 100%;
+  border-radius: 2px;
+  border: 1px solid color-mix(in srgb, var(--an-fg) 20%, transparent);
+  background: color-mix(in srgb, var(--an-bg-0) 82%, transparent);
+  color: var(--an-fg);
+  font: 400 12px "Space Mono", ui-monospace, monospace;
+  line-height: 1.55;
+  padding: 10px 12px;
+  outline: none;
+}
+.an-appr-field:focus { border-color: var(--an-green); }
+.an-appr-field::placeholder { color: var(--an-fg-mute); }
+
 /* Assistant typing indicator — dots rise and brighten in a soft wave (replaces the flat
    triple opacity-pulse, which read as static). */
 @keyframes an-typing {

@@ -55,9 +55,11 @@ export function ApprovalDock() {
       style={{ maxHeight: hasQuestion ? "calc(var(--vvh, 100dvh) * 0.62)" : "calc(var(--vvh, 100dvh) * 0.5)" }}
     >
       {visible.length > 1 && (
-        <div className="flex items-center justify-between px-0.5 text-xs">
-          <span className="font-medium text-zinc-300">1 / {visible.length}</span>
-          <span className="text-zinc-500">{visible.length - 1} more waiting</span>
+        <div className="flex items-center justify-between px-0.5">
+          <span className="an-appr-count" style={{ color: "var(--an-fg-dim)" }}>1 / {visible.length}</span>
+          <span className="an-appr-count" style={{ color: "var(--an-fg-mute)", fontWeight: 400 }}>
+            {visible.length - 1} more waiting
+          </span>
         </div>
       )}
       {head &&
@@ -67,6 +69,33 @@ export function ApprovalDock() {
           <ApprovalCard key={head.id} req={head} onDecide={(o, extra) => decide(head, o, extra)} />
         ))}
     </div>
+  );
+}
+
+function DangerGlyph() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path d="M6 1.6 10.7 10H1.3L6 1.6Z" stroke="currentColor" strokeWidth="1.1" />
+      <path d="M6 4.6v2.5M6 8.7h.01" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ReadGlyph() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+      <path d="M2.2 2.2h8.6v8.6H2.2V2.2Z" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M4.1 4.5h4.8M4.1 6.5h4.8M4.1 8.5h3.2" stroke="currentColor" strokeWidth="1" strokeLinecap="square" />
+    </svg>
+  );
+}
+
+function EditGlyph() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+      <path d="M3 9.9 3.6 7.4 8.9 2.1l1.9 1.9-5.3 5.3L3 9.9Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+      <path d="M7.7 3.3 9.6 5.2" stroke="currentColor" strokeWidth="1.1" />
+    </svg>
   );
 }
 
@@ -123,32 +152,35 @@ function QuestionCard({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-emerald-700/50 bg-emerald-950/95 text-sm">
+    <div className="an-appr text-sm">
       {questions.map((q, qi) => (
-        <div key={qi} className="border-b border-emerald-700/20 px-3 py-2.5 last:border-b-0">
-          {q.header && (
-            <div className="mb-1 inline-block rounded bg-emerald-700/30 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-300">
-              {q.header}
-            </div>
-          )}
-          <div className="mb-2 font-medium text-zinc-100">{q.question}</div>
+        <div
+          key={qi}
+          className="px-3.5 py-3"
+          style={{ borderTop: qi === 0 ? undefined : "1px solid color-mix(in srgb, var(--brk) 22%, transparent)" }}
+        >
+          {q.header && <div className="an-appr-chip mb-2.5">{q.header}</div>}
+          <div className="mb-2.5 font-bold" style={{ color: "var(--an-fg)" }}>{q.question}</div>
           {q.options.length > 0 && (
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-2">
               {q.options.map((opt) => {
                 const chosen = (selections[qi] ?? []).includes(opt.label);
+                const multi = q.multiSelect === true;
                 return (
                   <button
                     key={opt.label}
-                    onClick={() => toggle(qi, opt.label, q.multiSelect === true)}
-                    className={`rounded-lg border px-3 py-2 text-left transition ${
-                      chosen
-                        ? "border-emerald-500 bg-emerald-600/20"
-                        : "border-zinc-700 hover:border-zinc-600"
-                    }`}
+                    onClick={() => toggle(qi, opt.label, multi)}
+                    className={`an-appr-opt ${chosen ? "is-on" : ""}`}
+                    aria-pressed={chosen}
                   >
-                    <div className="text-sm font-medium text-zinc-100">{opt.label}</div>
+                    <div className="flex items-center gap-2.5">
+                      {multi && (
+                        <span className={`an-appr-check ${chosen ? "is-on" : ""}`} aria-hidden="true" />
+                      )}
+                      <span className="font-bold" style={{ color: "var(--an-fg)" }}>{opt.label}</span>
+                    </div>
                     {opt.description && (
-                      <div className="mt-0.5 text-xs leading-snug text-zinc-400">{opt.description}</div>
+                      <div className="mt-1 text-xs leading-snug" style={{ color: "var(--an-fg-dim)" }}>{opt.description}</div>
                     )}
                   </button>
                 );
@@ -156,8 +188,8 @@ function QuestionCard({
             </div>
           )}
           {q.allowCustomInput && (
-            <div className="mt-2 flex flex-col gap-1.5">
-              <div className="text-xs text-zinc-400">
+            <div className="mt-2.5 flex flex-col gap-1.5">
+              <div className="text-xs" style={{ color: "var(--an-fg-dim)" }}>
                 {q.options.length > 0 ? "Or type your own answer" : "Type your answer"}
               </div>
               {q.secret ? (
@@ -166,7 +198,8 @@ function QuestionCard({
                   value={customInput[qi] ?? ""}
                   onChange={(e) => setTypedAnswer(qi, e.target.value)}
                   placeholder="Type your answer…"
-                  className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-500"
+                  className="an-appr-field"
+                  style={{ letterSpacing: "2px" }}
                 />
               ) : (
                 <textarea
@@ -174,19 +207,15 @@ function QuestionCard({
                   value={customInput[qi] ?? ""}
                   onChange={(e) => setTypedAnswer(qi, e.target.value)}
                   placeholder="Type your answer…"
-                  className="resize-y rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-500"
+                  className="an-appr-field resize-y"
                 />
               )}
             </div>
           )}
         </div>
       ))}
-      <div className="sticky bottom-0 bg-emerald-950 px-3 py-2">
-        <button
-          disabled={!allAnswered}
-          onClick={submit}
-          className="w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium [color:var(--an-bg-0)] disabled:opacity-40"
-        >
+      <div className="sticky bottom-0 px-3.5 py-3" style={{ background: "var(--brk-bg)" }}>
+        <button disabled={!allAnswered} onClick={submit} className="an-appr-send">
           Send
         </button>
       </div>
@@ -250,41 +279,45 @@ function ApprovalCard({
     }
   }, [req.id, isForge]);
 
-  const borderColor = isDanger ? "border-red-700/60" : isForge ? "" : "border-emerald-700/50";
-  // Near-opaque (composer-glass level) so chat content doesn't show through the card.
-  const bgColor = isDanger ? "bg-red-950/95" : "bg-emerald-950/95";
+  // Terminal-skin variant: danger keeps green buttons but a red frame; buy = amber forge,
+  // publish = violet forge. --brk-bg stays near-opaque
+  // (composer-glass level) so chat content doesn't show through the card.
+  const variantClass = isDanger ? "is-danger" : isBuy ? "is-amber" : isPublish ? "is-violet" : "";
 
   return (
     <div
       ref={cardRef}
       tabIndex={-1}
-      className={`relative overflow-hidden rounded-lg border ${borderColor} ${bgColor} text-sm outline-none ${isForge ? "skill-forge" : ""} ${isBuy ? "is-buy" : ""}`}
-      style={isForge ? { borderColor: `color-mix(in srgb, ${forgeAccent} 55%, transparent)` } : undefined}
+      className={`an-appr ${variantClass} text-sm outline-none ${isForge ? "skill-forge" : ""} ${isBuy ? "is-buy" : ""}`}
     >
       {isForge && <ForgeStars accent={forgeAccent} />}
       {/* header */}
-      <div className="relative z-10 flex items-center gap-2 px-3 py-1.5">
+      <div className="relative z-10 flex items-center gap-2 px-3.5 pt-2.5 pb-1.5">
         {isDanger && (
-          <span className="font-bold text-red-400">⚠ DANGER</span>
+          <span className="inline-flex items-center gap-1 font-bold" style={{ color: "var(--an-red)", fontSize: "11px", letterSpacing: "0.5px" }}>
+            <DangerGlyph />
+            DANGER
+          </span>
         )}
-        <span className="inline-flex items-center font-mono" style={{ color: isForge ? forgeAccent : undefined }}>
+        <span className="inline-flex items-center font-bold" style={{ color: isForge ? forgeAccent : "var(--an-green)" }}>
           {isPlan || isForge ? (
             <SkillIcon className="h-4 w-4" />
           ) : req.kind === "bash" ? (
             "$"
           ) : req.kind === "read" ? (
-            "□"
+            <ReadGlyph />
           ) : (
-            "✎"
+            <EditGlyph />
           )}
         </span>
-        <span className="truncate font-medium">{isPublish ? `Forge skill: ${forgeName}` : isBuy ? `Buy skill${buyName ? `: ${buyName}` : ""}` : req.title || req.tool}</span>
-        <span className="ml-auto text-xs text-zinc-500">{req.cli}</span>
+        <span className="truncate font-bold" style={{ color: "var(--an-fg)" }}>{isPublish ? `Forge skill: ${forgeName}` : isBuy ? `Buy skill${buyName ? `: ${buyName}` : ""}` : req.title || req.tool}</span>
+        <span className="ml-auto text-xs" style={{ color: "var(--an-fg-mute)" }}>{req.cli}</span>
         {/* bash: edit toggle */}
         {req.kind === "bash" && req.command && (
           <button
             onClick={() => setEditMode((e) => !e)}
-            className="text-xs text-zinc-500 hover:text-zinc-300"
+            className="text-xs"
+            style={{ color: "var(--an-fg-mute)" }}
           >
             {editMode ? "cancel" : "edit"}
           </button>
@@ -294,8 +327,8 @@ function ApprovalCard({
       {/* detail */}
       {req.command && !editMode && (
         <pre
-          className="overflow-auto px-3 pb-2 font-mono text-xs text-zinc-200"
-          style={{ maxHeight: "calc(var(--vvh, 100dvh) * 0.32)" }}
+          className="overflow-auto px-3.5 pb-3 font-mono text-xs"
+          style={{ color: "var(--an-fg-dim)", lineHeight: 1.55, maxHeight: "calc(var(--vvh, 100dvh) * 0.32)" }}
         >
           {req.command}
         </pre>
@@ -305,44 +338,46 @@ function ApprovalCard({
           value={editedCmd}
           onChange={(e) => setEditedCmd(e.target.value)}
           rows={3}
-          className="w-full resize-y bg-zinc-950 px-3 py-2 font-mono text-xs text-zinc-100 outline-none border-t border-zinc-700"
+          className="an-appr-div w-full resize-y px-3.5 py-2.5 font-mono text-xs outline-none"
+          style={{ background: "color-mix(in srgb, var(--an-bg-0) 82%, transparent)", color: "var(--an-fg)" }}
         />
       )}
       {req.plan && (
         <div
-          className="overflow-y-auto whitespace-pre-wrap px-3 pb-2 text-xs leading-relaxed text-zinc-300 [overflow-wrap:anywhere]"
-          style={{ maxHeight: "min(16rem, max(8rem, calc(var(--vvh, 100dvh) * 0.36)))" }}
+          className="overflow-y-auto whitespace-pre-wrap px-3.5 pb-3 text-xs leading-relaxed [overflow-wrap:anywhere]"
+          style={{ color: "var(--an-fg-dim)", maxHeight: "min(16rem, max(8rem, calc(var(--vvh, 100dvh) * 0.36)))" }}
         >
           {req.plan}
         </div>
       )}
       {req.file && !req.diff && (
-        <div className="px-3 pb-2 font-mono text-xs text-zinc-300">{req.file}</div>
+        <div className="px-3.5 pb-3 font-mono text-xs" style={{ color: "var(--an-fg-dim)" }}>{req.file}</div>
       )}
       {isPublish && (
         // What is being forged: name + description + price, so the approval is meaningful.
-        // (Buy has no such input — its command line already names the skill.)
-        <div className="relative z-10 px-3 pb-2">
-          <div className="text-[0.95rem] font-semibold text-zinc-100">{forgeName}</div>
-          {forgeDesc && <div className="mt-0.5 text-xs leading-snug text-zinc-300/85">{forgeDesc}</div>}
-          <div className="mt-1.5 text-[0.7rem] text-zinc-400">mint a soulbound NFT · price {forgePrice}</div>
+        // (Buy has no such input; its command line already names the skill.)
+        <div className="relative z-10 px-3.5 pb-3">
+          <div className="text-sm font-bold" style={{ color: "var(--an-fg)" }}>{forgeName}</div>
+          {forgeDesc && <div className="mt-0.5 text-xs leading-snug" style={{ color: "var(--an-fg-dim)" }}>{forgeDesc}</div>}
+          <div className="mt-1.5 text-xs" style={{ color: "var(--an-fg-mute)" }}>mint a soulbound NFT / price {forgePrice}</div>
         </div>
       )}
       {req.diff && (
         <pre
-          className="overflow-auto px-3 pb-2 font-mono text-xs"
+          className="overflow-auto px-3.5 pb-3 font-mono text-xs"
           style={{ maxHeight: "calc(var(--vvh, 100dvh) * 0.32)" }}
         >
           {req.diff.split("\n").map((ln, i) => (
             <div
               key={i}
-              className={
-                ln[0] === "+"
-                  ? "text-emerald-400"
-                  : ln[0] === "-"
-                    ? "text-red-400"
-                    : "text-zinc-500"
-              }
+              style={{
+                color:
+                  ln[0] === "+"
+                    ? "var(--an-green)"
+                    : ln[0] === "-"
+                      ? "var(--an-red)"
+                      : "var(--an-fg-mute)",
+              }}
             >
               {ln}
             </div>
@@ -350,18 +385,18 @@ function ApprovalCard({
         </pre>
       )}
 
-      {/* deny-with-reason input — mobile-friendly: a full-width multiline field with
+      {/* deny-with-reason input: mobile-friendly full-width multiline field with
           full-size action buttons below, so the reason is easy to type and the buttons are
           comfortable tap targets (the old single-line text-xs row was too small on a phone). */}
       {showReason && (
-        <div className="flex flex-col gap-2 border-t border-zinc-700 px-3 py-2.5">
+        <div className="an-appr-div flex flex-col gap-2.5 px-3.5 py-3">
           <textarea
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="Reason for denying (optional)"
             autoFocus
             rows={2}
-            className="w-full resize-y rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-500 placeholder:text-zinc-600"
+            className="an-appr-field resize-y"
             onKeyDown={(e) => {
               // Cmd/Ctrl+Enter submits; plain Enter inserts a newline (mobile keyboard friendly).
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) onDecide("deny", { reason: reason.trim() || undefined });
@@ -371,13 +406,19 @@ function ApprovalCard({
           <div className="flex gap-2">
             <button
               onClick={() => onDecide("deny", { reason: reason.trim() || undefined })}
-              className="flex-1 rounded-lg bg-red-900/70 px-3 py-2.5 text-sm font-medium text-red-100 active:bg-red-800"
+              className="an-appr-btn"
+              style={{
+                flex: "2 1 0",
+                background: "color-mix(in srgb, var(--an-red) 24%, var(--an-bg-0))",
+                color: "color-mix(in srgb, var(--an-red) 55%, var(--an-fg))",
+              }}
             >
               Deny
             </button>
             <button
               onClick={() => { setShowReason(false); setReason(""); }}
-              className="rounded-lg border border-zinc-600/50 px-4 py-2.5 text-sm text-zinc-300 active:bg-zinc-700/40"
+              className="an-appr-btn"
+              style={{ borderColor: "color-mix(in srgb, var(--an-fg) 25%, transparent)", color: "var(--an-fg-dim)" }}
             >
               Cancel
             </button>
@@ -385,16 +426,16 @@ function ApprovalCard({
         </div>
       )}
 
-      {/* action buttons — equal width, single row; primary action filled, the rest ghost
+      {/* action buttons: equal width, single row; primary action filled, the rest ghost
           (outline) so the card reads cleanly and the main choice stands out. z-10 keeps them
           above the skill-effect overlay. */}
-      <div className="relative z-10 flex gap-2 border-t border-emerald-700/40 px-3 py-2">
+      <div className="an-appr-div relative z-10 flex gap-2 px-3 py-2.5">
         {isPlan ? (
           <>
-            <button autoFocus onClick={() => onDecide("once")} className="flex-1 whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold [color:var(--an-bg-0)] active:bg-emerald-500">
+            <button autoFocus onClick={() => onDecide("once")} className="an-appr-btn an-appr-btn--primary whitespace-nowrap">
               Approve plan
             </button>
-            <button onClick={() => { if (req.plan) savePlan(req.plan); onDecide("deny"); }} className="flex-1 whitespace-nowrap rounded-lg border border-red-500/40 px-3 py-2.5 text-sm font-medium text-red-300 active:bg-red-900/30">
+            <button onClick={() => { if (req.plan) savePlan(req.plan); onDecide("deny"); }} className="an-appr-btn an-appr-btn--deny whitespace-nowrap">
               Keep planning
             </button>
           </>
@@ -403,25 +444,29 @@ function ApprovalCard({
             <button
               autoFocus
               onClick={() => onDecide("once", { updatedInput: { ...(req.input ?? {}), command: editedCmd } })}
-              className="flex-1 whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold [color:var(--an-bg-0)] active:bg-emerald-500"
+              className="an-appr-btn an-appr-btn--primary whitespace-nowrap"
             >
               Approve edited
             </button>
-            <button onClick={() => setEditMode(false)} className="flex-1 whitespace-nowrap rounded-lg border border-zinc-500/40 px-3 py-2.5 text-sm font-medium text-zinc-300 active:bg-zinc-700/40">
+            <button
+              onClick={() => setEditMode(false)}
+              className="an-appr-btn whitespace-nowrap"
+              style={{ borderColor: "color-mix(in srgb, var(--an-fg) 25%, transparent)", color: "var(--an-fg-dim)" }}
+            >
               Cancel
             </button>
           </>
         ) : (
           <>
-            <button autoFocus onClick={() => onDecide("once")} className="flex-1 whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold [color:var(--an-bg-0)] active:bg-emerald-500">
+            <button autoFocus onClick={() => onDecide("once")} className="an-appr-btn an-appr-btn--primary whitespace-nowrap">
               Approve
             </button>
-            <button onClick={() => onDecide("always")} className="flex-1 whitespace-nowrap rounded-lg border border-emerald-400/45 px-3 py-2.5 text-sm font-medium text-emerald-200 active:bg-emerald-500/15">
+            <button onClick={() => onDecide("always")} className="an-appr-btn an-appr-btn--always whitespace-nowrap">
               Always
             </button>
             <button
               onClick={() => { setShowReason((s) => !s); }}
-              className="flex-1 whitespace-nowrap rounded-lg border border-red-500/40 px-3 py-2.5 text-sm font-medium text-red-300 active:bg-red-900/30"
+              className="an-appr-btn an-appr-btn--deny whitespace-nowrap"
             >
               Deny
             </button>
