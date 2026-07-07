@@ -132,6 +132,24 @@ let googleLoginError: string | null = null;
 let claudeLogin: ClaudeLogin | null = null;
 let codexLogin: CodexLogin | null = null;
 
+// The single place that wires connect()'s cloud-status callback and adopts the result as
+// the live runtime, so the wiring can't drift across the (re)connect paths (wallet connect,
+// drive connect, pickCloud, disconnect). Always builds a FRESH runtime for the current
+// storage config.
+function rebuildRuntime(w: Wallet): Promise<AgentRuntime> {
+  return connect(w, (s) => { lastCloudStatus = s; onCloudStatus?.(); }).then((rt) => { runtime = rt; return rt; });
+}
+
+// Lazy build for the SSE path: reuse an in-flight build so two near-simultaneous /events
+// connections don't each construct a runtime (the second would overwrite `runtime` and
+// orphan the first client's chat).
+let runtimeBuilding: Promise<AgentRuntime> | null = null;
+function ensureRuntime(w: Wallet): Promise<AgentRuntime> {
+  if (runtime) return Promise.resolve(runtime);
+  if (!runtimeBuilding) runtimeBuilding = rebuildRuntime(w).finally(() => { runtimeBuilding = null; });
+  return runtimeBuilding;
+}
+
 function googleLoginErrorMessage(e: unknown): string {
   const message = e instanceof Error ? e.message : String(e);
   if (message.includes("client_secret is missing")) {
@@ -157,11 +175,11 @@ async function googleAuthorizeError(res: Response): Promise<string> {
 async function connectGoogleDriveStorage() {
   if (!wallet) return;
   await switchStorage(wallet, { kind: "gdrive" });
-  runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
+  const rt = await rebuildRuntime(wallet);
   // One-shot: push local sessions the cloud is missing, now that Drive is (re)connected.
   // Fire-and-forget so the login response is not blocked; runs only on this explicit
   // connect, never on passive startup, so it can't become a per-launch cloud storm.
-  void runtime.syncCloud()
+  void rt.syncCloud()
     .then((r) => { if (r.uploaded) console.error(`[cloud] backfilled ${r.uploaded}/${r.missing} missing sessions`); })
     .catch(() => { /* best-effort */ });
 }
@@ -203,6 +221,12 @@ function beginGoogleLogin(c: Client) {
       } finally {
         googleLoginSession = null;
       }
+    }).catch((e) => {
+      // done itself rejected (login aborted/errored before resolving) — surface it instead
+      // of leaving an unhandled rejection, and clear the session so a retry can start clean.
+      googleLoginError = googleLoginErrorMessage(e);
+      broadcastGoogleLoginStatus(false, googleLoginError);
+      googleLoginSession = null;
     });
   } catch (e) {
     c.send({ type: "googleLoginStatus", status: "error", error: (e as Error).message });
@@ -242,7 +266,7 @@ async function connectWallet(address: string, signature: Uint8Array): Promise<vo
   // building it here with no-cloud config and then rebuilding after Drive OAuth caused
   // the chat SSE to attach to a stale local runtime while the user was in Chrome.
   if (await isInitialized()) {
-    runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
+    await rebuildRuntime(wallet);
   }
 }
 
@@ -346,6 +370,9 @@ function attachAuthHandlers(c: Client) {
             c.send({ type: "claudeLoginStatus", status: ok ? "done" : "error", error: ok ? undefined : "Login was not completed." });
             if (ok) await pushCliStatus(c);
             claudeLogin = null;
+          }).catch((e) => {
+            c.send({ type: "claudeLoginStatus", status: "error", error: (e as Error).message });
+            claudeLogin = null;
           });
         } catch (e) {
           c.send({ type: "claudeLoginStatus", status: "error", error: (e as Error).message });
@@ -368,6 +395,9 @@ function attachAuthHandlers(c: Client) {
             if (ok) await markCodexConnected();
             c.send({ type: "codexLoginStatus", status: ok ? "done" : "error", error: ok ? undefined : "Login was not completed." });
             if (ok) await pushCliStatus(c);
+            codexLogin = null;
+          }).catch((e) => {
+            c.send({ type: "codexLoginStatus", status: "error", error: (e as Error).message });
             codexLogin = null;
           });
         } catch (e) {
@@ -746,13 +776,13 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
     connectCloud: async (cfg) => {
       if (wallet) {
         await switchStorage(wallet, { kind: cfg.kind, location: cfg.location, authHeader: cfg.authHeader } as StorageConfig);
-        runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
+        await rebuildRuntime(wallet);
       }
     },
     disconnectCloud: async () => {
       await disconnectCloud();
       if (wallet) {
-        runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
+        await rebuildRuntime(wallet);
       }
     },
     disconnectWallet: async () => {
@@ -881,7 +911,13 @@ function attachOnboarding(c: Client) {
 function readBody(req: import("node:http").IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     let body = "";
-    req.on("data", (chunk) => { body += chunk; if (body.length > 4_000_000) req.destroy(); });
+    req.on("data", (chunk) => {
+      body += chunk;
+      // Abort WITH an error: a bare req.destroy() emits no 'error', so the promise would
+      // never settle and `await readBody` would hang forever (no response, the handler and
+      // the 4MB buffer leaked). Passing an error routes through the reject handler below.
+      if (body.length > 4_000_000) req.destroy(new Error("request body too large"));
+    });
     req.on("end", () => resolve(body));
     req.on("error", reject);
   });
@@ -937,8 +973,7 @@ const http = createServer(async (req, res) => {
     // gets a working chat (matches the desktop/VSCode connect(wallet) path). Only a true
     // process restart (wallet lost from memory) re-onboards.
     else if (wallet) {
-      runtime = await connect(wallet, (s) => { lastCloudStatus = s; onCloudStatus?.(); });
-      attachChat(id, c, runtime);
+      attachChat(id, c, await ensureRuntime(wallet));
     }
     else attachOnboarding(c);
     return;
