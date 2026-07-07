@@ -111,6 +111,7 @@ export interface State {
   toast: string | null;
   buyCelebrate: boolean;
   buyCelebrateLabel: string | null; // the COMPLETE plaque sub-label: "SKILL PURCHASED" / "WORKFLOW PURCHASED"
+  lastBuyError: { at: number } | null; // dedup-able signal so the UI can buzz an error once per failed buy
   contextTokens?: number;
   contextWindow?: number;
   isCompacting: boolean;
@@ -161,6 +162,7 @@ const initialState: State = {
   toast: null,
   buyCelebrate: false,
   buyCelebrateLabel: null,
+  lastBuyError: null,
   marketOpen: false,
   marketInitialView: "browse",
   marketTab: "skill",
@@ -514,6 +516,7 @@ function reducer(state: State, ev: Action): State {
         // Broke wallet -> open the fund prompt so the buyer can top up and retry, instead of
         // only flashing a transient error toast that leaves them stuck.
         fundOpen: !ev.ok && ev.code === "insufficient_funds" ? true : state.fundOpen,
+        lastBuyError: !ev.ok ? { at: Date.now() } : state.lastBuyError,
       };
     case "disposeResult":
       return {
@@ -590,6 +593,8 @@ function reducer(state: State, ev: Action): State {
         // Fire the same COMPLETE plaque as a single buy when anything landed (a batch is skills).
         buyCelebrate: ev.bought > 0 ? true : state.buyCelebrate,
         buyCelebrateLabel: ev.bought > 0 ? "SKILL PURCHASED" : state.buyCelebrateLabel,
+        // Only a complete miss counts as a failure buzz; a partial batch already celebrates.
+        lastBuyError: ev.bought === 0 ? { at: Date.now() } : state.lastBuyError,
       };
     case "agentNoteResult":
       return { ...state, toast: ev.ok ? "Note posted." : `Note failed: ${ev.error ?? "unknown"}` };

@@ -91,6 +91,9 @@ export function App() {
     if (r?.ok && r !== celebratedPublish.current) {
       celebratedPublish.current = r;
       setPublishCelebrate(true);
+    } else if (r && !r.ok && r !== celebratedPublish.current) {
+      celebratedPublish.current = r;
+      haptics.error();
     }
   }, [state.publishResult]);
 
@@ -103,8 +106,21 @@ export function App() {
     if (r?.ok && r !== celebratedRepo.current) {
       celebratedRepo.current = r;
       setRepoCelebrate(true);
+    } else if (r && !r.ok && r !== celebratedRepo.current) {
+      celebratedRepo.current = r;
+      haptics.error();
     }
   }, [state.workRepoResult]);
+
+  // A failed buy has no celebration plaque; give it the shared error buzz, once per new failure.
+  const buzzedBuyError = useRef<unknown>(null);
+  useEffect(() => {
+    const e = state.lastBuyError;
+    if (e && e !== buzzedBuyError.current) {
+      buzzedBuyError.current = e;
+      haptics.error();
+    }
+  }, [state.lastBuyError]);
 
   return (
     <>
