@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useStore } from "../state/store";
+import { haptics } from "../haptics";
 import { walletAvatarSvg, walletBandColor } from "./walletAvatar";
 import { AgentListSkeleton } from "./Skeletons";
 import type { Reputation } from "../transport/protocol";
@@ -68,7 +69,7 @@ function AgentCard({ agent, self, onOpen }: { agent: Reputation; self?: boolean;
 
   return (
     <button
-      onClick={() => onOpen(agent.wallet)}
+      onClick={() => { haptics.tick(); onOpen(agent.wallet); }}
       className={`an-ac ${self ? "is-self" : ""}`}
       style={{ "--accent": accent } as CSSProperties}
     >

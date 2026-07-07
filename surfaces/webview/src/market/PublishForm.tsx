@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { useStore } from "../state/store";
+import { haptics } from "../haptics";
 import { ImageIcon, SkillIcon } from "../icons";
 
 // Per-kind tint: skills forge violet, workflows forge amber (matches their card colors).
@@ -146,14 +147,14 @@ export function PublishForm({ onBack, initialKind = "skill" }: Props) {
     return (
       <div className="flex flex-col h-full">
         <header className={`flex items-center gap-2 border-b ${t.border} px-3 py-2 shrink-0`}>
-          <button onClick={() => { clearPublishResult(); onBack(); }} className="text-zinc-400 active:text-zinc-200 px-1 text-lg">←</button>
+          <button onClick={() => { haptics.tick(); clearPublishResult(); onBack(); }} className="text-zinc-400 active:text-zinc-200 px-1 text-lg">←</button>
           <span className="font-medium text-sm">Publish {kind === "workflow" ? "Workflow" : "Skill"}</span>
         </header>
         <div className={`flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center bg-gradient-to-b ${t.wash} to-transparent`}>
           <SkillIcon className={`h-10 w-10 ${t.icon}`} />
           <p className={`${t.label} font-semibold`}>{kind === "workflow" ? "Workflow minted!" : "Skill minted!"}</p>
           {result.mint && <p className="font-mono text-xs text-zinc-500">{result.mint}</p>}
-          <button onClick={() => { clearPublishResult(); onBack(); }} className="mt-2 text-sm text-zinc-400 underline">Back to market</button>
+          <button onClick={() => { haptics.tick(); clearPublishResult(); onBack(); }} className="mt-2 text-sm text-zinc-400 underline">Back to market</button>
         </div>
       </div>
     );
@@ -177,7 +178,7 @@ export function PublishForm({ onBack, initialKind = "skill" }: Props) {
     <div className="flex flex-col h-full">
       <header className="flex items-center gap-3 border-b px-3.5 py-3 shrink-0" style={{ borderColor: "#1d1d20" }}>
         <button
-          onClick={onBack}
+          onClick={() => { haptics.tick(); onBack(); }}
           aria-label="Back"
           className="an-bracket flex shrink-0 items-center justify-center"
           style={{ width: "32px", height: "32px", border: "1px solid #1f1f23", color: "#cfcfcf", "--ts": "7px", "--bk": "#0d0d0e", "--tk": "#6e6e72" } as CSSProperties}

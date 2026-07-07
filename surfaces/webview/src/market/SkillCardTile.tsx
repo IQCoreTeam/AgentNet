@@ -1,5 +1,6 @@
 import type { SkillCard } from "../transport/protocol";
 import { BookIcon, CollectionIcon } from "../icons";
+import { haptics } from "../haptics";
 import { mediaUrl } from "./mediaUrl";
 
 interface Props {
@@ -31,7 +32,7 @@ export function SkillCardTile({ card, owned, disposed, firing, layout = "row", o
   //    title, then the description + meta fill the height so it reads as a card, not a row. ──
   if (layout === "tile") {
     return (
-      <button onClick={() => onOpen(card)} className={`flex flex-col ${base} p-3`}>
+      <button onClick={() => { haptics.tick(); onOpen(card); }} className={`flex flex-col ${base} p-3`}>
         {cover && (
           <img src={cover} alt="" referrerPolicy="no-referrer" className="mb-2 h-20 w-full rounded-lg object-cover" />
         )}
@@ -54,7 +55,7 @@ export function SkillCardTile({ card, owned, disposed, firing, layout = "row", o
 
   // ── Wide row (1-col stack + market list) — icon left, text right. ──
   return (
-    <button onClick={() => onOpen(card)} className={`w-full ${base} p-3`}>
+    <button onClick={() => { haptics.tick(); onOpen(card); }} className={`w-full ${base} p-3`}>
       <div className="flex items-start gap-2.5">
         <div className="relative h-10 w-10 shrink-0">
           {cover ? (
