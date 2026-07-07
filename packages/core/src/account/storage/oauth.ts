@@ -375,7 +375,7 @@ async function nativeAccessToken(nativeUrl: string): Promise<string> {
         throw new Error("native Google auth did not return an access token");
       }
       nativeToken = { value: token, at: Date.now() };
-      console.error(`[perf] gtoken MISS ${Date.now() - t0}ms (served ${nativeTokenHits} cached since last miss)`);
+      if (process.env.AGENTNET_PERF) console.error(`[perf] gtoken MISS ${Date.now() - t0}ms (served ${nativeTokenHits} cached since last miss)`);
       nativeTokenHits = 0;
       return token;
     } finally {

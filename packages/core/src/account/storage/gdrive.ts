@@ -129,7 +129,7 @@ async function findId(walletAddress: string, sessionId: string): Promise<string 
   const res = await fetch(`${FILES}?q=${q}&fields=files(id)`, { headers: hdr });
   if (!res.ok) throw new Error(`drive list failed: ${res.status}`);
   const data = (await res.json()) as { files: { id: string }[] };
-  console.error(`[perf] drive find ${sessionId.slice(0, 8)} auth=${t1 - t0}ms query=${Date.now() - t1}ms`);
+  if (process.env.AGENTNET_PERF) console.error(`[perf] drive find ${sessionId.slice(0, 8)} auth=${t1 - t0}ms query=${Date.now() - t1}ms`);
   const id = data.files[0]?.id ?? null;
   if (id) cacheFileId(walletAddress, sessionId, id);
   return id;
@@ -178,7 +178,7 @@ export function gdriveStorage(walletAddress: string): StorageAdapter {
       }
       if (!res.ok) throw new Error(`drive get failed: ${res.status}`);
       const bytes = new Uint8Array(await res.arrayBuffer());
-      console.error(`[perf] drive get ${sessionId.slice(0, 8)} media=${Date.now() - t0}ms ${bytes.length}B`);
+      if (process.env.AGENTNET_PERF) console.error(`[perf] drive get ${sessionId.slice(0, 8)} media=${Date.now() - t0}ms ${bytes.length}B`);
       return bytes;
     },
 
@@ -197,7 +197,7 @@ export function gdriveStorage(walletAddress: string): StorageAdapter {
         names.push(sessionId);
         cacheFileId(walletAddress, sessionId, f.id);
       }
-      console.error(`[perf] drive list ${Date.now() - t0}ms n=${names.length}`);
+      if (process.env.AGENTNET_PERF) console.error(`[perf] drive list ${Date.now() - t0}ms n=${names.length}`);
       return names;
     },
 
