@@ -147,6 +147,9 @@ function attachAuthHandlers(transport: WebviewTransport) {
             });
             if (ok) await pushCliStatus(transport);
             claudeLogin = null;
+          }).catch((e) => {
+            transport.send({ type: "claudeLoginStatus", status: "error", error: errorMessage(e) });
+            claudeLogin = null;
           });
         } catch (e) {
           transport.send({ type: "claudeLoginStatus", status: "error", error: errorMessage(e) });
@@ -174,6 +177,9 @@ function attachAuthHandlers(transport: WebviewTransport) {
               error: ok ? undefined : "Login was not completed.",
             });
             if (ok) await pushCliStatus(transport);
+            codexLogin = null;
+          }).catch((e) => {
+            transport.send({ type: "codexLoginStatus", status: "error", error: errorMessage(e) });
             codexLogin = null;
           });
         } catch (e) {

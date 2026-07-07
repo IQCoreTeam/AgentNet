@@ -108,16 +108,24 @@ export async function googleLogin(openBrowser: (url: string) => void): Promise<v
   // after — keeping redirect_uri identical between auth request and token request.
   const { code, redirect } = await new Promise<{ code: string; redirect: string }>(
     (resolve, reject) => {
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const ok = (v: { code: string; redirect: string }) => { if (settled) return; settled = true; if (timer) clearTimeout(timer); resolve(v); };
+      const fail = (e: Error) => { if (settled) return; settled = true; if (timer) clearTimeout(timer); reject(e); };
       const server = createServer((req, res) => {
         const url = new URL(req.url || "", "http://127.0.0.1");
         const code = url.searchParams.get("code");
         const gotState = url.searchParams.get("state");
         res.end("AgentNet: Google connected. You can close this tab.");
         server.close();
-        if (!code || gotState !== state) reject(new Error("oauth: bad redirect"));
-        else resolve({ code, redirect });
+        if (!code || gotState !== state) fail(new Error("oauth: bad redirect"));
+        else ok({ code, redirect });
       });
       let redirect = "";
+      // Give up if the user never completes consent (closed the tab): otherwise the server
+      // listens forever and this promise never settles.
+      timer = setTimeout(() => { server.close(); fail(new Error("oauth: timed out waiting for Google redirect")); }, 5 * 60_000);
+      timer.unref?.();
       server.listen(0, "127.0.0.1", () => {
         // Anything thrown HERE (e.g. clientId() with no creds) would otherwise be
         // swallowed by the async callback and leave the promise pending forever —
@@ -139,7 +147,7 @@ export async function googleLogin(openBrowser: (url: string) => void): Promise<v
           openBrowser(auth);
         } catch (e) {
           server.close();
-          reject(e);
+          fail(e as Error);
         }
       });
     },
@@ -162,6 +170,17 @@ export function startGoogleLogin(): Promise<GoogleLogin> {
   let settleDone: (ok: boolean) => void;
   const done = new Promise<boolean>((r) => (settleDone = r));
 
+  // Settle `done` exactly once and clear the abandon-timeout. Callers still close the server
+  // at their own site (they already did); this only owns the settle + timer.
+  let settled = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const finishDone = (ok: boolean) => {
+    if (settled) return;
+    settled = true;
+    if (timer) clearTimeout(timer);
+    settleDone(ok);
+  };
+
   let redirect = "";
   const server = createServer((req, res) => {
     const url = new URL(req.url || "", "http://127.0.0.1");
@@ -171,12 +190,16 @@ export function startGoogleLogin(): Promise<GoogleLogin> {
     server.close();
     if (code && gotState === state) {
       exchangeCode(code, verifier, redirect)
-        .then(() => settleDone(true))
-        .catch(() => settleDone(false));
+        .then(() => finishDone(true))
+        .catch(() => finishDone(false));
     } else {
-      settleDone(false);
+      finishDone(false);
     }
   });
+  // Abandoned login (tab closed, code never submitted): auto-clean after 10 min so the
+  // loopback server + pkce session don't linger forever.
+  timer = setTimeout(() => { server.close(); finishDone(false); }, 10 * 60_000);
+  timer.unref?.();
 
   return new Promise<GoogleLogin>((resolve, reject) => {
     server.listen(0, "127.0.0.1", () => {
@@ -213,16 +236,16 @@ export function startGoogleLogin(): Promise<GoogleLogin> {
             try {
               await exchangeCode(code, verifier, redirect);
               server.close();
-              settleDone(true);
+              finishDone(true);
             } catch (e) {
               server.close();
-              settleDone(false);
+              finishDone(false);
               throw e;
             }
           },
           cancel() {
             server.close();
-            settleDone(false);
+            finishDone(false);
           },
           done,
         });
