@@ -29,7 +29,7 @@ function StepRow({ label, done }: { label: string; done: boolean }) {
 // .agentnet marker and calls the indexer; this UI picks the repo + skills, shows the two
 // steps while it runs, and the result.
 export function RegisterWorkRepo() {
-  const { state, send } = useStore();
+  const { state, send, notify } = useStore();
   const [repo, setRepo] = useState("");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [phase, setPhase] = useState<"form" | "working" | "done">("form");
@@ -59,6 +59,16 @@ export function RegisterWorkRepo() {
   const mints = state.marketOwnedMints;
   const chosen = Object.keys(selected).filter((m) => selected[m]);
   const canSubmit = hasToken && repo.trim().length > 0 && chosen.length > 0;
+  // Why Register can't fire yet — a situation-accurate line (not one generic string), in the
+  // order the user fills the form. Shown as a toast when the disabled-LOOKING but clickable
+  // button is tapped AND inline under it, so a tester who skips the fine print still learns
+  // what's missing. null once every requirement is met.
+  const blockReason: string | null =
+    !hasToken ? "Add a GitHub token above first."
+    : repo.trim().length === 0 ? "Enter a repo first: owner/name or a github.com URL."
+    : owned.length === 0 ? "You need at least one owned skill to register work. Buy or mint a skill, then link it here."
+    : chosen.length === 0 ? "Pick at least one skill this repo used."
+    : null;
 
   function toggle(mint: string) {
     setSelected((s) => ({ ...s, [mint]: !s[mint] }));
@@ -132,9 +142,19 @@ export function RegisterWorkRepo() {
             </p>
           )}
 
-          <button onClick={submit} disabled={!canSubmit} className="an-btn an-btn-green">
+          {/* Disabled-LOOKING (opacity 0.4, matching .an-btn:disabled) but still clickable, so a
+              tap explains what's missing via a toast instead of a dead, silent button. */}
+          <button
+            onClick={() => { if (blockReason) { notify(blockReason); return; } submit(); }}
+            aria-disabled={!!blockReason}
+            className="an-btn an-btn-green"
+            style={blockReason ? { opacity: 0.4 } : undefined}
+          >
             Register repo
           </button>
+          {blockReason && (
+            <p className="an-term-mono text-[10px] leading-relaxed" style={{ color: "#7a7a7a" }}>{blockReason}</p>
+          )}
         </>
       )}
     </div>
