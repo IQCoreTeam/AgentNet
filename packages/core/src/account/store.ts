@@ -21,6 +21,23 @@ import { encodeRecord, metaRecord, msgRecord, decodeLog } from "./sessionLog.js"
 
 export const PAGE_SIZE = 30;
 
+// [perf] diagnostics fire on every turn (loadLatest/loadOlder/listMine); keep them opt-in
+// so a normal session doesn't spam the host log. Set AGENTNET_PERF=1 to re-enable.
+const PERF = !!process.env.AGENTNET_PERF;
+
+// Build a SessionMeta, spreading lastDevice only when present: SessionMeta.lastDevice is
+// OPTIONAL, so under exactOptionalPropertyTypes an explicit `lastDevice: undefined` isn't
+// assignable to it (which used to break the `m is SessionMeta` predicate + sort).
+function toSessionMeta(
+  sessionId: string,
+  title: string,
+  cli: "claude" | "codex",
+  ts: number,
+  lastDevice?: SessionMeta["lastDevice"],
+): SessionMeta {
+  return { sessionId, title, cli, ts, ...(lastDevice ? { lastDevice } : {}) };
+}
+
 const pageKey = (sessionId: string, page: number) => `${sessionId}__p${page}`;
 // parse "abc__p2" -> { sessionId: "abc", page: 2 }; null if not a page key
 function parsePageKey(key: string): { sessionId: string; page: number } | null {
@@ -50,6 +67,13 @@ export interface PageResult {
 export class SessionStore {
   // per-session in-memory state for the CURRENT page (this process)
   private cur = new Map<string, { page: number; count: number }>();
+
+  // Cache of each session's newest-page meta so listMine() doesn't re-decrypt every
+  // session's page on every turn (the big per-turn cost — N sessions = N ECDH decrypts).
+  // Keyed by sessionId; carries the page index it came from, so a rollover or another
+  // device advancing the session (a higher page appearing in storage.list) forces a
+  // re-decode. Filled for free on append/recordMeta, where we already hold the fresh meta.
+  private metaCache = new Map<string, { page: number; meta: SessionMeta }>();
 
   // The key POLICY owns the session key's lifetime (memory vs persisted). Defaults to
   // ephemeral so existing callers are unchanged; a surface passes persistedKey(vault)
@@ -131,6 +155,7 @@ export class SessionStore {
     }
     await this.write(pk, await encodeRecord(key, msgRecord(msg)));
     state.count += 1;
+    this.cacheMeta(state.page, meta);
   }
 
   async recordMeta(meta: Omit<CanonicalSession, "messages">): Promise<void> {
@@ -138,10 +163,20 @@ export class SessionStore {
     const state = await this.currentPage(meta.sessionId);
     const pk = pageKey(meta.sessionId, state.page);
     await this.write(pk, await encodeRecord(key, metaRecord(meta)));
+    this.cacheMeta(state.page, meta);
+  }
+
+  // Refresh the listMine cache from a meta we just wrote — no decode needed.
+  private cacheMeta(page: number, meta: Omit<CanonicalSession, "messages">): void {
+    this.metaCache.set(meta.sessionId, {
+      page,
+      meta: toSessionMeta(meta.sessionId, meta.title, meta.cli, meta.ts, meta.lastDevice),
+    });
   }
 
   async remove(sessionId: string): Promise<void> {
     this.cur.delete(sessionId);
+    this.metaCache.delete(sessionId);
     for (const k of await this.storage.list()) {
       const p = parsePageKey(k);
       if (p && p.sessionId === sessionId) await this.storage.remove(k);
@@ -177,7 +212,7 @@ export class SessionStore {
       decoded = blob ? await decodeLog(await this.getKey(), blob) : null;
     }
     const t3 = Date.now();
-    console.error(
+    if (PERF) console.error(
       `[perf] loadLatest ${sessionId.slice(0, 8)} page=${idx} discover=${t1 - t0}ms(${this.lastTier}) ` +
       `get=${t2 - t1}ms(${blob?.length ?? 0}B) decode=${t3 - t2}ms msgs=${decoded?.messages.length ?? 0}`,
     );
@@ -215,7 +250,7 @@ export class SessionStore {
     const t1 = Date.now();
     const s = blob ? await decodeLog(await this.getKey(), blob) : null;
     const t2 = Date.now();
-    console.error(
+    if (PERF) console.error(
       `[perf] loadOlder ${sessionId.slice(0, 8)} page=${cursor} ` +
       `get=${t1 - t0}ms(${blob?.length ?? 0}B) decode=${t2 - t1}ms msgs=${s?.messages.length ?? 0}`,
     );
@@ -248,31 +283,34 @@ export class SessionStore {
       if (prev === undefined || p.page > prev) latestPage.set(p.sessionId, p.page);
     }
     const tList = Date.now();
-    // Read every session's newest page IN PARALLEL. On a cloud tier (Drive) each loadPage
-    // is a network round-trip (download + decrypt); doing them serially made the chat-list
-    // sync at app start cost 1 + N sequential round-trips (visibly slow on mobile/Drive).
-    // Promise.all overlaps them so the wall-clock is ~the slowest single page, not the sum.
+    // Serve each session's meta from cache when its newest page is unchanged; only DECODE
+    // sessions we've never seen (first load / synced from another device) or whose page
+    // advanced. This kills the per-turn cost: a hot session-list refresh does ~0 decrypts
+    // instead of one per session. Uncached decodes still run IN PARALLEL — on a cloud tier
+    // (Drive) each loadPage is a network round-trip, so Promise.all keeps first-load fast.
+    let decoded = 0;
     const metas = await Promise.all(
       [...latestPage].map(async ([sessionId, page]) => {
+        const cached = this.metaCache.get(sessionId);
+        if (cached && cached.page === page) return cached.meta;
         // A page encrypted with a DIFFERENT wallet key (e.g. after reconnecting a new
         // keypair) can't be decrypted; skip it instead of failing the whole list, so one
         // unreadable session never hides all the readable ones.
         try {
+          decoded++;
           const s = await this.loadPage(sessionId, page);
-          // Spread lastDevice only when present: SessionMeta.lastDevice is OPTIONAL, so under
-          // exactOptionalPropertyTypes a literal `lastDevice: undefined` (a required key) is not
-          // assignable to it — which broke the `m is SessionMeta` predicate and the sort below.
-          return s
-            ? { sessionId, title: s.title, cli: s.cli, ts: s.ts, ...(s.lastDevice ? { lastDevice: s.lastDevice } : {}) }
-            : null;
+          if (!s) return null;
+          const meta = toSessionMeta(sessionId, s.title, s.cli, s.ts, s.lastDevice);
+          this.metaCache.set(sessionId, { page, meta });
+          return meta;
         } catch {
           return null; // undecryptable (foreign key / corrupt), omit from the list
         }
       }),
     );
     const out = metas.filter((m): m is SessionMeta => m !== null).sort((a, b) => b.ts - a.ts);
-    console.error(
-      `[perf] listMine sessions=${latestPage.size} kept=${out.length} ` +
+    if (PERF) console.error(
+      `[perf] listMine sessions=${latestPage.size} kept=${out.length} decoded=${decoded} ` +
       `list=${tList - t0}ms pages=${Date.now() - tList}ms total=${Date.now() - t0}ms`,
     );
     return out;

@@ -15,7 +15,8 @@
 
 import { spawn } from "node:child_process";
 import readline from "node:readline";
-import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdir, writeFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { configFile, rootDir } from "../core/paths.js";
@@ -147,6 +148,13 @@ export function spawnCli(opts: SpawnOpts): Engine {
   return opts.cli === "claude" ? claudeEngine(opts) : codexEngine(opts);
 }
 
+// Coalesce partial assistant/thinking snapshots to ~frame rate. Partials arrive at token
+// rate (tens–hundreds/sec), each carrying the FULL text-so-far (replace-semantics), so
+// emitting every one makes the host re-serialize an O(n²) amount of text over IPC and
+// stalls the whole editor. 40ms ≈ 25fps; the webview already repaints at most once per
+// animation frame, so this is visually indistinguishable.
+const PARTIAL_THROTTLE_MS = 40;
+
 // small typed callback bag so each engine doesn't re-implement listener plumbing.
 function callbacks() {
   const msg: Array<(m: ChatMessage) => void> = [];
@@ -156,15 +164,37 @@ function callbacks() {
   const skill: Array<(name: string) => void> = [];
   const use: Array<(n: number, window?: number) => void> = [];
   const comp: Array<() => void> = [];
+  const rawEmitMsg = (m: ChatMessage) => { for (const c of msg) c(m); };
+
+  // Latest pending partial per role (assistant/thinking coalesce independently). Because
+  // each partial is a full snapshot, keeping only the newest per role loses no text.
+  const pendingPartial = new Map<string, ChatMessage>();
+  let partialTimer: ReturnType<typeof setTimeout> | null = null;
+  const flushPartials = () => {
+    if (partialTimer) { clearTimeout(partialTimer); partialTimer = null; }
+    if (!pendingPartial.size) return;
+    const queued = [...pendingPartial.values()]; // Map preserves first-seen order (thinking→assistant)
+    pendingPartial.clear();
+    for (const m of queued) rawEmitMsg(m);
+  };
+
   return {
     msg, sid, turn, err, skill, use, comp,
-    emitMsg: (m: ChatMessage) => { for (const c of msg) c(m); },
+    // Non-partial events ALWAYS flush pending partials first, so text→tool-card→final
+    // ordering is preserved even though partials are delayed.
+    emitMsg: (m: ChatMessage) => { flushPartials(); rawEmitMsg(m); },
+    emitPartial: (m: ChatMessage) => {
+      pendingPartial.set(m.role, m);
+      if (!partialTimer) partialTimer = setTimeout(() => { partialTimer = null; flushPartials(); }, PARTIAL_THROTTLE_MS);
+    },
     emitSid: (id: string) => { for (const c of sid) c(id); },
-    emitTurn: () => { for (const c of turn) c(); },
-    emitErr: (t: string) => { for (const c of err) c(t); },
+    emitTurn: () => { flushPartials(); for (const c of turn) c(); }, // trailing flush at turn end
+    emitErr: (t: string) => { flushPartials(); for (const c of err) c(t); },
     emitSkill: (n: string) => { for (const c of skill) c(n); },
     emitUsage: (n: number, window?: number) => { for (const c of use) c(n, window); },
-    emitCompact: () => { for (const c of comp) c(); },
+    emitCompact: () => { flushPartials(); for (const c of comp) c(); },
+    // Drop any queued partial + timer without emitting (session stop / interrupt teardown).
+    stopPartials: () => { if (partialTimer) { clearTimeout(partialTimer); partialTimer = null; } pendingPartial.clear(); },
   };
 }
 
@@ -198,7 +228,11 @@ function savePersistentWhitelist(allowedKeys: Set<string>): void {
     if (existsSync(file)) {
       config = JSON.parse(readFileSync(file, "utf8"));
     }
-    config.whitelist = Array.from(allowedKeys);
+    // Union with what's already on disk: claude and codex each hold their own in-memory
+    // whitelist, so a bare overwrite would clobber grants the other engine just added.
+    const merged = new Set<string>(Array.isArray(config.whitelist) ? config.whitelist : []);
+    for (const k of allowedKeys) merged.add(k);
+    config.whitelist = Array.from(merged);
     writeFileSync(file, JSON.stringify(config, null, 2), "utf8");
   } catch (e) {
     console.error("Failed to save whitelist:", e);
@@ -227,23 +261,25 @@ export function claudeUserContent(text: string, images?: ImageInput[]): string |
 
 // codex needs a FILE PATH (its native `localImage` input), so we materialise each base64
 // image into a temp file and hand back the paths + a cleanup to unlink them after the
-// turn. Files live under <tmp>/agentnet-img; a failed write is skipped, not fatal.
-function writeCodexImages(images: ImageInput[]): { paths: string[]; cleanup: () => void } {
+// turn. Async so a multi-MB image doesn't block the host thread. Files live under
+// <tmp>/agentnet-img; a failed write is skipped, not fatal.
+async function writeCodexImages(images: ImageInput[]): Promise<{ paths: string[]; cleanup: () => void }> {
   const dir = join(tmpdir(), "agentnet-img");
-  try { mkdirSync(dir, { recursive: true }); } catch {}
+  await mkdir(dir, { recursive: true }).catch(() => {});
   const paths: string[] = [];
-  images.forEach((im, i) => {
+  for (let i = 0; i < images.length; i++) {
+    const im = images[i];
     try {
       const p = join(dir, `img-${process.pid}-${seqImg++}-${i}.${mimeToExt(im.mime)}`);
-      writeFileSync(p, Buffer.from(im.dataBase64, "base64"));
+      await writeFile(p, Buffer.from(im.dataBase64, "base64"));
       paths.push(p);
     } catch (e) {
       console.error("[codex image] failed to write temp file:", e);
     }
-  });
+  }
   return {
     paths,
-    cleanup: () => { for (const p of paths) { try { unlinkSync(p); } catch {} } },
+    cleanup: () => { for (const p of paths) void unlink(p).catch(() => {}); },
   };
 }
 let seqImg = 0; // monotonic so two images in one turn never collide on a filename
@@ -389,7 +425,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
         for (const cm of r.messages) {
           if (cm.role === "assistant" && cm.partial) {
             streamBuf += cm.text;
-            cb.emitMsg({ ...cm, text: streamBuf });
+            cb.emitPartial({ ...cm, text: streamBuf });
           } else {
             if (cm.role === "assistant" && !cm.partial) streamBuf = ""; // final block arrived
             cb.emitMsg(cm);
@@ -423,7 +459,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
     // interrupt the running turn WITHOUT closing the query — prompts() keeps waiting, so
     // the next send resumes the same session. (stop() also sets closed=true to end it.)
     interrupt: () => { void q.interrupt?.().catch(() => {}); },
-    stop: () => { closed = true; wake?.(); void q.interrupt?.().catch(() => {}); },
+    stop: () => { closed = true; cb.stopPartials(); wake?.(); void q.interrupt?.().catch(() => {}); },
     updateMode: (mode) => { currentMode = mode; },
   };
 }
@@ -484,13 +520,20 @@ function codexEngine(opts: SpawnOpts): Engine {
 
   child.on("error", (err) => {
     cb.emitErr(`[codex app-server] Failed to start: ${err.message}`);
+    failPending(`app-server failed to start: ${err.message}`);
     cb.emitTurn();
   });
-  child.on("exit", (code) => {
+  child.on("exit", (code, signal) => {
     if (code !== 0 && code !== null) {
       cb.emitErr(`[codex app-server] Exited with code ${code}`);
-      cb.emitTurn();
     }
+    // ANY exit (even a clean code 0 mid-turn) must release in-flight requests, or the
+    // pending turn/start promise never settles: `running` stays true and every future
+    // send() is silently dropped, wedging the session. Only surface a turn-end when there
+    // was work to unblock, so a normal stop()-driven exit stays quiet.
+    const hadWork = running || pendingRequests.size > 0;
+    failPending(`app-server exited (code ${code ?? "null"}, signal ${signal ?? "none"})`);
+    if (hadWork) cb.emitTurn();
   });
 
   let nextRpcId = 1;
@@ -527,6 +570,18 @@ function codexEngine(opts: SpawnOpts): Engine {
   let currentTurnId: string | null = null; // the in-flight turn (for turn/interrupt)
   let pendingImgCleanup: (() => void) | null = null; // unlink this turn's temp images on end
 
+  // The app-server child is gone (crash / exit / spawn error); reject everything waiting on
+  // it and reset turn state so the engine can't get stuck in a permanently-"running" limbo.
+  function failPending(reason: string) {
+    const err = new Error(reason);
+    for (const [, p] of pendingRequests) p.reject(err);
+    pendingRequests.clear();
+    running = false;
+    currentTurnId = null;
+    streamBuf = ""; thinkingBuf = "";
+    pendingImgCleanup?.(); pendingImgCleanup = null;
+  }
+
   rl.on("line", (line) => {
     if (!line.trim()) return;
     try {
@@ -560,10 +615,10 @@ function codexEngine(opts: SpawnOpts): Engine {
       currentTurnId = params.turn.id; // remember so interrupt() can target THIS turn
     } else if (msg.method === "item/agentMessage/delta" && params?.delta) {
       streamBuf += params.delta;
-      cb.emitMsg({ role: "assistant", text: streamBuf, ts: Date.now(), partial: true });
+      cb.emitPartial({ role: "assistant", text: streamBuf, ts: Date.now(), partial: true });
     } else if (msg.method === "item/reasoning/textDelta" && params?.delta) {
       thinkingBuf += params.delta;
-      cb.emitMsg({ role: "thinking", text: thinkingBuf, ts: Date.now(), partial: true });
+      cb.emitPartial({ role: "thinking", text: thinkingBuf, ts: Date.now(), partial: true });
     } else if (msg.method === "item/completed" && params?.item) {
       const it = params.item;
       if ((it.type === "agentMessage" || it.type === "agent_message") && it.text) {
@@ -664,6 +719,29 @@ function codexEngine(opts: SpawnOpts): Engine {
     }).catch(() => {}); // turn may have ended between the denial and the steer; harmless
   }
 
+  // Per-session "always" grants, loaded ONCE (like the claude engine) instead of a
+  // readFileSync on every single approval request. Kept in sync on each "always" outcome.
+  const allowed = loadPersistentWhitelist();
+
+  // codex speaks two approval vocabularies: the legacy execCommandApproval/applyPatchApproval
+  // verbs vs the newer item/* verbs. Map a decision to the right verb and persist an "always"
+  // grant in one place. The caller still steers the deny reason AFTER sending the response.
+  const EXEC_VERBS = { once: "approved", always: "approved_for_session", deny: "denied" };
+  const ITEM_VERBS = { once: "accept", always: "acceptForSession", deny: "decline" };
+  function codexDecisionVerb(
+    decision: ApprovalDecision,
+    key: string,
+    verbs: { once: string; always: string; deny: string },
+  ): string {
+    if (decision.outcome === "once") return verbs.once;
+    if (decision.outcome === "always") {
+      allowed.add(key);
+      savePersistentWhitelist(allowed);
+      return verbs.always;
+    }
+    return verbs.deny; // deny is the safe default for any unexpected outcome
+  }
+
   async function handleServerRequest(msg: any) {
     const params = msg.params;
     try {
@@ -682,46 +760,17 @@ function codexEngine(opts: SpawnOpts): Engine {
         return;
       }
       if (msg.method === "execCommandApproval" || msg.method === "item/commandExecution/requestApproval") {
+        const verbs = msg.method === "execCommandApproval" ? EXEC_VERBS : ITEM_VERBS;
         let cmdStr = "";
         if (params.command) {
           cmdStr = Array.isArray(params.command) ? params.command.join(" ") : String(params.command);
         }
         const req = toApprovalRequest("codex", sessionId, "Bash", { command: cmdStr }, params.cwd);
         const key = `bash:${cmdStr}`;
-        const allowed = loadPersistentWhitelist();
-        if (allowed.has(key)) {
-          if (msg.method === "execCommandApproval") {
-            return sendResponse(msg.id, { decision: "approved_for_session" });
-          } else {
-            return sendResponse(msg.id, { decision: "acceptForSession" });
-          }
-        }
-        
+        if (allowed.has(key)) return sendResponse(msg.id, { decision: verbs.always });
         const decision = await approval.request(req);
-        
-        if (msg.method === "execCommandApproval") {
-          let reviewDecision: string = "denied";
-          if (decision.outcome === "once") reviewDecision = "approved";
-          else if (decision.outcome === "always") {
-            reviewDecision = "approved_for_session";
-            allowed.add(key);
-            savePersistentWhitelist(allowed);
-          }
-          else if (decision.outcome === "deny") reviewDecision = "denied";
-          sendResponse(msg.id, { decision: reviewDecision });
-          if (decision.outcome === "deny") deliverDenyReason(decision.reason);
-        } else {
-          let decisionVal: "accept" | "acceptForSession" | "decline" | "cancel" = "decline";
-          if (decision.outcome === "once") decisionVal = "accept";
-          else if (decision.outcome === "always") {
-            decisionVal = "acceptForSession";
-            allowed.add(key);
-            savePersistentWhitelist(allowed);
-          }
-          else if (decision.outcome === "deny") decisionVal = "decline";
-          sendResponse(msg.id, { decision: decisionVal });
-          if (decision.outcome === "deny") deliverDenyReason(decision.reason);
-        }
+        sendResponse(msg.id, { decision: codexDecisionVerb(decision, key, verbs) });
+        if (decision.outcome === "deny") deliverDenyReason(decision.reason);
       } else if (msg.method === "applyPatchApproval" || msg.method === "item/fileChange/requestApproval") {
         if (msg.method === "applyPatchApproval") {
           const filePaths = Object.keys(params.fileChanges || {});
@@ -744,24 +793,11 @@ function codexEngine(opts: SpawnOpts): Engine {
           
           const req = toApprovalRequest("codex", sessionId, tool, { file_path: filePath }, opts.cwd);
           if (diff) req.diff = diff;
-          
-          const key = `${tool}:${filePath}`;
-          const allowed = loadPersistentWhitelist();
-          if (allowed.has(key)) {
-            return sendResponse(msg.id, { decision: "approved_for_session" });
-          }
-          
-          const decision = await approval.request(req);
-          let reviewDecision: string = "denied";
-          if (decision.outcome === "once") reviewDecision = "approved";
-          else if (decision.outcome === "always") {
-            reviewDecision = "approved_for_session";
-            allowed.add(key);
-            savePersistentWhitelist(allowed);
-          }
-          else if (decision.outcome === "deny") reviewDecision = "denied";
 
-          sendResponse(msg.id, { decision: reviewDecision });
+          const key = `${tool}:${filePath}`;
+          if (allowed.has(key)) return sendResponse(msg.id, { decision: EXEC_VERBS.always });
+          const decision = await approval.request(req);
+          sendResponse(msg.id, { decision: codexDecisionVerb(decision, key, EXEC_VERBS) });
           if (decision.outcome === "deny") deliverDenyReason(decision.reason);
         } else {
           const pathStr = params.grantRoot || "";
@@ -770,24 +806,11 @@ function codexEngine(opts: SpawnOpts): Engine {
           if (params.reason) {
             req.title += ` (${params.reason})`;
           }
-          
-          const key = `Edit:${pathStr}`;
-          const allowed = loadPersistentWhitelist();
-          if (allowed.has(key)) {
-            return sendResponse(msg.id, { decision: "acceptForSession" });
-          }
-          
-          const decision = await approval.request(req);
-          let decisionVal: "accept" | "acceptForSession" | "decline" | "cancel" = "decline";
-          if (decision.outcome === "once") decisionVal = "accept";
-          else if (decision.outcome === "always") {
-            decisionVal = "acceptForSession";
-            allowed.add(key);
-            savePersistentWhitelist(allowed);
-          }
-          else if (decision.outcome === "deny") decisionVal = "decline";
 
-          sendResponse(msg.id, { decision: decisionVal });
+          const key = `Edit:${pathStr}`;
+          if (allowed.has(key)) return sendResponse(msg.id, { decision: ITEM_VERBS.always });
+          const decision = await approval.request(req);
+          sendResponse(msg.id, { decision: codexDecisionVerb(decision, key, ITEM_VERBS) });
           if (decision.outcome === "deny") deliverDenyReason(decision.reason);
         }
       } else if (msg.method === "item/permissions/requestApproval") {
@@ -888,7 +911,7 @@ function codexEngine(opts: SpawnOpts): Engine {
     running = true;
     // codex wants a file path per image (`localImage`), so materialise the base64 into
     // temp files for this turn and unlink them once it ends (turn/completed|failed|stop).
-    const imgFiles = images && images.length ? writeCodexImages(images) : null;
+    const imgFiles = images && images.length ? await writeCodexImages(images) : null;
     pendingImgCleanup = imgFiles?.cleanup ?? null;
     const input: any[] = [{ type: "text", text, text_elements: [] }];
     for (const p of imgFiles?.paths ?? []) input.push({ type: "localImage", path: p });
@@ -991,8 +1014,14 @@ function codexEngine(opts: SpawnOpts): Engine {
       }
     },
     stop: () => {
+      cb.stopPartials();
       pendingImgCleanup?.(); pendingImgCleanup = null;
-      child.kill();
+      child.kill(); // SIGTERM
+      // If the app-server ignores SIGTERM, force-kill so we don't leak a codex process
+      // (it holds the session jsonl + model connection). The exit handler clears the rest.
+      const force = setTimeout(() => { try { child.kill("SIGKILL"); } catch {} }, 2000);
+      force.unref?.();
+      child.once("exit", () => clearTimeout(force));
     },
     updateMode: (mode) => {},
   };

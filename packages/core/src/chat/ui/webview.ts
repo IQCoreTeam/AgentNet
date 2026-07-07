@@ -307,8 +307,11 @@ export function chatHtml(): string {
      vertical timeline (a left rail + a dot per item). Scroll past a turn and the
      next command's header slides up and replaces it. */
   .turn { display: flex; flex-direction: column; }
-  .turnHead { position: sticky; top: 0; z-index: 5; backdrop-filter: blur(8px);
-              background: color-mix(in srgb, var(--vscode-editor-background) 82%, transparent);
+  /* Solid background, NOT a backdrop-filter blur: every turn header is sticky, so a blur
+     here spawns one compositing layer per turn and scroll cost grows with the chat length.
+     An opaque fill pins just as cleanly (content still can't bleed through) for ~free. */
+  .turnHead { position: sticky; top: 0; z-index: 5;
+              background: var(--vscode-editor-background);
               border-bottom: 1px solid var(--an-line-soft);
               padding: 11px 16px; display: flex; align-items: flex-start; gap: 9px; cursor: default; }
   .turnHead .uq { color: var(--an-green); font-weight: 700; flex: none; line-height: 1.5; opacity: 0.8; }
@@ -2082,6 +2085,11 @@ export function chatHtml(): string {
     const raw = streaming.dataset.acc || '';
     if (streaming.dataset.role === 'assistant') renderMd(streaming, raw);
     else { streaming.textContent = raw; streaming.dataset.md = raw; }
+    // Follow the tail + keep the typing indicator pinned to the bottom HERE, coalesced to
+    // this frame. Doing it per streamed snapshot forced a synchronous layout (scrollHeight
+    // read) on every token and was a top cause of editor-wide jank while streaming.
+    if (typingEl) tailBody().appendChild(typingEl);
+    stickToBottom();
   }
   function scheduleStreamRender() { if (!streamRaf) streamRaf = requestAnimationFrame(flushStreamRender); }
   let allSessions = [];     // last sessions payload from extension
@@ -3076,7 +3084,8 @@ export function chatHtml(): string {
       // then compounded every later snapshot into quadratic repeated text (the
       // runaway streaming-duplication bug).
       streaming.dataset.acc = msg.text;
-      scheduleStreamRender(); // live markdown while streaming (throttled to one paint/frame)
+      scheduleStreamRender(); // live markdown + tail-follow, throttled to one paint/frame
+      return; // stick/typing happens in flushStreamRender — no forced layout per token
     } else {
       if (streaming && streaming.dataset.role === msg.role) {
         const prev = streaming.dataset.acc || '';
@@ -5157,7 +5166,8 @@ export function chatHtml(): string {
   let pageCursor = null;   // cursor for the NEXT older page (null = none / at start)
   let hasMore = false;     // older pages exist?
   let loadingOlder = false;
-  function resetPaging() { pageCursor = null; hasMore = false; loadingOlder = false; }
+  let lastOlderCursor = null; // last cursor we asked for; never auto-request the same one twice
+  function resetPaging() { pageCursor = null; hasMore = false; loadingOlder = false; lastOlderCursor = null; }
 
   // Prepend older messages while keeping the viewport pinned (no jump): measure
   // scroll height before/after and restore the offset.
@@ -5212,8 +5222,13 @@ export function chatHtml(): string {
   }
 
   function requestOlder() {
-    if (hasMore && !loadingOlder && pageCursor !== null) {
+    // pageCursor !== lastOlderCursor: a well-behaved host always answers with a SMALLER
+    // cursor, so this is normally true. If a host ever returns hasMore:true without
+    // advancing the cursor (e.g. an empty page bug), this stops the loadMore ping-pong
+    // instead of spinning forever through maybeFillOlder's re-check.
+    if (hasMore && !loadingOlder && pageCursor !== null && pageCursor !== lastOlderCursor) {
       loadingOlder = true;
+      lastOlderCursor = pageCursor;
       vscode.postMessage({ type: 'loadMore', cursor: pageCursor });
     }
   }
