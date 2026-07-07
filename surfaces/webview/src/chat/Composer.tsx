@@ -3,6 +3,7 @@ import { useStore, isApprovalForView } from "../state/store";
 import { enqueueLiveImages } from "./liveImages";
 import type { Cli, ImageInput } from "../transport/protocol";
 import { AttachIcon } from "../icons";
+import { haptics } from "../haptics";
 import { useElementHeightVariable } from "../layoutEffects";
 import type { ChatModelOption } from "@iqlabs-official/agent-sdk/chat/modelOptions";
 import { CHAT_SLASH_COMMANDS } from "@iqlabs-official/agent-sdk/chat/slashCommands";
@@ -322,6 +323,7 @@ export function Composer() {
     if (frozen) return;
     const t = text.trim();
     if (!t && !attached.length) return;
+    haptics.tap(); // a real dispatch is happening; an empty tap above stayed silent
 
     // slash command handling
     if (t.startsWith("/")) {

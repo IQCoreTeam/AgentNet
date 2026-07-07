@@ -25,6 +25,7 @@ export function ApprovalDock() {
     outcome: ApprovalOutcome,
     extra?: { reason?: string; updatedInput?: Record<string, unknown>; questionResponses?: ApprovalQuestionResponse[] },
   ) {
+    if (outcome === "deny") haptics.error(); else haptics.tap();
     resolveApproval(req.id);
     send({ type: "approvalDecision", id: req.id, outcome, ...extra });
     if (req.kind === "plan" && outcome === "once") {
@@ -240,16 +241,14 @@ function ApprovalCard({
     return () => window.removeEventListener("keydown", onKey);
   }, [isPlan]);
 
-  const didVibrate = useRef(false);
-  // Medium haptic when the forge card appears (parity with the casting cue).
+  // Every approval card announces itself; forge (on-chain publish/buy) hits harder.
+  const lastBuzzedReq = useRef<string | null>(null);
   useEffect(() => {
-    if (isForge && !didVibrate.current) {
-      haptics.forge();
-      didVibrate.current = true;
-    } else if (!isForge) {
-      didVibrate.current = false;
+    if (req.id !== lastBuzzedReq.current) {
+      lastBuzzedReq.current = req.id;
+      (isForge ? haptics.strong : haptics.press)();
     }
-  }, [isForge]);
+  }, [req.id, isForge]);
 
   const borderColor = isDanger ? "border-red-700/60" : isForge ? "" : "border-emerald-700/50";
   // Near-opaque (composer-glass level) so chat content doesn't show through the card.
