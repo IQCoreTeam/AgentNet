@@ -21,7 +21,6 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import type { Connection } from "@solana/web3.js";
 import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
@@ -165,7 +164,7 @@ export const agentNetAllowedTools = (): string[] =>
 // reads the names. Add a tool here and it reaches Codex, Claude, AND the allowlist at
 // once — the three can no longer drift (the drift that left publish_skill / the
 // comment tools unreachable from Claude).
-const SKILL_TOOLS: { name: string; description: string; schema: z.ZodRawShape }[] = [
+export const SKILL_TOOLS: { name: string; description: string; schema: z.ZodRawShape }[] = [
   {
     name: "search_skills",
     description: "Search the AgentNet marketplace for available skills and workflows.",
@@ -529,26 +528,7 @@ export function createAgentMcpServer(
   return server;
 }
 
-/**
- * SDK-transport bridge (plan §3): expose the same tools to a Claude Agent SDK spawn.
- * Each tool handler delegates to the shared handleToolCall so the scan + guard + buy
- * logic lives in one place. A per-spawn VerifyGuard enforces verify-before-buy.
- */
-export function createAgentSdkMcpServer(
-  conn: Connection,
-  signer: SignerInput,
-  defaultCreatorWallet: string,
-  guard: VerifyGuard = newVerifyGuard(),
-  onMarketEvent?: MarketEmit,
-) {
-  const call = (name: string, args: any) => handleToolCall(conn, signer, defaultCreatorWallet, name, args, guard, onMarketEvent);
-
-  // Same SKILL_TOOLS the stdio server uses — fed straight to tool() (Zod), so the two
-  // transports expose an identical tool set by construction. typed loosely: tool()
-  // returns a differently-shaped generic per schema, so a homogeneous array won't fit.
-  const tools: any[] = SKILL_TOOLS.map((t) =>
-    tool(t.name, t.description, t.schema, async (args: any) => (await call(t.name, args)) as any),
-  );
-
-  return createSdkMcpServer({ name: AGENTNET_MCP_SERVER, version: "0.0.1", tools });
-}
+// NOTE: the Claude Agent SDK bridge (createAgentSdkMcpServer) lives in ./sdk.ts, NOT
+// here — this module must stay importable without @anthropic-ai/claude-agent-sdk so
+// the standalone stdio entry (and its npm bundle for foreign hosts) doesn't drag the
+// whole Claude SDK along (issue #84's "one entanglement to cut").

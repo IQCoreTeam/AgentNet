@@ -22,6 +22,7 @@ import { writeOpenclawMemory } from "../memory/convert/openclaw.js";
 import { SoulStore } from "../soul/store.js";
 import { syncSoulWithFile } from "../soul/convert/openclaw.js";
 import { writeElizaCharacter } from "../soul/convert/eliza.js";
+import { injectSoulNative } from "../soul/convert/native.js";
 import type { VaultDeps } from "./tools.js";
 
 const exists = (p: string) => access(p).then(() => true).catch(() => false);
@@ -48,6 +49,16 @@ export async function injectExternalHosts(deps: VaultDeps): Promise<string[]> {
       if (mem.records.length > 0) log.push(`openclaw memory: injected ${mem.records.length} record(s)`);
     } catch (err: any) {
       log.push(`openclaw memory inject failed: ${err.message}`);
+    }
+  }
+
+  // Our own engines (dogfood): the same soul lands in Claude's/Codex's global
+  // instruction file when that engine lives on this machine.
+  for (const cli of ["claude", "codex"] as const) {
+    try {
+      if (await injectSoulNative(cli, souls)) log.push(`${cli} soul: injected`);
+    } catch (err: any) {
+      log.push(`${cli} soul inject failed: ${err.message}`);
     }
   }
 

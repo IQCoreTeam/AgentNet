@@ -68,7 +68,8 @@ export type { Reputation } from "./core/types.js";
 export { isHttpsGithubUrl, parseGithubLink, safeExternalUrl } from "./links/github.js";
 export type { GithubLinkInfo, GithubLinkKind } from "./links/github.js";
 // skill-market MCP surface (autonomous buy)
-export { createAgentMcpServer, createAgentSdkMcpServer, getAgentNetTools, handleToolCall, newVerifyGuard, verifyOneSkill, verifySkills } from "./skill-market/index.js";
+export { createAgentMcpServer, getAgentNetTools, handleToolCall, newVerifyGuard, verifyOneSkill, verifySkills } from "./skill-market/index.js";
+export { createAgentSdkMcpServer } from "./skill-market/sdk.js";
 export type { VerifyGuard } from "./skill-market/index.js";
 // vault band (issue #84 / plans/soul-memory-portability.md): soul store + the MCP
 // tools that expose soul/memory to external hosts through the stdio server.

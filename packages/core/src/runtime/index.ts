@@ -10,9 +10,12 @@ import { SessionStore } from "../account/store.js";
 import { prepareResume } from "./inject/index.js";
 import { getDeviceProfile, buildDeviceNotice } from "../core/device.js";
 import { MemorySync, updateSkillsSection } from "../memory/index.js";
+import { SoulStore } from "../soul/store.js";
+import { injectSoulNative } from "../soul/convert/native.js";
 import { setSkillShoppingActive } from "../skill-market/passive.js";
 import { setMakeSkillActive } from "../skill-market/makeSkill.js";
-import { createAgentSdkMcpServer, newVerifyGuard, agentNetAllowedTools, AGENTNET_MCP_SERVER } from "../skill-market/index.js";
+import { newVerifyGuard, agentNetAllowedTools, AGENTNET_MCP_SERVER } from "../skill-market/index.js";
+import { createAgentSdkMcpServer } from "../skill-market/sdk.js";
 import { resolveRpcUrl, hasDasRpc, loadGithubToken } from "../core/rpc.js";
 import { getCodexApiKey } from "../account/codexAuth.js";
 import type { ApprovalChannel } from "./approval/channel.js";
@@ -90,6 +93,9 @@ export function createRuntime(
   // Shared memory (issue #18): same wallet + storage as sessions. Injected into the
   // CLI's native memory files before it starts; captured back from Claude after turns.
   const memory = new MemorySync(wallet, storage);
+  // Soul (issue #84 follow-up): the wallet's persona, injected into the CLI's GLOBAL
+  // instruction file so our engines wear the same self foreign hosts get.
+  const souls = new SoulStore(wallet, storage);
 
   return {
     async startSession(opts): Promise<SessionHandle> {
@@ -124,6 +130,9 @@ export function createRuntime(
       let enabledSkills: string[] | undefined;
       try {
         await memory.injectAtStart(opts.cli, opts.cwd);
+        // Soul rides the same best-effort inject: a stored persona lands in the CLI's
+        // global instruction file (fenced block); no soul stored → no-op.
+        await injectSoulNative(opts.cli, souls);
         // After memory is written, refresh the managed "your skills" line so the agent
         // passively knows which skills are installed (no system-prompt nudge, no RPC).
         // Must run AFTER injectAtStart, which regenerates MEMORY.md / AGENTS.md.
