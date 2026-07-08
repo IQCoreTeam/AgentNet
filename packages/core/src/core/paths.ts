@@ -134,6 +134,12 @@ export function openclawSkillsDir(): string {
   return join(openclawHome(), "skills");
 }
 
+/** OpenClaw agent workspace (~/.openclaw/workspace) — holds its SOUL.md, MEMORY.md,
+ *  memories/ daily notes. Override: OPENCLAW_WORKSPACE. */
+export function openclawWorkspaceDir(): string {
+  return process.env.OPENCLAW_WORKSPACE || join(openclawHome(), "workspace");
+}
+
 /** Extra skill-install dirs, comma-separated absolute paths (AGENTNET_SKILL_DIRS).
  *  The escape hatch for hosts without a fixed convention (e.g. an Eliza knowledge dir)
  *  — anything listed here receives bought skills alongside the known hosts. */

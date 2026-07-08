@@ -34,6 +34,7 @@ import { localWallet } from "./account/localWallet.js";
 import { login } from "./account/login.js";
 import { createAgentMcpServer, newVerifyGuard } from "./skill-market/index.js";
 import type { VaultDeps } from "./vault/tools.js";
+import { injectExternalHosts } from "./vault/inject.js";
 
 function readOnlyFromEnv(): boolean {
   const v = (process.env.AGENTNET_MCP_READONLY ?? "").trim().toLowerCase();
@@ -69,6 +70,15 @@ async function main(): Promise<void> {
   const server = createAgentMcpServer(conn, wallet, address, { readOnly, guard: newVerifyGuard(), vault });
   await server.connect(new StdioServerTransport());
   console.error(`[agentnet-mcp] ready (${readOnly ? "read-only" : `full${vault ? "+vault" : ""}`}) — wallet ${address}`);
+
+  // Connect = the outfit follows: reconcile soul + memory into detected hosts' native
+  // files (OpenClaw workspace, Eliza character). AFTER connect, best-effort — the
+  // tools are the contract; this inject is progressive enhancement.
+  if (vault) {
+    injectExternalHosts(vault)
+      .then((lines) => lines.forEach((l) => console.error(`[agentnet-mcp] ${l}`)))
+      .catch((err) => console.error(`[agentnet-mcp] host inject failed: ${err instanceof Error ? err.message : String(err)}`));
+  }
 }
 
 main().catch((err) => {
