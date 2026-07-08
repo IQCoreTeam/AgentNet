@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Box, Text } from "ink";
 import { Select, TextInput } from "@inkjs/ui";
+import open from "open";
 import { STORAGE_OPTIONS, type StorageConfig, type StorageKind, startCodexLogin, markCodexConnected, saveCodexApiKey, startGoogleLogin, type GoogleLogin } from "@iqlabs-official/agent-sdk";
 import type { CliReport, CliStatus } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../theme.js";
@@ -97,12 +98,17 @@ export function Onboarding({
       activeSession = session;
       setGdriveUrl(session.url);
       setGoogleSession(session);
+      // Auto-open the browser with the exact URL — copying it manually means copying a
+      // ~300-char string that wraps across terminal lines below, which terminals routinely
+      // mangle (silently truncated scope → Google's own "Error 400: invalid_scope"). The
+      // wrapped text stays visible as a remote/SSH fallback, but auto-open is now primary.
+      void open(session.url).catch(() => { /* no GUI browser available — falls back to the link/paste below */ });
       session.done.then((ok) => {
         if (cancelled) return;
         if (ok) {
           onDone(engine, { kind: "gdrive" });
         } else {
-          setGdriveErr("Google sign-in was not completed.");
+          setGdriveErr(session.error ?? "Google sign-in was not completed.");
         }
       });
     }).catch((e: unknown) => {
@@ -223,9 +229,10 @@ export function Onboarding({
           {!gdriveUrl && !gdriveErr && <Text dimColor>starting OAuth flow…</Text>}
           {gdriveUrl && (
             <>
-              <Text>1. open in browser (or copy link):</Text>
+              <Text>opening in your browser… approve access, then this closes on its own.</Text>
+              <Text dimColor>didn't open? copy this link (avoid copying across a wrapped line):</Text>
               <Text color={colors.iqCyan}>{gdriveUrl}</Text>
-              <Text>2. paste the redirected URL or authorization code here:</Text>
+              <Text>no GUI browser here? paste the redirected URL or code instead:</Text>
               <TextInput
                 placeholder="Paste URL or code here"
                 onSubmit={submitGdriveCode}

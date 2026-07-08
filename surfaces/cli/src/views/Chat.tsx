@@ -23,6 +23,7 @@ import {
   type GoogleLogin,
 } from "@iqlabs-official/agent-sdk";
 import { Select, TextInput } from "@inkjs/ui";
+import open from "open";
 import { chooseStorage } from "../bootstrap.js";
 import { copyToClipboard } from "../clipboard.js";
 import { Message } from "../components/Message.js";
@@ -499,13 +500,19 @@ export function Chat({
       activeSession = session;
       setGdriveUrl(session.url);
       setGoogleSession(session);
+      // Auto-open the browser with the exact URL — the alternative is the user copying a
+      // ~300-char URL that wraps across terminal lines inside the bordered box below, which
+      // terminals routinely mangle on copy (silently truncated scope → Google's own
+      // "Error 400: invalid_scope"). The wrapped text stays visible as a manual/remote-SSH
+      // fallback, but auto-open is the primary path now.
+      void open(session.url).catch(() => { /* no GUI browser available — user falls back to the link/paste below */ });
       session.done.then((ok) => {
         if (cancelled) return;
         if (ok) {
           setShowGdriveConnect(false);
           void finishCloudConnect({ kind: "gdrive" });
         } else {
-          setGdriveErr("Google sign-in was not completed.");
+          setGdriveErr(session.error ?? "Google sign-in was not completed.");
         }
       });
     }).catch((e: unknown) => {
@@ -783,9 +790,10 @@ export function Chat({
           {!gdriveUrl && !gdriveErr && <Text dimColor>starting OAuth flow…</Text>}
           {gdriveUrl && (
             <>
-              <Text>1. open in browser (or copy link):</Text>
+              <Text>opening in your browser… approve access, then this closes on its own.</Text>
+              <Text dimColor>didn't open? copy this link (avoid copying across a wrapped line):</Text>
               <Text color={colors.iqCyan}>{gdriveUrl}</Text>
-              <Text>2. paste the redirected URL or authorization code here:</Text>
+              <Text>no GUI browser here? paste the redirected URL or code instead:</Text>
               <TextInput placeholder="Paste URL or code here" onSubmit={submitGdriveCode} />
             </>
           )}
