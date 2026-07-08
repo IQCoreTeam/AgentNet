@@ -70,6 +70,12 @@ export type { GithubLinkInfo, GithubLinkKind } from "./links/github.js";
 // skill-market MCP surface (autonomous buy)
 export { createAgentMcpServer, createAgentSdkMcpServer, getAgentNetTools, handleToolCall, newVerifyGuard, verifyOneSkill, verifySkills } from "./skill-market/index.js";
 export type { VerifyGuard } from "./skill-market/index.js";
+// vault band (issue #84 / plans/soul-memory-portability.md): soul store + the MCP
+// tools that expose soul/memory to external hosts through the stdio server.
+export { SoulStore, SOUL_KEY, SOUL_TEXT_MAX } from "./soul/store.js";
+export type { SoulDoc } from "./soul/store.js";
+export { getVaultTools, handleVaultToolCall, VAULT_TOOL_NAMES } from "./vault/tools.js";
+export type { VaultDeps } from "./vault/tools.js";
 export { browseSkills } from "./skill-market/browse.js";
 export type { BrowseResult } from "./skill-market/browse.js";
 export { setSkillShoppingActive, PASSIVE_SKILL_SLUG } from "./skill-market/passive.js";

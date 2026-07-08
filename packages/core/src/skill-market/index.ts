@@ -37,6 +37,7 @@ import { loadHeliusKey } from "../core/rpc.js";
 import { signerAddress } from "../core/chain.js";
 import { scanSkillText } from "./scan.js";
 import { VERIFY_RUBRIC } from "./rubric.js";
+import { getVaultTools, handleVaultToolCall, VAULT_TOOL_NAMES, type VaultDeps } from "../vault/tools.js";
 import { solToLamports, friendlyBuyError, isInsufficientFundsError } from "./ingest/env.js";
 import { isHttpsGithubUrl } from "../links/github.js";
 
@@ -496,7 +497,7 @@ export function createAgentMcpServer(
   conn: Connection,
   signer: SignerInput,
   defaultCreatorWallet: string,
-  opts: { readOnly?: boolean; guard?: VerifyGuard } = {},
+  opts: { readOnly?: boolean; guard?: VerifyGuard; vault?: VaultDeps } = {},
 ): Server {
   // readOnly (Codex MCP bridge, Phase 1): expose ONLY the read tools. The write/spend
   // tools aren't registered at all, so a missing approval channel can't be bypassed.
@@ -504,12 +505,24 @@ export function createAgentMcpServer(
   // Full mode (external hosts, issue #84): pass a per-process guard so buy_skill keeps
   // its verify-before-buy floor even without an interactive approval channel.
   const guard = opts.guard ?? ALLOW_ALL_GUARD;
+  // Vault band (soul + memory, plans/soul-memory-portability.md §5): registered only
+  // when the caller wired storage AND the server is full-mode — the vault is private
+  // data, so even its reads stay out of read-only mode (which exists precisely to be
+  // safe with no approval channel).
+  const vault = opts.readOnly ? undefined : opts.vault;
   const server = new Server({ name: AGENTNET_MCP_SERVER, version: "0.0.1" }, { capabilities: { tools: {} } });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: getAgentNetTools().filter((t) => allow(t.name)),
+    tools: [
+      ...getAgentNetTools().filter((t) => allow(t.name)),
+      ...(vault ? getVaultTools() : []),
+    ],
   }));
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
+    if (VAULT_TOOL_NAMES.has(name)) {
+      if (!vault) throw new Error(`Tool not available: ${name}`);
+      return await handleVaultToolCall(vault, name, args);
+    }
     if (!allow(name)) throw new Error(`Tool not available: ${name}`);
     return await handleToolCall(conn, signer, defaultCreatorWallet, name, args, guard);
   });
