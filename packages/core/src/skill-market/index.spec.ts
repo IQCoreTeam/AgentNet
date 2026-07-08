@@ -44,11 +44,12 @@ describe("skill-market", () => {
 
   it("exposes the marketplace tool set (incl. unequip_skill and post_blog)", () => {
     const tools = getAgentNetTools();
-    expect(tools).toHaveLength(8);
+    expect(tools).toHaveLength(9);
     expect(tools.map((t) => t.name)).toEqual([
       "search_skills",
       "verify_skill",
       "buy_skill",
+      "install_skill",
       "unequip_skill",
       "post_skill_comment",
       "post_agent_comment",

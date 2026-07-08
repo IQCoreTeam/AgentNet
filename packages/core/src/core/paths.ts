@@ -109,6 +109,41 @@ export function codexSkillsDir(): string {
   return join(codexHome(), "skills");
 }
 
+// ── external hosts (issue #84): foreign runtimes that speak MCP and scan a skills dir
+// of their own. We never spawn these engines — we only INSTALL bought skills into their
+// dirs so the skill NFT is usable there too. A host is "present" when its home dir
+// exists (it spawned our stdio server, so it lives on this machine).
+
+/** Hermes config home. Override: HERMES_HOME. */
+export function hermesHome(): string {
+  return process.env.HERMES_HOME || join(homedir(), ".hermes");
+}
+
+/** Hermes user skills dir (~/.hermes/skills); a skill lives at {dir}/{name}/SKILL.md. */
+export function hermesSkillsDir(): string {
+  return join(hermesHome(), "skills");
+}
+
+/** OpenClaw config home. Override: OPENCLAW_HOME. */
+export function openclawHome(): string {
+  return process.env.OPENCLAW_HOME || join(homedir(), ".openclaw");
+}
+
+/** OpenClaw user skills dir (~/.openclaw/skills, live-watched by default). */
+export function openclawSkillsDir(): string {
+  return join(openclawHome(), "skills");
+}
+
+/** Extra skill-install dirs, comma-separated absolute paths (AGENTNET_SKILL_DIRS).
+ *  The escape hatch for hosts without a fixed convention (e.g. an Eliza knowledge dir)
+ *  — anything listed here receives bought skills alongside the known hosts. */
+export function extraSkillDirs(): string[] {
+  return (process.env.AGENTNET_SKILL_DIRS ?? "")
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
+
 // ── inactive skills (skill-shopping toggle, plans/skill-shopping.md §6): a holding
 // dir OUTSIDE every runtime's scanned skills path. Toggling a bundled skill OFF moves
 // its folder here (never deletes it); toggling ON moves it back to the scanned dir. The

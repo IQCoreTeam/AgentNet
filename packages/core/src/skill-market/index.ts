@@ -30,8 +30,9 @@ import { publishSkill } from "../nft/skill.js";
 import { readSkillText } from "../nft/token2022.js";
 import { SkillSync } from "./ingest/index.js";
 import { postNote, postAgentNote } from "../notes/notes.js";
+import { homedir } from "node:os";
 import { getSkillsCollectionMint, getWorkflowsCollectionMint, getIndexerUrl } from "../core/seed.js";
-import { indexerSource } from "../core/skillSource.js";
+import { indexerSource, ownedSkillMints } from "../core/skillSource.js";
 import { loadHeliusKey } from "../core/rpc.js";
 import { signerAddress } from "../core/chain.js";
 import { scanSkillText } from "./scan.js";
@@ -189,6 +190,15 @@ const SKILL_TOOLS: { name: string; description: string; schema: z.ZodRawShape }[
     },
   },
   {
+    name: "install_skill",
+    description:
+      "Install a skill your wallet already OWNS into a runtime's skills directory — the owned-sync path for a skill bought earlier or on another machine. Spends nothing and touches nothing on-chain (ownership is checked first; to acquire a new skill use buy_skill). Omit targetDir to install into every runtime detected on this machine (Claude, Codex, and any present foreign hosts like Hermes/OpenClaw).",
+    schema: {
+      skillId: z.string().describe("The base58 mint address of an owned skill to install."),
+      targetDir: z.string().optional().describe("Absolute path of the skills directory to install into (e.g. ~/.hermes/skills). Omit to install into all detected runtimes' skills dirs."),
+    },
+  },
+  {
     name: "unequip_skill",
     description:
       "Un-equip a skill from your local runtime — removes its SKILL.md so it stops loading, and remembers the choice so it won't re-install next session. This is LOCAL-ONLY: the soulbound NFT stays in your wallet (no refund, no burn), and if you are the skill's CREATOR, your published skill remains listed on the marketplace — this does NOT unpublish, delist, or destroy it. Re-equip it anytime from the marketplace (no re-buy).",
@@ -330,6 +340,39 @@ export async function handleToolCall(
     }
   }
 
+  if (name === "install_skill") {
+    const skillId = args?.skillId as string;
+    if (!skillId) throw new Error("Missing required argument: skillId");
+    // Ownership is the gate: install renders on-chain skill text into a local dir, so
+    // without this check the tool would hand out any listed skill for free.
+    const owner = await signerAddress(signer);
+    let owned: string[];
+    try {
+      owned = await ownedSkillMints(owner);
+    } catch (err: any) {
+      return { isError: true, content: [{ type: "text", text: `Could not enumerate owned skills (a DAS-capable RPC is required): ${err.message}` }] };
+    }
+    if (!owned.includes(skillId)) {
+      return { isError: true, content: [{ type: "text", text: `Wallet ${owner} does not own skill ${skillId}. Use search_skills → verify_skill → buy_skill to acquire it first.` }] };
+    }
+    try {
+      const sync = new SkillSync(conn);
+      const targetDir = typeof args?.targetDir === "string" && args.targetDir.trim()
+        ? args.targetDir.trim().replace(/^~(?=$|\/)/, homedir())
+        : undefined;
+      const slug = targetDir
+        ? await sync.installBoughtToDir(targetDir, skillId)
+        : await sync.installBoughtAll(skillId);
+      if (!slug) {
+        return { isError: true, content: [{ type: "text", text: `Skill ${skillId} has no readable mint metadata yet — nothing was installed. Try again shortly.` }] };
+      }
+      const where = targetDir ?? "all detected runtimes' skills dirs";
+      return { content: [{ type: "text", text: `Installed owned skill "${slug}" (${skillId}) into ${where}. Restart-based hosts (Hermes) discover it next session; live-watch hosts (OpenClaw) see it immediately.` }] };
+    } catch (err: any) {
+      return { isError: true, content: [{ type: "text", text: `Failed to install skill: ${err.message}` }] };
+    }
+  }
+
   if (name === "unequip_skill") {
     const skillId = args?.skillId as string;
     if (!skillId) throw new Error("Missing required argument: skillId");
@@ -453,11 +496,14 @@ export function createAgentMcpServer(
   conn: Connection,
   signer: SignerInput,
   defaultCreatorWallet: string,
-  opts: { readOnly?: boolean } = {},
+  opts: { readOnly?: boolean; guard?: VerifyGuard } = {},
 ): Server {
   // readOnly (Codex MCP bridge, Phase 1): expose ONLY the read tools. The write/spend
   // tools aren't registered at all, so a missing approval channel can't be bypassed.
   const allow = (name: string) => !opts.readOnly || READ_ONLY_TOOLS.has(name);
+  // Full mode (external hosts, issue #84): pass a per-process guard so buy_skill keeps
+  // its verify-before-buy floor even without an interactive approval channel.
+  const guard = opts.guard ?? ALLOW_ALL_GUARD;
   const server = new Server({ name: AGENTNET_MCP_SERVER, version: "0.0.1" }, { capabilities: { tools: {} } });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: getAgentNetTools().filter((t) => allow(t.name)),
@@ -465,7 +511,7 @@ export function createAgentMcpServer(
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
     if (!allow(name)) throw new Error(`Tool not available: ${name}`);
-    return await handleToolCall(conn, signer, defaultCreatorWallet, name, args);
+    return await handleToolCall(conn, signer, defaultCreatorWallet, name, args, guard);
   });
   return server;
 }
