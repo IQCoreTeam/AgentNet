@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Box, Text } from "ink";
 import type { AgentRuntime } from "@iqlabs-official/agent-sdk/runtime/contract";
 import { autoApprove, type StorageConfig, type CliReport } from "@iqlabs-official/agent-sdk";
+import type { CloudStatus } from "@iqlabs-official/agent-sdk/account/storage/mirror";
 import { InkApprovalChannel } from "./InkApprovalChannel.js";
 import { Banner } from "./components/Banner.js";
 import { BootChecklist, type BootStep } from "./components/BootChecklist.js";
@@ -49,14 +50,20 @@ export function App({ options }: { options: AppOptions }) {
   const [prefs, setPrefs] = useState<Prefs>({});
   // tool-approval seam: --yolo skips the UI (auto-allow); otherwise prompts route here.
   const approval = React.useRef<InkApprovalChannel | null>(options.yolo ? null : new InkApprovalChannel());
+  // reported by mirrorStorage after each cloud write attempt — drives the StatusLine
+  // sync chip so a dead/offline cloud is visible instead of silently drifting.
+  const [cloudStatus, setCloudStatus] = useState<CloudStatus | null>(null);
 
   const set = (i: number, patch: Partial<BootStep>) =>
     setSteps((s) => s.map((step, j) => (j === i ? { ...step, ...patch } : step)));
 
-  // connect wallet → runtime, then enter chat. Reused after onboarding too.
-  async function go(addr: string, w: Awaited<ReturnType<typeof loadWallet>>["wallet"]) {
+  // connect wallet → runtime, then enter chat. Reused after onboarding too. `freshCloud`
+  // is set when onboarding just connected a cloud backend for the FIRST time on this
+  // device — an explicit connect, so (same as a mid-session reconnect) it gets a one-shot
+  // backfill of anything already local (e.g. sessions from a prior local-only run).
+  async function go(addr: string, w: Awaited<ReturnType<typeof loadWallet>>["wallet"], freshCloud?: boolean) {
     set(3, { status: "pending", label: "connecting storage" });
-    const rt = await buildRuntime(w, approval.current ?? autoApprove());
+    const rt = await buildRuntime(w, approval.current ?? autoApprove(), setCloudStatus);
     setRuntime(rt);
     setWallet(w);
     set(3, { status: "ok", label: "storage ready" });
@@ -64,6 +71,19 @@ export function App({ options }: { options: AppOptions }) {
     // clean screen (Ink leaves prior static output in the terminal history otherwise).
     process.stdout.write("\x1b[2J\x1b[3J\x1b[H");
     setPhase("chat");
+    if (freshCloud) {
+      void rt.syncCloud().catch(() => { /* best-effort; a later write or reconnect re-syncs */ });
+    }
+  }
+
+  // Re-bind the runtime to whatever storage config.json now holds (called after Chat
+  // writes a new storage choice mid-session — connect, reconnect, or disconnect). Without
+  // this the already-built runtime keeps mirroring the OLD cloud/local choice forever,
+  // since it was bound once at boot and storage config changes don't self-apply.
+  async function rebuildRuntime(): Promise<AgentRuntime> {
+    const rt = await buildRuntime(wallet!, approval.current ?? autoApprove(), setCloudStatus);
+    setRuntime(rt);
+    return rt;
   }
 
   useEffect(() => {
@@ -98,7 +118,7 @@ export function App({ options }: { options: AppOptions }) {
           onboardFinish.current = async (engine: "claude" | "codex", cfg?: StorageConfig) => {
             if (cfg) await chooseStorage(cfg);
             await savePrefs({ onboarded: true, lastCli: engine });
-            await go(addr, wallet);
+            await go(addr, wallet, !!cfg && cfg.kind !== "local");
           };
         }
       } catch (e) {
@@ -138,15 +158,27 @@ export function App({ options }: { options: AppOptions }) {
   }
 
   // chat — apply remembered prefs as defaults (explicit flags win); --continue resumes
-  // the most recent session.
+  // the most recent session. model comes from the resolved ENGINE's own remembered
+  // model — a claude model id (e.g. "sonnet") sent to codex's API is a 400, so the two
+  // must never share one field.
+  const effectiveCli = options.cli ?? prefs.lastCli ?? "claude";
   const effective: AppOptions = {
     ...options,
-    cli: options.cli ?? prefs.lastCli ?? "claude",
-    model: options.model ?? prefs.lastModel,
+    cli: effectiveCli,
+    model: options.model ?? (effectiveCli === "codex" ? prefs.lastModelCodex : prefs.lastModelClaude),
     effort: options.effort ?? prefs.lastEffort,
     resume: options.resume ?? (options.continue ? prefs.lastSessionId : undefined),
   };
   return (
-    <Chat runtime={runtime!} wallet={wallet!} address={address} report={report} options={effective} approval={approval.current} />
+    <Chat
+      runtime={runtime!}
+      wallet={wallet!}
+      address={address}
+      report={report}
+      options={effective}
+      approval={approval.current}
+      cloudStatus={cloudStatus}
+      onRebuildRuntime={rebuildRuntime}
+    />
   );
 }

@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Box, Text, Static, useApp, useInput } from "ink";
 import type { AgentRuntime, Wallet, ChatMessage } from "@iqlabs-official/agent-sdk/runtime/contract";
-import type { CliReport } from "@iqlabs-official/agent-sdk";
+import type { CliReport, StorageConfig } from "@iqlabs-official/agent-sdk";
+import type { CloudStatus } from "@iqlabs-official/agent-sdk/account/storage/mirror";
 import type { ApprovalRequest } from "@iqlabs-official/agent-sdk/runtime/approval/channel";
 import type { AppOptions } from "../app.js";
 import type { InkApprovalChannel } from "../InkApprovalChannel.js";
@@ -18,8 +19,10 @@ import {
   hasDasRpc,
   marketplaceEnv,
   BUNDLED_SKILLS,
+  startGoogleLogin,
+  type GoogleLogin,
 } from "@iqlabs-official/agent-sdk";
-import { Select } from "@inkjs/ui";
+import { Select, TextInput } from "@inkjs/ui";
 import { chooseStorage } from "../bootstrap.js";
 import { copyToClipboard } from "../clipboard.js";
 import { Message } from "../components/Message.js";
@@ -54,6 +57,8 @@ export function Chat({
   options,
   approval,
   address,
+  cloudStatus,
+  onRebuildRuntime,
 }: {
   runtime: AgentRuntime;
   wallet: Wallet;
@@ -61,6 +66,8 @@ export function Chat({
   report: CliReport;
   options: AppOptions;
   approval: InkApprovalChannel | null;
+  cloudStatus: CloudStatus | null;
+  onRebuildRuntime: () => Promise<AgentRuntime>;
 }) {
   const { exit } = useApp();
   const cwd = options.cwd ?? process.cwd();
@@ -186,6 +193,16 @@ export function Chat({
   // the panel to edit settings. showCloud opens the storage picker from the panel's cloud row.
   const [panelFocused, setPanelFocused] = useState(false);
   const [showCloud, setShowCloud] = useState(false);
+  // gdrive reconnect/connect overlay — reuses the same OAuth flow as first-run onboarding
+  // (packages/core startGoogleLogin: loopback server + a manual code/url paste fallback
+  // for remote/SSH terminals where the browser can't reach the CLI's loopback listener).
+  const [showGdriveConnect, setShowGdriveConnect] = useState(false);
+  const [gdriveUrl, setGdriveUrl] = useState<string | null>(null);
+  const [gdriveErr, setGdriveErr] = useState<string | null>(null);
+  const [googleSession, setGoogleSession] = useState<GoogleLogin | null>(null);
+  // icloud/custom need a folder path / endpoint URL before they can connect.
+  const [pendingCloudKind, setPendingCloudKind] = useState<StorageKind | null>(null);
+  const [showLocationInput, setShowLocationInput] = useState(false);
   const [celebrate, setCelebrate] = useState<"sparkle" | "confetti" | null>(null);
   const [eggMood, setEggMood] = useState<Mood | null>(null);
   const [idle, setIdle] = useState(false);
@@ -334,7 +351,9 @@ export function Chat({
         !showBtw &&
         !showAccount &&
         !showSettings &&
-        !showCloud,
+        !showCloud &&
+        !showGdriveConnect &&
+        !showLocationInput,
     },
   );
 
@@ -352,6 +371,19 @@ export function Chat({
   useInput(
     (_input, key) => { if (key.escape) setShowCloud(false); },
     { isActive: showCloud },
+  );
+
+  // Esc cancels an in-flight gdrive connect/reconnect (the effect's cleanup cancels the
+  // OAuth session/loopback server).
+  useInput(
+    (_input, key) => { if (key.escape) setShowGdriveConnect(false); },
+    { isActive: showGdriveConnect },
+  );
+
+  // Esc backs out of the icloud/custom location prompt (TextInput owns Enter/typing).
+  useInput(
+    (_input, key) => { if (key.escape) { setShowLocationInput(false); setPendingCloudKind(null); } },
+    { isActive: showLocationInput },
   );
 
   // Escape or Return closes the /btw overlay.
@@ -417,19 +449,87 @@ export function Chat({
     setShowMarket(true);
   }
 
-  // apply a storage choice picked from the panel. local applies in place; a cloud (gdrive)
-  // needs the OAuth flow, which lives in onboarding — point there rather than half-doing it.
+  // Write the storage choice, then rebuild the runtime so it actually picks up the new
+  // config (the runtime is bound once at boot; without this a config change is silently
+  // ignored until the next launch — same bug whether connecting, reconnecting, or going
+  // back to local-only). One-shot backfill mirrors vscode/localhost's connectCloud /
+  // reconnectCloud handlers: push whatever's missing, fire-and-forget, never on a timer.
+  async function finishCloudConnect(cfg: StorageConfig) {
+    await chooseStorage(cfg);
+    const rt = await onRebuildRuntime();
+    setCloud(await getStorageInfo());
+    setNotice(`storage → ${cfg.kind} connected, syncing history…`);
+    void rt.syncCloud()
+      .then((r) => setNotice(r.uploaded ? `synced ${r.uploaded} session${r.uploaded === 1 ? "" : "s"} to ${cfg.kind}` : `storage → ${cfg.kind} (already in sync)`))
+      .catch(() => { /* best-effort; a later write or reconnect re-syncs */ });
+  }
+
+  // apply a storage choice picked from the panel. local applies immediately; gdrive opens
+  // the same OAuth flow onboarding uses; icloud/custom need a path/URL first.
   function applyCloud(kind: StorageKind) {
     setShowCloud(false);
     setPanelFocused(false);
     if (kind === "local") {
-      void chooseStorage({ kind: "local" }).then(() => {
+      void chooseStorage({ kind: "local" }).then(async () => {
+        await onRebuildRuntime();
         setCloud(null);
         setNotice("storage → local only");
       });
       return;
     }
-    setNotice(`${kind} needs sign-in: re-run onboarding to connect (rm ~/.config/agentnet to reset)`);
+    if (kind === "gdrive") {
+      setGdriveErr(null);
+      setGdriveUrl(null);
+      setShowGdriveConnect(true);
+      return;
+    }
+    setPendingCloudKind(kind);
+    setShowLocationInput(true);
+  }
+
+  // drive the gdrive OAuth flow while the connect overlay is open (mirrors Onboarding's
+  // gdriveLogin step: loopback server auto-completes if the browser can reach it, with a
+  // manual code/url paste as fallback for remote/SSH terminals).
+  useEffect(() => {
+    if (!showGdriveConnect) return;
+    let activeSession: GoogleLogin | null = null;
+    let cancelled = false;
+    startGoogleLogin().then((session) => {
+      if (cancelled) { session.cancel(); return; }
+      activeSession = session;
+      setGdriveUrl(session.url);
+      setGoogleSession(session);
+      session.done.then((ok) => {
+        if (cancelled) return;
+        if (ok) {
+          setShowGdriveConnect(false);
+          void finishCloudConnect({ kind: "gdrive" });
+        } else {
+          setGdriveErr("Google sign-in was not completed.");
+        }
+      });
+    }).catch((e: unknown) => {
+      if (!cancelled) setGdriveErr(e instanceof Error ? e.message : String(e));
+    });
+    return () => {
+      cancelled = true;
+      if (activeSession) activeSession.cancel();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showGdriveConnect]);
+
+  function submitGdriveCode(codeVal: string) {
+    if (!codeVal.trim() || !googleSession) return;
+    void googleSession.submitCode(codeVal.trim()).catch((e: unknown) => {
+      setGdriveErr(e instanceof Error ? e.message : String(e));
+    });
+  }
+
+  function submitCloudLocation(value: string) {
+    if (!pendingCloudKind) return;
+    setShowLocationInput(false);
+    void finishCloudConnect({ kind: pendingCloudKind, location: value });
+    setPendingCloudKind(null);
   }
 
   function runSlash(raw: string) {
@@ -556,9 +656,10 @@ export function Chat({
         return;
       }
       case "storage":
-        void getStorageInfo().then((info) =>
-          setNotice(info ? `storage: ${info.kind}${info.account ? ` (${info.account})` : ""}` : "storage: local only"),
-        );
+        // Opens the same picker as the welcome panel's cloud row — the one-tap entry
+        // point for connect / reconnect (a dead gdrive token surfaces via the status
+        // line's "reconnect needed" chip, which points here).
+        setShowCloud(true);
         return;
       case "account":
         void (async () => {
@@ -668,6 +769,46 @@ export function Chat({
             />
           </Box>
           <Box marginTop={1}><Text dimColor>Esc  close</Text></Box>
+        </Box>
+      </Box>
+    );
+  }
+
+  // gdrive connect/reconnect overlay — same flow as first-run onboarding's gdriveLogin step.
+  if (showGdriveConnect) {
+    return (
+      <Box flexDirection="column" paddingX={1}>
+        <Box borderStyle="round" borderColor={colors.iqCyan} flexDirection="column" paddingX={2} paddingY={1} gap={1}>
+          <Text bold color={colors.iqCyan}>sign in to Google Drive</Text>
+          {!gdriveUrl && !gdriveErr && <Text dimColor>starting OAuth flow…</Text>}
+          {gdriveUrl && (
+            <>
+              <Text>1. open in browser (or copy link):</Text>
+              <Text color={colors.iqCyan}>{gdriveUrl}</Text>
+              <Text>2. paste the redirected URL or authorization code here:</Text>
+              <TextInput placeholder="Paste URL or code here" onSubmit={submitGdriveCode} />
+            </>
+          )}
+          {gdriveErr && <Text color={colors.err}>{gdriveErr}</Text>}
+          <Box marginTop={1}><Text dimColor>Esc  cancel</Text></Box>
+        </Box>
+      </Box>
+    );
+  }
+
+  // icloud/custom connect overlay — needs a folder path / endpoint URL before connecting.
+  if (showLocationInput && pendingCloudKind) {
+    return (
+      <Box flexDirection="column" paddingX={1}>
+        <Box borderStyle="round" borderColor={colors.iqCyan} flexDirection="column" paddingX={2} paddingY={1}>
+          <Text bold color={colors.iqCyan}>
+            {pendingCloudKind === "icloud" ? "iCloud folder path:" : "endpoint base URL:"}
+          </Text>
+          <TextInput
+            placeholder={pendingCloudKind === "icloud" ? "~/Library/Mobile Documents/…" : "https://…"}
+            onSubmit={submitCloudLocation}
+          />
+          <Box marginTop={1}><Text dimColor>Esc  cancel</Text></Box>
         </Box>
       </Box>
     );
@@ -843,7 +984,7 @@ export function Chat({
       <Celebrate kind={celebrate} />
       {idle && !chat.busy ? <Text dimColor>{copy.idleNudge}</Text> : null}
 
-      <StatusLine mood={mood} cli={chat.cli} model={chat.model} effort={chat.effort} cwd={cwd} elapsed={chat.busy ? chat.elapsed : undefined} ctx={usedFrac} ctxTokens={usedTokens !== undefined ? Math.round(usedTokens) : undefined} ctxWindow={usedFrac !== undefined ? WINDOW : undefined} ctxApprox={!ctxReal} />
+      <StatusLine mood={mood} cli={chat.cli} model={chat.model} effort={chat.effort} cwd={cwd} elapsed={chat.busy ? chat.elapsed : undefined} sync={cloud && cloud.kind !== "local" ? (cloudStatus ? { ok: cloudStatus.ok, error: cloudStatus.ok ? undefined : cloudStatus.error, reason: cloudStatus.ok ? undefined : cloudStatus.reason } : { ok: true }) : null} ctx={usedFrac} ctxTokens={usedTokens !== undefined ? Math.round(usedTokens) : undefined} ctxWindow={usedFrac !== undefined ? WINDOW : undefined} ctxApprox={!ctxReal} />
 
       {/* hide the composer while an approval is pending — keys answer the card instead */}
       {!pendingApproval ? (

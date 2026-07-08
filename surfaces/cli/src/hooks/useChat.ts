@@ -7,7 +7,8 @@ import type {
   SessionMeta,
 } from "@iqlabs-official/agent-sdk/runtime/contract";
 import type { ApprovalChannel } from "@iqlabs-official/agent-sdk/runtime/approval/channel";
-import { savePrefs, type EffortLevel } from "../prefs.js";
+import { readPrefs, savePrefs, type EffortLevel } from "../prefs.js";
+import { loadModelOptions } from "../models.js";
 
 export type Engine = "claude" | "codex";
 export type { EffortLevel };
@@ -126,9 +127,28 @@ export function useChat(
 
   const ensureHandle = useCallback(async (): Promise<SessionHandle> => {
     if (handle.current) return handle.current;
+    // Guard against a stale/invalid model string reaching the engine's API — not just the
+    // cross-engine case (switchEngine already fixes that) but anything else that could
+    // leave modelRef holding a name the ACTIVE engine doesn't recognize: --model with a
+    // typo, an old prefs value for a model since removed from the catalog, etc. Mirrors
+    // the webview Composer's catalog-validate-and-fallback (`models.some(...) ? model :
+    // models[0]?.value`) — validate against the live per-engine catalog, fall back to its
+    // first entry (often "default", i.e. no override) instead of sending garbage.
+    let modelToUse = modelRef.current;
+    if (modelToUse) {
+      try {
+        const catalog = await loadModelOptions(cliRef.current);
+        if (!catalog.some((m) => m.value === modelToUse)) {
+          modelToUse = catalog[0]?.value;
+        }
+      } catch {
+        /* catalog probe failed — send what we have; the engine call itself will surface
+           a clear error if it's genuinely invalid */
+      }
+    }
     const h = await runtime.startSession({
       cli: cliRef.current,
-      model: modelRef.current,
+      model: modelToUse,
       effort: effortRef.current,
       cwd: opts.cwd,
       sessionId: pendingRef.current,
@@ -170,6 +190,10 @@ export function useChat(
       setContextTokens(undefined);
       setContextWindow(undefined);
       void savePrefs({ lastCli: next });
+      // a model id is engine-specific (claude's "sonnet" is a 400 on codex's API and vice
+      // versa) — load whatever the NEW engine last used (or its own default) instead of
+      // carrying over the previous engine's model string.
+      void readPrefs().then((p) => setModel(next === "codex" ? p.lastModelCodex : p.lastModelClaude));
     },
     [dropHandle],
   );
@@ -180,7 +204,7 @@ export function useChat(
       setModel(m);
       setContextTokens(undefined);
       setContextWindow(undefined);
-      void savePrefs({ lastModel: m });
+      void savePrefs(cliRef.current === "codex" ? { lastModelCodex: m } : { lastModelClaude: m });
     },
     [dropHandle],
   );

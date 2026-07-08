@@ -63,7 +63,7 @@ The input box is full-featured:
 /models               pick a model from a menu (or /model <name> to set directly)
 /engine claude|codex  switch engine — the current session CARRIES over (cross-CLI resume)
 /wallet               show your wallet address
-/storage              show where sessions are saved
+/storage              view/change where sessions are saved (connect or reconnect cloud)
 /iq                   a random IQ fact (+ Iggy spins)
 /dance                Iggy dances
 /quit  (/q)           leave
