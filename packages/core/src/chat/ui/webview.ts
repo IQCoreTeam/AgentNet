@@ -5413,7 +5413,12 @@ export function chatHtml(): string {
           recentlyPosted.push({
             wallet: pendingPost.wallet,
             ts: Date.now(),
-            note: { author: pendingPost.wallet, text: pendingPost.text, gitLink: pendingPost.gitLink, isSelfNote: pendingPost.self, parentId: pendingPost.parentId, timestamp: Date.now() },
+            // author must be OUR wallet (the writer), not the profile owner's
+            // (pendingPost.wallet): mergeOptimistic dedupes the ghost against the real
+            // on-chain note by author+text, and the real note's author is the writer —
+            // a profile-owner author only matches on self-posts, so comments on OTHER
+            // agents rendered twice once the chain read caught up.
+            note: { author: myWalletAddress || pendingPost.wallet, text: pendingPost.text, gitLink: pendingPost.gitLink, isSelfNote: pendingPost.self, parentId: pendingPost.parentId, timestamp: Date.now() },
           });
           pendingPost = null;
         }
