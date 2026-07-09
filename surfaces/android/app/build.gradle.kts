@@ -34,10 +34,9 @@ android {
     }
 
     // targetSdk is a per-flavor dimension, not a fixed value, so one codebase ships both the
-    // proven legacy engine and the modern-target variant we are bringing up (see
-    // plans/raise-targetsdk-exec.md). applicationId and signing stay IDENTICAL across flavors,
-    // so switching flavor is an in-place upgrade that never wipes the user's rootfs — do not add
-    // an applicationIdSuffix.
+    // proven legacy engine and the modern-target variant we are bringing up. applicationId and
+    // signing stay IDENTICAL across flavors, so switching flavor is an in-place upgrade that
+    // never wipes the user's rootfs — do not add an applicationIdSuffix.
     flavorDimensions += "execTarget"
     productFlavors {
         create("legacy") {
@@ -52,10 +51,11 @@ android {
         }
         create("modern") {
             dimension = "execTarget"
-            // targetSdk 35 gives up the W^X exemption on purpose. This flavor exists to probe what
-            // actually breaks (Module 0) and then route guest exec through /system/bin/linker64
-            // (Module 3, system_linker_exec). Until Module 3 lands, guest binaries are EXPECTED to
-            // fail to exec at runtime here — that failure is the probe signal, not a regression.
+            // targetSdk 35 gives up the W^X exemption on purpose. This flavor is where we bring up
+            // a modern target: guest exec will be routed through /system/bin/linker64 (the
+            // system_linker_exec technique) so app-storage binaries still run. Until that routing
+            // lands, guest binaries are EXPECTED to fail to exec at runtime here — that failure is
+            // the signal we are probing for, not a regression.
             targetSdk = 35
             buildConfigField("String", "EXEC_TARGET", "\"modern\"")
         }

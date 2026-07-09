@@ -6,8 +6,8 @@ package com.iqlabs.agentnet
 //
 // Today there is exactly one strategy, DirectProotExec, which runs the stock proot launch
 // and therefore needs the targetSdk<=28 W^X exemption to exec the guest's binaries out of
-// app storage. Module 3 (plans/raise-targetsdk-exec.md) adds a linker-routing strategy for
-// targetSdk>=29; when it exists the selection point in ServerManager gains a second case.
+// app storage. A linker-routing strategy for targetSdk>=29 (routing exec through the system
+// linker) will add a second case at the selection point in ServerManager.
 interface GuestExec {
     // Launch `guestCommand` inside the guest via its login shell, with `guestEnv` as the
     // guest process environment ("KEY=VALUE" entries). Returns a live host Process with

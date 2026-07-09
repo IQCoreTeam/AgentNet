@@ -9,7 +9,7 @@ import java.io.File
 // ptrace-remaps the guest's "/lib, /usr, /etc" onto the rootfs in app storage, so
 // node/claude/codex see a normal Linux. This launch execs the guest's own binaries from app
 // storage, so it depends on the targetSdk<=28 W^X exemption — the modern flavor will need
-// the linker-routing strategy from Module 3 (plans/raise-targetsdk-exec.md) instead.
+// a linker-routing strategy (exec via the system linker) instead.
 //
 // Mechanics (ProcessBuilder + host-side proot env) adapted from AnyClaw
 // (friuns2/openclaw-android-assistant, MIT). The OpenClaw/Codex-specific install steps are
