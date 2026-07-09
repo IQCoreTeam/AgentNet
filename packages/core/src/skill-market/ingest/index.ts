@@ -136,6 +136,17 @@ export class SkillSync {
     creatorWallet: string,
   ): Promise<{ txSig: string; slug: string | null }> {
     const buyerWallet = await signerAddress(signer);
+    // Refuse to re-buy a skill the wallet already holds: tokens are soulbound (no
+    // transfer, no refund), so a second buy is pure SOL loss — and every buy path
+    // (UI modal, agent tool, mobile) funnels through here, so this is the one floor
+    // that catches a stale "Buy" button anywhere. Best-effort: no DAS → can't check
+    // → proceed (same availability trade injectOwned makes).
+    const alreadyOwned = await ownedSkillMints(buyerWallet).catch(() => null);
+    if (alreadyOwned && alreadyOwned.includes(skillId)) {
+      throw new Error(
+        "You already own this skill (soulbound, held in your wallet). Re-equip it instead of buying again.",
+      );
+    }
     // A workflow gates on required skills: buy_item needs the buyer's ATA for each, passed
     // in the config's order. Read them from the mint metadata (publish order = config order).
     // A plain skill has none, so this is a no-op gate there.

@@ -890,21 +890,21 @@ export function chatHtml(): string {
   .mktSortBtn.stars { color: #e0a23a; border-color: color-mix(in srgb, #e0a23a 45%, transparent); }
   .mktFilter input { margin: 0; accent-color: var(--an-green); cursor: pointer; }
   /* detail sub-view */
-  #mktDetailBody .dt-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-  #mktDetailBody .dt-img { width: 56px; height: 56px; border-radius: 10px; background: var(--an-green-dim);
+  #mktDetailBody .dt-head, #skillModalBody .dt-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  #mktDetailBody .dt-img, #skillModalBody .dt-img { width: 56px; height: 56px; border-radius: 10px; background: var(--an-green-dim);
                            display: flex; align-items: center; justify-content: center; flex: none; }
-  #mktDetailBody .dt-img .wand { width: 34px; height: auto; color: var(--an-green); display: inline-flex; }
-  #mktDetailBody .dt-img .wand svg { width: 100%; height: auto; }
-  #mktDetailBody .dt-name { font-size: 1.15em; font-weight: 700; }
-  #mktDetailBody .dt-kind { font-size: 0.7em; text-transform: uppercase; letter-spacing: 0.05em;
+  #mktDetailBody .dt-img .wand, #skillModalBody .dt-img .wand { width: 34px; height: auto; color: var(--an-green); display: inline-flex; }
+  #mktDetailBody .dt-img .wand svg, #skillModalBody .dt-img .wand svg { width: 100%; height: auto; }
+  #mktDetailBody .dt-name, #skillModalBody .dt-name { font-size: 1.15em; font-weight: 700; }
+  #mktDetailBody .dt-kind, #skillModalBody .dt-kind { font-size: 0.7em; text-transform: uppercase; letter-spacing: 0.05em;
                             color: var(--an-green); opacity: 0.8; }
-  #mktDetailBody .dt-desc { opacity: 0.85; margin-bottom: 10px; }
-  #mktDetailBody .dt-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-  #mktDetailBody .dt-tag { font-size: 0.75em; padding: 2px 9px; border-radius: 999px;
+  #mktDetailBody .dt-desc, #skillModalBody .dt-desc { opacity: 0.85; margin-bottom: 10px; }
+  #mktDetailBody .dt-meta, #skillModalBody .dt-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  #mktDetailBody .dt-tag, #skillModalBody .dt-tag { font-size: 0.75em; padding: 2px 9px; border-radius: 999px;
                            background: var(--an-bg); border: 1px solid var(--an-line); opacity: 0.8; }
-  #mktDetailBody .dt-sec { font-size: 0.7em; text-transform: uppercase; letter-spacing: 0.05em;
+  #mktDetailBody .dt-sec, #skillModalBody .dt-sec { font-size: 0.7em; text-transform: uppercase; letter-spacing: 0.05em;
                            opacity: 0.5; margin: 14px 0 6px; }
-  #mktDetailBody .dt-body { white-space: pre-wrap; font-family: var(--vscode-editor-font-family, monospace);
+  #mktDetailBody .dt-body, #skillModalBody .dt-body { white-space: pre-wrap; font-family: var(--vscode-editor-font-family, monospace);
                             font-size: 0.82em; background: var(--an-bg); border: 1px solid var(--an-line);
                             border-radius: var(--an-radius); padding: 10px 12px; max-height: 320px; overflow: auto; }
   #mktDetailBody .dt-buy { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
@@ -4634,28 +4634,36 @@ export function chatHtml(): string {
   // in the right place.
   const skillModalEl = document.getElementById('skillModal');
   const skillModalBody = document.getElementById('skillModalBody');
-  let skillModalOpen = false, skillModalBuyBtn = null, skillModalName = null, skillDocOpen = false;
+  let skillModalOpen = false, skillModalBuyBtn = null, skillModalName = null, skillModalMint = null, skillDocOpen = false;
   function openSkillModal(mint) {
     skillModalOpen = true;
-    skillModalBuyBtn = null; skillModalName = null;
+    skillModalBuyBtn = null; skillModalName = null; skillModalMint = null;
     skillModalBody.innerHTML = '<div class="mktEmpty">Loading…</div>';
     skillModalEl.style.display = 'flex';
     vscode.postMessage({ type: 'getSkillDetail', mint });
+    // The panel may not have received an ownedSkills push yet (the modal opens from the
+    // profile, not the market) — request one so refreshModalOwned can flip Buy → Owned
+    // instead of offering to re-buy a soulbound skill we already hold.
+    vscode.postMessage({ type: 'ownedSkills' });
   }
   function closeSkillModal() {
-    skillModalOpen = false; skillDocOpen = false; skillModalBuyBtn = null; skillModalName = null;
+    skillModalOpen = false; skillDocOpen = false; skillModalBuyBtn = null; skillModalName = null; skillModalMint = null;
     skillModalEl.style.display = 'none';
   }
   // flip the modal's Buy → Owned once an ownedSkills refresh shows we now hold it
   function refreshModalOwned() {
-    if (skillModalBuyBtn && skillModalName && ownedSkills.indexOf(skillModalName) >= 0) {
+    if (skillModalBuyBtn && (ownsMint(skillModalMint) || (skillModalName && ownedSkills.indexOf(skillModalName) >= 0))) {
       skillModalBuyBtn.disabled = true; skillModalBuyBtn.textContent = 'Owned';
     }
   }
   function renderSkillModal(detail) {
     const c = (detail && detail.card) || {};
-    const owned = ownedSkills.indexOf(c.name) >= 0;
+    // Ownership is decided by MINT first, same as the market detail and the comment
+    // gate (ownsMint) — name matching alone breaks for skills whose detail comes back
+    // with name === mint, which is what offered Buy on an already-owned skill.
+    const owned = ownsMint(c.id) || ownedSkills.indexOf(c.name) >= 0;
     skillModalName = c.name || null;
+    skillModalMint = c.id || null;
     skillModalBody.innerHTML = '';
     const head = document.createElement('div'); head.className = 'dt-head';
     const img = document.createElement('div'); img.className = 'dt-img';
