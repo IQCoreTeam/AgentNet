@@ -232,6 +232,7 @@ export function chatHtml(): string {
   .wmItem .wmCaret { margin-left: auto; font-size: 0.7em; opacity: 0.5; transition: transform 0.12s; }
   .wmItem .soon:not([style*="none"]) + .wmCaret { margin-left: 6px; }
   .wmItem.open .wmCaret { transform: rotate(90deg); }
+  .wmItem.wmDanger { color: var(--vscode-errorForeground, #f87171); }
   /* inline owned-skill list inside the wallet dropdown: scrollable, no buy/nav */
   #walletSkillList { max-height: 184px; overflow-y: auto; margin: 2px 4px 4px; padding: 2px;
                      display: flex; flex-direction: column; gap: 3px; }
@@ -1694,6 +1695,9 @@ export function chatHtml(): string {
     <!-- inline, scrollable list of the skills THIS wallet owns. No buy / no navigation —
          purchases happen in the Markets tab. Just "what do I own", scroll through it. -->
     <div id="walletSkillList" style="display:none"></div>
+    <!-- same action as the profile page's Disconnect button; lives here too because the
+         dropdown is where storage/RPC connections are managed, so it's where users look -->
+    <div class="wmItem wmDanger" id="walletDisconnect">Disconnect wallet</div>
   </div>
 
   <div id="wrap">
@@ -5157,6 +5161,11 @@ export function chatHtml(): string {
     el.textContent = cloudConnected ? 'Local + cloud mirror (connected)' : 'Local only (no cloud)';
   }
   document.getElementById('disconnectWalletBtn').addEventListener('click', () => {
+    vscode.postMessage({ type: 'disconnectWallet' });
+  });
+  // Dropdown twin of the profile's Disconnect: the surface closes every panel on
+  // disconnect, so no local menu-close bookkeeping is needed here.
+  document.getElementById('walletDisconnect').addEventListener('click', () => {
     vscode.postMessage({ type: 'disconnectWallet' });
   });
 
