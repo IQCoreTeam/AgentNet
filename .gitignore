@@ -16,3 +16,4 @@ apk/
 
 # internal, local-only design docs (strategy kept out of the public repo)
 plans/raise-targetsdk-exec.md
+surfaces/android/scripts/probe-modern-exec.sh
