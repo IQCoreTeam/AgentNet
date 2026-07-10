@@ -24,8 +24,8 @@ the per-syscall overhead small — fine for the network-bound agent-chat workloa
 surfaces/android/
   settings.gradle.kts, build.gradle.kts, gradle.properties
   app/
-    build.gradle.kts          legacy/modern flavors: targetSdk 28 (W^X exemption to exec
-                              from app storage) vs 35 (modern-target bring-up)
+    build.gradle.kts          targetSdk 35; guest runs under proot (its loader mmap
+                              survives the W^X policy, verified on device)
     src/main/
       AndroidManifest.xml
       java/com/iqlabs/agentnet/

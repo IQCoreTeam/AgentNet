@@ -1,0 +1,162 @@
+# Build a SIGNED release AAB (Android App Bundle) for Google Play closed/production testing.
+#
+# This is DELIBERATELY separate from android-apk.yml:
+#   - android-apk.yml  -> debug-signed APK, auto-built on every main push, for sideload sharing.
+#   - android-release.yml (this) -> release-signed AAB, MANUAL only, for uploading to Play.
+# Play requires an AAB (not APK), a recent targetSdk, and a real release key — none of which the
+# debug pipeline produces. The app targets SDK 35 (our standard) so it clears Play's minimum-target
+# bar. The AAB is uploaded ONLY as a workflow artifact — never to
+# the public android-latest release (an AAB is not directly installable, and Play uploads are a
+# deliberate human step, not an automatic push).
+#
+# Required repo secrets (the UPLOAD key — Google re-signs with the Play-managed app key on top):
+#   ANDROID_RELEASE_KEYSTORE_B64    base64 of the upload keystore (`base64 -i upload.jks`)
+#   ANDROID_RELEASE_STORE_PASSWORD  keystore password
+#   ANDROID_RELEASE_KEY_ALIAS       key alias inside the keystore
+#   ANDROID_RELEASE_KEY_PASSWORD    key password
+# The uploaded AAB carries only the public cert + signature, so the artifact is safe to download.
+# Manual trigger only, so these secrets are never exposed to untrusted (fork PR) code.
+
+name: android-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      abi:
+        description: "Target ABI (arm64 = real phones; x86_64 = emulator only)"
+        type: choice
+        options: ["arm64", "x86_64"]
+        default: "arm64"
+      version_code:
+        description: "Play versionCode (must increase every upload; blank = use run number)"
+        required: false
+        default: ""
+      version_name:
+        description: "User-visible version name (blank = keep gradle default)"
+        required: false
+        default: ""
+      assets_run_id:
+        description: "android-assets run id to reuse (blank = latest successful)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      ABI: ${{ github.event.inputs.abi || 'arm64' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Fail fast if the release signing secrets are missing — otherwise gradle would produce an
+      # UNSIGNED AAB (signingConfig resolves to null), which Play rejects with a confusing error.
+      - name: Require release signing secrets
+        env:
+          KS_B64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_B64 }}
+          STORE_PW: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          KEY_PW: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+        run: |
+          missing=""
+          [ -z "$KS_B64" ]   && missing="$missing ANDROID_RELEASE_KEYSTORE_B64"
+          [ -z "$STORE_PW" ] && missing="$missing ANDROID_RELEASE_STORE_PASSWORD"
+          [ -z "$KEY_ALIAS" ] && missing="$missing ANDROID_RELEASE_KEY_ALIAS"
+          [ -z "$KEY_PW" ]   && missing="$missing ANDROID_RELEASE_KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing release signing secrets:$missing (see android-release.yml header)"
+            exit 1
+          fi
+
+      # Lightweight, arch-independent JS — rebuilt every run so the AAB carries the latest UI.
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter agentnet-localhost build
+      - run: pnpm --filter agentnet-webview build
+
+      # Reuse the rootfs + jniLibs from the latest android-assets run (no QEMU rebuild). Same
+      # resolution logic as android-apk.yml: walk recent successful runs, take the first whose
+      # per-ABI artifact hasn't expired.
+      - name: Resolve android-assets run
+        id: assets
+        run: |
+          ID="${{ github.event.inputs.assets_run_id }}"
+          if [ -z "$ID" ]; then
+            for cand in $(gh run list --workflow=android-assets.yml --status success -L 15 \
+                            --json databaseId -q '.[].databaseId' || true); do
+              live=$(gh api "repos/${{ github.repository }}/actions/runs/$cand/artifacts" \
+                       -q ".artifacts[] | select(.name==\"android-assets-${ABI}\" and .expired==false) | .id" \
+                       2>/dev/null | head -1 || true)
+              if [ -n "$live" ]; then ID="$cand"; break; fi
+            done
+          fi
+          if [ -z "$ID" ]; then
+            echo "::error::No android-assets run with a live android-assets-${ABI} artifact. Run android-assets first."
+            exit 1
+          fi
+          echo "Using android-assets run $ID"
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+
+      - name: Download rootfs + jniLibs
+        run: gh run download "${{ steps.assets.outputs.id }}" -n "android-assets-${ABI}" -D ci-assets
+
+      - name: Stage assets into the source tree
+        run: |
+          set -e
+          mkdir -p surfaces/android/app/src/main/assets
+          rm -rf surfaces/android/app/src/main/jniLibs
+          cp -R ci-assets/jniLibs surfaces/android/app/src/main/jniLibs
+          cp ci-assets/assets/rootfs-*.tar surfaces/android/app/src/main/assets/
+          STAGE="$(mktemp -d)/server-bundle"
+          mkdir -p "$STAGE/webview"
+          cp -R surfaces/localhost/dist/. "$STAGE/"
+          cp -R surfaces/webview/dist/. "$STAGE/webview/"
+          tar -cf surfaces/android/app/src/main/assets/agentnet-server.tar -C "$STAGE" .
+          ls -lh surfaces/android/app/src/main/assets/
+
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+
+      # Decode the upload keystore into a path gradle reads via ANDROID_RELEASE_KEYSTORE. Removed at
+      # job end; GitHub-hosted runners are ephemeral and isolated.
+      - name: Install release keystore
+        env:
+          KS_B64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_B64 }}
+        run: printf '%s' "$KS_B64" | base64 -d > surfaces/android/agentnet-upload.keystore
+
+      - name: Build signed release AAB (targetSdk 35)
+        working-directory: surfaces/android
+        env:
+          ANDROID_RELEASE_KEYSTORE: agentnet-upload.keystore
+          ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+          ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+          ANDROID_VERSION_CODE: ${{ github.event.inputs.version_code || github.run_number }}
+          ANDROID_VERSION_NAME: ${{ github.event.inputs.version_name }}
+        run: ./gradlew --no-daemon bundleRelease
+
+      - name: Remove keystore
+        if: always()
+        run: rm -f surfaces/android/agentnet-upload.keystore
+
+      # Confirm the AAB really is signed before handing it off (catches a silently-unsigned build).
+      - name: Verify AAB is signed
+        run: |
+          AAB=surfaces/android/app/build/outputs/bundle/release/app-release.aab
+          ls -lh "$AAB"
+          unzip -l "$AAB" | grep -E "META-INF/.*\.(RSA|EC|DSA)" \
+            || { echo "::error::AAB has no signature block — check the release secrets"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agentnet-aab-${{ env.ABI }}
+          path: surfaces/android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 30
+          if-no-files-found: error

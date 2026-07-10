@@ -135,15 +135,12 @@ jobs:
           KS_B64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_B64 }}
         run: printf '%s' "$KS_B64" | base64 -d > surfaces/android/agentnet-debug.keystore
 
-      # Ship the `legacy` flavor (targetSdk 28): it keeps the pre-29 W^X exemption that runs
-      # node + the proot guest's binaries from app storage, and is the proven, on-device-tested
-      # variant. The `modern` flavor (targetSdk 35) is validated on hardware but not yet the
-      # public download — build it explicitly here only once it is. Do NOT use bare
-      # `assembleDebug`: with flavors it builds BOTH variants and writes to per-flavor dirs,
-      # so the output path below would no longer resolve.
+      # Single variant now: the app targets SDK 35 (our standard). proot loads the guest binaries
+      # via its own loader mmap, which survives the targetSdk 35 SELinux W^X policy (verified on
+      # device), so there is no separate legacy target to build.
       - name: Build signed debug APK
         working-directory: surfaces/android
-        run: ./gradlew --no-daemon assembleLegacyDebug
+        run: ./gradlew --no-daemon assembleDebug
 
       # SHA-1 is a public fingerprint (not the key), safe to log — proves the team key signed it.
       - name: Print signing SHA-1
@@ -157,22 +154,19 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: agentnet-apk-${{ env.ABI }}
-          path: surfaces/android/app/build/outputs/apk/legacy/debug/app-legacy-debug.apk
+          path: surfaces/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 7
           if-no-files-found: error
 
       # Publish to the rolling `android-latest` release so the public download link
       # (.../releases/download/android-latest/app-debug.apk) always serves the newest build.
-      # arm64 only, so a manual x86_64 build doesn't clobber the shareable arm64 APK.
-      # The flavor split names the file app-legacy-debug.apk, but the public download URL is keyed
-      # by the asset NAME, which must stay app-debug.apk. gh's `file#label` syntax only sets the
-      # label (not the name), so copy the file to app-debug.apk and upload that — then --clobber
-      # replaces the existing asset in place and the shared URL keeps working.
+      # arm64 only, so a manual x86_64 build doesn't clobber the shareable arm64 APK. The build now
+      # outputs app-debug.apk directly (single variant), so the asset NAME the public URL is keyed
+      # by is already correct — upload it as-is and --clobber replaces the asset in place.
       - name: Update android-latest release
         if: env.ABI == 'arm64'
         run: |
-          cp surfaces/android/app/build/outputs/apk/legacy/debug/app-legacy-debug.apk app-debug.apk
           gh release view android-latest >/dev/null 2>&1 \
             || gh release create android-latest --title "AgentNet Android (latest)" --latest \
                  --notes "Auto-built from main. Download app-debug.apk and install (allow unknown sources)."
-          gh release upload android-latest app-debug.apk --clobber
+          gh release upload android-latest surfaces/android/app/build/outputs/apk/debug/app-debug.apk --clobber
