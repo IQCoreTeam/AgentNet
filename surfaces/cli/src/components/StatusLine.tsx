@@ -41,7 +41,7 @@ export function StatusLine({
   effort?: string;
   cwd: string;
   elapsed?: number;
-  sync?: { ok: boolean; error?: string } | null;
+  sync?: { ok: boolean; error?: string; reason?: "reauth" | "transient" } | null;
   ctx?: number;        // fraction USED (0..1); undefined = no data yet
   ctxTokens?: number; // raw tokens used (for label)
   ctxWindow?: number; // model window size (for label)
@@ -65,7 +65,8 @@ export function StatusLine({
         {elapsed !== undefined ? <Text color={colors.iqCyan}> · {elapsed.toFixed(1)}s</Text> : null}
         {sync ? (
           <Text color={sync.ok ? colors.ok : colors.err}>
-            {" · "}{sync.ok ? "☁ synced" : "☁ offline"}
+            {" · "}
+            {sync.ok ? "☁ synced" : sync.reason === "reauth" ? "☁ reconnect needed (/storage)" : "☁ offline"}
           </Text>
         ) : null}
       </Box>

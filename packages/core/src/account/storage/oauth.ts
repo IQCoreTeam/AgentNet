@@ -161,6 +161,11 @@ export interface GoogleLogin {
   submitCode(code: string): Promise<void>;
   cancel(): void;
   done: Promise<boolean>;
+  // Set once `done` resolves false. The loopback server's landing page says "connected"
+  // unconditionally (it can't know yet whether the code exchange will succeed) — this is
+  // the only reliable way for the UI to show WHY a login actually failed, instead of a
+  // generic "not completed" message that hides state-mismatch/missing-code/exchange errors.
+  readonly error: string | null;
 }
 
 export function startGoogleLogin(): Promise<GoogleLogin> {
@@ -170,14 +175,19 @@ export function startGoogleLogin(): Promise<GoogleLogin> {
   let settleDone: (ok: boolean) => void;
   const done = new Promise<boolean>((r) => (settleDone = r));
 
+  let lastError: string | null = null;
   // Settle `done` exactly once and clear the abandon-timeout. Callers still close the server
   // at their own site (they already did); this only owns the settle + timer.
   let settled = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const finishDone = (ok: boolean) => {
+  const finishDone = (ok: boolean, reason?: string) => {
     if (settled) return;
     settled = true;
     if (timer) clearTimeout(timer);
+    if (!ok) {
+      lastError = reason ?? "Google sign-in failed.";
+      console.error(`[oauth] google sign-in failed: ${lastError}`);
+    }
     settleDone(ok);
   };
 
@@ -191,14 +201,16 @@ export function startGoogleLogin(): Promise<GoogleLogin> {
     if (code && gotState === state) {
       exchangeCode(code, verifier, redirect)
         .then(() => finishDone(true))
-        .catch(() => finishDone(false));
+        .catch((e: unknown) => finishDone(false, e instanceof Error ? e.message : String(e)));
+    } else if (!code) {
+      finishDone(false, "no code in Google's redirect");
     } else {
-      finishDone(false);
+      finishDone(false, "state mismatch (possible CSRF or stale login)");
     }
   });
   // Abandoned login (tab closed, code never submitted): auto-clean after 10 min so the
   // loopback server + pkce session don't linger forever.
-  timer = setTimeout(() => { server.close(); finishDone(false); }, 10 * 60_000);
+  timer = setTimeout(() => { server.close(); finishDone(false, "timed out waiting for Google redirect"); }, 10 * 60_000);
   timer.unref?.();
 
   return new Promise<GoogleLogin>((resolve, reject) => {
@@ -239,15 +251,16 @@ export function startGoogleLogin(): Promise<GoogleLogin> {
               finishDone(true);
             } catch (e) {
               server.close();
-              finishDone(false);
+              finishDone(false, e instanceof Error ? e.message : String(e));
               throw e;
             }
           },
           cancel() {
             server.close();
-            finishDone(false);
+            finishDone(false, "canceled");
           },
           done,
+          get error() { return lastError; },
         });
       } catch (e) {
         server.close();
@@ -267,6 +280,13 @@ export function startGoogleLoginFixed(redirectUri: string): GoogleLogin {
 
   let settleDone: (ok: boolean) => void;
   const done = new Promise<boolean>((r) => (settleDone = r));
+
+  let lastError: string | null = null;
+  const fail = (reason: string) => {
+    lastError = reason;
+    console.error(`[oauth] google sign-in failed: ${reason}`);
+    settleDone(false);
+  };
 
   const url = `${AUTH_URL}?${new URLSearchParams({
     client_id: clientId(),
@@ -290,25 +310,40 @@ export function startGoogleLoginFixed(redirectUri: string): GoogleLogin {
       // exchanged. No regex fallback — if the URL won't parse or the state doesn't match,
       // refuse rather than salvage a code we can't tie to this request.
       if (code.startsWith("http://") || code.startsWith("https://") || code.includes("code=")) {
-        const urlParsed = new URL(code); // throws on malformed input → submission refused
+        let urlParsed: URL;
+        try {
+          urlParsed = new URL(code);
+        } catch (e) {
+          fail(e instanceof Error ? e.message : String(e));
+          throw e;
+        }
         const gotState = urlParsed.searchParams.get("state");
-        if (!gotState || gotState !== state) throw new Error("oauth: state mismatch");
+        if (!gotState || gotState !== state) {
+          const e = new Error("oauth: state mismatch");
+          fail(e.message);
+          throw e;
+        }
         const gotCode = urlParsed.searchParams.get("code");
-        if (!gotCode) throw new Error("oauth: no code in callback");
+        if (!gotCode) {
+          const e = new Error("oauth: no code in callback");
+          fail(e.message);
+          throw e;
+        }
         code = gotCode;
       }
       try {
         await exchangeCode(code, verifier, redirectUri);
         settleDone(true);
       } catch (e) {
-        settleDone(false);
+        fail(e instanceof Error ? e.message : String(e));
         throw e;
       }
     },
     cancel() {
-      settleDone(false);
+      fail("canceled");
     },
     done,
+    get error() { return lastError; },
   };
 }
 

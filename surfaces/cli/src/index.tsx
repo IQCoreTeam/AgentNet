@@ -1,10 +1,34 @@
 import { render } from "ink";
 import React from "react";
 import { program } from "commander";
+import { appendFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { DelightProvider } from "./components/DelightProvider.js";
 import { App, type AppOptions } from "./app.js";
 import { detectCli } from "./bootstrap.js";
 import { readPrefsSync, savePrefs } from "./prefs.js";
+
+// Diagnostics from the core/engine layer (codex app-server tracing, the claudeModels probe,
+// bigint's native-binding fallback notice, etc.) are all plain console.error/warn calls —
+// fine for vscode/mobile, where that goes to a log nobody's staring at, but the CLI's stderr
+// IS the visible terminal: every such line punches through the Ink UI mid-render. Route them
+// to a log file instead (same content, just not in front of the user), unless the user asked
+// for exactly this kind of visibility (AGENTNET_DEBUG, or AGENTNET_PERF for the traffic-audit
+// [perf] lines) — then leave the real console methods alone.
+function quietDiagnosticsToFile() {
+  if (process.env.AGENTNET_DEBUG || process.env.AGENTNET_PERF) return;
+  const logFile = join(homedir(), ".agentnet", "cli-debug.log");
+  const redirect = (level: string) => (...args: unknown[]) => {
+    try {
+      appendFileSync(logFile, `[${new Date().toISOString()}] ${level}: ${args.map(String).join(" ")}\n`);
+    } catch {
+      /* best-effort — a logging failure must never break the session */
+    }
+  };
+  console.error = redirect("error");
+  console.warn = redirect("warn");
+}
 
 // Launch the interactive TUI with the given options (and optional session to resume).
 // The TUI needs a real terminal (raw-mode keyboard input); when piped/redirected we
@@ -20,10 +44,16 @@ function launch(options: AppOptions, calmFlag?: boolean) {
     );
     process.exit(1);
   }
+  quietDiagnosticsToFile();
+  // Ink's own render() re-patches console.log/error/warn by default (patchConsole: true)
+  // to inject any stray console output above the live UI — which is exactly what clobbers
+  // our redirect above the moment render() runs, since Ink's patch installs AFTER ours and
+  // forwards straight to the terminal. Disable Ink's patching so our file-redirect sticks.
   render(
     <DelightProvider calm={calm}>
       <App options={options} />
     </DelightProvider>,
+    { patchConsole: false },
   );
 }
 

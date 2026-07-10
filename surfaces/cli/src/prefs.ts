@@ -12,7 +12,10 @@ export type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
 export interface Prefs {
   onboarded?: boolean;
   lastCli?: "claude" | "codex";
-  lastModel?: string;
+  // per-engine: a claude model id (e.g. "sonnet") is meaningless to codex's API and vice
+  // versa, so each engine remembers its own last model rather than sharing one field.
+  lastModelClaude?: string;
+  lastModelCodex?: string;
   lastSessionId?: string;
   lastEffort?: EffortLevel;
   calm?: boolean; // remembered animation preference

@@ -22,7 +22,7 @@ export const SLASH_COMMANDS: SlashCmd[] = [
   { name: "settings", desc: "show current engine/model/effort/cwd" },
   { name: "btw", desc: "side-channel question without interrupting session", args: "<question>" },
   { name: "wallet", desc: "show wallet address" },
-  { name: "storage", desc: "show where sessions save" },
+  { name: "storage", desc: "view/change where sessions save (connect or reconnect cloud)" },
   { name: "iq", desc: "a random IQ fact" },
   { name: "dance", desc: "Iggy dances" },
   { name: "help", desc: "list commands" },
