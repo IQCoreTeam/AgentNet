@@ -24,7 +24,13 @@ import java.io.File
 class Installer(private val ctx: Context) {
     companion object {
         private const val TAG = "AgentNet/Installer"
-        private const val MARKER = ".installed-v2"
+        // Bumped v2 -> v3 to force a one-time rootfs re-extraction on existing installs:
+        // the hardlink-extraction fix (guest-absolute symlinks) lives in how the rootfs is
+        // unpacked, so binaries like claude stay broken until the rootfs is laid down again.
+        // The MARKER only re-extracts on a fresh marker, so bumping it is the only way the
+        // fix reaches devices that update in place. Re-extract is from the bundled tar (no
+        // network download).
+        private const val MARKER = ".installed-v3"
         // Server bundle is small and changes every app build; its marker holds the app's
         // versionCode so an APK update re-extracts ONLY the server bundle (the heavy
         // rootfs is left alone). Without this, the idempotent MARKER froze the server
