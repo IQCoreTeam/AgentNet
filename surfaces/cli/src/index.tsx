@@ -49,11 +49,14 @@ function launch(options: AppOptions, calmFlag?: boolean) {
   // to inject any stray console output above the live UI — which is exactly what clobbers
   // our redirect above the moment render() runs, since Ink's patch installs AFTER ours and
   // forwards straight to the terminal. Disable Ink's patching so our file-redirect sticks.
+  // exitOnCtrlC:false — Ink's default hard-quits on Ctrl+C, which kills a running turn
+  // abruptly and skips our own teardown. We handle Ctrl+C ourselves instead (interrupt a
+  // live turn, then quit on a second press), so it behaves like the other agent CLIs.
   render(
     <DelightProvider calm={calm}>
       <App options={options} />
     </DelightProvider>,
-    { patchConsole: false },
+    { patchConsole: false, exitOnCtrlC: false },
   );
 }
 

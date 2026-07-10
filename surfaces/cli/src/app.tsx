@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Box, Text } from "ink";
+import { Box, Text, useApp, useInput } from "ink";
 import type { AgentRuntime } from "@iqlabs-official/agent-sdk/runtime/contract";
 import { autoApprove, type StorageConfig, type CliReport } from "@iqlabs-official/agent-sdk";
 import type { CloudStatus } from "@iqlabs-official/agent-sdk/account/storage/mirror";
@@ -53,6 +53,14 @@ export function App({ options }: { options: AppOptions }) {
   // reported by mirrorStorage after each cloud write attempt — drives the StatusLine
   // sync chip so a dead/offline cloud is visible instead of silently drifting.
   const [cloudStatus, setCloudStatus] = useState<CloudStatus | null>(null);
+
+  const { exit } = useApp();
+  // Ctrl+C during boot/onboarding/error — nothing's running yet, so quit straight away.
+  // Ink's built-in exitOnCtrlC is off (see index.tsx); in the chat phase Chat owns Ctrl+C
+  // (interrupt-then-quit), so this stays out of its way.
+  useInput((input, key) => {
+    if (key.ctrl && input === "c") exit();
+  }, { isActive: phase !== "chat" });
 
   const set = (i: number, patch: Partial<BootStep>) =>
     setSteps((s) => s.map((step, j) => (j === i ? { ...step, ...patch } : step)));

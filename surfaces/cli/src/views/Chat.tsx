@@ -6,10 +6,12 @@ import type { CloudStatus } from "@iqlabs-official/agent-sdk/account/storage/mir
 import type { ApprovalRequest } from "@iqlabs-official/agent-sdk/runtime/approval/channel";
 import type { AppOptions } from "../app.js";
 import type { InkApprovalChannel } from "../InkApprovalChannel.js";
+import { SLASH_COMMANDS } from "../commands.js";
 import { useChat, type Engine } from "../hooks/useChat.js";
 import { useFrameLoop } from "../hooks/useFrameLoop.js";
 import {
   getStorageInfo,
+  disconnectCloud,
   getCodexApiKey,
   STORAGE_OPTIONS,
   type StorageKind,
@@ -190,6 +192,8 @@ export function Chat({
   const [showAccount, setShowAccount] = useState(false);
   const [accountLines, setAccountLines] = useState<string[]>([]);
   const [showSettings, setShowSettings] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const [showKeys, setShowKeys] = useState(false);
   // welcome control panel: focus stays on the composer by default; Ctrl+S moves focus into
   // the panel to edit settings. showCloud opens the storage picker from the panel's cloud row.
   const [panelFocused, setPanelFocused] = useState(false);
@@ -209,6 +213,10 @@ export function Chat({
   const [idle, setIdle] = useState(false);
   const prevBusy = useRef(false);
   const konami = useRef<string[]>([]);
+  // Ctrl+C is a two-step quit: a live turn gets interrupted first, and a press while nothing
+  // is running (or a second press within the window) actually leaves — so one stray Ctrl+C
+  // never nukes an in-flight turn. Cleared after 1.5s so the "again to quit" arming lapses.
+  const ctrlCArmed = useRef(false);
 
   // celebration on turn completion: confetti if the last tool looks like a win, else a
   // quick sparkle. Disabled visually by Celebrate under --calm.
@@ -248,6 +256,25 @@ export function Chat({
     const t = setTimeout(() => setIdle(true), 60_000);
     return () => clearTimeout(t);
   }, [chat.messages.length, chat.busy, notice]);
+
+  // Ctrl+C owns quit now that Ink's exitOnCtrlC is off (see index.tsx). A running turn is
+  // interrupted first; a press while idle (or a second press within the window) exits — so
+  // it lines up with claude/codex and never hard-kills a turn on a single stray keypress.
+  // Left always-active (no isActive gate) so it still works with any overlay open.
+  useInput((input, key) => {
+    if (!key.ctrl || input !== "c") return;
+    if (chat.busy) {
+      chat.interrupt();
+      ctrlCArmed.current = true;
+      setNotice("interrupted. press Ctrl+C again to quit");
+      setTimeout(() => { ctrlCArmed.current = false; }, 1500);
+      return;
+    }
+    if (ctrlCArmed.current) return exit();
+    ctrlCArmed.current = true;
+    setNotice("press Ctrl+C again to quit");
+    setTimeout(() => { ctrlCArmed.current = false; }, 1500);
+  });
 
   // Esc cancels a running turn (only while busy and no approval pending).
   useInput(
@@ -366,6 +393,16 @@ export function Chat({
   useInput(
     (_input, key) => { if (key.escape || key.return) setShowSettings(false); },
     { isActive: showSettings },
+  );
+
+  useInput(
+    (_input, key) => { if (key.escape || key.return) setShowHelp(false); },
+    { isActive: showHelp },
+  );
+
+  useInput(
+    (_input, key) => { if (key.escape || key.return) setShowKeys(false); },
+    { isActive: showKeys },
   );
 
   // Esc closes the cloud/storage picker (Select handles its own arrows + enter).
@@ -668,6 +705,22 @@ export function Chat({
         // line's "reconnect needed" chip, which points here).
         setShowCloud(true);
         return;
+      case "logout":
+        // Sign out of cloud: disconnectCloud drops the token + storage kind (keeps creds
+        // for a later reconnect), then rebuild so the live runtime stops mirroring — same
+        // rebuild the storage picker uses, just in the disconnect direction.
+        void (async () => {
+          const info = await getStorageInfo();
+          if (!info) {
+            setNotice("not signed in to any cloud (already local-only)");
+            return;
+          }
+          await disconnectCloud();
+          await onRebuildRuntime();
+          setCloud(null);
+          setNotice(`signed out of ${info.kind}${info.account ? ` (${info.account})` : ""} · now local-only`);
+        })();
+        return;
       case "account":
         void (async () => {
           const lines: string[] = [];
@@ -698,7 +751,12 @@ export function Chat({
         startBtwQuery(arg.trim());
         return;
       case "help":
-        setNotice("/new /sessions /resume /more /compact /clear /copy /models /engine /effort /context /account /settings /wallet /storage /btw <question> /iq /quit · !cmd shell · Esc cancels · Ctrl+A/E/W/U edit");
+        // A dismissable overlay (not a one-line notice that vanishes on the next keystroke),
+        // rendered straight from SLASH_COMMANDS so the list never drifts from the registry.
+        setShowHelp(true);
+        return;
+      case "keys":
+        setShowKeys(true);
         return;
       default:
         setNotice(`unknown command: /${cmd} (try /help)`);
@@ -756,6 +814,47 @@ export function Chat({
           <Box marginTop={1}>
             <Text dimColor>{"/engine claude|codex  ·  /model <name>  ·  /models  ·  /effort <level>  ·  /efforts  to change"}</Text>
           </Box>
+          <Box marginTop={1}><Text dimColor>Esc / Enter  close</Text></Box>
+        </Box>
+      </Box>
+    );
+  }
+
+  // /help overlay — the slash-command list, sourced from the shared registry so it stays
+  // in lockstep with autocomplete instead of a hand-maintained string that drifts.
+  if (showHelp) {
+    return (
+      <Box flexDirection="column" paddingX={1}>
+        <Box borderStyle="round" borderColor={colors.iqCyan} flexDirection="column" paddingX={2} paddingY={1}>
+          <Text bold color={colors.iqCyan}>commands</Text>
+          {SLASH_COMMANDS.map((c) => (
+            <Text key={c.name} dimColor>{`/${c.name}${c.args ? ` ${c.args}` : ""}`.padEnd(24)}{c.desc}</Text>
+          ))}
+          <Box marginTop={1}><Text dimColor>!cmd runs a shell command  ·  /keys for shortcuts</Text></Box>
+          <Box marginTop={1}><Text dimColor>Esc / Enter  close</Text></Box>
+        </Box>
+      </Box>
+    );
+  }
+
+  // /keys overlay — keyboard shortcuts, which are otherwise scattered across the composer
+  // and the approval prompt with no single place to look them up.
+  if (showKeys) {
+    return (
+      <Box flexDirection="column" paddingX={1}>
+        <Box borderStyle="round" borderColor={colors.iqCyan} flexDirection="column" paddingX={2} paddingY={1}>
+          <Text bold color={colors.iqCyan}>keyboard shortcuts</Text>
+          <Text dimColor>{"Enter".padEnd(16)}send message</Text>
+          <Text dimColor>{"Ctrl+C".padEnd(16)}interrupt a turn · again to quit</Text>
+          <Text dimColor>{"Esc".padEnd(16)}cancel a running turn · close a panel</Text>
+          <Text dimColor>{"/  @  !".padEnd(16)}commands · file mentions · shell command</Text>
+          <Text dimColor>{"Ctrl+A / Ctrl+E".padEnd(16)}jump to line start / end</Text>
+          <Text dimColor>{"Ctrl+W".padEnd(16)}delete previous word</Text>
+          <Text dimColor>{"Ctrl+U / Ctrl+K".padEnd(16)}delete to line start / end</Text>
+          <Text dimColor>{"Ctrl+V".padEnd(16)}paste an image from the clipboard</Text>
+          <Text dimColor>{"\\ then Enter".padEnd(16)}insert a newline</Text>
+          <Text dimColor>{"Ctrl+S".padEnd(16)}focus the welcome panel (Esc returns)</Text>
+          <Box marginTop={1}><Text dimColor>at an approval prompt:  y accept · a always · n deny · e edit · r reason · d diff</Text></Box>
           <Box marginTop={1}><Text dimColor>Esc / Enter  close</Text></Box>
         </Box>
       </Box>
