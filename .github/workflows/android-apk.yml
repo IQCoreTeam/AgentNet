@@ -164,14 +164,15 @@ jobs:
       # Publish to the rolling `android-latest` release so the public download link
       # (.../releases/download/android-latest/app-debug.apk) always serves the newest build.
       # arm64 only, so a manual x86_64 build doesn't clobber the shareable arm64 APK.
-      # The flavor split names the file app-legacy-debug.apk, but the public link people already
-      # have points at app-debug.apk — upload it under that display name (gh's `file#name` syntax)
-      # so the shared URL keeps working.
+      # The flavor split names the file app-legacy-debug.apk, but the public download URL is keyed
+      # by the asset NAME, which must stay app-debug.apk. gh's `file#label` syntax only sets the
+      # label (not the name), so copy the file to app-debug.apk and upload that — then --clobber
+      # replaces the existing asset in place and the shared URL keeps working.
       - name: Update android-latest release
         if: env.ABI == 'arm64'
         run: |
-          APK=surfaces/android/app/build/outputs/apk/legacy/debug/app-legacy-debug.apk
+          cp surfaces/android/app/build/outputs/apk/legacy/debug/app-legacy-debug.apk app-debug.apk
           gh release view android-latest >/dev/null 2>&1 \
             || gh release create android-latest --title "AgentNet Android (latest)" --latest \
                  --notes "Auto-built from main. Download app-debug.apk and install (allow unknown sources)."
-          gh release upload android-latest "$APK#app-debug.apk" --clobber
+          gh release upload android-latest app-debug.apk --clobber
