@@ -30,12 +30,16 @@ on:
         required: false
         default: ""
   # Auto-build a fresh signed APK whenever main gets an app/server/UI change, so the latest
-  # team-signed APK is always waiting as an artifact. Paths-filtered so doc-only pushes don't
-  # build. (Public repo -> GitHub-hosted minutes are free.)
+  # team-signed APK is always waiting as an artifact. Scoped to exactly what the build below
+  # bundles into the APK: the android app, plus the localhost (server) and webview (UI) dists
+  # it repacks each run, plus the shared packages those two import. The cli and vscode surfaces
+  # never ship in the APK, so their changes must NOT trigger a (wasteful, re-publishing) build.
   push:
     branches: [main]
     paths:
-      - "surfaces/**"
+      - "surfaces/android/**"
+      - "surfaces/localhost/**"
+      - "surfaces/webview/**"
       - "packages/**"
       - ".github/workflows/android-apk.yml"
 
