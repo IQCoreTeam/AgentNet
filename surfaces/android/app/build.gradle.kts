@@ -24,41 +24,25 @@ android {
     defaultConfig {
         applicationId = "com.iqlabs.agentnet"
         minSdk = 24
-        versionCode = 1
-        versionName = "0.1.0"
+        // targetSdk 35 is our standard. We never direct-execve guest binaries; proot loads them via
+        // its own loader mmap, which survives the targetSdk 35 SELinux W^X policy. Verified on device
+        // (Seeker / Android 16 + pointer tagging, a worst-case target): node, codex and claude all
+        // ran with no exec/mmap denials, so no linker-exec routing is needed. This is the same
+        // approach Play-Store Termux uses to run a proot-distro glibc userland at target 29+. minSdk
+        // stays 24 so older phones still install; appId + signing are unchanged, so shipping this is
+        // an in-place upgrade over the older targetSdk-28 build and never wipes the user's rootfs.
+        targetSdk = 35
+        // Play requires a strictly increasing versionCode for every upload to a track. CI passes
+        // the next number via ANDROID_VERSION_CODE; local/debug builds fall back to 1 unchanged.
+        versionCode = (providers.environmentVariable("ANDROID_VERSION_CODE").orNull
+            ?: localProperties.getProperty("versionCode"))?.toInt() ?: 1
+        versionName = providers.environmentVariable("ANDROID_VERSION_NAME").orNull
+            ?: localProperties.getProperty("versionName", "0.1.0")
         buildConfigField(
             "String",
             "GOOGLE_OAUTH_CLIENT_ID",
             "\"${googleOAuthClientId.replace("\\", "\\\\").replace("\"", "\\\"")}\""
         )
-    }
-
-    // targetSdk is a per-flavor dimension, not a fixed value, so one codebase ships both the
-    // proven legacy engine and the modern-target variant we are bringing up. applicationId and
-    // signing stay IDENTICAL across flavors, so switching flavor is an in-place upgrade that
-    // never wipes the user's rootfs — do not add an applicationIdSuffix.
-    flavorDimensions += "execTarget"
-    productFlavors {
-        create("legacy") {
-            dimension = "execTarget"
-            // targetSdk 28 is load-bearing here: Android 10+ (target 29+) enforces SELinux W^X,
-            // which blocks executing binaries extracted into app data. We run node + the proot
-            // guest's binaries from app storage, so the legacy flavor keeps the pre-29 exemption.
-            // Termux (F-Droid) pins the same target for the same reason. This is today's shipping
-            // behavior; keep it unchanged until the modern flavor proves out.
-            targetSdk = 28
-            buildConfigField("String", "EXEC_TARGET", "\"legacy\"")
-        }
-        create("modern") {
-            dimension = "execTarget"
-            // targetSdk 35 gives up the W^X exemption on purpose. This flavor is where we bring up
-            // a modern target: guest exec will be routed through /system/bin/linker64 (the
-            // system_linker_exec technique) so app-storage binaries still run. Until that routing
-            // lands, guest binaries are EXPECTED to fail to exec at runtime here — that failure is
-            // the signal we are probing for, not a regression.
-            targetSdk = 35
-            buildConfigField("String", "EXEC_TARGET", "\"modern\"")
-        }
     }
 
     buildFeatures {
@@ -84,6 +68,29 @@ android {
         }
     }
 
+    // Release signing = the Play "upload key". Fully env-driven so the private key NEVER lives in
+    // this public repo: CI decodes the keystore from a secret and exports these vars; locally you
+    // can put the same values in local.properties. Unlike the debug keystore, the passwords ARE
+    // secrets, so there is no hardcoded fallback. When none of this is set (every normal build),
+    // no release signing config is created and a release build stays unsigned — nothing else
+    // changes. Google re-signs the uploaded AAB with the Play-managed app key (Play App Signing),
+    // so this upload key can be rotated without breaking installs.
+    val releaseStoreFile = (providers.environmentVariable("ANDROID_RELEASE_KEYSTORE").orNull
+        ?: localProperties.getProperty("releaseKeystore"))?.let { rootProject.file(it) }
+    if (releaseStoreFile != null && releaseStoreFile.exists()) {
+        signingConfigs {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = providers.environmentVariable("ANDROID_RELEASE_STORE_PASSWORD").orNull
+                    ?: localProperties.getProperty("releaseStorePassword")
+                keyAlias = providers.environmentVariable("ANDROID_RELEASE_KEY_ALIAS").orNull
+                    ?: localProperties.getProperty("releaseKeyAlias")
+                keyPassword = providers.environmentVariable("ANDROID_RELEASE_KEY_PASSWORD").orNull
+                    ?: localProperties.getProperty("releaseKeyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -91,6 +98,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Signed only when the release upload key is configured (CI/Play builds); otherwise
+            // findByName returns null and the release build stays unsigned, same as before.
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 
