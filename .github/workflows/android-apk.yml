@@ -135,9 +135,15 @@ jobs:
           KS_B64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_B64 }}
         run: printf '%s' "$KS_B64" | base64 -d > surfaces/android/agentnet-debug.keystore
 
+      # Ship the `legacy` flavor (targetSdk 28): it keeps the pre-29 W^X exemption that runs
+      # node + the proot guest's binaries from app storage, and is the proven, on-device-tested
+      # variant. The `modern` flavor (targetSdk 35) is validated on hardware but not yet the
+      # public download — build it explicitly here only once it is. Do NOT use bare
+      # `assembleDebug`: with flavors it builds BOTH variants and writes to per-flavor dirs,
+      # so the output path below would no longer resolve.
       - name: Build signed debug APK
         working-directory: surfaces/android
-        run: ./gradlew --no-daemon assembleDebug
+        run: ./gradlew --no-daemon assembleLegacyDebug
 
       # SHA-1 is a public fingerprint (not the key), safe to log — proves the team key signed it.
       - name: Print signing SHA-1
@@ -151,18 +157,21 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: agentnet-apk-${{ env.ABI }}
-          path: surfaces/android/app/build/outputs/apk/debug/app-debug.apk
+          path: surfaces/android/app/build/outputs/apk/legacy/debug/app-legacy-debug.apk
           retention-days: 7
           if-no-files-found: error
 
       # Publish to the rolling `android-latest` release so the public download link
       # (.../releases/download/android-latest/app-debug.apk) always serves the newest build.
       # arm64 only, so a manual x86_64 build doesn't clobber the shareable arm64 APK.
+      # The flavor split names the file app-legacy-debug.apk, but the public link people already
+      # have points at app-debug.apk — upload it under that display name (gh's `file#name` syntax)
+      # so the shared URL keeps working.
       - name: Update android-latest release
         if: env.ABI == 'arm64'
         run: |
-          APK=surfaces/android/app/build/outputs/apk/debug/app-debug.apk
+          APK=surfaces/android/app/build/outputs/apk/legacy/debug/app-legacy-debug.apk
           gh release view android-latest >/dev/null 2>&1 \
             || gh release create android-latest --title "AgentNet Android (latest)" --latest \
                  --notes "Auto-built from main. Download app-debug.apk and install (allow unknown sources)."
-          gh release upload android-latest "$APK" --clobber
+          gh release upload android-latest "$APK#app-debug.apk" --clobber

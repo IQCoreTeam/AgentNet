@@ -24,11 +24,6 @@ android {
     defaultConfig {
         applicationId = "com.iqlabs.agentnet"
         minSdk = 24
-        // targetSdk 28 is load-bearing: Android 10+ (target 29+) enforces SELinux W^X,
-        // which blocks executing binaries extracted into app data. We run node + the
-        // proot guest's binaries from app storage, so we need the legacy exemption.
-        // Termux (F-Droid) pins the same target for the same reason.
-        targetSdk = 28
         versionCode = 1
         versionName = "0.1.0"
         buildConfigField(
@@ -36,6 +31,34 @@ android {
             "GOOGLE_OAUTH_CLIENT_ID",
             "\"${googleOAuthClientId.replace("\\", "\\\\").replace("\"", "\\\"")}\""
         )
+    }
+
+    // targetSdk is a per-flavor dimension, not a fixed value, so one codebase ships both the
+    // proven legacy engine and the modern-target variant we are bringing up. applicationId and
+    // signing stay IDENTICAL across flavors, so switching flavor is an in-place upgrade that
+    // never wipes the user's rootfs — do not add an applicationIdSuffix.
+    flavorDimensions += "execTarget"
+    productFlavors {
+        create("legacy") {
+            dimension = "execTarget"
+            // targetSdk 28 is load-bearing here: Android 10+ (target 29+) enforces SELinux W^X,
+            // which blocks executing binaries extracted into app data. We run node + the proot
+            // guest's binaries from app storage, so the legacy flavor keeps the pre-29 exemption.
+            // Termux (F-Droid) pins the same target for the same reason. This is today's shipping
+            // behavior; keep it unchanged until the modern flavor proves out.
+            targetSdk = 28
+            buildConfigField("String", "EXEC_TARGET", "\"legacy\"")
+        }
+        create("modern") {
+            dimension = "execTarget"
+            // targetSdk 35 gives up the W^X exemption on purpose. This flavor is where we bring up
+            // a modern target: guest exec will be routed through /system/bin/linker64 (the
+            // system_linker_exec technique) so app-storage binaries still run. Until that routing
+            // lands, guest binaries are EXPECTED to fail to exec at runtime here — that failure is
+            // the signal we are probing for, not a regression.
+            targetSdk = 35
+            buildConfigField("String", "EXEC_TARGET", "\"modern\"")
+        }
     }
 
     buildFeatures {

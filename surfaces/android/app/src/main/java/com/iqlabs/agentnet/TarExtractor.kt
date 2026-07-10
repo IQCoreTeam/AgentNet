@@ -70,10 +70,17 @@ object TarExtractor {
                         clobber(target) // a dir/file may already sit here; remove it first
                         runCatching { Os.symlink(linkName, target.absolutePath) }
                     }
-                    '1' -> { // hardlink: fall back to a symlink into the same rootfs
+                    '1' -> { // hardlink: app storage has no hardlinks, so emulate with a symlink.
+                        // The tar stores the link target relative to the rootfs ROOT (e.g.
+                        // "./usr/bin/x"), so point the symlink at the GUEST-absolute path ("/usr/bin/x")
+                        // — that is what resolves inside proot's remapped root. The host-absolute path
+                        // (dest + linkName, e.g. /data/.../rootfs/usr/bin/x) resolves on the host but
+                        // DANGLES inside the guest, which is what broke `claude` (a hardlink to its
+                        // native binary) with spawn ENOENT.
                         ensureDirectory(target.parentFile)
                         clobber(target)
-                        runCatching { Os.symlink(File(dest, linkName).absolutePath, target.absolutePath) }
+                        val guestTarget = "/" + linkName.removePrefix("./").removePrefix("/")
+                        runCatching { Os.symlink(guestTarget, target.absolutePath) }
                     }
                     '0', ' ' -> { // regular file
                         ensureDirectory(target.parentFile)
