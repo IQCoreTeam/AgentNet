@@ -21,6 +21,7 @@
 set -euo pipefail
 
 ABI="${ABI:-arm64}"          # arm64 | x86_64
+AGENTNET_ROOTFS_BASE_IMAGE="${AGENTNET_ROOTFS_BASE_IMAGE:-unknown}"
 case "$ABI" in
   arm64)  PROOT_ARCH="aarch64" ;;
   x86_64) PROOT_ARCH="x86_64" ;;
@@ -35,6 +36,7 @@ WORK="${WORK:-$ANDROID_DIR/.assets-build}"
 mkdir -p "$ASSETS" "$WORK"
 
 echo "==> ABI=$ABI  proot=$PROOT_ARCH"
+echo "==> rootfs base image: $AGENTNET_ROOTFS_BASE_IMAGE"
 echo "==> assets -> $ASSETS"
 echo "==> work   -> $WORK"
 
@@ -167,14 +169,18 @@ apt-get clean && rm -rf /var/lib/apt/lists/*
 # ship the agent environment guidance into the guest
 cp "$ANDROID_DIR/guest/AGENTS.md" /root/AGENTS.md
 
-# 24.04's glibc registers rseq per-thread; proot passes the rseq syscall through
-# untranslated, which corrupts traced processes under load (issue #112, A/B-verified on
-# device). The app covers node + children via guest env (ServerManager.buildGuestEnv);
-# this profile.d covers any LOGIN shell entered another way (adb + manual proot, the
-# future in-app terminal) — same pattern as proot-distro's inject_termux_profile.
+# Keep rseq disabled for login shells when the guest libc supports this tunable. issue
+# #112 is fixed by shipping the 22.04 rootfs again, but this remains a low-cost guard if
+# a future asset build returns to a newer glibc under proot. The app covers node +
+# children via guest env; this profile.d covers adb/manual proot entry too.
 cat > /etc/profile.d/00-agentnet-rseq.sh <<'RSEQ'
 export GLIBC_TUNABLES=glibc.pthread.rseq=0
 RSEQ
+cat > "$ASSETS/agentnet-rootfs.env" <<EOF
+AGENTNET_ROOTFS_BASE_IMAGE=$AGENTNET_ROOTFS_BASE_IMAGE
+AGENTNET_ROOTFS_ABI=$ABI
+AGENTNET_ROOTFS_PROOT_ARCH=$PROOT_ARCH
+EOF
 
 echo "    packing this container's / as the rootfs tar (plain tar; TarExtractor reads .tar)"
 # Write the tar OUTSIDE the tree we're taring (/var/tmp is on the container's own fs and

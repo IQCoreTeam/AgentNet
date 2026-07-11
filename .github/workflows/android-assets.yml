@@ -53,7 +53,8 @@ jobs:
           docker run --rm --platform linux/arm64 \
             -v "${{ github.workspace }}:/work" -w /work \
             -e ABI=${{ github.event.inputs.abi }} -e ALLOW_CROSS=1 \
-            ubuntu:24.04 \
+            -e AGENTNET_ROOTFS_BASE_IMAGE=ubuntu:22.04 \
+            ubuntu:22.04 \
             bash -c '
               set -e
               apt-get update
