@@ -44,6 +44,14 @@ class ServerManager(private val ctx: Context) {
             "TERM=xterm-256color",
             "LANG=C.UTF-8",
             "TMPDIR=/tmp",
+            // Ubuntu 24.04's glibc (2.39) registers rseq for every thread, which proot's
+            // ptrace emulation on Android kernels handles wrong — threaded workloads see
+            // corrupted state. The visible casualty is `git index-pack` (multi-threaded
+            // delta resolution), which makes EVERY `git clone` fail connectivity checks
+            // ("remote did not send all necessary objects", issue #112). Same workaround
+            // the Termux/proot-distro fleet uses for 24.04 guests. Set here so node and
+            // every child it spawns (claude/codex/git) inherit it.
+            "GLIBC_TUNABLES=glibc.pthread.rseq=0",
             "AGENTNET_PORT=${Paths.PORT}",
             // the React SPA ships alongside the server bundle (build-assets.sh packs it at
             // ./webview); point the host at it so it serves the real UI, not the fallback.
