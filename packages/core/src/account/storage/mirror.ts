@@ -5,7 +5,7 @@
 //   list  → union of local + cloud, deduped.
 // Satisfies StorageAdapter, so runtime/store don't change — this is one layer on top.
 
-import type { StorageAdapter } from "../../runtime/contract.js";
+import type { CloudListState, StorageAdapter } from "../../runtime/contract.js";
 
 // onCloudStatus (optional): notified after each cloud write attempt — "ok" on
 // success, "error" + message on failure. The UI uses it to show whether the drive
@@ -98,6 +98,10 @@ export function mirrorStorage(
     pendingFlush.set(sessionId, t);
   };
 
+  // Outcome of the most recent list() union. Starts "ok" when a cloud is configured
+  // (nothing has failed yet); flips per list() call. "none" is a configuration fact.
+  let lastListState: CloudListState = cloud ? "ok" : "none";
+
   return {
     async put(sessionId, blob) {
       await local.put(sessionId, blob);
@@ -134,14 +138,27 @@ export function mirrorStorage(
       if (cloud) {
         const t0 = Date.now();
         try {
-          for (const id of await cloud.list()) ids.add(id);
+          for (const id of await withCloudTimeout(cloud.list())) ids.add(id);
           if (process.env.AGENTNET_PERF) console.error(`[perf] cloud.list ${Date.now() - t0}ms`);
-        } catch {
-          /* offline — show what local has */
+          lastListState = "ok";
+        } catch (e) {
+          // The union silently degrading to local-only is how a dead sign-in hid whole
+          // devices' sessions with no signal (issue #107 follow-up). Classify + record so
+          // the session list can SAY it is local-only, and report through the same status
+          // channel writes use.
+          const msg = e instanceof Error ? e.message : String(e);
+          lastListState = isReauthError(msg) ? "reauth" : "transient";
+          onCloudStatus?.({ ok: false, error: msg, reason: lastListState });
         }
       }
       return [...ids];
     },
+
+    // How the last list() union went: "none" = no cloud configured (local-only by
+    // choice), "ok" = union included the cloud, "reauth"/"transient" = the cloud tier
+    // FAILED and the union is silently local-only (reauth needs the user; transient may
+    // self-heal). Surfaces tag the session list with this so "local only" is visible.
+    cloudState: () => lastListState,
 
     // Fast, local-only listing (no network). The session store uses this to find a
     // session's newest page without a Drive round-trip when local already holds it —

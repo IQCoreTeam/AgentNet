@@ -49,7 +49,15 @@ export interface StorageAdapter {
   // explicit (re)connect, so it never turns into a per-launch cloud storm. Uploads only
   // the genuinely-missing keys (0 when already in sync) and aborts if the cloud is dead.
   backfill?(): Promise<{ uploaded: number; missing: number }>;
+  // OPTIONAL cloud health of the last list() union (only the mirror implements it).
+  // "none" = no cloud configured; "ok" = the union really included the cloud;
+  // "reauth"/"transient" = the cloud tier failed and list() fell back to local-only.
+  // Session-list surfaces read this to label a silently-degraded list instead of
+  // letting "cloud is down" look identical to "those sessions don't exist".
+  cloudState?(): CloudListState;
 }
+
+export type CloudListState = "ok" | "reauth" | "transient" | "none";
 
 // ── chat message ────────────────────────────────────────
 // `partial` lets us start with whole-turn messages and add streaming deltas
@@ -161,6 +169,11 @@ export interface AgentRuntime {
 
   // list the wallet's saved sessions (for the UI's session list)
   listSessions(): Promise<SessionMeta[]>;
+
+  // OPTIONAL cloud health of the storage behind listSessions (see
+  // StorageAdapter.cloudState). Read AFTER listSessions so it reflects that very union.
+  // Surfaces send it with the session list so the UI can mark a degraded, local-only list.
+  cloudState?(): CloudListState;
 
   // load a saved session's NEWEST page (paginated). Returns the latest messages +
   // whether older pages exist + an opaque cursor for loadMore. Call on resume to

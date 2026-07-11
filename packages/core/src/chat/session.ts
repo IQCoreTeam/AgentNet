@@ -417,7 +417,10 @@ export function createChatSession(
   async function pushSessions() {
     const list = await rt.listSessions();
     const activeId = slot().handle?.sessionId ?? slot().pendingId;
-    transport.send({ type: "sessions", list, activeId });
+    // cloud reflects THIS list's union (read after listSessions): "reauth"/"transient"
+    // mean the cloud tier failed and `list` is silently local-only — the UI labels it
+    // so missing remote sessions read as "sync is down", not "they don't exist".
+    transport.send({ type: "sessions", list, activeId, cloud: rt.cloudState?.() ?? "none" });
   }
 
   async function pushStorage() {

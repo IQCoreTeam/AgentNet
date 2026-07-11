@@ -285,6 +285,10 @@ export function createRuntime(
       return store.listMine();
     },
 
+    cloudState() {
+      return storage.cloudState?.() ?? "none";
+    },
+
     async loadSession(sessionId: string) {
       return store.loadLatest(sessionId); // newest page + cursor to older
     },

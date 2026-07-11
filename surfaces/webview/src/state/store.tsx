@@ -99,6 +99,10 @@ export interface State {
   // "syncing…" state on initial login (while listMine() does its cloud round-trip) instead
   // of a misleading "No chats yet" before the list has actually been fetched.
   sessionsSynced: boolean;
+  // Cloud health of the last sessions union: "reauth"/"transient" = the list is silently
+  // LOCAL-ONLY (cloud tier failed); the drawer labels it so other devices' sessions read
+  // as "sync down", not "gone". "none" = no cloud configured.
+  sessionsCloud: "ok" | "reauth" | "transient" | "none";
   activeSessionId?: string;
   approvals: ApprovalRequest[];
   storage: { info: unknown; options: unknown; googleCredsConfigured?: boolean } | null;
@@ -151,6 +155,7 @@ const initialState: State = {
   log: [],
   sessions: [],
   sessionsSynced: false,
+  sessionsCloud: "none",
   approvals: [],
   storage: null,
   googleCredsError: null,
@@ -411,6 +416,7 @@ function reducer(state: State, ev: Action): State {
         phase: state.phase === "connecting" || state.phase === "chat" ? "chat" : state.phase,
         sessions: ev.list,
         sessionsSynced: true,
+        sessionsCloud: ev.cloud ?? "none",
         activeSessionId: state.activeSessionId ?? ev.activeId,
       };
     case "loading":

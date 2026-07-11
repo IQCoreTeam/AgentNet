@@ -212,6 +212,21 @@ export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: 
                     <span className="text-[0.78rem]" style={{ color: "var(--an-fg-dim)" }}>Offline · showing saved chats</span>
                   </div>
                 )}
+                {/* Online but the cloud tier failed: this list is silently local-only.
+                    Same calm-band pattern as offline; reauth points at the fix. */}
+                {online && state.sessionsSynced && (state.sessionsCloud === "reauth" || state.sessionsCloud === "transient") && (
+                  <div
+                    className="mb-2 flex items-center gap-2 rounded-xl px-3 py-2"
+                    style={{ background: "var(--an-bg-2)", border: "1px solid var(--an-line)" }}
+                  >
+                    <WifiOffIcon className="h-4 w-4 shrink-0" style={{ color: "var(--an-warn, #e5c07b)" }} />
+                    <span className="text-[0.78rem]" style={{ color: "var(--an-fg-dim)" }}>
+                      {state.sessionsCloud === "reauth"
+                        ? "Cloud sync signed out · showing this device only · reconnect in Storage"
+                        : "Cloud unreachable · showing this device only"}
+                    </span>
+                  </div>
+                )}
                 {/* Offline with nothing cached: a minimal centered state, not an endless spinner. */}
                 {!online && state.sessions.length === 0 ? (
                   <div className="flex flex-col items-center justify-center gap-3 px-4 py-12 text-center" style={{ color: "var(--an-fg-mute)" }}>

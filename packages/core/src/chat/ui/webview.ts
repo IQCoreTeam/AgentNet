@@ -2096,6 +2096,7 @@ export function chatHtml(): string {
   }
   function scheduleStreamRender() { if (!streamRaf) streamRaf = requestAnimationFrame(flushStreamRender); }
   let allSessions = [];     // last sessions payload from extension
+  let cloudListState = 'none'; // cloud health of that payload's union (ok/reauth/transient/none)
   let activeId = null;
   let expanded = false;     // "모두 보기" toggled?
   const COLLAPSED = 5;      // sessions shown before "모두 보기(N)"
@@ -3110,6 +3111,17 @@ export function chatHtml(): string {
   // ---- session list (title + relative time + 모두 보기) ----
   function renderSessions() {
     sessList.innerHTML = '';
+    // A degraded cloud makes this list silently local-only; say so instead of letting
+    // sessions from other devices look deleted. reauth = sign-in dead (user must
+    // reconnect in Storage); transient = network/5xx, may heal on the next refresh.
+    if (cloudListState === 'reauth' || cloudListState === 'transient') {
+      const warn = document.createElement('div');
+      warn.style.cssText = 'padding:4px 8px;font-size:11px;color:var(--vscode-editorWarning-foreground, #e5c07b);opacity:.9';
+      warn.textContent = cloudListState === 'reauth'
+        ? 'Cloud sync signed out. Showing this device only. Reconnect in Storage.'
+        : 'Cloud unreachable. Showing this device only.';
+      sessList.appendChild(warn);
+    }
     emptyEl.style.display = allSessions.length ? 'none' : 'block';
     const shown = expanded ? allSessions : allSessions.slice(0, COLLAPSED);
     for (const s of shown) {
@@ -5268,7 +5280,7 @@ export function chatHtml(): string {
   window.addEventListener('message', (event) => {
     const m = event.data;
     if (m.type === 'message') onMessage(m.msg);
-    else if (m.type === 'sessions') { allSessions = m.list || []; activeId = m.activeId; renderSessions(); }
+    else if (m.type === 'sessions') { allSessions = m.list || []; cloudListState = m.cloud || 'none'; activeId = m.activeId; renderSessions(); }
     else if (m.type === 'notice') renderNotice(m.text || '');
     else if (m.type === 'status') renderStatus(m.status || {});
     else if (m.type === 'loading') showLoading();

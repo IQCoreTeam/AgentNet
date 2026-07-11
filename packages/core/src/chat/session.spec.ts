@@ -350,7 +350,7 @@ describe("chat/session — slash commands", () => {
 
     fromUI({ type: "slashCommand", command: "resume" });
     await flush();
-    expect(transport.send).toHaveBeenCalledWith({ type: "sessions", list: [], activeId: undefined });
+    expect(transport.send).toHaveBeenCalledWith({ type: "sessions", list: [], activeId: undefined, cloud: "none" });
     expect(transport.send).toHaveBeenCalledWith({ type: "notice", text: "Resume: open a session from History." });
   });
 
