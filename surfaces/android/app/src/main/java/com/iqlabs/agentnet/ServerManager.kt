@@ -44,13 +44,15 @@ class ServerManager(private val ctx: Context) {
             "TERM=xterm-256color",
             "LANG=C.UTF-8",
             "TMPDIR=/tmp",
-            // Ubuntu 24.04's glibc (2.39) registers rseq for every thread, which proot's
-            // ptrace emulation on Android kernels handles wrong — threaded workloads see
-            // corrupted state. The visible casualty is `git index-pack` (multi-threaded
-            // delta resolution), which makes EVERY `git clone` fail connectivity checks
-            // ("remote did not send all necessary objects", issue #112). Same workaround
-            // the Termux/proot-distro fleet uses for 24.04 guests. Set here so node and
-            // every child it spawns (claude/codex/git) inherit it.
+            // Ubuntu 24.04's glibc (2.39) registers rseq for every thread. proot does not
+            // translate the rseq syscall AT ALL (it is absent from termux/proot's syscall
+            // table), so kernel-side rseq areas coexist with proot's ptrace rewriting and
+            // corrupt state under a loaded tracer — measured on the Seeker as git clone
+            // failures ("remote did not send all necessary objects" / lost .git files)
+            // whenever git runs beside thread-heavy node under ONE proot (issue #112,
+            // A/B-verified on device). This tunable is glibc's official switch for rseq
+            // (no proot-distro precedent — they don't handle it as of 2026-07). Set here
+            // so node and every child it spawns (claude/codex/git) inherit it.
             "GLIBC_TUNABLES=glibc.pthread.rseq=0",
             "AGENTNET_PORT=${Paths.PORT}",
             // the React SPA ships alongside the server bundle (build-assets.sh packs it at

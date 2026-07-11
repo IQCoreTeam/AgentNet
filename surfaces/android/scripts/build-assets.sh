@@ -167,10 +167,11 @@ apt-get clean && rm -rf /var/lib/apt/lists/*
 # ship the agent environment guidance into the guest
 cp "$ANDROID_DIR/guest/AGENTS.md" /root/AGENTS.md
 
-# 24.04's glibc registers rseq per-thread, which proot's ptrace emulation on Android
-# mishandles (issue #112: every `git clone` fails its connectivity check). The app covers
-# node + children via guest env (ServerManager.buildGuestEnv); this profile.d covers any
-# LOGIN shell entered another way (adb + manual proot, the future in-app terminal).
+# 24.04's glibc registers rseq per-thread; proot passes the rseq syscall through
+# untranslated, which corrupts traced processes under load (issue #112, A/B-verified on
+# device). The app covers node + children via guest env (ServerManager.buildGuestEnv);
+# this profile.d covers any LOGIN shell entered another way (adb + manual proot, the
+# future in-app terminal) — same pattern as proot-distro's inject_termux_profile.
 cat > /etc/profile.d/00-agentnet-rseq.sh <<'RSEQ'
 export GLIBC_TUNABLES=glibc.pthread.rseq=0
 RSEQ
