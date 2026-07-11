@@ -24,14 +24,13 @@ import java.io.File
 class Installer(private val ctx: Context) {
     companion object {
         private const val TAG = "AgentNet/Installer"
-        // Bumped v3 -> v4 to force a one-time rootfs re-extraction on existing installs:
-        // issue #112 is fixed by replacing the Ubuntu 24.04 guest asset with the 22.04
-        // rootfs, so server-bundle-only updates are not enough. The hardlink-extraction
-        // v3 notes still apply: marker bumps are how heavy rootfs fixes reach devices.
-        // The MARKER only re-extracts on a fresh marker, so bumping it is the only way the
-        // fix reaches devices that update in place. Re-extract is from the bundled tar (no
-        // network download).
-        private const val MARKER = ".installed-v4"
+        // Bumped v4 -> v5 to force a one-time rootfs re-extraction on existing installs:
+        // issue #112's real fix ships IN the rootfs (python3-dulwich + the git-clone shim at
+        // /usr/local/bin/git — native git clone is corrupted by proot under targetSdk-35's
+        // untrusted_app domain), so a server-bundle-only update is not enough. Marker bumps
+        // are how heavy rootfs fixes reach devices: the MARKER only re-extracts on a fresh
+        // marker, and the re-extract is from the bundled tar (no network download).
+        private const val MARKER = ".installed-v5"
         // Server bundle is small and changes every app build; its marker holds the app's
         // versionCode so an APK update re-extracts ONLY the server bundle (the heavy
         // rootfs is left alone). Without this, the idempotent MARKER froze the server

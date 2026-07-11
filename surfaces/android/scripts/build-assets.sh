@@ -139,7 +139,9 @@ if [ "$(id -u)" != "0" ]; then
 fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y curl ca-certificates git ripgrep xz-utils
+# python3-dulwich backs the git-clone shim (issue #112): native git clone is corrupted
+# under proot on Android's targetSdk-35 untrusted_app domain; dulwich clones in one process.
+apt-get install -y curl ca-certificates git ripgrep xz-utils python3 python3-dulwich
 # node (NodeSource LTS)
 curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
 apt-get install -y nodejs
@@ -168,6 +170,13 @@ echo "    claude OK: $CLAUDE_BIN -> $(readlink -f "$CLAUDE_BIN")"
 apt-get clean && rm -rf /var/lib/apt/lists/*
 # ship the agent environment guidance into the guest
 cp "$ANDROID_DIR/guest/AGENTS.md" /root/AGENTS.md
+
+# issue #112: install the git-clone shim ahead of /usr/bin/git on PATH. It routes `git clone`
+# through dulwich (single-process, works under targetSdk-35 proot) and passes everything else
+# to the real git. /usr/local/bin is first in the guest PATH (see ServerManager.buildGuestEnv).
+cp "$ANDROID_DIR/guest/agentnet-git-clone.py" /usr/local/bin/agentnet-git-clone.py
+cp "$ANDROID_DIR/guest/git-clone-shim.sh" /usr/local/bin/git
+chmod +x /usr/local/bin/agentnet-git-clone.py /usr/local/bin/git
 
 # Keep rseq disabled for login shells when the guest libc supports this tunable. issue
 # #112 is fixed by shipping the 22.04 rootfs again, but this remains a low-cost guard if
