@@ -19,4 +19,5 @@ plans/raise-targetsdk-exec.md
 plans/modern-rollout-testing.md
 plans/PR-modern-targetsdk.md
 plans/play-release-setup.md
+plans/engine-native-exec.md
 surfaces/android/scripts/probe-modern-exec.sh
