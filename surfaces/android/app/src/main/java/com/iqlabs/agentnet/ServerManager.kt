@@ -44,15 +44,11 @@ class ServerManager(private val ctx: Context) {
             "TERM=xterm-256color",
             "LANG=C.UTF-8",
             "TMPDIR=/tmp",
-            // Ubuntu 24.04's glibc (2.39) registers rseq for every thread. proot does not
-            // translate the rseq syscall AT ALL (it is absent from termux/proot's syscall
-            // table), so kernel-side rseq areas coexist with proot's ptrace rewriting and
-            // corrupt state under a loaded tracer — measured on the Seeker as git clone
-            // failures ("remote did not send all necessary objects" / lost .git files)
-            // whenever git runs beside thread-heavy node under ONE proot (issue #112,
-            // A/B-verified on device). This tunable is glibc's official switch for rseq
-            // (no proot-distro precedent — they don't handle it as of 2026-07). Set here
-            // so node and every child it spawns (claude/codex/git) inherit it.
+            // Keep rseq disabled in the guest. NOT the fix for #112 — the app-domain
+            // (untrusted_app) transport corruption survives rseq-off; the fix is the
+            // git-clone shim in the rootfs. But rseq-under-ptrace is a real, separately
+            // measured corruption vector (flaky-link clones in the runas_app domain fail
+            // ~33% with rseq on, 0% with it off), so this stays as a cheap guard.
             "GLIBC_TUNABLES=glibc.pthread.rseq=0",
             "AGENTNET_PORT=${Paths.PORT}",
             // the React SPA ships alongside the server bundle (build-assets.sh packs it at

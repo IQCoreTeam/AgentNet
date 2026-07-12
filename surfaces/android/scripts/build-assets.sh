@@ -137,7 +137,9 @@ if [ "$(id -u)" != "0" ]; then
 fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y curl ca-certificates git ripgrep xz-utils
+# python3-dulwich backs the git-clone shim (issue #112): native git clone is corrupted
+# under proot on Android's targetSdk-35 untrusted_app domain; dulwich clones in one process.
+apt-get install -y curl ca-certificates git ripgrep xz-utils python3 python3-dulwich
 # node (NodeSource LTS)
 curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
 apt-get install -y nodejs
@@ -167,11 +169,17 @@ apt-get clean && rm -rf /var/lib/apt/lists/*
 # ship the agent environment guidance into the guest
 cp "$ANDROID_DIR/guest/AGENTS.md" /root/AGENTS.md
 
-# 24.04's glibc registers rseq per-thread; proot passes the rseq syscall through
-# untranslated, which corrupts traced processes under load (issue #112, A/B-verified on
-# device). The app covers node + children via guest env (ServerManager.buildGuestEnv);
-# this profile.d covers any LOGIN shell entered another way (adb + manual proot, the
-# future in-app terminal) — same pattern as proot-distro's inject_termux_profile.
+# issue #112: install the git-clone shim ahead of /usr/bin/git on PATH. It routes `git clone`
+# through dulwich (single-process, works under targetSdk-35 proot) and passes everything else
+# to the real git. /usr/local/bin is first in the guest PATH (see ServerManager.buildGuestEnv).
+cp "$ANDROID_DIR/guest/agentnet-git-clone.py" /usr/local/bin/agentnet-git-clone.py
+cp "$ANDROID_DIR/guest/git-clone-shim.sh" /usr/local/bin/git
+chmod +x /usr/local/bin/agentnet-git-clone.py /usr/local/bin/git
+
+# Keep rseq disabled for login shells. Not the fix for #112 (that's the clone shim above —
+# the app-domain transport corruption survives rseq-off), but rseq-under-ptrace is a real,
+# separately-measured corruption vector, so this stays as a low-cost guard. The app covers
+# node + children via guest env; this profile.d covers adb/manual proot entry too.
 cat > /etc/profile.d/00-agentnet-rseq.sh <<'RSEQ'
 export GLIBC_TUNABLES=glibc.pthread.rseq=0
 RSEQ

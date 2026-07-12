@@ -24,13 +24,13 @@ import java.io.File
 class Installer(private val ctx: Context) {
     companion object {
         private const val TAG = "AgentNet/Installer"
-        // Bumped v2 -> v3 to force a one-time rootfs re-extraction on existing installs:
-        // the hardlink-extraction fix (guest-absolute symlinks) lives in how the rootfs is
-        // unpacked, so binaries like claude stay broken until the rootfs is laid down again.
-        // The MARKER only re-extracts on a fresh marker, so bumping it is the only way the
-        // fix reaches devices that update in place. Re-extract is from the bundled tar (no
-        // network download).
-        private const val MARKER = ".installed-v3"
+        // Bumped v3 -> v5 (v4 skipped) to force a one-time rootfs re-extraction on existing
+        // installs: issue #112's fix ships IN the rootfs (python3-dulwich + the git-clone shim
+        // at /usr/local/bin/git — native git clone is corrupted by proot under targetSdk-35's
+        // untrusted_app domain), so a server-bundle-only update is not enough. Marker bumps
+        // are how heavy rootfs fixes reach devices: the MARKER only re-extracts on a fresh
+        // marker, and the re-extract is from the bundled tar (no network download).
+        private const val MARKER = ".installed-v5"
         // Server bundle is small and changes every app build; its marker holds the app's
         // versionCode so an APK update re-extracts ONLY the server bundle (the heavy
         // rootfs is left alone). Without this, the idempotent MARKER froze the server
@@ -107,8 +107,11 @@ class Installer(private val ctx: Context) {
         // keep this dependency-free, we unpack with Android's own gzip/xz is not
         // available, so the rootfs ships as a plain tar (.tar) and we stream-untar it
         // in Kotlin before first proot use.
+        val preservedHome = preserveGuestHome(p)
+        File(p.rootfs).deleteRecursively()
         Paths.dir(p.rootfs)
         TarExtractor.extract(ctx.assets.open("rootfs-$abi.tar"), File(p.rootfs))
+        restoreGuestHome(p, preservedHome)
         configureGuest(p) // DNS/hosts/tmp — Android doesn't provide these to the guest
 
         onProgress("Almost there")
@@ -116,6 +119,37 @@ class Installer(private val ctx: Context) {
 
         File(ctx.filesDir, MARKER).writeText("ok")
         Log.i(TAG, "install complete")
+    }
+
+    private fun preserveGuestHome(p: Paths.Layout): File? {
+        val home = File(p.home)
+        val backup = File(ctx.filesDir, ".guest-home-backup")
+        // If a previous install attempt died between the rootfs delete and restore, the
+        // backup still holds the user's guest /root while home is gone — adopt it instead
+        // of returning null, or that data would be orphaned forever.
+        if (!home.exists()) return backup.takeIf { it.exists() }
+        backup.deleteRecursively()
+        if (home.renameTo(backup)) return backup
+        return runCatching {
+            home.copyRecursively(backup, overwrite = true)
+            backup
+        }.onFailure {
+            Log.w(TAG, "could not preserve guest /root before rootfs replacement", it)
+        }.getOrNull()
+    }
+
+    private fun restoreGuestHome(p: Paths.Layout, preservedHome: File?) {
+        if (preservedHome == null || !preservedHome.exists()) return
+        File(p.home).deleteRecursively()
+        val home = File(p.home)
+        if (!preservedHome.renameTo(home)) {
+            runCatching {
+                preservedHome.copyRecursively(home, overwrite = true)
+                preservedHome.deleteRecursively()
+            }.onFailure {
+                Log.w(TAG, "could not restore preserved guest /root after rootfs replacement", it)
+            }
+        }
     }
 
     // Android exposes neither /etc/resolv.conf nor /etc/hosts to the proot guest, so
