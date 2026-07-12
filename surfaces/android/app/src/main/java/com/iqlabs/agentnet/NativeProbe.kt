@@ -171,6 +171,11 @@ object NativeProbe {
             // FAIL until the T2 redirect shim provides one. A fail here localizes the DNS problem
             // to exactly that shim; a pass would mean the device resolves without it.
             "getent" to listOf("hosts", "api.anthropic.com"),
+            // Basement de-risk (#115 option B): a static-PIE musl binary dropped into the rootfs
+            // bin dir. If route A goes green here, native exec of a non-glibc PIE binary works in
+            // untrusted_app — proving a static-musl node is reachable, without sourcing node yet.
+            // Absent by default (resolve() returns null → MISSING, skipped); push one to test.
+            "nativecheck" to emptyList(),
         )
         return Report(preflight(rootfs, lo), specs.map { (n, args) -> probeOne(lo, n, args, node) })
     }
