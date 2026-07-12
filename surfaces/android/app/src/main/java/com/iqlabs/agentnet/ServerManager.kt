@@ -44,9 +44,11 @@ class ServerManager(private val ctx: Context) {
             "TERM=xterm-256color",
             "LANG=C.UTF-8",
             "TMPDIR=/tmp",
-            // Keep rseq disabled when the guest libc supports this tunable. issue #112 is
-            // fixed by shipping the 22.04 rootfs again, but this remains a low-cost guard
-            // if a future asset build returns to a newer glibc under proot.
+            // Keep rseq disabled in the guest. NOT the fix for #112 — the app-domain
+            // (untrusted_app) transport corruption survives rseq-off; the fix is the
+            // git-clone shim in the rootfs. But rseq-under-ptrace is a real, separately
+            // measured corruption vector (flaky-link clones in the runas_app domain fail
+            // ~33% with rseq on, 0% with it off), so this stays as a cheap guard.
             "GLIBC_TUNABLES=glibc.pthread.rseq=0",
             "AGENTNET_PORT=${Paths.PORT}",
             // the React SPA ships alongside the server bundle (build-assets.sh packs it at

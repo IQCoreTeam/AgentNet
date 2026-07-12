@@ -21,7 +21,6 @@
 set -euo pipefail
 
 ABI="${ABI:-arm64}"          # arm64 | x86_64
-AGENTNET_ROOTFS_BASE_IMAGE="${AGENTNET_ROOTFS_BASE_IMAGE:-unknown}"
 case "$ABI" in
   arm64)  PROOT_ARCH="aarch64" ;;
   x86_64) PROOT_ARCH="x86_64" ;;
@@ -36,7 +35,6 @@ WORK="${WORK:-$ANDROID_DIR/.assets-build}"
 mkdir -p "$ASSETS" "$WORK"
 
 echo "==> ABI=$ABI  proot=$PROOT_ARCH"
-echo "==> rootfs base image: $AGENTNET_ROOTFS_BASE_IMAGE"
 echo "==> assets -> $ASSETS"
 echo "==> work   -> $WORK"
 
@@ -178,18 +176,13 @@ cp "$ANDROID_DIR/guest/agentnet-git-clone.py" /usr/local/bin/agentnet-git-clone.
 cp "$ANDROID_DIR/guest/git-clone-shim.sh" /usr/local/bin/git
 chmod +x /usr/local/bin/agentnet-git-clone.py /usr/local/bin/git
 
-# Keep rseq disabled for login shells when the guest libc supports this tunable. issue
-# #112 is fixed by shipping the 22.04 rootfs again, but this remains a low-cost guard if
-# a future asset build returns to a newer glibc under proot. The app covers node +
-# children via guest env; this profile.d covers adb/manual proot entry too.
+# Keep rseq disabled for login shells. Not the fix for #112 (that's the clone shim above —
+# the app-domain transport corruption survives rseq-off), but rseq-under-ptrace is a real,
+# separately-measured corruption vector, so this stays as a low-cost guard. The app covers
+# node + children via guest env; this profile.d covers adb/manual proot entry too.
 cat > /etc/profile.d/00-agentnet-rseq.sh <<'RSEQ'
 export GLIBC_TUNABLES=glibc.pthread.rseq=0
 RSEQ
-cat > "$ASSETS/agentnet-rootfs.env" <<EOF
-AGENTNET_ROOTFS_BASE_IMAGE=$AGENTNET_ROOTFS_BASE_IMAGE
-AGENTNET_ROOTFS_ABI=$ABI
-AGENTNET_ROOTFS_PROOT_ARCH=$PROOT_ARCH
-EOF
 
 echo "    packing this container's / as the rootfs tar (plain tar; TarExtractor reads .tar)"
 # Write the tar OUTSIDE the tree we're taring (/var/tmp is on the container's own fs and

@@ -24,9 +24,9 @@ import java.io.File
 class Installer(private val ctx: Context) {
     companion object {
         private const val TAG = "AgentNet/Installer"
-        // Bumped v4 -> v5 to force a one-time rootfs re-extraction on existing installs:
-        // issue #112's real fix ships IN the rootfs (python3-dulwich + the git-clone shim at
-        // /usr/local/bin/git — native git clone is corrupted by proot under targetSdk-35's
+        // Bumped v3 -> v5 (v4 skipped) to force a one-time rootfs re-extraction on existing
+        // installs: issue #112's fix ships IN the rootfs (python3-dulwich + the git-clone shim
+        // at /usr/local/bin/git — native git clone is corrupted by proot under targetSdk-35's
         // untrusted_app domain), so a server-bundle-only update is not enough. Marker bumps
         // are how heavy rootfs fixes reach devices: the MARKER only re-extracts on a fresh
         // marker, and the re-extract is from the bundled tar (no network download).
@@ -123,8 +123,11 @@ class Installer(private val ctx: Context) {
 
     private fun preserveGuestHome(p: Paths.Layout): File? {
         val home = File(p.home)
-        if (!home.exists()) return null
-        val backup = File(ctx.filesDir, ".guest-home-before-v4")
+        val backup = File(ctx.filesDir, ".guest-home-backup")
+        // If a previous install attempt died between the rootfs delete and restore, the
+        // backup still holds the user's guest /root while home is gone — adopt it instead
+        // of returning null, or that data would be orphaned forever.
+        if (!home.exists()) return backup.takeIf { it.exists() }
         backup.deleteRecursively()
         if (home.renameTo(backup)) return backup
         return runCatching {

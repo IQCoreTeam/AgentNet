@@ -188,8 +188,7 @@ pnpm --filter agentnet-webview build
 docker run --rm --platform linux/arm64 \
   -v "$(pwd):/work" -w /work \
   -e ABI=arm64 -e ALLOW_CROSS=1 \
-  -e AGENTNET_ROOTFS_BASE_IMAGE=ubuntu:22.04 \
-  ubuntu:22.04 \
+  ubuntu:24.04 \
   bash -c 'apt-get update -qq && apt-get install -y -qq curl ca-certificates xz-utils tar coreutils && bash surfaces/android/scripts/build-assets.sh'
 ```
 This writes the tars into `assets/` and the proot `lib*.so` files into `jniLibs/arm64-v8a/`.

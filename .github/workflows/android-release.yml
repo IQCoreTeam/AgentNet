@@ -110,20 +110,10 @@ jobs:
       - name: Stage assets into the source tree
         run: |
           set -e
-          manifest=ci-assets/assets/agentnet-rootfs.env
-          if [ ! -f "$manifest" ]; then
-            echo "::error::android-assets artifact has no rootfs manifest. Re-run android-assets so releases cannot silently reuse the known-bad Ubuntu 24.04 rootfs."
-            exit 1
-          fi
-          . "$manifest"
-          if [ "${AGENTNET_ROOTFS_BASE_IMAGE:-}" != "ubuntu:22.04" ]; then
-            echo "::error::android-assets artifact was built from ${AGENTNET_ROOTFS_BASE_IMAGE:-unknown}; issue #112 requires ubuntu:22.04. Re-run android-assets."
-            exit 1
-          fi
           mkdir -p surfaces/android/app/src/main/assets
           rm -rf surfaces/android/app/src/main/jniLibs
           cp -R ci-assets/jniLibs surfaces/android/app/src/main/jniLibs
-          cp ci-assets/assets/rootfs-*.tar ci-assets/assets/agentnet-rootfs.env surfaces/android/app/src/main/assets/
+          cp ci-assets/assets/rootfs-*.tar surfaces/android/app/src/main/assets/
           STAGE="$(mktemp -d)/server-bundle"
           mkdir -p "$STAGE/webview"
           cp -R surfaces/localhost/dist/. "$STAGE/"
