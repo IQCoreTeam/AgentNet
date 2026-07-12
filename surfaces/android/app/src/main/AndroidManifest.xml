@@ -63,6 +63,14 @@
             </intent-filter>
         </activity>
 
+        <!-- T0 native-exec probe (#115). Diagnostic only, no launcher entry. Exported so it
+             can be started over adb: `adb shell am start -n com.iqlabs.agentnet/.NativeProbeActivity`.
+             Harmless if triggered by a user (read-only diagnostic); still, no LAUNCHER filter. -->
+        <activity
+            android:name=".NativeProbeActivity"
+            android:exported="true"
+            android:label="AgentNet native probe" />
+
         <service
             android:name=".ServerService"
             android:exported="false"

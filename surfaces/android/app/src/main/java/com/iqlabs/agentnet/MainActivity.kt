@@ -142,8 +142,13 @@ class MainActivity : AppCompatActivity() {
         statusSub = findViewById(R.id.statusSub)
         bootBox = findViewById(R.id.bootBox)
         // The logo breathes while we boot — our "loading" cue instead of a progress bar.
-        findViewById<android.widget.ImageView>(R.id.logo)
-            .startAnimation(android.view.animation.AnimationUtils.loadAnimation(this, R.anim.logo_pulse))
+        findViewById<android.widget.ImageView>(R.id.logo).apply {
+            startAnimation(android.view.animation.AnimationUtils.loadAnimation(this@MainActivity, R.anim.logo_pulse))
+            // Debug-only: long-press the boot logo to open the T0 native-exec probe (#115).
+            if (BuildConfig.DEBUG) setOnLongClickListener {
+                startActivity(Intent(this@MainActivity, NativeProbeActivity::class.java)); true
+            }
+        }
 
         webView.settings.apply {
             javaScriptEnabled = true
