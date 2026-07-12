@@ -44,6 +44,9 @@ object NativeProbe {
 
     enum class Kind { ELF, SCRIPT, MISSING }
 
+    // Whole-sweep result: preflight (why a route COULD fail for boring reasons) + per-binary runs.
+    data class Report(val preflight: String, val targets: List<TargetReport>)
+
     // Derived rootfs layout. Standard Ubuntu arm64 locations; resolved lazily against what
     // actually exists so we don't hardcode a layout the rootfs build might change.
     class Layout(rootfs: String) {
@@ -63,6 +66,22 @@ object NativeProbe {
 
         fun resolve(name: String): String? =
             binDirs.map { "$it/$name" }.firstOrNull { File(it).exists() }
+
+        val libDirs: List<String> get() = libraryPath.split(":")
+    }
+
+    // Route-B preconditions. If any of these are absent, a route-B FAIL is a boring missing-file
+    // problem, NOT "bionic rejects glibc" — the distinction decides whether native exec is dead
+    // or just mis-pathed. Route A only needs the binary + libs on LD_LIBRARY_PATH.
+    private fun preflight(rootfs: String, lo: Layout): String = buildString {
+        fun mark(ok: Boolean) = if (ok) "OK  " else "MISS"
+        val abi = android.os.Build.SUPPORTED_ABIS.joinToString(",")
+        appendLine("--- preflight ---")
+        appendLine("app abi        : $abi")
+        appendLine("${mark(File(LINKER64).exists())} $LINKER64")
+        appendLine("${mark(File(rootfs).isDirectory)} rootfs $rootfs")
+        appendLine("${mark(File(lo.ldSo).exists())} ld.so  ${lo.ldSo}   (route B needs this)")
+        for (d in lo.libDirs) appendLine("${mark(File(d).isDirectory)} lib    $d")
     }
 
     // ── argv builders (pure — the testable core; see selfCheck) ─────────────────────────
@@ -139,10 +158,10 @@ object NativeProbe {
     }
 
     // Full T0 sweep. `rootfs` is Paths.Layout.rootfs. Runs off the UI thread (callers already do).
-    fun sweep(rootfs: String): List<TargetReport> {
+    fun sweep(rootfs: String): Report {
         val lo = Layout(rootfs)
         val node = lo.resolve("node")
-        val targets = listOf(
+        val specs = listOf(
             "node" to listOf("--version"),
             "git" to listOf("--version"),
             "claude" to listOf("--version"),
@@ -153,16 +172,16 @@ object NativeProbe {
             // to exactly that shim; a pass would mean the device resolves without it.
             "getent" to listOf("hosts", "api.anthropic.com"),
         )
-        return targets.map { (n, args) -> probeOne(lo, n, args, node) }
+        return Report(preflight(rootfs, lo), specs.map { (n, args) -> probeOne(lo, n, args, node) })
     }
 
     // Human-readable report for the screen / logcat.
-    fun format(reports: List<TargetReport>): String = buildString {
+    fun format(report: Report): String = buildString {
         appendLine("=== T0 native-exec probe ===")
         appendLine("pid=${OsProcess.myPid()} uid=${OsProcess.myUid()} (untrusted_app domain)")
-        appendLine("linker=$LINKER64")
+        appendLine(report.preflight)
         appendLine()
-        for (r in reports) {
+        for (r in report.targets) {
             appendLine("• ${r.name}  [${r.kind}]  ${r.resolvedPath ?: "NOT FOUND in rootfs"}")
             r.routeB?.let { appendLine("    route B (glibc ld.so): ${verdict(it)}") }
             r.routeA?.let { appendLine("    route A (direct)     : ${verdict(it)}") }
