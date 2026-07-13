@@ -149,9 +149,11 @@ if [ "$(id -u)" != "0" ]; then
 fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-# python3-dulwich backs the git-clone shim (issue #112): native git clone is corrupted
-# under proot on Android's targetSdk-35 untrusted_app domain; dulwich clones in one process.
-apt-get install -y curl ca-certificates git ripgrep xz-utils python3 python3-dulwich
+# python3 kept for general guest use. python3-dulwich dropped with the #112 git-clone shim:
+# the real root cause (proot's --link2symlink faking link() success) is fixed at the proot
+# launch layer (#115/#116, DirectProotExec), so native git clone works and dulwich is no longer
+# needed.
+apt-get install -y curl ca-certificates git ripgrep xz-utils python3
 # node (NodeSource LTS)
 curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
 apt-get install -y nodejs
@@ -181,12 +183,9 @@ apt-get clean && rm -rf /var/lib/apt/lists/*
 # ship the agent environment guidance into the guest
 cp "$ANDROID_DIR/guest/AGENTS.md" /root/AGENTS.md
 
-# issue #112: install the git-clone shim ahead of /usr/bin/git on PATH. It routes `git clone`
-# through dulwich (single-process, works under targetSdk-35 proot) and passes everything else
-# to the real git. /usr/local/bin is first in the guest PATH (see ServerManager.buildGuestEnv).
-cp "$ANDROID_DIR/guest/agentnet-git-clone.py" /usr/local/bin/agentnet-git-clone.py
-cp "$ANDROID_DIR/guest/git-clone-shim.sh" /usr/local/bin/git
-chmod +x /usr/local/bin/agentnet-git-clone.py /usr/local/bin/git
+# issue #112 git-clone shim REMOVED (#115/#116): its root cause — proot's --link2symlink
+# faking link() success under untrusted_app — is fixed at the proot launch layer, so native
+# `git clone` works. No shim shadowing /usr/bin/git anymore; real git is used for every command.
 
 # Keep rseq disabled for login shells. Not the fix for #112 (that's the clone shim above —
 # the app-domain transport corruption survives rseq-off), but rseq-under-ptrace is a real,
