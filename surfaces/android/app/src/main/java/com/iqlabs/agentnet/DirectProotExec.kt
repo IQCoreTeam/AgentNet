@@ -114,6 +114,7 @@ class DirectProotExec(private val layout: Paths.Layout) : GuestExec {
             "-0",                       // present as uid 0 inside the guest (fake root)
             "-b", "/dev",
             "-b", "/proc",
+            *fakeProcBinds().toTypedArray(),  // #117: shadow the /proc files Android denies us
             "-b", "/sys",
             "-b", "${layout.rootfs}/tmp:/dev/shm", // Android has no /dev/shm; bind a guest tmp dir
             "-w", "/root",
@@ -125,6 +126,31 @@ class DirectProotExec(private val layout: Paths.Layout) : GuestExec {
         val inner = "cd " + shQuote(layout.filesDir) + " && exec " + guestArgv.joinToString(" ") { shQuote(it) }
         return listOf("/system/bin/sh", "-c", inner)
     }
+
+    // #117 basement hardening: build `-b <fake>:/proc/X` binds for exactly the /proc files
+    // Android denies the guest under untrusted_app. We test readability from THIS (the app)
+    // process — the guest inherits our SELinux domain, so what we can't read, it can't either.
+    // Bind only the denied ones (never shadow a /proc that actually works) and only if the
+    // fake file exists (Installer.writeFakeSysdata lays them down; missing => skip, no bad bind).
+    // Same conditional-bind pattern as proot-distro's fake_proc_bindings(). Fixes the whole
+    // "tool reads a blocked /proc file" class (node os.loadavg/os.cpus, inotify watchers,
+    // capsh, id-mapping) in one place — not one tool at a time.
+    private fun fakeProcBinds(): List<String> {
+        val dir = sysdataDir(layout.rootfs)
+        val binds = ArrayList<String>()
+        for ((realPath, name, _) in FAKE_PROC) {
+            val fake = File(dir, name)
+            if (fake.exists() && !realReadable(realPath)) {
+                binds.add("-b"); binds.add("${fake.absolutePath}:$realPath")
+            }
+        }
+        return binds
+    }
+
+    // True iff this process can actually read `path`. File.canRead()/access() can disagree
+    // with SELinux, so we open + read one byte and trust the exception (Permission denied).
+    private fun realReadable(path: String): Boolean =
+        runCatching { java.io.FileInputStream(path).use { it.read() }; true }.getOrDefault(false)
 
     // POSIX single-quote escaping so paths/args with spaces or metacharacters survive the
     // host shell unmodified ( ' -> '\'' ).

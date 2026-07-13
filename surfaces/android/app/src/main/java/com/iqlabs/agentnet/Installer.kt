@@ -5,6 +5,59 @@ import android.system.Os
 import android.util.Log
 import java.io.File
 
+// #117 basement hardening: fake /proc content. Under untrusted_app, Android DENIES the app
+// (and therefore the proot guest that inherits its SELinux domain) read access to a set of
+// /proc files — proven on-device (SM-A356E): `cat /proc/loadavg` -> "Permission denied",
+// same for /proc/version and /proc/sys/fs/inotify/max_user_watches. This breaks tools that
+// read them: node os.loadavg()/os.cpus() (loadavg, stat), vite/chokidar & other inotify
+// watchers (max_user_watches), capsh/apt (cap_last_cap), id-mapping (overflowuid/gid).
+// proot-distro solves this by bind-mounting fake files ONLY where the real one is unreadable.
+// We mirror that: Installer lays these down, DirectProotExec binds the unreadable ones.
+// One list = the single source of truth for both. (realProcPath, fakeFileName, content)
+// ponytail: /proc/vmstat is in proot-distro's set but has no consumer in our node/agent
+// stack — skipped; add a row here if a tool ever needs it.
+internal val FAKE_PROC: List<Triple<String, String, String>> = listOf(
+    Triple("/proc/loadavg", "loadavg", "0.12 0.07 0.02 2/165 765\n"),
+    Triple(
+        "/proc/stat", "stat",
+        // cpu + per-cpu lines: node os.cpus() parses cpu0..cpuN for CPU times. 8 cores.
+        "cpu  1957 0 2877 93280 262 342 254 87 0 0\n" +
+            "cpu0 31 0 226 12027 82 10 4 9 0 0\n" +
+            "cpu1 45 0 664 11144 21 263 233 12 0 0\n" +
+            "cpu2 494 0 537 11283 27 10 3 8 0 0\n" +
+            "cpu3 359 0 234 11723 24 26 5 7 0 0\n" +
+            "cpu4 295 0 268 11772 10 12 2 12 0 0\n" +
+            "cpu5 270 0 251 11833 15 3 1 10 0 0\n" +
+            "cpu6 430 0 520 11386 30 8 1 12 0 0\n" +
+            "cpu7 30 0 172 12108 50 8 1 13 0 0\n" +
+            "ctxt 140223\nbtime 1680020856\nprocesses 772\n" +
+            "procs_running 2\nprocs_blocked 0\n",
+    ),
+    Triple("/proc/uptime", "uptime", "124.08 932.80\n"),
+    Triple("/proc/version", "version", "Linux version 5.15.0-android13 (proot@agentnet) #1 SMP PREEMPT\n"),
+    Triple("/proc/sys/kernel/cap_last_cap", "sysctl_cap_last_cap", "40\n"),
+    Triple("/proc/sys/fs/inotify/max_user_watches", "sysctl_inotify_max_user_watches", "4096\n"),
+    Triple("/proc/sys/kernel/overflowuid", "sysctl_overflowuid", "65534\n"),
+    Triple("/proc/sys/kernel/overflowgid", "sysctl_overflowgid", "65534\n"),
+)
+
+// Directory (in the rootfs) holding the fake /proc files DirectProotExec binds from.
+internal fun sysdataDir(rootfs: String): File = File(rootfs, ".sysdata")
+
+// #117: /usr/local/bin/bun wrapper — makes `bun add/install` work under proot/untrusted_app.
+// See Installer.writeBunWrapper for the why. Kept minimal; forwards everything else verbatim.
+private val BUN_WRAPPER = """
+#!/bin/sh
+# AgentNet #117: bun under proot needs node_modules pre-created + a non-hardlink backend.
+case "${'$'}1" in
+  add|install|i|update|remove|rm|link|unlink|ci)
+    mkdir -p node_modules 2>/dev/null
+    case " ${'$'}* " in *" --backend"*) : ;; *) set -- "${'$'}@" --backend=copyfile ;; esac
+    ;;
+esac
+exec /usr/bin/bun "${'$'}@"
+""".trimStart()
+
 // First-run setup: lay down the Ubuntu rootfs and our server bundle into app storage.
 // Idempotent — a marker file means "already installed", so this is a no-op on every
 // launch after the first.
@@ -87,6 +140,8 @@ class Installer(private val ctx: Context) {
             // /etc/gitconfig and git would stay broken. This write is idempotent + tiny, so do it
             // on every launch — far cheaper than a MARKER bump + full rootfs re-extract.
             writeGuestGitConfig(p)
+            writeFakeSysdata(p) // #117: idempotent + tiny; every-launch so existing installs get it
+            writeBunWrapper(p)
             // Heavy artifacts (proot + rootfs) are in place. But the server bundle changes
             // every build — refresh it if this APK shipped a different one.
             if (serverUpToDate(serverCrc)) {
@@ -169,6 +224,8 @@ class Installer(private val ctx: Context) {
         writeFresh(File(p.rootfs, "etc/resolv.conf"), "nameserver 8.8.8.8\nnameserver 8.8.4.4\n")
         writeFresh(File(p.rootfs, "etc/hosts"), "127.0.0.1 localhost\n::1 localhost\n")
         writeGuestGitConfig(p)
+        writeFakeSysdata(p)
+        writeBunWrapper(p)
         val tmp = File(p.rootfs, "tmp").apply { mkdirs() }
         runCatching { android.system.Os.chmod(tmp.absolutePath, 0b001_111_111_111) } // 1777
     }
@@ -185,6 +242,36 @@ class Installer(private val ctx: Context) {
     private fun writeGuestGitConfig(p: Paths.Layout) {
         runCatching { writeFresh(File(p.rootfs, "etc/gitconfig"), "[core]\n\tcreateObject = rename\n") }
             .onFailure { Log.w(TAG, "could not write guest /etc/gitconfig (#115 fix)", it) }
+    }
+
+    // #117: bun works under proot — the basement is fine — but two bun defaults break in
+    // untrusted_app (both proven on-device, SM-A356E, bun 1.3.14): (1) its default hardlink
+    // backend hits the kernel's hardlink denial (EACCES) and fails silently ("Failed to install
+    // N packages", empty node_modules); (2) bun won't create node_modules itself under proot
+    // ("ENOENT: could not open the node_modules directory"). A /usr/local/bin/bun wrapper (PATH
+    // is /usr/local/bin before /usr/bin, same as the old git shim) pre-creates node_modules and
+    // forces --backend=copyfile for install commands. With it, a plain `bun add express` fully
+    // installs (594 files, require() OK) vs 0 files unwrapped. Thin tool-config layer, exactly
+    // like git's core.createObject=rename — NOT a proot fix (proot handles bun's syscalls fine:
+    // parallel dirfd openat + openat2/RESOLVE all verified working). Every launch => reaches
+    // existing installs; skipped if the guest has no /usr/bin/bun.
+    private fun writeBunWrapper(p: Paths.Layout) {
+        runCatching {
+            if (!File(p.rootfs, "usr/bin/bun").exists()) return
+            val wrapper = File(p.rootfs, "usr/local/bin/bun")
+            writeFresh(wrapper, BUN_WRAPPER)
+            Os.chmod(wrapper.absolutePath, 0b000_111_101_101) // 0755
+        }.onFailure { Log.w(TAG, "could not write guest bun wrapper (#117)", it) }
+    }
+
+    // #117: write the fake /proc files (see FAKE_PROC). DirectProotExec binds them over the
+    // real, denied /proc entries at launch. Idempotent — overwrite each launch so content
+    // fixes reach existing installs without a rootfs re-extract.
+    private fun writeFakeSysdata(p: Paths.Layout) {
+        runCatching {
+            val dir = sysdataDir(p.rootfs).apply { mkdirs() }
+            for ((_, name, content) in FAKE_PROC) File(dir, name).writeText(content)
+        }.onFailure { Log.w(TAG, "could not write fake /proc sysdata (#117 hardening)", it) }
     }
 
     // Write `text` to `file`, first removing any existing symlink/file at that path so
