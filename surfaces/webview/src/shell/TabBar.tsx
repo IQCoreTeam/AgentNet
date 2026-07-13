@@ -1,14 +1,12 @@
 import { useRef } from "react";
 import { useElementHeightVariable } from "../layoutEffects";
 import { useStore } from "../state/store";
-import { LockIcon } from "../icons";
-import { useUnlock } from "../unlock/UnlockProvider";
 
-// The four top-level domains as an ordered pager (screen-rearrangement.md §9):
-// Chat · Skills · Agent · Market. Agent = "My Agent".
-export type TabKey = "chat" | "skills" | "profile" | "market";
+// Issue #118's value-first shell: chat and both public discovery surfaces are available
+// before wallet setup; Settings owns progressive account, sync, and skill configuration.
+export type TabKey = "chat" | "market" | "profile" | "settings";
 
-export const TAB_ORDER: TabKey[] = ["chat", "skills", "profile", "market"];
+export const TAB_ORDER: TabKey[] = ["chat", "market", "profile", "settings"];
 
 // VAR_01 "mono invert" glyphs (16x16, stroke 1.8), matched to the Nav Dock design.
 function ChatGlyph() {
@@ -19,13 +17,11 @@ function ChatGlyph() {
     </svg>
   );
 }
-function SkillsGlyph() {
+function SettingsGlyph() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <rect x="4" y="4" width="6.5" height="6.5" rx="1" />
-      <rect x="13.5" y="4" width="6.5" height="6.5" rx="1" />
-      <rect x="4" y="13.5" width="6.5" height="6.5" rx="1" />
-      <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1" />
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1-2.9 2.9-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21h-4v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1-2.9-2.9.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3v-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1 2.9-2.9.1.1a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V3h4v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1 2.9 2.9-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1h.1v4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
     </svg>
   );
 }
@@ -52,9 +48,9 @@ function MarketGlyph() {
 
 const TABS: { key: TabKey; label: string; Glyph: () => JSX.Element }[] = [
   { key: "chat", label: "CHAT", Glyph: ChatGlyph },
-  { key: "skills", label: "SKILLS", Glyph: SkillsGlyph },
-  { key: "profile", label: "RANK", Glyph: AgentGlyph },
   { key: "market", label: "MARKET", Glyph: MarketGlyph },
+  { key: "profile", label: "RANK", Glyph: AgentGlyph },
+  { key: "settings", label: "SETTINGS", Glyph: SettingsGlyph },
 ];
 
 // Compact centered "NAV_DOCK" (Nav Dock design, VAR_01 · mono invert): a 296px terminal bar with
@@ -67,7 +63,6 @@ export function TabBar({ position, instant, onChange }: { position: number; inst
   const navRef = useRef<HTMLElement>(null);
   useElementHeightVariable(navRef, "--tabbar-height");
   const { state } = useStore();
-  const { unlocked, requestUnlock } = useUnlock();
   const accent = state.cli === "claude" ? "var(--claude)" : "var(--an-green)";
   const activeIndex = Math.round(position);
   return (
@@ -94,13 +89,12 @@ export function TabBar({ position, instant, onChange }: { position: number; inst
                 type="button"
                 aria-label={label}
                 aria-current={on ? "page" : undefined}
-                onClick={() => key === "skills" && !unlocked ? requestUnlock("skills", () => onChange(i)) : onChange(i)}
+                onClick={() => onChange(i)}
                 className={`an-navseg ${on ? "is-on" : ""}`}
               >
                 {on && <span className="an-navseg-dot" />}
                 <Glyph />
                 <span className="an-navseg-label">{label}</span>
-                {key === "skills" && !unlocked && <LockIcon className="absolute right-2 top-1.5 h-3 w-3" />}
               </button>
             );
           })}

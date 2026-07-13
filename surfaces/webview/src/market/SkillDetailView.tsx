@@ -6,7 +6,7 @@ import { SkillIcon } from "../icons";
 import { mediaUrl } from "./mediaUrl";
 import { walletAvatarSvg } from "./walletAvatar";
 import { CompleteCelebration } from "./CompleteCelebration";
-import { LockedGate, useUnlock } from "../unlock/UnlockProvider";
+import { LockedGate } from "../unlock/UnlockProvider";
 
 function shortAddr(w?: string) {
   return w ? `${w.slice(0, 4)}…${w.slice(-4)}` : "";
@@ -21,11 +21,12 @@ interface Props {
 
 export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
   const { state, send } = useStore();
-  const { requestUnlock } = useUnlock();
   const [buying, setBuying] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [noteGitLink, setNoteGitLink] = useState("");
   const [commentDone, setCommentDone] = useState(false);
+  const [resumeComment, setResumeComment] = useState(false);
+  const noteInput = useRef<HTMLTextAreaElement>(null);
   const awaitingNote = useRef(false);
   const lastToast = useRef(state.toast);
   const { card, skillText, notes } = detail;
@@ -64,6 +65,13 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
       setCommentDone(true);
     }
   }, [state.toast]);
+
+  useEffect(() => {
+    if (!owned || !resumeComment) return;
+    noteInput.current?.focus();
+    noteInput.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setResumeComment(false);
+  }, [owned, resumeComment]);
 
   return (
     <div className="relative flex flex-col h-full">
@@ -141,13 +149,15 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
                   Required skills · <span className={allRequiredOwned ? "text-green-400" : "text-amber-300"}>{ownedRequiredCount}/{requiredCards.length} collected</span>
                 </p>
                 {unowned.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => requestUnlock("buy", () => { haptics.strong(); send({ type: "buyRequiredSkills", items: unowned.map((r) => ({ skillId: r.id, creatorWallet: r.creator })) }); })}
-                    className="rounded-lg bg-amber-400 px-2.5 py-1 text-[11px] font-semibold text-zinc-900 active:bg-amber-300"
-                  >
-                    Collect all {unowned.length}{totalSol ? ` · ${totalSol} SOL` : ""}
-                  </button>
+                  <LockedGate reason="buy" onUnlocked={() => { haptics.strong(); send({ type: "buyRequiredSkills", items: unowned.map((r) => ({ skillId: r.id, creatorWallet: r.creator })) }); }}>
+                    <button
+                      type="button"
+                      onClick={() => { haptics.strong(); send({ type: "buyRequiredSkills", items: unowned.map((r) => ({ skillId: r.id, creatorWallet: r.creator })) }); }}
+                      className="rounded-lg bg-amber-400 px-2.5 py-1 text-[11px] font-semibold text-zinc-900 active:bg-amber-300"
+                    >
+                      Collect all {unowned.length}{totalSol ? ` · ${totalSol} SOL` : ""}
+                    </button>
+                  </LockedGate>
                 )}
               </div>
               <div className="space-y-2">
@@ -204,6 +214,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
           <div className="space-y-2.5">
             <p className="text-[11px] text-zinc-500 uppercase tracking-wide">Leave a comment</p>
             <textarea
+              ref={noteInput}
               className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-3.5 text-base text-zinc-200 leading-relaxed resize-none focus:outline-none focus:border-green-500/50"
               rows={4}
               placeholder="Share your experience…"
@@ -226,11 +237,14 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
           </div>
         )}
         {!owned && !state.walletAddress && (
-          <LockedGate reason="comment">
+          <LockedGate reason="comment" onUnlocked={() => { setResumeComment(true); send({ type: "ownedSkills" }); send({ type: "getSkillDetail", mint: card.id }); }}>
             <button className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-3 text-left text-sm text-zinc-400">
               Connect a wallet to comment
             </button>
           </LockedGate>
+        )}
+        {!owned && !!state.walletAddress && (
+          <p className="rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-3 text-sm text-zinc-500">Collect this skill before commenting.</p>
         )}
       </div>
 

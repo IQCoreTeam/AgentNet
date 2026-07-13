@@ -18,9 +18,6 @@ import type { MarketEvent } from "../chat/marketMessages.js";
 
 export interface Wallet extends WalletSigner {
   address: string; // base58 (== publicKey.toBase58())
-  // False for the device-local guest identity. It can encrypt local sessions but must
-  // never receive marketplace write tools or be treated as an on-chain user wallet.
-  chainEnabled?: boolean;
   // used to derive the encryption key (iqlabs deriveX25519Keypair)
   signMessage(msg: Uint8Array): Promise<Uint8Array>;
 }

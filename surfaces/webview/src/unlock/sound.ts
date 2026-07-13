@@ -1,4 +1,15 @@
+const UNLOCK_SOUND_KEY = "agentnet.unlock.sound";
+
+export function unlockSoundEnabled(): boolean {
+  return typeof localStorage === "undefined" || localStorage.getItem(UNLOCK_SOUND_KEY) !== "off";
+}
+
+export function setUnlockSoundEnabled(enabled: boolean): void {
+  localStorage.setItem(UNLOCK_SOUND_KEY, enabled ? "on" : "off");
+}
+
 export function playUnlockSound(): void {
+  if (!unlockSoundEnabled()) return;
   try {
     const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextCtor) return;

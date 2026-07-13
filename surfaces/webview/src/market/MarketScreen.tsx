@@ -21,7 +21,7 @@ export type ShellTab = "market" | "skills" | "profile";
 //              the product store, so the agents directory moved OUT of Market and lives here.
 // Owned is no longer an internal tab (it is the Skills tab) and there is no back-to-chat
 // button (the bottom tab bar owns navigation).
-export function MarketScreen({ tab }: { tab: ShellTab }) {
+export function MarketScreen({ tab, onBack }: { tab: ShellTab; onBack?: () => void }) {
   const { state, send, setMarketTab, marketSearching, clearMarketDetail, clearAgentProfile } = useStore();
   // Search text is LOCAL: keying it into the global store re-rendered the whole app on every
   // keystroke. Only MarketScreen reads it, so it lives here (matches AgentDirectory's search).
@@ -182,6 +182,11 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
         className="flex items-start gap-2.5 border-b px-3.5 shrink-0"
         style={{ borderColor: "#1d1d20", paddingTop: "max(0.5rem, env(safe-area-inset-top))", paddingBottom: "0.7rem" }}
       >
+        {onBack && (
+          <button onClick={onBack} className="an-iconbtn shrink-0" aria-label="Back to settings">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m15 18-6-6 6-6" /></svg>
+          </button>
+        )}
         <div className="min-w-0 flex-1">
           <div className="an-term-title text-[18px] leading-none">{headerTitle}</div>
           <div className="an-term-sub leading-none">{headerSub}</div>

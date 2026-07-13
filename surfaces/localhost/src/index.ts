@@ -71,8 +71,8 @@ import {
   workflowMintsAmong,
   localWallet,
   manualStorage,
-  SessionStore,
 } from "@iqlabs-official/agent-sdk";
+import { SessionStore } from "@iqlabs-official/agent-sdk/account/store";
 
 const PORT = Number(process.env.AGENTNET_PORT ?? 4317);
 const GOOGLE_AUTHORIZE_URL = process.env.GOOGLE_AUTHORIZE_URL || "";
@@ -136,9 +136,19 @@ const GUEST_WALLET_PATH = join(
 async function deviceGuestWallet(): Promise<Wallet> {
   if (guestWallet) return guestWallet;
   const loaded = await localWallet(GUEST_WALLET_PATH);
-  loaded.wallet.chainEnabled = false;
-  guestWallet = loaded.wallet;
-  return loaded.wallet;
+  // The device key may sign the fixed session-key message, but it is not a chain wallet.
+  // Keep marketplace reads available to the agent while making every transaction-signing
+  // path fail closed until the user connects a real wallet.
+  guestWallet = {
+    ...loaded.wallet,
+    async signTransaction() {
+      throw new Error("Connect a wallet to use on-chain actions.");
+    },
+    async signAllTransactions() {
+      throw new Error("Connect a wallet to use on-chain actions.");
+    },
+  } as Wallet;
+  return guestWallet;
 }
 
 async function ensureGuestRuntime(): Promise<AgentRuntime> {
@@ -316,7 +326,7 @@ async function submitGoogleAuthCode(c: Client, code: string) {
 // Build the runtime from a freshly connected wallet (idempotent for this host: a
 // second connect with the same address is a no-op so re-opened tabs don't rebuild).
 async function connectWallet(address: string, signature: Uint8Array): Promise<void> {
-  if (walletAddress === address && wallet?.chainEnabled !== false) return;
+  if (walletAddress === address) return;
   const connected = webWallet(address, signature, signTransactionViaUi);
   await migrateGuestSessions(connected);
   wallet = connected;

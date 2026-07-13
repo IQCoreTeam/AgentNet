@@ -154,7 +154,6 @@ export {
 export { STORAGE_OPTIONS } from "./account/storage/adapter.js";
 export type { StorageConfig, StorageKind } from "./account/storage/adapter.js";
 export { manualStorage } from "./account/storage/manual.js";
-export { SessionStore } from "./account/store.js";
 // session-key lifetime policy: ephemeral (memory, default) vs persisted (KeyVault).
 // A surface picks one to enable "local storage mode"; default stays ephemeral.
 export { ephemeralKey, persistedKey } from "./account/keyPolicy.js";

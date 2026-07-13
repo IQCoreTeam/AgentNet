@@ -186,7 +186,7 @@ export function AgentDirectory() {
           {loading ? (
             <AgentListSkeleton rows={1} />
           ) : !selfRep ? (
-            <LockedGate reason="identity" onUnlocked={() => send({ type: "listAgents" })} className="mx-3 block">
+            <LockedGate reason="identity" onUnlocked={(wallet) => send({ type: "getAgentProfile", wallet })} className="mx-3 block">
               <button className="an-bracket flex w-full items-center justify-between px-4 py-4 text-left" style={{ "--tk": "var(--an-green)", "--bk": "var(--an-bg-1)", "--ts": "8px" } as CSSProperties}>
                 <span>
                   <span className="an-term-mono block text-xs font-bold uppercase" style={{ color: "var(--an-fg)" }}>Claim your agent identity</span>
