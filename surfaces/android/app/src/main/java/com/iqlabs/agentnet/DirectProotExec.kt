@@ -73,16 +73,18 @@ class DirectProotExec(private val layout: Paths.Layout) : GuestExec {
         // (The earlier belief that newer Android needs NO_SECCOMP for set_robust_list was
         // wrong for this path; seccomp-on is both correct AND faster.)
         env["PROOT_TMP_DIR"] = Paths.dir("${layout.rootfs}/tmp").absolutePath
-        env["PROOT_L2S_DIR"] = Paths.dir("${layout.rootfs}/.l2s").absolutePath // stable link2symlink db
+        // PROOT_L2S_DIR is gone with --link2symlink (#115/#116): without the extension loaded,
+        // proot never reads it. Old installs may still carry a rootfs/.l2s dir with orphaned
+        // .l2s.* backing files from before the fix; harmless, and their symlinks still resolve.
         pb.redirectErrorStream(true)
 
         return pb.start()
     }
 
     // Build the proot invocation that enters the Ubuntu guest and runs `guestCommand` as a
-    // login shell. Flags mirror proot-distro's defaults; --kill-on-exit ties guest
-    // processes to ours so nothing is orphaned, --link2symlink is guest compatibility, and
-    // /dev,/proc,/sys are bound through from Android.
+    // login shell. Flags mirror proot-distro's defaults minus --link2symlink (removed as the
+    // #115 root cause, see below); --kill-on-exit ties guest processes to ours so nothing is
+    // orphaned, and /dev,/proc,/sys are bound through from Android.
     // We launch proot through a host /system/bin/sh that first `cd`s into filesDir, then
     // `exec`s proot. This is load-bearing: an Android app process has cwd = "/", which is
     // unreadable under SELinux, so proot's startup getcwd() fails ("sh: 0: getcwd()
