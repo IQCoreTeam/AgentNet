@@ -8,6 +8,7 @@ import { AgentProfileView } from "./AgentProfileView";
 import type { SkillCard } from "../transport/protocol";
 import { HeliusSetupPanel } from "../settings/HeliusKeyForm";
 import { SkillDetailSkeleton, MarketListSkeleton, AgentProfileSkeleton } from "./Skeletons";
+import { LockedGate } from "../unlock/UnlockProvider";
 
 type MarketView = "browse" | "publish" | "helius";
 export type ShellTab = "market" | "skills" | "profile";
@@ -170,7 +171,7 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
   const isSkills = tab === "skills";
   const isAgents = tab === "profile";
   const isMarket = tab === "market";
-  const headerTitle = isSkills ? "My Skills" : isAgents ? "Agents" : "Market";
+  const headerTitle = isSkills ? "My Skills" : isAgents ? "Agent Rank" : "Market";
   const headerSub = isSkills ? "マイスキル" : isAgents ? "エージェント" : "マーケット";
   const balanceSol = state.marketBalance != null ? (state.marketBalance / 1_000_000_000).toFixed(3) : null;
 
@@ -195,13 +196,15 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
         {/* MARKET: SOL balance + publish */}
         {isMarket && balanceSol && <span className="an-term-mono shrink-0 text-xs font-bold" style={{ color: "#bdbdbd", letterSpacing: "0.5px" }}>{balanceSol} ◎</span>}
         {isMarket && (
-          <button
-            onClick={() => setView("publish")}
-            className="an-term-mono shrink-0 text-[10px] font-bold uppercase tracking-wider active:opacity-80"
-            style={{ color: "#4ade80", border: "1px solid #1d3a26", background: "#0d140f", padding: "7px 11px" }}
-          >
-            + Publish
-          </button>
+          <LockedGate reason="publish" onUnlocked={() => setView("publish")} className="shrink-0">
+            <button
+              onClick={() => setView("publish")}
+              className="an-term-mono text-[10px] font-bold uppercase tracking-wider active:opacity-80"
+              style={{ color: "#4ade80", border: "1px solid #1d3a26", background: "#0d140f", padding: "7px 11px" }}
+            >
+              + Publish
+            </button>
+          </LockedGate>
         )}
       </header>
 

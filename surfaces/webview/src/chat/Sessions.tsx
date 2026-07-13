@@ -25,6 +25,7 @@ import { useAutoOpenExternalUrl } from "../platform/useAutoOpenExternalUrl";
 import { HeliusKeyForm } from "../settings/HeliusKeyForm";
 import { ConnectGithub } from "../onboarding/ConnectGithub";
 import { hasAgentService, backgroundExecEnabled, setBackgroundExecEnabled } from "../platform/agentService";
+import { useUnlock } from "../unlock/UnlockProvider";
 
 // Chat list drawer — the mobile answer to vscode's multi-panel "new tab": instead of
 // splitting the screen, the ☰ menu slides this in and you pick ONE chat to show. Telegram
@@ -81,6 +82,7 @@ function StorageOption({ active, title, subtitle, onClick }: { active: boolean; 
 
 export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: () => void; embedded?: boolean; onOpenAgent?: () => void }) {
   const { state, send, getClientId, notify } = useStore();
+  const { requestUnlock } = useUnlock();
   const { storage, cloudSync, googleLoginUrl, googleLoginError } = state;
   const online = useOnline();
 
@@ -311,7 +313,7 @@ export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: 
               <MenuRow
                 label="Storage"
                 subtitle={cloudConnected ? `${info?.account ?? (info?.kind === "gdrive" ? "Google Drive" : "Custom Cloud")}${cloudSync ? ` · ${cloudSync.ok ? "synced" : "sync error"}` : ""}` : "Local only"}
-                onClick={() => setSettingsMode("connect")}
+                onClick={() => requestUnlock("sync", () => setSettingsMode("connect"))}
                 icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7.5c0-1.4 3.1-2.5 7-2.5s7 1.1 7 2.5S14.9 10 11 10 4 8.9 4 7.5Z" /><path d="M4 7.5v7c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-7" /><path d="M4 11c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5" /></svg>}
               />
               <MenuRow
@@ -361,22 +363,36 @@ export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: 
                 </>
               )}
             </div>
-            <button
-              onClick={() => {
-                forgetAndroidWallet(); // clear the Keystore creds so we don't silently reconnect
-                send({ type: "disconnectWallet" });
-                onClose();
-              }}
-              className="mt-2 flex w-full items-center gap-3.5 rounded-2xl px-2.5 py-3 text-left transition active:bg-red-500/10"
-            >
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center" style={{ color: "#f87171" }}>
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 4.5H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2.5" /><path d="M14 15l3-4-3-4M17 11H8.5" /></svg>
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[1.12rem] font-semibold leading-tight" style={{ color: "#f87171" }}>Disconnect wallet</span>
-                <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>Clears the saved session on this device</span>
-              </span>
-            </button>
+            {state.walletAddress ? (
+              <button
+                onClick={() => {
+                  forgetAndroidWallet(); // clear the Keystore creds so we don't silently reconnect
+                  send({ type: "disconnectWallet" });
+                  onClose();
+                }}
+                className="mt-2 flex w-full items-center gap-3.5 rounded-2xl px-2.5 py-3 text-left transition active:bg-red-500/10"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center" style={{ color: "#f87171" }}>
+                  <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 4.5H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2.5" /><path d="M14 15l3-4-3-4M17 11H8.5" /></svg>
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[1.12rem] font-semibold leading-tight" style={{ color: "#f87171" }}>Disconnect wallet</span>
+                  <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>Clears the saved session on this device</span>
+                </span>
+              </button>
+            ) : (
+              <button
+                onClick={() => requestUnlock("identity")}
+                className="mt-2 flex w-full items-center gap-3.5 rounded-2xl px-2.5 py-3 text-left transition active:opacity-80"
+                style={{ background: "var(--an-green-dim)", border: "1px solid var(--an-green-line)" }}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[1.12rem] font-semibold leading-tight" style={{ color: "var(--an-green)" }}>Unlock AgentNet</span>
+                  <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>Connect a wallet for identity and writes</span>
+                </span>
+                <span className="an-term-mono" style={{ color: "var(--an-green)" }}>›</span>
+              </button>
+            )}
           </div>
         ) : settingsMode === "helius" ? (
           <div className="flex flex-col h-full">

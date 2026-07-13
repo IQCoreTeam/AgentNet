@@ -303,34 +303,14 @@ function reducer(state: State, ev: Action): State {
       return { ...state, cli: ev.cli, phase: ev.cli === "claude" ? "claudeAuth" : "codexAuth" };
     }
     case "init":
-      // `init` means this SSE client is attached to onboarding, not chat. If the server
-      // still has the wallet (mid-onboarding reconnect before storage/runtime exists),
-      // preserve the current wallet-derived phase. If the server explicitly says it has
-      // no wallet, the app/server process restarted and the local wallet state is stale:
-      // clear it so sends don't get stuck in a chat UI backed by an onboarding handler.
-      // No wallet on the server (cold boot / restart). On the Android shell a silent Keystore
-      // reconnect may still succeed, so land on a neutral "restoring" splash and let the boot
-      // effect try it — only fall to the signup screen if it returns nothing (or on web, where
-      // there is no silent restore). Prevents the signup UI from flashing as a loading screen.
-      if (ev.hasWallet === false) return { ...state, walletAddress: null, phase: isAndroidWallet() ? "restoring" : "onboarding" };
-      if (state.walletAddress) return state;
-      return { ...state, phase: "onboarding" };
+      // The host always provides chat. Without a real wallet this is a persistent,
+      // device-local guest runtime; wallet setup is progressive and never blocks entry.
+      return { ...state, walletAddress: ev.hasWallet === false ? null : state.walletAddress, phase: "chat" };
     case "walletConnected":
-      // Wallet is in. If storage was already configured on this device (returning user),
-      // skip the storage picker entirely and go straight to engine select — the gdrive
-      // choice + token persist, so re-walking it (and re-auth) is pointless. Only a true
-      // first run shows the picker.
-      return { ...state, walletAddress: ev.address, phase: ev.storageConfigured ? "engineSelect" : "storageSelect" };
+      return { ...state, walletAddress: ev.address, phase: "chat" };
     case "cliStatus":
-      // After wallet: don't force claude. Record both engines' status and show the engine
-      // picker so the user chooses which one to activate. The chosen engine then runs its
-      // own gate (claude/codex login if needed) via __selectEngine.
-      if (state.phase === "chat" && ev[state.cli] === "no-login") {
-        return { ...state, cliReport: { claude: ev.claude, codex: ev.codex }, phase: state.cli === "claude" ? "claudeAuth" : "codexAuth" };
-      }
-      if (state.phase === "chat" && ev[state.cli] === "missing") {
-        return { ...state, cliReport: { claude: ev.claude, codex: ev.codex }, phase: "engineSelect" };
-      }
+      // Authentication is progressive too. Stay in chat until a send or explicit engine
+      // switch asks selectEngine() to route to the matching login surface.
       return { ...state, cliReport: { claude: ev.claude, codex: ev.codex } };
     case "__finishStorage":
       return { ...state, phase: "engineSelect" };
@@ -746,21 +726,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Android cold boot: while phase is "restoring", try a SILENT Keystore reconnect off the
-  // splash. Success -> post connectWallet (the server rebuilds the runtime and flips us toward
-  // chat); nothing saved / failure -> fall to the signup screen. Prevents the signup UI from
-  // showing as the loading screen for an already-signed-in user. Runs once per entry.
+  // Android cold boot: once guest chat is available, silently restore a previously connected
+  // wallet. Missing credentials simply leave the user in guest mode without interruption.
+  const restoreAttempted = useRef(false);
   useEffect(() => {
-    if (state.phase !== "restoring") return;
+    if (state.phase !== "chat" || state.walletAddress || !isAndroidWallet() || restoreAttempted.current) return;
+    restoreAttempted.current = true;
     let cancelled = false;
     void (async () => {
       const creds = await restoreAndroidWallet().catch(() => null);
       if (cancelled) return;
       if (creds) void transportRef.current?.post({ type: "connectWallet", address: creds.address, signature: creds.signature });
-      else raw({ type: "__restoreFailed" });
     })();
     return () => { cancelled = true; };
-  }, [state.phase]);
+  }, [state.phase, state.walletAddress]);
 
   // Keep busyRef in sync so send() (stable closure) can read current busy state.
   useEffect(() => { busyRef.current = state.typing; }, [state.typing]);
@@ -795,6 +774,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       wasChat.current = false;
     }
   }, [state.phase, state.cli]);
+
+  // Connecting or disconnecting a real wallet swaps the host runtime. Reopen SSE so the
+  // dispatcher binds to the new runtime while the visible product stays in chat.
+  const previousWallet = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (previousWallet.current === undefined) {
+      previousWallet.current = state.walletAddress;
+      return;
+    }
+    if (previousWallet.current === state.walletAddress) return;
+    previousWallet.current = state.walletAddress;
+    transportRef.current?.reopen();
+    void transportRef.current?.post({ type: "ready" });
+    void transportRef.current?.post({ type: "platform", cli: state.cli });
+  }, [state.walletAddress, state.cli]);
 
   // Live-state ref so the (stable) actions can read the CURRENT state without being rebuilt
   // when state changes — the whole point of splitting the contexts.

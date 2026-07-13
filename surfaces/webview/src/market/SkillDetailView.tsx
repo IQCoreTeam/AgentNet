@@ -6,6 +6,7 @@ import { SkillIcon } from "../icons";
 import { mediaUrl } from "./mediaUrl";
 import { walletAvatarSvg } from "./walletAvatar";
 import { CompleteCelebration } from "./CompleteCelebration";
+import { LockedGate, useUnlock } from "../unlock/UnlockProvider";
 
 function shortAddr(w?: string) {
   return w ? `${w.slice(0, 4)}…${w.slice(-4)}` : "";
@@ -20,6 +21,7 @@ interface Props {
 
 export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
   const { state, send } = useStore();
+  const { requestUnlock } = useUnlock();
   const [buying, setBuying] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [noteGitLink, setNoteGitLink] = useState("");
@@ -141,7 +143,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
                 {unowned.length > 0 && (
                   <button
                     type="button"
-                    onClick={() => { haptics.strong(); send({ type: "buyRequiredSkills", items: unowned.map((r) => ({ skillId: r.id, creatorWallet: r.creator })) }); }}
+                    onClick={() => requestUnlock("buy", () => { haptics.strong(); send({ type: "buyRequiredSkills", items: unowned.map((r) => ({ skillId: r.id, creatorWallet: r.creator })) }); })}
                     className="rounded-lg bg-amber-400 px-2.5 py-1 text-[11px] font-semibold text-zinc-900 active:bg-amber-300"
                   >
                     Collect all {unowned.length}{totalSol ? ` · ${totalSol} SOL` : ""}
@@ -223,6 +225,13 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
             </button>
           </div>
         )}
+        {!owned && !state.walletAddress && (
+          <LockedGate reason="comment">
+            <button className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-3 text-left text-sm text-zinc-400">
+              Connect a wallet to comment
+            </button>
+          </LockedGate>
+        )}
       </div>
 
       {owned && (
@@ -243,17 +252,19 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
 
       {!owned && !disposed && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-8 an-tabbar-inset" style={{ background: "linear-gradient(to top, color-mix(in srgb, var(--an-bg-0) 60%, transparent), transparent)" }}>
-          <button
-            onClick={handleBuy}
-            disabled={buying || (isWorkflow && !allRequiredOwned)}
-            className="an-btn an-btn-orange"
-          >
-            {buying
-              ? "Buying…"
-              : isWorkflow && !allRequiredOwned
-                ? `Collect ${requiredCards.length - ownedRequiredCount} more skill${requiredCards.length - ownedRequiredCount === 1 ? "" : "s"} to buy`
-                : priceSol ? `Buy for ${priceSol} SOL` : "Buy (free)"}
-          </button>
+          <LockedGate reason="buy" onUnlocked={handleBuy} className="pointer-events-auto">
+            <button
+              onClick={handleBuy}
+              disabled={buying || (isWorkflow && !allRequiredOwned)}
+              className="an-btn an-btn-orange"
+            >
+              {buying
+                ? "Buying…"
+                : isWorkflow && !allRequiredOwned
+                  ? `Collect ${requiredCards.length - ownedRequiredCount} more skill${requiredCards.length - ownedRequiredCount === 1 ? "" : "s"} to buy`
+                  : priceSol ? `Buy for ${priceSol} SOL` : "Buy (free)"}
+            </button>
+          </LockedGate>
         </div>
       )}
     </div>

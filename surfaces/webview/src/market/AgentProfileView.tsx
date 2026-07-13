@@ -12,6 +12,7 @@ import { mediaUrl } from "./mediaUrl";
 import { CompleteCelebration } from "./CompleteCelebration";
 import { SkillSdCard } from "./SkillSdCard";
 import { RegisterWorkRepo } from "../onboarding/RegisterWorkRepo";
+import { LockedGate } from "../unlock/UnlockProvider";
 
 function PenIcon({ className }: { className?: string }) {
   return (
@@ -875,6 +876,12 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                       posting={posting}
                       onSubmit={submitNote}
                     />
+                  ) : !state.walletAddress ? (
+                    <LockedGate reason="comment" onUnlocked={() => send({ type: "getAgentProfile", wallet: profile.wallet })}>
+                      <button className="w-full rounded-xl px-2.5 py-2 text-left text-[11px]" style={{ background: "var(--an-bg-1)", border: "1px solid var(--an-line)", color: "var(--an-fg-dim)" }}>
+                        Connect a wallet to comment
+                      </button>
+                    </LockedGate>
                   ) : (
                     <p className="rounded-xl px-2.5 py-2 text-[11px]" style={{ background: "var(--an-bg-1)", border: "1px solid var(--an-line)", color: "var(--an-fg-mute)" }}>
                       Hold a skill to comment.
@@ -897,13 +904,15 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
           className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-10 an-tabbar-inset"
           style={{ background: "linear-gradient(to top, color-mix(in srgb, var(--an-bg-0) 60%, transparent), transparent)" }}
         >
-          <button onClick={handleBuyAll} disabled={buyingAll} className="an-btn an-btn-orange pointer-events-auto">
-            {buyingAll
-              ? "Buying..."
-              : unownedSkills.length === allSkills.length
-                ? `Buy all ${unownedSkills.length} skill${unownedSkills.length !== 1 ? "s" : ""}`
-                : `Buy ${unownedSkills.length} more skill${unownedSkills.length !== 1 ? "s" : ""}`}
-          </button>
+          <LockedGate reason="buy" onUnlocked={handleBuyAll} className="pointer-events-auto">
+            <button onClick={handleBuyAll} disabled={buyingAll} className="an-btn an-btn-orange">
+              {buyingAll
+                ? "Buying..."
+                : unownedSkills.length === allSkills.length
+                  ? `Buy all ${unownedSkills.length} skill${unownedSkills.length !== 1 ? "s" : ""}`
+                  : `Buy ${unownedSkills.length} more skill${unownedSkills.length !== 1 ? "s" : ""}`}
+            </button>
+          </LockedGate>
         </div>
       )}
 

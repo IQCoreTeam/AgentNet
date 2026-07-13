@@ -1,6 +1,8 @@
 import { useRef } from "react";
 import { useElementHeightVariable } from "../layoutEffects";
 import { useStore } from "../state/store";
+import { LockIcon } from "../icons";
+import { useUnlock } from "../unlock/UnlockProvider";
 
 // The four top-level domains as an ordered pager (screen-rearrangement.md §9):
 // Chat · Skills · Agent · Market. Agent = "My Agent".
@@ -51,7 +53,7 @@ function MarketGlyph() {
 const TABS: { key: TabKey; label: string; Glyph: () => JSX.Element }[] = [
   { key: "chat", label: "CHAT", Glyph: ChatGlyph },
   { key: "skills", label: "SKILLS", Glyph: SkillsGlyph },
-  { key: "profile", label: "AGENT", Glyph: AgentGlyph },
+  { key: "profile", label: "RANK", Glyph: AgentGlyph },
   { key: "market", label: "MARKET", Glyph: MarketGlyph },
 ];
 
@@ -65,6 +67,7 @@ export function TabBar({ position, instant, onChange }: { position: number; inst
   const navRef = useRef<HTMLElement>(null);
   useElementHeightVariable(navRef, "--tabbar-height");
   const { state } = useStore();
+  const { unlocked, requestUnlock } = useUnlock();
   const accent = state.cli === "claude" ? "var(--claude)" : "var(--an-green)";
   const activeIndex = Math.round(position);
   return (
@@ -91,12 +94,13 @@ export function TabBar({ position, instant, onChange }: { position: number; inst
                 type="button"
                 aria-label={label}
                 aria-current={on ? "page" : undefined}
-                onClick={() => onChange(i)}
+                onClick={() => key === "skills" && !unlocked ? requestUnlock("skills", () => onChange(i)) : onChange(i)}
                 className={`an-navseg ${on ? "is-on" : ""}`}
               >
                 {on && <span className="an-navseg-dot" />}
                 <Glyph />
                 <span className="an-navseg-label">{label}</span>
+                {key === "skills" && !unlocked && <LockIcon className="absolute right-2 top-1.5 h-3 w-3" />}
               </button>
             );
           })}

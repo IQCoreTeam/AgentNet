@@ -62,6 +62,10 @@ async function buildPassiveSpawn(
     console.warn("[bundled-skills] install failed:", e);
   }
 
+  // Guest chat uses a persistent device key solely for encrypted local sessions. Do not
+  // expose any marketplace MCP tools to that identity; public browsing stays in the UI.
+  if (wallet.chainEnabled === false) return {};
+
   // Codex (Phase 1): a separate `node <entry>` stdio MCP server, read-only. Needs the
   // surface to have bundled the entry (AGENTNET_MCP_STDIO) AND a readable catalog (DAS).
   if (cli === "codex") {

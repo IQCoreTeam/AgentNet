@@ -26,6 +26,7 @@ import { createServer, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join, normalize, extname } from "node:path";
+import { homedir } from "node:os";
 import {
   connect,
   createChatSession,
@@ -58,7 +59,6 @@ import {
   saveGoogleCreds,
   hasGoogleCreds,
   isCloudConnected,
-  isInitialized,
   marketplaceEnv,
   saveHeliusKey,
   maskedHeliusKey,
@@ -69,6 +69,9 @@ import {
   loadGithubToken,
   registerVerifiedWork,
   workflowMintsAmong,
+  localWallet,
+  manualStorage,
+  SessionStore,
 } from "@iqlabs-official/agent-sdk";
 
 const PORT = Number(process.env.AGENTNET_PORT ?? 4317);
@@ -122,6 +125,61 @@ const REPLAY_BUFFER = 256;
 let wallet: Wallet | null = null;
 let runtime: AgentRuntime | null = null;
 let walletAddress: string | null = null;
+let guestWallet: Wallet | null = null;
+let walletEpoch = 0;
+
+const GUEST_WALLET_PATH = join(
+  process.env.AGENTNET_HOME || join(homedir(), ".agentnet"),
+  "guest-wallet.json",
+);
+
+async function deviceGuestWallet(): Promise<Wallet> {
+  if (guestWallet) return guestWallet;
+  const loaded = await localWallet(GUEST_WALLET_PATH);
+  loaded.wallet.chainEnabled = false;
+  guestWallet = loaded.wallet;
+  return loaded.wallet;
+}
+
+async function ensureGuestRuntime(): Promise<AgentRuntime> {
+  if (walletAddress && wallet) return ensureRuntime(wallet);
+  const guest = await deviceGuestWallet();
+  if (wallet !== guest) {
+    wallet = guest;
+    runtime = null;
+    walletEpoch += 1;
+  }
+  return ensureRuntime(guest);
+}
+
+// Preserve the value-first conversation when the user unlocks. Guest pages are decrypted
+// with the device key and appended into the real wallet's local store, which re-encrypts
+// them with the wallet-derived key. Existing destination sessions are never duplicated.
+async function migrateGuestSessions(realWallet: Wallet): Promise<void> {
+  const guest = await deviceGuestWallet();
+  const source = new SessionStore(guest, manualStorage(guest.address));
+  const destination = new SessionStore(realWallet, manualStorage(realWallet.address));
+  const existing = new Set((await destination.listMine()).map((s) => s.sessionId));
+  for (const meta of await source.listMine()) {
+    const session = await source.load(meta.sessionId);
+    if (!session) continue;
+    let start = 0;
+    if (existing.has(meta.sessionId)) {
+      const current = await destination.load(meta.sessionId);
+      if (!current || current.messages.length >= session.messages.length) continue;
+      const samePrefix = current.messages.every((message, index) =>
+        JSON.stringify(message) === JSON.stringify(session.messages[index]),
+      );
+      if (!samePrefix) continue;
+      start = current.messages.length;
+    }
+    if (session.messages.length === 0) {
+      await destination.recordMeta(meta);
+      continue;
+    }
+    for (const message of session.messages.slice(start)) await destination.appendMessage(meta, message);
+  }
+}
 
 // Latest drive-mirror sync result + the hook the active chat sets to surface it
 // (cloud writes are otherwise silent). One value; the connected chat reflects it.
@@ -258,16 +316,15 @@ async function submitGoogleAuthCode(c: Client, code: string) {
 // Build the runtime from a freshly connected wallet (idempotent for this host: a
 // second connect with the same address is a no-op so re-opened tabs don't rebuild).
 async function connectWallet(address: string, signature: Uint8Array): Promise<void> {
-  if (runtime && walletAddress === address) return;
-  wallet = webWallet(address, signature, signTransactionViaUi);
+  if (walletAddress === address && wallet?.chainEnabled !== false) return;
+  const connected = webWallet(address, signature, signTransactionViaUi);
+  await migrateGuestSessions(connected);
+  wallet = connected;
   walletAddress = address;
-  // Only build the runtime immediately if storage is already configured (returning user).
-  // First-time users go through onboarding (storage picker) before runtime is needed;
-  // building it here with no-cloud config and then rebuilding after Drive OAuth caused
-  // the chat SSE to attach to a stale local runtime while the user was in Chrome.
-  if (await isInitialized()) {
-    await rebuildRuntime(wallet);
-  }
+  walletEpoch += 1;
+  // Local storage is always available. Rebuild now so the WebView can reopen directly into
+  // the unlocked runtime without routing through the old blocking storage setup.
+  await rebuildRuntime(connected);
 }
 
 // ── one connected UI (one SSE stream) ──
@@ -442,11 +499,19 @@ function attachAuthHandlers(c: Client) {
         }
         return;
       case "startGoogleLogin":
+        if (!walletAddress) {
+          c.send({ type: "toast", text: "Connect a wallet to enable cross-device sync." });
+          return;
+        }
         beginGoogleLogin(c);
         return;
       // One-tap reconnect after a dead cloud sign-in (mirror reports reason:"reauth").
       // Re-runs the same Google flow (native on Android, fixed-redirect on web).
       case "reconnectCloud":
+        if (!walletAddress) {
+          c.send({ type: "toast", text: "Connect a wallet to enable cross-device sync." });
+          return;
+        }
         beginGoogleLogin(c);
         return;
       case "googleAuthCode":
@@ -464,6 +529,7 @@ function attachAuthHandlers(c: Client) {
 // but they should still work when the active SSE client is in onboarding/storage setup.
 function attachMarketHandlers(c: Client) {
   let mktPromise: ReturnType<typeof marketplaceEnv> | null = null;
+  let mktEpoch = -1;
   // One-time per market session: have we pulled the wallet's owned NFT skills from chain
   // and installed them locally yet? vscode does this at chat "ready" via env.loadOwnedSkills;
   // localhost has no such env wiring, so we drive it from the first owned-skills read below.
@@ -482,6 +548,11 @@ function attachMarketHandlers(c: Client) {
   }
   async function getMarket() {
     if (!wallet) throw new Error("Wallet not connected.");
+    if (mktEpoch !== walletEpoch) {
+      mktPromise = null;
+      ownedSynced = false;
+      mktEpoch = walletEpoch;
+    }
     if (!mktPromise) {
       const currentWallet = wallet;
       mktPromise = withMarketTimeout(
@@ -585,6 +656,40 @@ function attachMarketHandlers(c: Client) {
         ownedSynced = false;
         c.send({ type: "rpcStatus", status: { dasReady: false, hasKey: false, masked: null, network: getNetwork() } });
         return;
+      }
+    }
+
+    // Guests may browse every public read surface, but no wallet-specific read or chain
+    // write reaches marketplaceEnv. This is the server-side invariant behind the UI locks.
+    if (!walletAddress) {
+      switch (m.type) {
+        case "ownedSkills":
+          c.send({ type: "ownedSkills", names: [], mints: {}, disposedMints: {}, cards: [], workflowMints: [] });
+          return;
+        case "getBalance":
+          c.send({ type: "balance", lamports: null });
+          return;
+        case "buySkill":
+          c.send({ type: "buyResult", skillId: m.skillId ?? "", ok: false, error: "Connect a wallet to buy skills." });
+          return;
+        case "buyAllSkills":
+        case "buyRequiredSkills":
+          c.send({ type: "buyAllResult", wallet: m.wallet ?? "", ok: false, bought: 0, failed: 0, error: "Connect a wallet to buy skills." });
+          return;
+        case "publishSkill":
+          c.send({ type: "publishResult", ok: false, error: "Connect a wallet to publish skills." });
+          return;
+        case "postNote":
+          c.send({ type: "postNoteResult", skillId: m.skillId ?? "", ok: false, error: "Connect a wallet to comment." });
+          return;
+        case "postAgentNote":
+          c.send({ type: "agentNoteResult", agentWallet: m.agentWallet ?? "", ok: false, error: "Connect a wallet to post." });
+          return;
+        case "disposeSkill":
+        case "reEquipSkill":
+        case "airdrop":
+          c.send({ type: "toast", text: "Connect a wallet to use this action." });
+          return;
       }
     }
     let mkt;
@@ -774,7 +879,7 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
     walletAddress: () => walletAddress,
     storageInfo: async () => ({ info: await getStorageInfo(), options: STORAGE_OPTIONS, googleCredsConfigured: await hasGoogleCreds() }),
     connectCloud: async (cfg) => {
-      if (wallet) {
+      if (wallet && walletAddress) {
         await switchStorage(wallet, { kind: cfg.kind, location: cfg.location, authHeader: cfg.authHeader } as StorageConfig);
         await rebuildRuntime(wallet);
       }
@@ -787,9 +892,11 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
     },
     disconnectWallet: async () => {
       await disconnectCloud();
-      wallet = null;
       walletAddress = null;
       runtime = null;
+      wallet = await deviceGuestWallet();
+      walletEpoch += 1;
+      await rebuildRuntime(wallet);
       c.send({ type: "clear" });
       c.send({ type: "init", defaultPath: null, cloudKind: null, hasWallet: false });
     },
@@ -803,8 +910,13 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
     },
   });
   attachAuthHandlers(c);
+  attachWalletConnection(c);
   c.recvs.push(async (m: any) => {
-    if (m?.type === "ready") await pushCliStatus(c);
+    if (m?.type === "ready") {
+      c.send({ type: "init", defaultPath: null, cloudKind: null, hasWallet: !!walletAddress });
+      c.send({ type: "wallet", address: walletAddress });
+      await pushCliStatus(c);
+    }
   });
   attachMarketHandlers(c);
 
@@ -876,35 +988,18 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
   };
 }
 
-// Before a wallet exists, a client is in ONBOARDING: its recv handles the wallet
-// handshake plus market RPC/Helius settings (so the storage screen can configure Helius
-// before any runtime exists). On connect we build the runtime; the onboarding webview then
-// navigates to / (chat), which opens a FRESH SSE client that finds the runtime ready and
-// attaches chat. So an onboarding client never carries chat itself — clean separation.
-function attachOnboarding(c: Client) {
-  attachAuthHandlers(c);
-  attachMarketHandlers(c);
-
+function attachWalletConnection(c: Client) {
   c.recvs.push(async (m: any) => {
-    if (m?.type === "ready") {
-      c.send({ type: "init", defaultPath: null, cloudKind: null, hasWallet: !!wallet });
+    if (m?.type !== "connectWallet" || typeof m.address !== "string" || !Array.isArray(m.signature)) return;
+    try {
+      await connectWallet(m.address, Uint8Array.from(m.signature));
+    } catch (e) {
+      c.send({ type: "toast", text: "Wallet connect failed: " + (e as Error).message });
       return;
     }
-    if (m?.type === "connectWallet" && typeof m.address === "string" && Array.isArray(m.signature)) {
-      try {
-        await connectWallet(m.address, Uint8Array.from(m.signature));
-      } catch (e) {
-        c.send({ type: "toast", text: "Wallet connect failed: " + (e as Error).message });
-        return;
-      }
-      // storageConfigured lets the UI skip the storage picker on a returning device —
-      // the gdrive choice + token persist, so re-walking that screen (and re-auth) is
-      // pointless. Only a true first run needs the picker.
-      c.send({ type: "walletConnected", address: walletAddress, storageOptions: STORAGE_OPTIONS, storageConfigured: await isCloudConnected() });
-      c.send({ type: "storage", info: await getStorageInfo(), options: STORAGE_OPTIONS, googleCredsConfigured: await hasGoogleCreds() });
-      await pushCliStatus(c);
-      return;
-    }
+    c.send({ type: "walletConnected", address: walletAddress, storageOptions: STORAGE_OPTIONS, storageConfigured: await isCloudConnected() });
+    c.send({ type: "storage", info: await getStorageInfo(), options: STORAGE_OPTIONS, googleCredsConfigured: await hasGoogleCreds() });
+    await pushCliStatus(c);
   });
 }
 
@@ -928,7 +1023,7 @@ const http = createServer(async (req, res) => {
   const path = url.pathname;
 
   // ── SSE: open this UI's event stream (server→UI). A fresh connection gets a new
-  // client id + chat/onboarding attachment. A RECONNECT (?client=<id>&cursor=<seq>,
+  // client id + chat attachment. A RECONNECT (?client=<id>&cursor=<seq>,
   // or Last-Event-ID header) rebinds the existing client to the new response and
   // replays events after the cursor — so a brief WebView/network drop loses nothing,
   // without re-running ready or re-attaching the dispatcher. ──
@@ -963,24 +1058,17 @@ const http = createServer(async (req, res) => {
     res.write(`event: client\ndata: ${JSON.stringify({ client: id })}\n\n`);
     res.on("close", () => { clearInterval(ka); scheduleTeardown(id, c); });
     if (runtime) attachChat(id, c, runtime);
-    // Wallet is connected this session but the runtime is null — the user finished
-    // onboarding and navigated to /chat (a fresh SSE), or a reconnect/reopen raced the
-    // deferred build (connectWallet defers it during onboarding to avoid the Chrome-OAuth
-    // stale-runtime race). Build it now and bind CHAT instead of falling back to onboarding
-    // (which would re-send `init` and silently drop chat messages). We do NOT gate on
-    // isInitialized(): local storage ALWAYS works and cloud is optional — connect() mirrors
-    // cloud only if one was configured — so a user who chose "continue without cloud" still
-    // gets a working chat (matches the desktop/VSCode connect(wallet) path). Only a true
-    // process restart (wallet lost from memory) re-onboards.
+    // A connected wallet or persistent guest identity always receives a chat runtime.
+    // Local storage is immediate; cloud sync remains an optional unlock action.
     else if (wallet) {
       attachChat(id, c, await ensureRuntime(wallet));
     }
-    else attachOnboarding(c);
+    else attachChat(id, c, await ensureGuestRuntime());
     return;
   }
 
   // ── RPC: one UI→server command. Routed to its client's recv (the dispatcher or the
-  // onboarding handler). The reply is not in the HTTP response — it streams back over
+  // dispatcher). The reply is not in the HTTP response — it streams back over
   // that client's SSE (same as WS: send is async/push). ──
   if (req.method === "POST" && path === "/rpc") {
     const id = url.searchParams.get("client") ?? "";
@@ -1046,5 +1134,5 @@ const http = createServer(async (req, res) => {
 });
 
 http.listen(PORT, () => {
-  console.log(`AgentNet localhost → http://localhost:${PORT}/  (connect a wallet to begin)`);
+  console.log(`AgentNet localhost → http://localhost:${PORT}/  (guest chat ready)`);
 });
