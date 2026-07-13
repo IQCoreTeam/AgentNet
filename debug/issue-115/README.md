@@ -38,6 +38,30 @@ Decision table is in the handoff comment (link at top). Short version: if the lo
 `link ret=0 ... target_exists_after=0`, proot's `link` is a false success — that is the
 root cause.
 
+## Candidate fix — run probe10 right after probe9 confirms link
+
+git 2.43 `finalize_object_file()` (object-file.c, verified against v2.43.0): with
+`core.createObject=rename` (`OBJECT_CREATION_USES_RENAMES`) it **skips `link()` entirely** and
+uses `rename()`, which works under proot (probe6). So the interim fix is **one line of git
+config — no shim, no proot rebuild**:
+
+```
+run sh /root/probe10.sh and save the full output to /root/probe10_result.txt
+```
+probe10 reproduces the loss in link mode, shows it gone in rename mode, then does a real
+network clone with the fix. Verdict: fixed iff rename-mode survivors=50 AND clone exit=0.
+
+**Fix ladder (apply in order once probe9 names `link`):**
+1. **Config, git-only, zero code** — `core.createObject=rename` in the guest (system gitconfig
+   or `ServerManager.buildGuestEnv` via `GIT_CONFIG_*`). Fixes the shipping bug (git is the only
+   proven-affected tool). Ship this.
+2. **`shims/liblinkfix.c`, all tools** — LD_PRELOAD that returns EXDEV on object-path `link`/
+   `linkat`, forcing the caller's own rename fallback. Use only if a non-git tool (npm/cargo)
+   hits the same link false-success and has no config knob.
+3. **Basement, proot `linkat` patch** — fix the false-success in our own proot build (we own it
+   from the Seeker process_vm fix; GPLv2 → publish the patch). The true fix: covers every tool,
+   no per-tool workaround. This is the long-term "fix the basement" answer.
+
 ## How to stage these on a device
 
 ```bash

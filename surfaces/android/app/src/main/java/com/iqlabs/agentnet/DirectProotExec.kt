@@ -95,7 +95,18 @@ class DirectProotExec(private val layout: Paths.Layout) : GuestExec {
         val guestArgv = listOf(
             layout.proot,
             "--kill-on-exit",
-            "--link2symlink",           // app storage has no hardlinks; proot fakes them
+            // #115 ROOT CAUSE + fix: DO NOT add --link2symlink. In the untrusted_app domain the
+            // kernel denies hardlinks (verified on-device: `ln a b` -> EACCES). --link2symlink
+            // "helpfully" catches that and FAKES success (pokes syscall result 0) by swapping in a
+            // symlink-refcount scheme — but the fake defeats callers' own error handling: git's
+            // finalize_object_file and pnpm's store-linker both fall back to rename/copy when link
+            // FAILS, but never when it lies with a 0. Result: silent object loss ("remote did not
+            // send all necessary objects") and broken pnpm installs. With l2s OFF, linkat fails
+            // honestly with EACCES and both tools fall back correctly (verified on-device: git
+            // 50/50 objects survive, pnpm 589/589 files, real clone clean). One flag removed fixes
+            // every link()-using tool with a fallback — no proot rebuild, no per-tool config.
+            // (The core.createObject=rename gitconfig from #116 is now belt-and-suspenders: it just
+            // skips the doomed link attempt for git specifically.)
             // NOTE: kept to flags the Termux proot build supports. --sysvipc is dropped
             // (node doesn't need SysV IPC). -L and --kernel-release are likewise omitted as
             // non-essential (add back only if a specific build is confirmed to accept them).
