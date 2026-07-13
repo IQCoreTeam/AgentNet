@@ -163,6 +163,17 @@ class Installer(private val ctx: Context) {
         // first, then write a plain file. Same for /etc/hosts.
         writeFresh(File(p.rootfs, "etc/resolv.conf"), "nameserver 8.8.8.8\nnameserver 8.8.4.4\n")
         writeFresh(File(p.rootfs, "etc/hosts"), "127.0.0.1 localhost\n::1 localhost\n")
+        // #115: under untrusted_app, proot's link() is a FALSE success — it returns 0 but the
+        // target file never appears (proven on-device: `link ret=0 target_exists_after=0`). git's
+        // default loose-object finalize is mkstemp -> link(tmp,final) -> unlink(tmp); it trusts
+        // link's 0 and reports the object written, so clone/commit/fetch silently lose objects
+        // ("remote did not send all necessary objects" / "bad object"). core.createObject=rename
+        // makes git skip link() entirely and use rename(), which proot handles correctly (verified:
+        // 0/50 loose objects survive with link, 50/50 with rename, real clone then succeeds). System
+        // gitconfig so EVERY git — the server's and the user's interactive shell — gets it. This
+        // supersedes the clone-only dulwich shim (#114). The basement fix (patching proot's linkat
+        // for all tools) is tracked separately in #115.
+        writeFresh(File(p.rootfs, "etc/gitconfig"), "[core]\n\tcreateObject = rename\n")
         val tmp = File(p.rootfs, "tmp").apply { mkdirs() }
         runCatching { android.system.Os.chmod(tmp.absolutePath, 0b001_111_111_111) } // 1777
     }
