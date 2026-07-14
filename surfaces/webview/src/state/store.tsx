@@ -279,7 +279,6 @@ type LocalAction =
   | { type: "__newChat" }
   | { type: "__closeFund" }
   | { type: "__funding" }
-  | { type: "__restoreFailed" }
   | { type: "__clearCelebrate" };
 type Action = ServerMessage | LocalAction;
 
@@ -610,9 +609,6 @@ function reducer(state: State, ev: Action): State {
       return { ...state, fundOpen: false };
     case "__funding":
       return { ...state, funding: true };
-    case "__restoreFailed":
-      // Silent Android reconnect found nothing (or failed) — show the signup screen now.
-      return { ...state, phase: "onboarding" };
     case "__clearCelebrate":
       return { ...state, buyCelebrate: false, buyCelebrateLabel: null };
     default:

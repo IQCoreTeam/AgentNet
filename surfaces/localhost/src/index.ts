@@ -328,7 +328,13 @@ async function submitGoogleAuthCode(c: Client, code: string) {
 async function connectWallet(address: string, signature: Uint8Array): Promise<void> {
   if (walletAddress === address) return;
   const connected = webWallet(address, signature, signTransactionViaUi);
-  await migrateGuestSessions(connected);
+  // A damaged guest store must never lock the user out of connecting a wallet —
+  // the guest copy stays on disk, so a later connect can retry the migration.
+  try {
+    await migrateGuestSessions(connected);
+  } catch (e) {
+    console.error("[wallet] guest session migration failed:", e);
+  }
   wallet = connected;
   walletAddress = address;
   walletEpoch += 1;
