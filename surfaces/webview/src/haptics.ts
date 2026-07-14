@@ -17,4 +17,8 @@ export const haptics = {
   unlock: () => buzz([60, 80, 60]),     // strong double buzz for a progression unlock
   castStart: () => buzz([10, 40, 10]),  // light double tap when a skill starts casting
   celebrate: () => buzz([40, 30, 40, 30, 40, 30, 220]), // the success "zap"
+  // Tutorial ladder: each step lands with its own escalating pattern (Duolingo-style), so
+  // progress is felt, not just seen. step1 = crisp reveal, step2 = firmer rising double.
+  step1: () => buzz([12, 45, 22]),      // first step clears — a light rising tick
+  step2: () => buzz([18, 40, 26, 40, 40]), // second step clears — firmer, longer rise
 };

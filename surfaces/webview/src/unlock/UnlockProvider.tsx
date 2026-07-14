@@ -139,7 +139,11 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
 
   function go(next: UnlockScreen) {
     setScreen(next);
-    haptics.unlock();
+    // Escalating haptics as each tutorial step lands; the final unlock (screen "done") gets
+    // the big unlock+celebrate buzz from the connect effect above, so it's not repeated here.
+    if (next === "installed") haptics.step1();
+    else if (next === "connect") haptics.step2();
+    else haptics.tick();
     playUnlockSound();
   }
 
@@ -269,14 +273,17 @@ function StepScreen({ step, title, detail, complete = false, children }: { step:
   );
 }
 
-export function LockedGate({ reason, onUnlocked, children, className = "" }: { reason: UnlockReason; onUnlocked?: UnlockAction; children: ReactNode; className?: string }) {
+// `badge` draws the corner lock/check overlay — right for big card gates, but it collides
+// with small inline buttons (Publish, the UNLOCK row), so those pass badge={false} and show
+// their own inline lock instead.
+export function LockedGate({ reason, onUnlocked, children, className = "", badge = true }: { reason: UnlockReason; onUnlocked?: UnlockAction; children: ReactNode; className?: string; badge?: boolean }) {
   const { unlocked, celebrating, requestUnlock } = useUnlock();
   if (unlocked && !celebrating) return <>{children}</>;
   if (unlocked) {
     return (
       <div className={`relative unlock-gate-reveal ${className}`} style={{ "--unlock-delay": `${REVEAL_DELAY[reason]}ms` } as CSSProperties}>
         {children}
-        <span className="pointer-events-none absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-[color:var(--an-green)] text-[color:var(--an-on-green)] unlock-badge-open"><CheckIcon className="h-4 w-4" /></span>
+        {badge && <span className="pointer-events-none absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-[color:var(--an-green)] text-[color:var(--an-on-green)] unlock-badge-open"><CheckIcon className="h-4 w-4" /></span>}
       </div>
     );
   }
@@ -290,7 +297,7 @@ export function LockedGate({ reason, onUnlocked, children, className = "" }: { r
       aria-label={`Locked: ${REASON_COPY[reason].title}`}
     >
       <div className="pointer-events-none opacity-55">{children}</div>
-      <span className="pointer-events-none absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-[color:var(--an-bg-0)] text-[color:var(--an-green)]"><LockIcon className="h-4 w-4" /></span>
+      {badge && <span className="pointer-events-none absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-[color:var(--an-bg-0)] text-[color:var(--an-green)]"><LockIcon className="h-4 w-4" /></span>}
     </div>
   );
 }

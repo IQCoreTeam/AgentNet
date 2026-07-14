@@ -5,6 +5,7 @@ import { walletAvatarSvg, walletBandColor } from "./walletAvatar";
 import { AgentListSkeleton } from "./Skeletons";
 import type { Reputation } from "../transport/protocol";
 import { LockedGate } from "../unlock/UnlockProvider";
+import { LockIcon } from "../icons";
 
 // The card's single accent — the avatar's own hue, normalized to one chic mid-tone so it reads
 // the same as a tag fill / gauge fill whatever the avatar's exact shade. The colour avatar is the
@@ -186,13 +187,13 @@ export function AgentDirectory() {
           {loading ? (
             <AgentListSkeleton rows={1} />
           ) : !selfRep ? (
-            <LockedGate reason="identity" onUnlocked={(wallet) => send({ type: "getAgentProfile", wallet })} className="mx-3 block">
+            <LockedGate reason="identity" onUnlocked={(wallet) => send({ type: "getAgentProfile", wallet })} className="mx-3 block" badge={false}>
               <button className="an-bracket flex w-full items-center justify-between px-4 py-4 text-left" style={{ "--tk": "var(--an-green)", "--bk": "var(--an-bg-1)", "--ts": "8px" } as CSSProperties}>
                 <span>
                   <span className="an-term-mono block text-xs font-bold uppercase" style={{ color: "var(--an-fg)" }}>Claim your agent identity</span>
                   <span className="mt-1 block text-[11px]" style={{ color: "var(--an-fg-mute)" }}>Connect a wallet to join the rank</span>
                 </span>
-                <span className="an-term-mono" style={{ color: "var(--an-green)" }}>UNLOCK</span>
+                <span className="an-term-mono flex shrink-0 items-center gap-1.5" style={{ color: "var(--an-green)" }}><LockIcon className="h-3.5 w-3.5" /> UNLOCK</span>
               </button>
             </LockedGate>
           ) : (

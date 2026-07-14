@@ -203,7 +203,7 @@ export function MarketScreen({ tab, onBack }: { tab: ShellTab; onBack?: () => vo
         {/* MARKET: SOL balance + publish */}
         {isMarket && balanceSol && <span className="an-term-mono shrink-0 text-xs font-bold" style={{ color: "#bdbdbd", letterSpacing: "0.5px" }}>{balanceSol} ◎</span>}
         {isMarket && (
-          <LockedGate reason="publish" onUnlocked={() => setView("publish")} className="shrink-0">
+          <LockedGate reason="publish" onUnlocked={() => setView("publish")} className="shrink-0" badge={false}>
             <button
               onClick={() => setView("publish")}
               className="an-term-mono text-[10px] font-bold uppercase tracking-wider active:opacity-80"
@@ -403,7 +403,7 @@ function SkillsLocked({ onUnlock }: { onUnlock: () => void }) {
       </div>
       <div className="absolute inset-0 flex items-center justify-center p-5">
         <div
-          className="an-bracket w-full max-w-[280px] p-5 text-center"
+          className="an-bracket unlock-denied-in w-full max-w-[280px] p-5 text-center"
           style={{ border: "1px solid #1d3a26", "--ts": "12px", "--bk": "var(--an-bg-0)", "--tk": "#2f6b46" } as CSSProperties}
         >
           <span className="mx-auto mb-4 grid h-16 w-16 place-items-center" style={{ border: "1px solid #1d3a26", background: "var(--an-green-dim)", color: "var(--an-green)" }}>
