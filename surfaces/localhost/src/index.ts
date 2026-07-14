@@ -1070,9 +1070,13 @@ const http = createServer(async (req, res) => {
     const id = `c${++clientCounter}`;
     const c = makeClient(res);
     clients.set(id, c);
-    // Tell the UI its id (it tags every POST with it) before anything else.
-    res.write(`event: client\ndata: ${JSON.stringify({ client: id })}\n\n`);
     res.on("close", () => { clearInterval(ka); scheduleTeardown(id, c); });
+    // Attach the dispatcher (which populates c.recvs) BEFORE announcing the client id.
+    // The UI POSTs /rpc?client=<id> ({type:"ready"}) the instant it sees the handshake
+    // frame; if we announced first, a cold-boot guest whose runtime is still building
+    // (the await below) would have empty recvs when that first `ready` lands → the RPC
+    // 409s, `ready` is dropped, the server never pushes `init`, and the UI hangs on the
+    // boot splash forever. Announcing the id only after recvs is ready closes that race.
     if (runtime) attachChat(id, c, runtime);
     // A connected wallet or persistent guest identity always receives a chat runtime.
     // Local storage is immediate; cloud sync remains an optional unlock action.
@@ -1080,6 +1084,8 @@ const http = createServer(async (req, res) => {
       attachChat(id, c, await ensureRuntime(wallet));
     }
     else attachChat(id, c, await ensureGuestRuntime());
+    // recvs is ready now — tell the UI its id (it tags every POST with it).
+    res.write(`event: client\ndata: ${JSON.stringify({ client: id })}\n\n`);
     return;
   }
 
