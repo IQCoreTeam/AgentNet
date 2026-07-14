@@ -8,7 +8,8 @@ import { AgentProfileView } from "./AgentProfileView";
 import type { SkillCard } from "../transport/protocol";
 import { HeliusSetupPanel } from "../settings/HeliusKeyForm";
 import { SkillDetailSkeleton, MarketListSkeleton, AgentProfileSkeleton } from "./Skeletons";
-import { LockedGate } from "../unlock/UnlockProvider";
+import { LockedGate, useUnlock } from "../unlock/UnlockProvider";
+import { LockIcon } from "../icons";
 
 type MarketView = "browse" | "publish" | "helius";
 export type ShellTab = "market" | "skills" | "profile";
@@ -23,6 +24,7 @@ export type ShellTab = "market" | "skills" | "profile";
 // button (the bottom tab bar owns navigation).
 export function MarketScreen({ tab, onBack }: { tab: ShellTab; onBack?: () => void }) {
   const { state, send, setMarketTab, marketSearching, clearMarketDetail, clearAgentProfile } = useStore();
+  const { unlocked, requestUnlock } = useUnlock();
   // Search text is LOCAL: keying it into the global store re-rendered the whole app on every
   // keystroke. Only MarketScreen reads it, so it lives here (matches AgentDirectory's search).
   const [query, setQuery] = useState("");
@@ -298,7 +300,9 @@ export function MarketScreen({ tab, onBack }: { tab: ShellTab; onBack?: () => vo
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-3 an-tabbar-inset">
         {isSkills ? (
-          ownedLoading && state.marketOwned.length === 0 ? (
+          !unlocked ? (
+            <SkillsLocked owned={ownedCards} onUnlock={() => requestUnlock("skills")} />
+          ) : ownedLoading && state.marketOwned.length === 0 ? (
             <MarketListSkeleton />
           ) : state.marketOwned.length === 0 ? (
             <div className="py-8 text-center text-sm text-zinc-600">
@@ -352,6 +356,38 @@ export function MarketScreen({ tab, onBack }: { tab: ShellTab; onBack?: () => vo
             )}
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+// The Skills tab before a wallet is connected: the real skill chips sit dimmed behind an
+// "Access Denied" terminal panel, so the value is visible but gated. Tapping Unlock routes
+// into the shared unlock flow (same as every other LockedGate).
+function SkillsLocked({ owned, onUnlock }: { owned: SkillCard[]; onUnlock: () => void }) {
+  return (
+    <div className="relative min-h-full pt-3">
+      {owned.length > 0 && (
+        <div className="pointer-events-none grid grid-cols-3 gap-3.5 opacity-25" style={{ filter: "saturate(0.35)" }} aria-hidden="true">
+          {owned.map((card) => (
+            <SkillSdCard key={card.id} card={card} owned onOpen={() => undefined} />
+          ))}
+        </div>
+      )}
+      <div className="absolute inset-0 flex items-center justify-center p-5">
+        <div
+          className="an-bracket w-full max-w-[280px] p-5 text-center"
+          style={{ border: "1px solid #1d3a26", "--ts": "12px", "--bk": "var(--an-bg-0)", "--tk": "#2f6b46" } as CSSProperties}
+        >
+          <span className="mx-auto mb-4 grid h-16 w-16 place-items-center" style={{ border: "1px solid #1d3a26", background: "var(--an-green-dim)", color: "var(--an-green)" }}>
+            <LockIcon className="h-8 w-8" />
+          </span>
+          <div className="an-term-mono text-[15px] font-bold uppercase tracking-[0.2em]" style={{ color: "var(--an-green)" }}>Access Denied</div>
+          <p className="an-term-mono mx-auto mt-3 max-w-[220px] text-[10px] uppercase leading-relaxed tracking-wide" style={{ color: "var(--an-fg-dim)" }}>
+            Connect a wallet to browse, collect, and publish skills.
+          </p>
+          <button onClick={onUnlock} className="an-btn an-btn-green mt-5 w-full">Unlock Agent</button>
+        </div>
       </div>
     </div>
   );

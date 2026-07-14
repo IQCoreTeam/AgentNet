@@ -422,7 +422,7 @@ export function Sessions({
                       <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="M11 7v4l2.5 2" /></svg>
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-fg)" }}>Background execution</span>
+                      <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-fg)" }}>Background run</span>
                       <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>{bgExec ? "Runs in the background only while a task is active" : "Agent stops when you leave the app"}</span>
                     </span>
                     <span className="relative h-[1.35rem] w-[2.4rem] shrink-0 rounded-full transition" style={{ background: bgExec ? "var(--an-green)" : "var(--an-bg-2)" }}>
@@ -451,7 +451,7 @@ export function Sessions({
                       <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M16.8 14.6A7 7 0 0 1 7.4 5.2 7 7 0 1 0 16.8 14.6Z" /><path d="M14.8 5.2v2.6M13.5 6.5h2.6" /></svg>
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-fg)" }}>Keep working while locked</span>
+                      <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-fg)" }}>Run while locked</span>
                       <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>
                         {!bgExec ? "Turn on background execution first" : screenOffExec ? "Keeps active tasks running with the screen off" : "Pauses may occur after the screen turns off"}
                       </span>
