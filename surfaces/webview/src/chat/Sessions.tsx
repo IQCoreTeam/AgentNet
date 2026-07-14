@@ -82,6 +82,19 @@ function Toggle({ on }: { on: boolean }) {
   );
 }
 
+// One mobile-friendly header for every settings sub-view: a 44px tap-target back
+// button + terminal title, matching the height of the main tab headers.
+function SettingsSubHeader({ title, onBack }: { title: string; onBack: () => void }) {
+  return (
+    <div className="mb-4 flex items-center gap-2 border-b border-zinc-900 pb-2.5">
+      <button onClick={onBack} aria-label="Back" className="an-iconbtn shrink-0">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+      </button>
+      <span className="an-term-mono text-[13px] font-bold uppercase tracking-wide" style={{ color: "var(--an-fg-dim)" }}>{title}</span>
+    </div>
+  );
+}
+
 // One row in the Storage radio picker: a filled dot marks the active backend, tap to switch.
 // Compact + token-styled to sit naturally in the settings drawer (no emoji / em-dash).
 function StorageOption({ active, title, subtitle, onClick }: { active: boolean; title: string; subtitle: string; onClick: () => void }) {
@@ -502,35 +515,14 @@ export function Sessions({
           </div>
         ) : settingsMode === "helius" ? (
           <div className="flex flex-col h-full">
-            <div className="mb-4 flex items-center justify-between border-b border-zinc-900 pb-2">
-              <span className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">
-                Market RPC
-              </span>
-              <button
-                onClick={() => setSettingsMode("configure")}
-                className="text-xs text-zinc-400 hover:text-zinc-200"
-              >
-                Back
-              </button>
-            </div>
+            <SettingsSubHeader title="Market RPC" onBack={() => setSettingsMode("configure")} />
             <div className="flex-1 overflow-y-auto">
               <HeliusKeyForm onDone={() => setSettingsMode(rootMode)} />
             </div>
           </div>
         ) : settingsMode === "github" ? (
           <div className="flex flex-col h-full">
-            <div className="mb-4 flex items-center gap-2 border-b border-zinc-900 pb-3">
-              <button
-                onClick={() => setSettingsMode("configure")}
-                aria-label="Back"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-zinc-400 transition active:bg-[color:var(--an-bg-2)] active:text-zinc-100"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
-              </button>
-              <span className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">
-                GitHub
-              </span>
-            </div>
+            <SettingsSubHeader title="GitHub" onBack={() => setSettingsMode("configure")} />
             <div className="flex-1 overflow-y-auto flex flex-col gap-4">
               <ConnectGithub onDone={() => setSettingsMode(rootMode)} />
             </div>
@@ -538,17 +530,7 @@ export function Sessions({
         ) : settingsMode === "connect" ? (
           <div className="flex flex-col h-full justify-between">
             <div>
-              <div className="mb-4 flex items-center justify-between border-b border-zinc-900 pb-2">
-                <span className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">
-                  Storage
-                </span>
-                <button
-                  onClick={() => setSettingsMode("configure")}
-                  className="text-xs text-zinc-400 hover:text-zinc-200"
-                >
-                  Back
-                </button>
-              </div>
+              <SettingsSubHeader title="Storage" onBack={() => setSettingsMode("configure")} />
               <div className="flex flex-col gap-2.5">
                 {/* Radio picker: the filled dot = the active backend. Local = disconnect any
                     cloud; gdrive/custom open their existing connect flow. */}
@@ -593,17 +575,7 @@ export function Sessions({
         ) : settingsMode === "custom" ? (
           <div className="flex flex-col h-full justify-between">
             <div>
-              <div className="flex items-center justify-between border-b border-zinc-900 pb-2 mb-4">
-                <span className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">
-                  Custom Cloud
-                </span>
-                <button
-                  onClick={() => setSettingsMode("connect")}
-                  className="text-xs text-zinc-400 hover:text-zinc-200"
-                >
-                  Back
-                </button>
-              </div>
+              <SettingsSubHeader title="Custom Cloud" onBack={() => setSettingsMode("connect")} />
               <div className="flex flex-col gap-3">
                 <div>
                   <label className="text-[10px] text-zinc-500 font-semibold uppercase block mb-1">
@@ -655,20 +627,7 @@ export function Sessions({
           /* Google Drive Auth */
           <div className="flex flex-col h-full justify-between">
             <div>
-              <div className="flex items-center justify-between border-b border-zinc-900 pb-2 mb-4">
-                <span className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">
-                  Google Drive
-                </span>
-                <button
-                  onClick={() => {
-                    if (googleLoginUrl) send({ type: "cancelGoogleLogin" });
-                    setSettingsMode("connect");
-                  }}
-                  className="text-xs text-zinc-400 hover:text-zinc-200"
-                >
-                  Back
-                </button>
-              </div>
+              <SettingsSubHeader title="Google Drive" onBack={() => { if (googleLoginUrl) send({ type: "cancelGoogleLogin" }); setSettingsMode("connect"); }} />
               <div className="flex flex-col gap-3">
                 {!googleLoginUrl ? (
                   <>

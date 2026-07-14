@@ -24,8 +24,8 @@ function PublishProgressView({ progress }: { progress: { phase: "store" | "mint"
 
   return (
     <div className="flex flex-col h-full">
-      <header className={`flex items-center gap-2 border-b ${t.border} px-3 py-2 shrink-0`} style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))" }}>
-        <span className={`font-medium text-sm ${t.head}`}>Forging your {t.noun}</span>
+      <header className={`flex items-center gap-2 border-b ${t.border} px-3.5 shrink-0`} style={{ paddingTop: "max(0.85rem, env(safe-area-inset-top))", paddingBottom: "0.85rem" }}>
+        <span className={`font-medium text-[15px] ${t.head}`}>Forging your {t.noun}</span>
       </header>
       <div className={`flex-1 flex flex-col items-center justify-center gap-5 p-6 text-center bg-gradient-to-b ${t.wash} to-transparent`}>
         <SkillIcon className={`h-12 w-12 ${t.icon} publish-forge-pulse`} />
@@ -147,8 +147,8 @@ export function PublishForm({ onBack, initialKind = "skill" }: Props) {
   if (result?.ok) {
     return (
       <div className="flex flex-col h-full">
-        <header className={`flex items-center gap-2 border-b ${t.border} px-3 py-2 shrink-0`} style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))" }}>
-          <button onClick={() => { haptics.tick(); clearPublishResult(); onBack(); }} className="text-zinc-400 active:text-zinc-200 px-1 text-lg">←</button>
+        <header className={`flex items-center gap-2 border-b ${t.border} px-2.5 shrink-0`} style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))", paddingBottom: "0.55rem" }}>
+          <button onClick={() => { haptics.tick(); clearPublishResult(); onBack(); }} className="an-iconbtn shrink-0" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg></button>
           <span className="font-medium text-sm">Publish {kind === "workflow" ? "Workflow" : "Skill"}</span>
         </header>
         <div className={`flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center bg-gradient-to-b ${t.wash} to-transparent`}>
