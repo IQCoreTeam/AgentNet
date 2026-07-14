@@ -45,6 +45,32 @@ jobs:
       - run: pnpm --filter agentnet-localhost build
       - run: pnpm --filter agentnet-webview build   # the React SPA the server serves
 
+      # Build PRoot from the exact Termux recipe we ship, with AgentNet's GPLv2
+      # copy-on-link patch applied. The official builder supplies the Android NDK,
+      # bionic sysroot, process_vm feature detection, libtalloc, libandroid-shmem,
+      # and the matching unbundled loaders.
+      - uses: actions/checkout@v4
+        with:
+          repository: termux/termux-packages
+          ref: 105685dac8697e3b6c2ceb57be24d624afbfa2a3
+          path: .termux-packages
+      - name: Build patched PRoot from source
+        shell: bash
+        run: |
+          case "${{ github.event.inputs.abi }}" in
+            arm64) TERMUX_ARCH=aarch64 ;;
+            x86_64) TERMUX_ARCH=x86_64 ;;
+          esac
+          cp surfaces/android/proot/patches/0001-copy-on-link.patch \
+            .termux-packages/packages/proot/0001-copy-on-link.patch
+          CI=true CONTAINER_NAME=agentnet-proot-builder \
+            TERMUX_BUILDER_IMAGE_NAME=ghcr.io/termux/package-builder@sha256:fa23eb4238ef8eda877cd991a06152ce76e9f274d1cae0d42f28fee3e5cd6016 \
+            .termux-packages/scripts/run-docker.sh ./build-package.sh \
+              -a "$TERMUX_ARCH" -f -I proot
+          PROOT_PACKAGE=$(ls .termux-packages/output/proot_*_"$TERMUX_ARCH".deb | tail -1)
+          test -s "$PROOT_PACKAGE"
+          echo "PROOT_DEB=/work/$PROOT_PACKAGE" >> "$GITHUB_ENV"
+
       # Run the asset build inside an arm64 Ubuntu container (root + target arch). The
       # container has the chroot/apt the rootfs step needs; ALLOW_CROSS lets the script
       # proceed since uname inside the arm64 container already reports aarch64.
@@ -53,6 +79,7 @@ jobs:
           docker run --rm --platform linux/arm64 \
             -v "${{ github.workspace }}:/work" -w /work \
             -e ABI=${{ github.event.inputs.abi }} -e ALLOW_CROSS=1 \
+            -e PROOT_DEB="${PROOT_DEB}" \
             ubuntu:24.04 \
             bash -c '
               set -e

@@ -19,6 +19,17 @@ class DirectProotExec(private val layout: Paths.Layout) : GuestExec {
         private const val TAG = "AgentNet/Server"
     }
 
+    // android-apk can temporarily reuse an older android-assets artifact while a new heavy
+    // source build is pending. Never pass an unknown option to that old binary (which would
+    // prevent the entire guest from booting). The patched binary embeds its CLI option string.
+    private val copyOnLinkSupported: Boolean by lazy {
+        runCatching {
+            File(layout.proot).readBytes()
+                .toString(Charsets.ISO_8859_1)
+                .contains("--copy-on-link")
+        }.getOrDefault(false)
+    }
+
     override fun launch(guestEnv: List<String>, guestCommand: String): Process {
         // prootCommand wraps the launch in `sh -c 'cd <filesDir> && exec proot …'`, so the
         // host cwd is already pinned to a readable dir before proot runs (see the comment
@@ -92,10 +103,16 @@ class DirectProotExec(private val layout: Paths.Layout) : GuestExec {
     // before exec, makes proot start from a readable cwd. The guest env + args are passed
     // verbatim to that shell as a single argv.
     private fun prootCommand(guestEnv: List<String>, guestCommand: String): List<String> {
+        val copyOnLinkArgs = if (copyOnLinkSupported) {
+            arrayOf("--copy-on-link")
+        } else {
+            Log.w(TAG, "bundled PRoot predates --copy-on-link; rebuild android-assets")
+            emptyArray()
+        }
         val guestArgv = listOf(
             layout.proot,
             "--kill-on-exit",
-            // #115 ROOT CAUSE + fix: DO NOT add --link2symlink. In the untrusted_app domain the
+            // #115 ROOT CAUSE: DO NOT add --link2symlink. In the untrusted_app domain the
             // kernel denies hardlinks (verified on-device: `ln a b` -> EACCES). --link2symlink
             // "helpfully" catches that and FAKES success (pokes syscall result 0) by swapping in a
             // symlink-refcount scheme — but the fake defeats callers' own error handling: git's
@@ -103,10 +120,14 @@ class DirectProotExec(private val layout: Paths.Layout) : GuestExec {
             // FAILS, but never when it lies with a 0. Result: silent object loss ("remote did not
             // send all necessary objects") and broken pnpm installs. With l2s OFF, linkat fails
             // honestly with EACCES and both tools fall back correctly (verified on-device: git
-            // 50/50 objects survive, pnpm 589/589 files, real clone clean). One flag removed fixes
-            // every link()-using tool with a fallback — no proot rebuild, no per-tool config.
-            // (The core.createObject=rename gitconfig from #116 is now belt-and-suspenders: it just
-            // skips the doomed link attempt for git specifically.)
+            // 50/50 objects survive, pnpm 589/589 files, real clone clean).
+            //
+            // #117 closes the remaining no-fallback gap (notably dpkg): our published GPLv2 PRoot
+            // patch adds --copy-on-link. A native hardlink is attempted first; only EACCES retries
+            // as an O_EXCL regular-file byte copy. That is honest data preservation, unlike l2s's
+            // dangling-symlink false success. Other link errors and unsupported file types remain
+            // unchanged. The git config from #116 remains belt-and-suspenders.
+            *copyOnLinkArgs,
             // NOTE: kept to flags the Termux proot build supports. --sysvipc is dropped
             // (node doesn't need SysV IPC). -L and --kernel-release are likewise omitted as
             // non-essential (add back only if a specific build is confirmed to accept them).

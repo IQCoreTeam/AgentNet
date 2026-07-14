@@ -38,7 +38,7 @@ echo "==> ABI=$ABI  proot=$PROOT_ARCH"
 echo "==> assets -> $ASSETS"
 echo "==> work   -> $WORK"
 
-# 1) proot binary + loader + its shared libs. We use the TERMUX proot build, NOT
+# 1) proot binary + loader + its shared libs. We use our patched TERMUX proot build, NOT
 #    green-green-avk. Why: this proot is compiled with the process_vm accelerator
 #    (process_vm_readv/writev) for guest-memory access. process_vm_readv strips arm64
 #    top-byte pointer tags, so it avoids the `ptrace(PEEKDATA): I/O error` on tagged
@@ -76,6 +76,18 @@ deb_extract() {  # $1 = deb file, $2 = dest dir
   esac
   rm -rf "$tmp"
 }
+# Accept the source-built package path from android-assets.yml as well as the
+# repository URLs used for the two runtime libraries.
+fetch_deb() {  # $1 = URL or local path, $2 = destination
+  case "$1" in
+    http://*|https://*) curl -fsSL "$1" -o "$2" ;;
+    file://*) cp "${1#file://}" "$2" ;;
+    *) cp "$1" "$2" ;;
+  esac
+}
+# Release CI always sets PROOT_DEB to the package built from the pinned Termux
+# source recipe plus surfaces/android/proot/patches/0001-copy-on-link.patch.
+# The URL fallback keeps this script independently runnable for development.
 PROOT_DEB="${PROOT_DEB:-$(termux_latest_deb p/proot)}"
 TALLOC_DEB="${TALLOC_DEB:-$(termux_latest_deb libt/libtalloc)}"
 SHMEM_DEB="${SHMEM_DEB:-$(termux_latest_deb liba/libandroid-shmem)}"
@@ -85,9 +97,9 @@ echo "    talloc: $TALLOC_DEB"
 echo "    shmem:  $SHMEM_DEB"
 PROOT_STAGE="$WORK/proot"
 rm -rf "$PROOT_STAGE"; mkdir -p "$PROOT_STAGE"
-curl -fsSL "$PROOT_DEB"  -o "$WORK/proot.deb"  && deb_extract "$WORK/proot.deb"  "$PROOT_STAGE/proot"
-curl -fsSL "$TALLOC_DEB" -o "$WORK/talloc.deb" && deb_extract "$WORK/talloc.deb" "$PROOT_STAGE/talloc"
-curl -fsSL "$SHMEM_DEB"  -o "$WORK/shmem.deb"  && deb_extract "$WORK/shmem.deb"  "$PROOT_STAGE/shmem"
+fetch_deb "$PROOT_DEB"  "$WORK/proot.deb"  && deb_extract "$WORK/proot.deb"  "$PROOT_STAGE/proot"
+fetch_deb "$TALLOC_DEB" "$WORK/talloc.deb" && deb_extract "$WORK/talloc.deb" "$PROOT_STAGE/talloc"
+fetch_deb "$SHMEM_DEB"  "$WORK/shmem.deb"  && deb_extract "$WORK/shmem.deb"  "$PROOT_STAGE/shmem"
 # Termux installs under data/data/com.termux/files/usr — pull the bits we need out of there.
 TUSR="data/data/com.termux/files/usr"
 # Ship proot + loader + libs under jniLibs/<android-abi> as lib*.so (NOT as loose ELF in
