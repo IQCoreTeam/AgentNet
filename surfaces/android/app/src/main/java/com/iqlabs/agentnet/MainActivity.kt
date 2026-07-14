@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.util.Log
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
@@ -45,8 +46,10 @@ class MainActivity : AppCompatActivity() {
         private const val IDENTITY_NAME = "AgentNet"
         private const val IDENTITY_URI = "https://agentnet.iqlabs.com"
         private const val IDENTITY_ICON = "favicon.ico" // relative to IDENTITY_URI
-        private const val APPROVAL_CHANNEL = "agentnet_approval"
+        private const val APPROVAL_CHANNEL = "agentnet_approval_locked_v2"
+        private const val COMPLETION_CHANNEL = "agentnet_completion_locked_v1"
         private const val APPROVAL_NOTIF_ID = 2
+        private const val COMPLETION_NOTIF_ID = 3
         private const val REQ_POST_NOTIFICATIONS = 101
         // Intent extra: which chat to deep-link to when an approval notification is tapped.
         const val EXTRA_OPEN_SESSION = "agentnet.openSession"
@@ -262,7 +265,10 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         inForeground = true
         // Returning to the app clears any pending approval alert — the WebView shows it now.
-        getSystemService(NotificationManager::class.java)?.cancel(APPROVAL_NOTIF_ID)
+        getSystemService(NotificationManager::class.java)?.let {
+            it.cancel(APPROVAL_NOTIF_ID)
+            it.cancel(COMPLETION_NOTIF_ID)
+        }
     }
 
     override fun onPause() {
@@ -303,8 +309,10 @@ class MainActivity : AppCompatActivity() {
     // Promote/demote the foreground service that keeps this process (and the node runtime)
     // alive while backgrounded. The web UI calls this with `active && backgroundExecEnabled`.
     // `clientId` rides along so the notification's Stop action can reach /rpc.
-    fun setAgentActive(active: Boolean, clientId: String) {
-        val svc = Intent(this, ServerService::class.java).putExtra(ServerService.EXTRA_CLIENT, clientId)
+    fun setAgentActive(active: Boolean, clientId: String, keepWhileLocked: Boolean) {
+        val svc = Intent(this, ServerService::class.java)
+            .putExtra(ServerService.EXTRA_CLIENT, clientId)
+            .putExtra(ServerService.EXTRA_KEEP_WHILE_LOCKED, keepWhileLocked)
         if (active) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(svc)
             else startService(svc)
@@ -339,9 +347,16 @@ class MainActivity : AppCompatActivity() {
         if (inForeground && !force) return
         val mgr = getSystemService(NotificationManager::class.java) ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            mgr.createNotificationChannel(
-                NotificationChannel(APPROVAL_CHANNEL, "AgentNet approvals", NotificationManager.IMPORTANCE_HIGH)
-            )
+            mgr.createNotificationChannel(NotificationChannel(
+                APPROVAL_CHANNEL,
+                "AgentNet approvals",
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply {
+                description = "Approval requests from active agent turns"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 220, 140, 220)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            })
         }
         // Tap carries the sessionId so the WebView can jump to that chat. A distinct request
         // code per session keeps FLAG_UPDATE_CURRENT from collapsing different chats' extras;
@@ -372,14 +387,67 @@ class MainActivity : AppCompatActivity() {
             .setLargeIcon(Icon.createWithResource(this, R.drawable.iq_logo_green))
             .setContentIntent(tap)
             .setAutoCancel(true)
+            .setCategory(Notification.CATEGORY_REMINDER)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            builder.setPriority(Notification.PRIORITY_HIGH).setVibrate(longArrayOf(0, 220, 140, 220))
+        }
         // Only a yes/no approval gets Approve/Reject buttons. A question is answered by picking
         // an option in-app, so the notification just deep-links there on tap (no actions).
         if (!isQuestion) {
             builder
                 .addAction(android.R.drawable.ic_menu_revert, "Reject", approvalAction("reject", id, clientId, 2))
-                .addAction(android.R.drawable.ic_menu_send, "Approve", approvalAction("approve", id, clientId, 3))
+                // Approval from a locked phone must route through device unlock into the
+                // in-app approval dock rather than execute from the lock screen.
+                .addAction(android.R.drawable.ic_menu_send, "Approve", tap)
         }
         mgr.notify(APPROVAL_NOTIF_ID, builder.build())
+    }
+
+    // Alert only while the display is off. The WebView calls this on a real typing -> idle
+    // transition and only when the user opted into screen-off execution.
+    fun notifyTurnComplete(sessionId: String) {
+        val power = getSystemService(PowerManager::class.java) ?: return
+        if (power.isInteractive) return
+        val mgr = getSystemService(NotificationManager::class.java) ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            mgr.createNotificationChannel(NotificationChannel(
+                COMPLETION_CHANNEL,
+                "AgentNet completions",
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply {
+                description = "Completed agent turns"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 180)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            })
+        }
+        val tap = PendingIntent.getActivity(
+            this,
+            sessionId.hashCode(),
+            Intent(this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(EXTRA_OPEN_SESSION, sessionId),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, COMPLETION_CHANNEL)
+        } else {
+            @Suppress("DEPRECATION") Notification.Builder(this)
+        }
+        builder
+            .setContentTitle("Agent finished")
+            .setContentText("Your agent turn is complete.")
+            .setSmallIcon(R.drawable.iq_logo_green)
+            .setLargeIcon(Icon.createWithResource(this, R.drawable.iq_logo_green))
+            .setContentIntent(tap)
+            .setAutoCancel(true)
+            .setCategory(Notification.CATEGORY_STATUS)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            builder.setPriority(Notification.PRIORITY_HIGH).setVibrate(longArrayOf(0, 180))
+        }
+        mgr.notify(COMPLETION_NOTIF_ID, builder.build())
     }
 
     // Drop the approval notification — called when the WebView reports the user is now

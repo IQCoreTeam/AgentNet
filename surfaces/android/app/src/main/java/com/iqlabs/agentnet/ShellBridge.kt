@@ -19,8 +19,8 @@ class ShellBridge(private val activity: MainActivity) {
 
     // #53: turn started/ended → promote/demote the background foreground service.
     @JavascriptInterface
-    fun setAgentActive(active: Boolean, clientId: String) {
-        activity.runOnUiThread { runCatching { activity.setAgentActive(active, clientId) } }
+    fun setAgentActive(active: Boolean, clientId: String, keepWhileLocked: Boolean) {
+        activity.runOnUiThread { runCatching { activity.setAgentActive(active, clientId, keepWhileLocked) } }
     }
 
     // #53: a turn is waiting on approval → raise a notification. `sessionId` lets a tap
@@ -42,5 +42,11 @@ class ShellBridge(private val activity: MainActivity) {
     @JavascriptInterface
     fun onBackgroundEnabled() {
         activity.runOnUiThread { runCatching { activity.onBackgroundEnabled() } }
+    }
+
+    // A completed turn gets a softer lock-screen alert when screen-off execution is enabled.
+    @JavascriptInterface
+    fun notifyTurnComplete(sessionId: String) {
+        activity.runOnUiThread { runCatching { activity.notifyTurnComplete(sessionId) } }
     }
 }

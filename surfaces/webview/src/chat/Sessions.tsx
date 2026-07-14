@@ -24,7 +24,13 @@ import { openExternalUrl } from "../platform/openExternalUrl";
 import { useAutoOpenExternalUrl } from "../platform/useAutoOpenExternalUrl";
 import { HeliusKeyForm } from "../settings/HeliusKeyForm";
 import { ConnectGithub } from "../onboarding/ConnectGithub";
-import { hasAgentService, backgroundExecEnabled, setBackgroundExecEnabled } from "../platform/agentService";
+import {
+  hasAgentService,
+  backgroundExecEnabled,
+  screenOffExecEnabled,
+  setBackgroundExecEnabled,
+  setScreenOffExecEnabled,
+} from "../platform/agentService";
 import { LockedGate, useUnlock, type UnlockReason } from "../unlock/UnlockProvider";
 import { setUnlockSoundEnabled, unlockSoundEnabled } from "../unlock/sound";
 
@@ -120,6 +126,7 @@ export function Sessions({
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [bgExec, setBgExec] = useState(backgroundExecEnabled());
+  const [screenOffExec, setScreenOffExec] = useState(screenOffExecEnabled());
   const [showManualCode, setShowManualCode] = useState(false);
   const [unlockSound, setUnlockSound] = useState(unlockSoundEnabled);
 
@@ -403,9 +410,12 @@ export function Sessions({
                     onClick={() => {
                       const v = !bgExec;
                       setBgExec(v);
-                      setBackgroundExecEnabled(v, getClientId());
-                      if (!v && state.typing) notify("Background off — task keeps running while the app is open.");
+                      if (!v) setScreenOffExec(false);
+                      setBackgroundExecEnabled(v, state.typing || state.approvals.length > 0, getClientId());
+                      if (!v && state.typing) notify("Background off: task keeps running while the app is open.");
                     }}
+                    role="switch"
+                    aria-checked={bgExec}
                     className="flex w-full items-center gap-3.5 rounded-2xl px-2.5 py-3 text-left transition active:bg-[color:var(--an-bg-2)]"
                   >
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center" style={{ color: bgExec ? "var(--an-green)" : "var(--an-fg-dim)" }}>
@@ -424,6 +434,35 @@ export function Sessions({
                       Uses more battery while a task runs in the background. No task = nothing runs.
                     </p>
                   )}
+                  <button
+                    onClick={() => {
+                      if (!bgExec) return;
+                      const v = !screenOffExec;
+                      setScreenOffExec(v);
+                      setScreenOffExecEnabled(v, state.typing || state.approvals.length > 0, getClientId());
+                    }}
+                    disabled={!bgExec}
+                    role="switch"
+                    aria-checked={screenOffExec}
+                    aria-describedby="screen-off-exec-note"
+                    className="flex w-full items-center gap-3.5 rounded-2xl px-2.5 py-3 text-left transition enabled:active:bg-[color:var(--an-bg-2)] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center" style={{ color: screenOffExec ? "var(--an-green)" : "var(--an-fg-dim)" }}>
+                      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M16.8 14.6A7 7 0 0 1 7.4 5.2 7 7 0 1 0 16.8 14.6Z" /><path d="M14.8 5.2v2.6M13.5 6.5h2.6" /></svg>
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[1.12rem] font-semibold leading-tight" style={{ color: "var(--an-fg)" }}>Keep working while locked</span>
+                      <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>
+                        {!bgExec ? "Turn on background execution first" : screenOffExec ? "Keeps active tasks running with the screen off" : "Pauses may occur after the screen turns off"}
+                      </span>
+                    </span>
+                    <span className="relative h-[1.35rem] w-[2.4rem] shrink-0 rounded-full transition" style={{ background: screenOffExec ? "var(--an-green)" : "var(--an-bg-2)" }}>
+                      <span className="absolute top-[0.15rem] h-[1.05rem] w-[1.05rem] rounded-full bg-white transition-all" style={{ left: screenOffExec ? "1.2rem" : "0.15rem" }} />
+                    </span>
+                  </button>
+                  <p id="screen-off-exec-note" className="px-2.5 pb-1 text-[0.68rem] leading-snug" style={{ color: "var(--an-fg-mute)" }}>
+                    Uses more battery during active tasks. Approval requests and completed turns vibrate on the lock screen.
+                  </p>
                 </>
               )}
             </div>

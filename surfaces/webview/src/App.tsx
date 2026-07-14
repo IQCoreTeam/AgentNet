@@ -14,7 +14,7 @@ import { TabBar } from "./shell/TabBar";
 import { Toast } from "./Toast";
 import { useVisualViewportVars, useKeyboardChrome } from "./layoutEffects";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { syncAgentService, notifyApproval, clearApprovalNotice, ensureBackgroundConsent } from "./platform/agentService";
+import { syncAgentService, notifyApproval, clearApprovalNotice, ensureBackgroundConsent, notifyTurnComplete } from "./platform/agentService";
 import { haptics } from "./haptics";
 
 // Phase router:
@@ -35,6 +35,16 @@ export function App() {
   // enabled background exec; demote otherwise. No-op off the Android shell.
   const agentActive = state.typing || state.approvals.length > 0;
   useEffect(() => { syncAgentService(agentActive, getClientId()); }, [agentActive, getClientId]);
+
+  // A real active -> idle transition means the turn ended. Native checks that the display is
+  // still off before posting, and the helper checks the user's screen-off opt-in.
+  const wasTyping = useRef(false);
+  useEffect(() => {
+    if (wasTyping.current && !state.typing && state.approvals.length === 0) {
+      notifyTurnComplete(state.activeSessionId ?? "");
+    }
+    wasTyping.current = state.typing;
+  }, [state.typing, state.approvals.length, state.activeSessionId]);
 
   // Default-on background exec: prompt once for battery-optimization exemption on launch.
   useEffect(() => { ensureBackgroundConsent(); }, []);

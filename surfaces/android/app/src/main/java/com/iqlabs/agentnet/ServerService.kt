@@ -5,10 +5,14 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 
 // Foreground service that keeps the node server (and the running agent turn) alive when the
 // app is backgrounded. Android aggressively kills background processes; a foreground service
@@ -21,7 +25,19 @@ class ServerService : Service() {
     companion object {
         private const val CHANNEL = "agentnet_server"
         private const val NOTIF_ID = 1
+        private const val WAKE_LOCK_TIMEOUT_MS = 6 * 60 * 60 * 1000L
         const val EXTRA_CLIENT = "client" // SSE client id, so Stop can reach /rpc
+        const val EXTRA_KEEP_WHILE_LOCKED = "keepWhileLocked"
+    }
+
+    private var keepWhileLocked = false
+    private var wakeLock: PowerManager.WakeLock? = null
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_OFF, Intent.ACTION_SCREEN_ON -> updateWakeLock()
+            }
+        }
     }
 
     override fun onCreate() {
@@ -31,6 +47,15 @@ class ServerService : Service() {
                 NotificationChannel(CHANNEL, "AgentNet", NotificationManager.IMPORTANCE_LOW)
             )
         }
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(screenReceiver, filter, RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION") registerReceiver(screenReceiver, filter)
+        }
         startForeground(NOTIF_ID, notification(""))
     }
 
@@ -39,11 +64,41 @@ class ServerService : Service() {
     // it we don't want it auto-resurrected with no work to do; the next turn restarts it.
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val client = intent?.getStringExtra(EXTRA_CLIENT) ?: ""
+        keepWhileLocked = intent?.getBooleanExtra(EXTRA_KEEP_WHILE_LOCKED, false) == true
         startForeground(NOTIF_ID, notification(client))
+        updateWakeLock()
         return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    // A partial wakelock keeps the CPU and node runtime alive without lighting the display.
+    // It is held only while this active-turn service is alive, the user opted in, and the
+    // display is off. The timeout is a final leak guard; every normal lifecycle path releases.
+    private fun updateWakeLock() {
+        val power = getSystemService(PowerManager::class.java) ?: return
+        if (keepWhileLocked && !power.isInteractive) {
+            val lock = wakeLock ?: power.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "$packageName:agent-turn",
+            ).apply { setReferenceCounted(false) }.also { wakeLock = it }
+            if (!lock.isHeld) lock.acquire(WAKE_LOCK_TIMEOUT_MS)
+        } else {
+            releaseWakeLock()
+        }
+    }
+
+    private fun releaseWakeLock() {
+        wakeLock?.let { if (it.isHeld) runCatching { it.release() } }
+        wakeLock = null
+    }
+
+    override fun onDestroy() {
+        keepWhileLocked = false
+        releaseWakeLock()
+        runCatching { unregisterReceiver(screenReceiver) }
+        super.onDestroy()
+    }
 
     private fun notification(client: String): Notification {
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
