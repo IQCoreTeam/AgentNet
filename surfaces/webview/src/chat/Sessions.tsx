@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, type ReactNode, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { useStore } from "../state/store";
-import { IqLogo, AgentIcon } from "../icons";
+import { IqLogo, AgentIcon, LockIcon, SkillIcon } from "../icons";
 import { useOnline } from "../layoutEffects";
 import agentnetWordmark from "../assets/agentnet.png";
 import { haptics } from "../haptics";
@@ -31,6 +31,8 @@ import {
   setBackgroundExecEnabled,
   setScreenOffExecEnabled,
 } from "../platform/agentService";
+import { LockedGate, useUnlock, type UnlockReason } from "../unlock/UnlockProvider";
+import { setUnlockSoundEnabled, unlockSoundEnabled } from "../unlock/sound";
 
 // Chat list drawer — the mobile answer to vscode's multi-panel "new tab": instead of
 // splitting the screen, the ☰ menu slides this in and you pick ONE chat to show. Telegram
@@ -38,9 +40,11 @@ import {
 // fresh one. Only the picked chat is ever on screen — no split, no second panel.
 // One big, bold menu row (icon + label + status subtitle) — the ChatGPT/Claude mobile
 // drawer header pattern. Icons are inline SVG (currentColor) so they theme cleanly.
-function MenuRow({ icon, label, subtitle, onClick, accent = false }: {
-  icon: ReactNode; label: string; subtitle?: string; onClick: () => void; accent?: boolean;
-}) {
+type MenuRowProps = {
+  icon: ReactNode; label: string; subtitle?: string; onClick: () => void; accent?: boolean; locked?: boolean;
+};
+
+function MenuRow({ icon, label, subtitle, onClick, accent = false, locked = false }: MenuRowProps) {
   return (
     <button
       onClick={onClick}
@@ -57,9 +61,16 @@ function MenuRow({ icon, label, subtitle, onClick, accent = false }: {
         <span className="an-term-mono block text-[17px] font-bold uppercase leading-tight" style={{ color: "#f2f2f2", letterSpacing: "0.5px" }}>{label}</span>
         {subtitle && <span className="an-term-mono block truncate text-[10px] uppercase leading-tight" style={{ color: "#6a6a6a", letterSpacing: "0.5px", marginTop: "4px" }}>{subtitle}</span>}
       </span>
-      <span className="an-term-mono text-[16px] font-bold" style={{ color: "#4a4a4d" }}>›</span>
+      {locked
+        ? <LockIcon className="h-4 w-4 shrink-0" style={{ color: "var(--an-green)" }} />
+        : <span className="an-term-mono text-[16px] font-bold" style={{ color: "#4a4a4d" }}>›</span>}
     </button>
   );
+}
+
+function ProgressiveMenuRow({ reason, unlocked, onUnlocked, ...row }: Omit<MenuRowProps, "onClick" | "locked"> & { reason: UnlockReason; unlocked: boolean; onUnlocked: () => void }) {
+  if (unlocked) return <MenuRow {...row} onClick={onUnlocked} />;
+  return <LockedGate reason={reason} onUnlocked={onUnlocked}><MenuRow {...row} locked onClick={onUnlocked} /></LockedGate>;
 }
 
 // One row in the Storage radio picker: a filled dot marks the active backend, tap to switch.
@@ -85,12 +96,30 @@ function StorageOption({ active, title, subtitle, onClick }: { active: boolean; 
   );
 }
 
-export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: () => void; embedded?: boolean; onOpenAgent?: () => void }) {
+type SettingsMode = "list" | "configure" | "connect" | "gdrive" | "custom" | "helius" | "github";
+
+export function Sessions({
+  onClose,
+  embedded = false,
+  onOpenAgent,
+  onOpenSkills,
+  initialMode,
+  settingsRoot = false,
+}: {
+  onClose: () => void;
+  embedded?: boolean;
+  onOpenAgent?: () => void;
+  onOpenSkills?: () => void;
+  initialMode?: SettingsMode;
+  settingsRoot?: boolean;
+}) {
   const { state, send, getClientId, notify } = useStore();
+  const { requestUnlock } = useUnlock();
   const { storage, cloudSync, googleLoginUrl, googleLoginError } = state;
   const online = useOnline();
 
-  const [settingsMode, setSettingsMode] = useState<"list" | "configure" | "connect" | "gdrive" | "custom" | "helius" | "github">("list");
+  const rootMode: SettingsMode = settingsRoot ? "configure" : "list";
+  const [settingsMode, setSettingsMode] = useState<SettingsMode>(initialMode ?? rootMode);
   const [customUrl, setCustomUrl] = useState("");
   const [customAuth, setCustomAuth] = useState("");
   const [code, setCode] = useState("");
@@ -99,6 +128,7 @@ export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: 
   const [bgExec, setBgExec] = useState(backgroundExecEnabled());
   const [screenOffExec, setScreenOffExec] = useState(screenOffExecEnabled());
   const [showManualCode, setShowManualCode] = useState(false);
+  const [unlockSound, setUnlockSound] = useState(unlockSoundEnabled);
 
   // Long-press a chat row to reveal a delete menu (replaces the always-on per-row x).
   // `pressFired` suppresses the row's open-on-click that would otherwise follow pointerup.
@@ -136,7 +166,7 @@ export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: 
   // Auto-close settings screen once Google Drive connects successfully
   useEffect(() => {
     if (settingsMode === "gdrive" && info?.kind === "gdrive" && info?.connected) {
-      setSettingsMode("list");
+      setSettingsMode(rootMode);
       setBusy(false);
       setShowManualCode(false);
     }
@@ -150,17 +180,17 @@ export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (settingsMode !== "list") { setSettingsMode("list"); return; }
+      if (settingsMode !== rootMode) { setSettingsMode(rootMode); return; }
       onClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [settingsMode, onClose]);
+  }, [settingsMode, onClose, rootMode]);
 
   const panel = (
       <div
         className={embedded ? "relative flex h-full w-full flex-col p-3" : "relative flex w-[82vw] max-w-xs flex-col p-3"}
-        style={{ background: "#060608", borderRight: "1px solid #1a1a1d", paddingTop: "max(0.75rem, env(safe-area-inset-top))", paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+        style={{ background: "#060608", borderRight: "1px solid #1a1a1d", paddingTop: "max(0.75rem, env(safe-area-inset-top))", paddingBottom: settingsRoot ? "calc(var(--tabbar-height, 0px) + max(0.75rem, env(safe-area-inset-bottom)))" : "max(0.75rem, env(safe-area-inset-bottom))" }}
         onClick={(e) => e.stopPropagation()}
       >
         {settingsMode === "list" ? (
@@ -312,13 +342,25 @@ export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: 
           <div className="flex h-full flex-col">
             <div className="mb-3 flex items-center justify-between px-1">
               <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Settings</span>
-              <button onClick={() => setSettingsMode("list")} className="text-xs text-zinc-400 hover:text-zinc-200">Back</button>
+              {!settingsRoot && <button onClick={() => setSettingsMode("list")} className="text-xs text-zinc-400 hover:text-zinc-200">Back</button>}
             </div>
             <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
-              <MenuRow
+              {onOpenSkills && (
+                <ProgressiveMenuRow
+                  reason="skills"
+                  unlocked={!!state.walletAddress}
+                  onUnlocked={onOpenSkills}
+                  label="My Skills"
+                  subtitle={state.walletAddress ? `${state.marketOwned.length} owned` : "Connect a wallet to equip skills"}
+                  icon={<SkillIcon className="h-[22px] w-[22px]" />}
+                />
+              )}
+              <ProgressiveMenuRow
+                reason="sync"
+                unlocked={!!state.walletAddress}
+                onUnlocked={() => setSettingsMode("connect")}
                 label="Storage"
                 subtitle={cloudConnected ? `${info?.account ?? (info?.kind === "gdrive" ? "Google Drive" : "Custom Cloud")}${cloudSync ? ` · ${cloudSync.ok ? "synced" : "sync error"}` : ""}` : "Local only"}
-                onClick={() => setSettingsMode("connect")}
                 icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7.5c0-1.4 3.1-2.5 7-2.5s7 1.1 7 2.5S14.9 10 11 10 4 8.9 4 7.5Z" /><path d="M4 7.5v7c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-7" /><path d="M4 11c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5" /></svg>}
               />
               <MenuRow
@@ -333,6 +375,30 @@ export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: 
                 onClick={() => { send({ type: "getGithubStatus" }); setSettingsMode("github"); }}
                 icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 16.5c-3 .9-3-1.5-4.2-1.8M15 19v-3.1c0-.8-.3-1.4-.8-1.8 2.6-.3 5.3-1.3 5.3-5.7 0-1.3-.4-2.3-1.2-3.2.1-.3.5-1.6-.1-3.1 0 0-1-.3-3.3 1.2a11.5 11.5 0 0 0-6 0C6.6 1.8 5.6 2.1 5.6 2.1c-.6 1.5-.2 2.8-.1 3.1-.8.9-1.2 2-1.2 3.2 0 4.4 2.7 5.4 5.3 5.7-.4.4-.7.9-.8 1.6V19" /></svg>}
               />
+              <button
+                type="button"
+                role="switch"
+                aria-checked={unlockSound}
+                onClick={() => {
+                  const enabled = !unlockSound;
+                  setUnlockSound(enabled);
+                  setUnlockSoundEnabled(enabled);
+                  haptics.tick();
+                }}
+                className="flex w-full items-center gap-3.5 px-1 py-4 text-left transition active:opacity-80"
+                style={{ borderBottom: "1px solid var(--an-line)" }}
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center" style={{ color: "var(--an-fg-dim)" }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5 6.5 9H3v6h3.5L11 19V5Z" /><path d="M15 9a4 4 0 0 1 0 6M17.5 6.5a8 8 0 0 1 0 11" /></svg>
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[1.12rem] font-semibold leading-tight" style={{ color: "var(--an-fg)" }}>Unlock sound</span>
+                  <span className="an-term-mono mt-1 block text-[10px] uppercase leading-tight" style={{ color: "var(--an-fg-mute)" }}>{unlockSound ? "On" : "Muted"}</span>
+                </span>
+                <span className="relative h-[1.35rem] w-[2.4rem] shrink-0 rounded-full transition" style={{ background: unlockSound ? "var(--an-green)" : "var(--an-bg-2)" }}>
+                  <span className="absolute top-[0.15rem] h-[1.05rem] w-[1.05rem] rounded-full bg-white transition-all" style={{ left: unlockSound ? "1.2rem" : "0.15rem" }} />
+                </span>
+              </button>
               {/* Android shell only: keep the agent running (and notify on approvals)
                   while the app is backgrounded — but ONLY while a task is active. Off =
                   idle process is reclaimed. Turning OFF mid-turn is foreground-only: the
@@ -400,22 +466,36 @@ export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: 
                 </>
               )}
             </div>
-            <button
-              onClick={() => {
-                forgetAndroidWallet(); // clear the Keystore creds so we don't silently reconnect
-                send({ type: "disconnectWallet" });
-                onClose();
-              }}
-              className="mt-2 flex w-full items-center gap-3.5 rounded-2xl px-2.5 py-3 text-left transition active:bg-red-500/10"
-            >
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center" style={{ color: "#f87171" }}>
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 4.5H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2.5" /><path d="M14 15l3-4-3-4M17 11H8.5" /></svg>
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[1.12rem] font-semibold leading-tight" style={{ color: "#f87171" }}>Disconnect wallet</span>
-                <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>Clears the saved session on this device</span>
-              </span>
-            </button>
+            {state.walletAddress ? (
+              <button
+                onClick={() => {
+                  forgetAndroidWallet(); // clear the Keystore creds so we don't silently reconnect
+                  send({ type: "disconnectWallet" });
+                  onClose();
+                }}
+                className="mt-2 flex w-full items-center gap-3.5 rounded-2xl px-2.5 py-3 text-left transition active:bg-red-500/10"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center" style={{ color: "#f87171" }}>
+                  <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 4.5H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2.5" /><path d="M14 15l3-4-3-4M17 11H8.5" /></svg>
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[1.12rem] font-semibold leading-tight" style={{ color: "#f87171" }}>Disconnect wallet</span>
+                  <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>Clears the saved session on this device</span>
+                </span>
+              </button>
+            ) : (
+              <button
+                onClick={() => requestUnlock("identity")}
+                className="mt-2 flex w-full items-center gap-3.5 rounded-2xl px-2.5 py-3 text-left transition active:opacity-80"
+                style={{ background: "var(--an-green-dim)", border: "1px solid var(--an-green-line)" }}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[1.12rem] font-semibold leading-tight" style={{ color: "var(--an-green)" }}>Unlock AgentNet</span>
+                  <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>Connect a wallet for identity and writes</span>
+                </span>
+                <span className="an-term-mono" style={{ color: "var(--an-green)" }}>›</span>
+              </button>
+            )}
           </div>
         ) : settingsMode === "helius" ? (
           <div className="flex flex-col h-full">
@@ -431,7 +511,7 @@ export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: 
               </button>
             </div>
             <div className="flex-1 overflow-y-auto">
-              <HeliusKeyForm onDone={() => setSettingsMode("list")} />
+              <HeliusKeyForm onDone={() => setSettingsMode(rootMode)} />
             </div>
           </div>
         ) : settingsMode === "github" ? (
@@ -449,7 +529,7 @@ export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: 
               </span>
             </div>
             <div className="flex-1 overflow-y-auto flex flex-col gap-4">
-              <ConnectGithub onDone={() => setSettingsMode("list")} />
+              <ConnectGithub onDone={() => setSettingsMode(rootMode)} />
             </div>
           </div>
         ) : settingsMode === "connect" ? (
@@ -553,7 +633,7 @@ export function Sessions({ onClose, embedded = false, onOpenAgent }: { onClose: 
                       location: customUrl.trim(),
                       authHeader: customAuth.trim() || undefined,
                     });
-                    setSettingsMode("list");
+                    setSettingsMode(rootMode);
                   }}
                   className="w-full rounded-lg bg-an-green hover:bg-[#00d068] text-xs font-semibold py-2.5 text-black mt-2 active:scale-95 transition disabled:opacity-40"
                 >

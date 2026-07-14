@@ -53,7 +53,7 @@ function phantomStore(): { label: string; url: string } {
     : { label: "Go to Play Store", url: "https://play.google.com/store/apps/details?id=app.phantom" };
 }
 
-export function ConnectWallet() {
+export function ConnectWallet({ embedded = false }: { embedded?: boolean } = {}) {
   const { send } = useStore();
   const [busy, setBusy] = useState<string | null>(null);
   // Android-only: MWA can't tell us a wallet is missing until we try, so we surface the
@@ -118,11 +118,8 @@ export function ConnectWallet() {
     }
   }
 
-  return (
-    <OnboardingShell
-      title="Connect your wallet"
-      subtitle="One signature derives your session key. Your keys stay in your wallet."
-    >
+  const controls = (
+    <>
       {android ? (
         // Android shell: one button drives the native wallet picker (Phantom/Solflare/…).
         <>
@@ -134,9 +131,17 @@ export function ConnectWallet() {
           ) : null}
         </>
       ) : wallets.length === 0 ? (
-        <p className="text-center text-sm text-zinc-500">
-          No Solana wallet detected. Install Phantom, Solflare, or Backpack and reload.
-        </p>
+        <div className="space-y-3 text-center">
+          <p className="text-sm text-zinc-500">No Solana wallet detected. Install a wallet, then reload this page.</p>
+          <a
+            href="https://phantom.com/download"
+            target="_blank"
+            rel="noreferrer"
+            className="an-btn an-btn-green inline-flex w-full items-center justify-center"
+          >
+            Install Phantom
+          </a>
+        </div>
       ) : (
         wallets.map(({ name, provider }) => (
           <OnboardingButton
@@ -148,6 +153,16 @@ export function ConnectWallet() {
           </OnboardingButton>
         ))
       )}
+    </>
+  );
+
+  if (embedded) return controls;
+  return (
+    <OnboardingShell
+      title="Connect your wallet"
+      subtitle="One signature derives your session key. Your keys stay in your wallet."
+    >
+      {controls}
     </OnboardingShell>
   );
 }

@@ -111,6 +111,28 @@ body {
   overscroll-behavior: none;
 }
 
+.unlock-sheet { animation: unlock-sheet-in var(--dur-screen) var(--ease-emphasized-decelerate); }
+.unlock-pop { animation: unlock-pop var(--dur-celebrate) var(--ease-emphasized-decelerate); }
+.unlock-gate-reveal { animation: unlock-gate-reveal 520ms var(--ease-emphasized-decelerate) var(--unlock-delay) both; }
+.unlock-badge-open { animation: unlock-badge-open 420ms var(--ease-emphasized-decelerate) var(--unlock-delay) both; }
+@keyframes unlock-sheet-in {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes unlock-pop {
+  0% { opacity: 0; transform: scale(0.72); }
+  55% { opacity: 1; transform: scale(1.06); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes unlock-gate-reveal {
+  0% { opacity: 0.55; filter: saturate(0.45); }
+  100% { opacity: 1; filter: saturate(1); }
+}
+@keyframes unlock-badge-open {
+  0% { opacity: 0; transform: rotate(-28deg) scale(0.7); }
+  100% { opacity: 1; transform: rotate(0) scale(1); }
+}
+
 /* ── Mobile component primitives (extension concept, thumb-sized) ──────────── */
 
 /* Glassy sticky header — sits over the scrolling log, blurs content beneath it. */
@@ -1700,5 +1722,5 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
   100% { transform: translateY(0); opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .cmp-wrap, .cmp-label { animation-duration: 0.01ms; }
+  .cmp-wrap, .cmp-label, .unlock-sheet, .unlock-pop, .unlock-gate-reveal, .unlock-badge-open { animation-duration: 0.01ms; animation-delay: 0ms; }
 }
