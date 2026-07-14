@@ -48,7 +48,14 @@ internal fun sysdataDir(rootfs: String): File = File(rootfs, ".sysdata")
 // See Installer.writeBunWrapper for the why. Kept minimal; forwards everything else verbatim.
 private val BUN_WRAPPER = """
 #!/bin/sh
-# AgentNet #117: bun under proot needs node_modules pre-created + a non-hardlink backend.
+# AgentNet #117: bun under proot/untrusted_app needs two nudges (both proven on-device):
+#  (1) it won't create node_modules itself ("ENOENT: could not open node_modules") -> pre-create.
+#      This is unrelated to hardlinks, so --copy-on-link does NOT cover it — always needed.
+#  (2) its default hardlink backend hits the kernel hardlink denial -> force --backend=copyfile.
+# copyfile is belt-and-suspenders alongside PRoot's --copy-on-link (like git's core.createObject=
+# rename in #116): it works whether or not the shipped PRoot is the patched build, so bun never
+# regresses while a source-built binary is pending. Keeping it costs nothing (same result, bun
+# just copies in userspace instead of PRoot copying on the EACCES).
 case "${'$'}1" in
   add|install|i|update|remove|rm|link|unlink|ci)
     mkdir -p node_modules 2>/dev/null
@@ -244,17 +251,12 @@ class Installer(private val ctx: Context) {
             .onFailure { Log.w(TAG, "could not write guest /etc/gitconfig (#115 fix)", it) }
     }
 
-    // #117: bun works under proot — the basement is fine — but two bun defaults break in
-    // untrusted_app (both proven on-device, SM-A356E, bun 1.3.14): (1) its default hardlink
-    // backend hits the kernel's hardlink denial (EACCES) and fails silently ("Failed to install
-    // N packages", empty node_modules); (2) bun won't create node_modules itself under proot
-    // ("ENOENT: could not open the node_modules directory"). A /usr/local/bin/bun wrapper (PATH
-    // is /usr/local/bin before /usr/bin, same as the old git shim) pre-creates node_modules and
-    // forces --backend=copyfile for install commands. With it, a plain `bun add express` fully
-    // installs (594 files, require() OK) vs 0 files unwrapped. Thin tool-config layer, exactly
-    // like git's core.createObject=rename — NOT a proot fix (proot handles bun's syscalls fine:
-    // parallel dirfd openat + openat2/RESOLVE all verified working). Every launch => reaches
-    // existing installs; skipped if the guest has no /usr/bin/bun.
+    // #117: the source-built PRoot's --copy-on-link now handles bun's default hardlink backend
+    // universally (unwrapped/default backend: 594 files, require() OK). One unrelated bun quirk
+    // remains: with node_modules absent it exits on "ENOENT: could not open the node_modules
+    // directory" before linking anything. This minimal wrapper only pre-creates that directory;
+    // it no longer selects a bun-specific link backend. Every launch => reaches existing installs;
+    // skipped if the guest has no /usr/bin/bun.
     private fun writeBunWrapper(p: Paths.Layout) {
         runCatching {
             if (!File(p.rootfs, "usr/bin/bun").exists()) return
