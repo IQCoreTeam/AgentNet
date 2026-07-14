@@ -36,6 +36,14 @@
   --text-heading: 1.5rem;       --text-heading--line-height: 1.25;
   --text-display: 1.75rem;      --text-display--line-height: 1.2;
 
+  /* type families — the single source. Everything else uses var(--an-font-*);
+     never hard-code a family name again. mono = the terminal/brand face,
+     display = the condensed numerals/headlines, code = plain code blocks. */
+  --an-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --an-font-mono: "Space Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --an-font-display: "Saira Condensed", "Space Grotesk", ui-sans-serif, sans-serif;
+  --an-font-code: ui-monospace, SFMono-Regular, Menlo, monospace;
+
   /* motion easings — design-system §8.2 (generates ease-* utilities) */
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-decelerate: cubic-bezier(0, 0, 0, 1);
@@ -105,8 +113,7 @@ body,
 body {
   background: var(--an-bg-0);
   color: var(--an-fg);
-  font-family:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--an-font-sans);
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
 }
@@ -273,9 +280,9 @@ body {
   flex-direction: column;
 }
 .an-id-namerow { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 4px 0 12px; }
-.an-id-role { font-family: "Space Mono", ui-monospace, monospace; font-size: 10px; color: var(--an-fg-mute); letter-spacing: 3px; margin-bottom: 4px; }
+.an-id-role { font-family: var(--an-font-mono); font-size: 10px; color: var(--an-fg-mute); letter-spacing: 3px; margin-bottom: 4px; }
 .an-id-name {
-  font-family: "Saira Condensed", sans-serif;
+  font-family: var(--an-font-display);
   font-weight: 800;
   font-style: italic;
   font-size: 46px;
@@ -286,25 +293,25 @@ body {
   background-clip: text;
   color: transparent;
 }
-.an-id-tail { font-family: "Space Mono", ui-monospace, monospace; text-align: right; font-size: 10px; color: var(--an-fg-mute); letter-spacing: 1px; line-height: 1.6; }
+.an-id-tail { font-family: var(--an-font-mono); text-align: right; font-size: 10px; color: var(--an-fg-mute); letter-spacing: 1px; line-height: 1.6; }
 .an-id-body { display: grid; grid-template-columns: 160px 1fr; gap: 14px; }
 .an-id-ava { position: relative; aspect-ratio: 1 / 1.1; border: 1px solid var(--an-line); overflow: hidden; background: #08080a; }
 .an-id-ava > div, .an-id-ava svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.an-id-ava .tag { position: absolute; left: 5px; bottom: 4px; z-index: 2; font-family: "Space Mono", ui-monospace, monospace; font-size: 9px; color: var(--an-fg-mute); letter-spacing: 1px; }
+.an-id-ava .tag { position: absolute; left: 5px; bottom: 4px; z-index: 2; font-family: var(--an-font-mono); font-size: 9px; color: var(--an-fg-mute); letter-spacing: 1px; }
 .an-id-info { display: flex; flex-direction: column; justify-content: space-between; min-width: 0; padding: 2px 0; }
 .an-id-bigstat { display: flex; align-items: flex-end; gap: 0; border-bottom: 1px solid var(--an-line); padding-bottom: 9px; }
 .an-id-bigstat:last-child { border-bottom: none; padding-bottom: 0; }
-.an-id-bigstat .k { font-family: "Space Mono", ui-monospace, monospace; font-size: 10px; color: var(--an-fg-mute); letter-spacing: 2px; line-height: 1; padding-bottom: 4px; white-space: nowrap; }
+.an-id-bigstat .k { font-family: var(--an-font-mono); font-size: 10px; color: var(--an-fg-mute); letter-spacing: 2px; line-height: 1; padding-bottom: 4px; white-space: nowrap; }
 .an-id-bigstat .lead { flex: 1; border-bottom: 2px dotted var(--an-fg-mute); opacity: 0.5; margin: 0 8px 8px; min-width: 14px; }
-.an-id-bigstat .v { font-family: "Saira Condensed", sans-serif; font-weight: 800; font-style: italic; font-size: 40px; line-height: 0.82; color: var(--an-fg); }
+.an-id-bigstat .v { font-family: var(--an-font-display); font-weight: 800; font-style: italic; font-size: 40px; line-height: 0.82; color: var(--an-fg); }
 .an-id-ladder { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
-.an-id-ladder .lab { font-family: "Space Mono", ui-monospace, monospace; font-size: 9px; color: var(--an-fg-mute); letter-spacing: 2px; white-space: nowrap; }
+.an-id-ladder .lab { font-family: var(--an-font-mono); font-size: 9px; color: var(--an-fg-mute); letter-spacing: 2px; white-space: nowrap; }
 .an-id-rungs { display: flex; gap: 4px; flex: 1; }
 .an-id-rung {
   position: relative;
   flex: 1;
   text-align: center;
-  font-family: "Space Mono", ui-monospace, monospace;
+  font-family: var(--an-font-mono);
   font-size: 8.5px;
   letter-spacing: 0.5px;
   padding: 5px 0;
@@ -315,11 +322,11 @@ body {
 .an-id-rung.done { background: #222227; color: #b9b9c0; border-color: #2c2c32; }
 .an-id-rung.cur { background: var(--tier); color: #0d0904; border-color: var(--tier); font-weight: 700; }
 .an-id-gauge { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
-.an-id-gauge .lab { font-family: "Space Mono", ui-monospace, monospace; font-size: 10px; letter-spacing: 1px; color: var(--an-fg-mute); white-space: nowrap; }
+.an-id-gauge .lab { font-family: var(--an-font-mono); font-size: 10px; letter-spacing: 1px; color: var(--an-fg-mute); white-space: nowrap; }
 .an-id-segs { display: flex; gap: 2px; flex: 1; min-width: 0; }
 .an-id-segs i { flex: 1; height: 12px; border: 1px solid var(--an-fg-mute); }
 .an-id-segs i.on { background: var(--tier); border-color: var(--tier); }
-.an-id-gauge .val { font-family: "Space Mono", ui-monospace, monospace; font-size: 12px; font-weight: 700; white-space: nowrap; color: var(--an-fg); }
+.an-id-gauge .val { font-family: var(--an-font-mono); font-size: 12px; font-weight: 700; white-space: nowrap; color: var(--an-fg); }
 
 /* WORK card: the CARD // FOLDER = TERMINAL shape with CARD // FOLDER TIERS colour. A clip-path
    folder tab over a dark screen with a faint binary wash, owner + bold repo name + large octocat,
@@ -349,7 +356,7 @@ body {
   inset: 0;
   color: var(--c);
   opacity: 0.1;
-  font: 700 9px "Space Mono", ui-monospace, monospace;
+  font: 700 9px var(--an-font-mono);
   line-height: 1.45;
   letter-spacing: 1px;
   word-break: break-all;
@@ -357,9 +364,9 @@ body {
   user-select: none;
   pointer-events: none;
 }
-.an-tfolder-label { position: relative; font: 700 8px "Space Mono", ui-monospace, monospace; letter-spacing: 0.5px; color: var(--c); }
-.an-tfolder-owner { position: relative; font: 700 8px "Space Mono", ui-monospace, monospace; letter-spacing: 0.5px; color: #9a9a9a; margin-top: 9px; }
-.an-tfolder-name { position: relative; display: flex; align-items: center; gap: 8px; margin-top: 2px; color: #f2f2f2; font: 700 22px "Space Mono", ui-monospace, monospace; letter-spacing: 0.5px; }
+.an-tfolder-label { position: relative; font: 700 8px var(--an-font-mono); letter-spacing: 0.5px; color: var(--c); }
+.an-tfolder-owner { position: relative; font: 700 8px var(--an-font-mono); letter-spacing: 0.5px; color: #9a9a9a; margin-top: 9px; }
+.an-tfolder-name { position: relative; display: flex; align-items: center; gap: 8px; margin-top: 2px; color: #f2f2f2; font: 700 22px var(--an-font-mono); letter-spacing: 0.5px; }
 .an-tfolder-name-t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .an-tfolder-foot {
   position: absolute;
@@ -376,7 +383,7 @@ body {
   align-items: center;
   border: 1px solid #3a3a3d;
   background: rgba(255, 255, 255, 0.04);
-  font: 700 9px "Space Mono", ui-monospace, monospace;
+  font: 700 9px var(--an-font-mono);
   color: #cfcfcf;
   padding: 4px 8px;
   white-space: nowrap;
@@ -385,7 +392,7 @@ body {
   max-width: 62%;
 }
 .an-tfolder-stars { display: flex; align-items: center; gap: 6px; flex: none; }
-.an-tfolder-stars-n { font: 700 15px "Space Mono", ui-monospace, monospace; color: var(--c); }
+.an-tfolder-stars-n { font: 700 15px var(--an-font-mono); color: var(--c); }
 .an-tfolder-gauge { display: flex; gap: 2px; align-items: center; }
 .an-tfolder-gauge i { width: 4px; height: 14px; transform: skewX(-12deg); background: var(--e); }
 .an-tfolder-gauge i.on { background: var(--c); }
@@ -409,7 +416,7 @@ body {
   filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.45));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), inset 0 -1px 0 rgba(0, 0, 0, 0.24);
   text-align: left;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--an-font-code);
   transition: transform 0.1s var(--ease-standard);
 }
 /* broad diffuse top light — matte under a softbox, NOT a specular hotspot */
@@ -495,7 +502,7 @@ body {
   right: 8px;
   bottom: 38px;
   z-index: 4;
-  font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--an-font-display);
   font-size: 14.5px;
   font-weight: 700;
   letter-spacing: -0.2px;
@@ -574,7 +581,7 @@ body {
   box-shadow: 0 6px 22px rgba(0, 0, 0, 0.55);
   text-align: left;
   color: #ececf0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--an-font-code);
   transition: transform 0.1s var(--ease-standard);
 }
 .an-ac::after {
@@ -600,7 +607,7 @@ body {
 .an-ac-namerow { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid #34343a; padding: 6px 0 8px; }
 .an-ac-kana { font-size: 8px; color: #82828c; letter-spacing: 3px; margin-bottom: 2px; }
 .an-ac-name {
-  font-family: "Saira Condensed", "Space Grotesk", ui-sans-serif, sans-serif;
+  font-family: var(--an-font-display);
   font-weight: 800;
   font-style: italic;
   font-size: 30px;
@@ -712,7 +719,7 @@ body {
   align-items: center;
   margin-bottom: 6px;
   padding: 0 1px;
-  font-family: "Space Mono", ui-monospace, monospace;
+  font-family: var(--an-font-mono);
   font-weight: 700;
   font-size: 7px;
   letter-spacing: 1.5px;
@@ -760,7 +767,7 @@ body {
   gap: 3px;
   color: var(--an-fg-dim);
   border-left: 1px solid color-mix(in srgb, var(--an-fg) 12%, transparent);
-  font-family: "Space Mono", ui-monospace, monospace;
+  font-family: var(--an-font-mono);
   transition: color 0.18s var(--ease-standard);
 }
 .an-navseg:first-child { border-left: none; }
@@ -923,7 +930,7 @@ body {
     var(--bk);
 }
 /* terminal textarea: mono, uppercased placeholder */
-.an-term-ta { font-family: "Space Mono", ui-monospace, monospace; letter-spacing: 0.2px; }
+.an-term-ta { font-family: var(--an-font-mono); letter-spacing: 0.2px; }
 .an-term-ta::placeholder { text-transform: uppercase; letter-spacing: 0.5px; color: #6e6e72; }
 /* terminal segmented chips (engine + auto-edit) — opaque fill so chat behind doesn't bleed through */
 .an-term-seg {
@@ -931,7 +938,7 @@ body {
   height: 34px;
   border: 1px solid var(--an-line);
   background: var(--an-bg-1);
-  font-family: "Space Mono", ui-monospace, monospace;
+  font-family: var(--an-font-mono);
 }
 .an-term-seg > button { display: flex; align-items: center; height: 100%; font-size: 10px; font-weight: 700; letter-spacing: 1px; padding: 0 13px; text-transform: uppercase; color: #7a7a7a; }
 .an-term-seg > button + button { border-left: 1px solid var(--an-line); }
@@ -940,12 +947,12 @@ body {
   border: 1px solid var(--an-line);
   background: var(--an-bg-1);
   color: #9a9a9a;
-  font-family: "Space Mono", ui-monospace, monospace; font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+  font-family: var(--an-font-mono); font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
 }
 /* terminal top-bar title + katakana sub (Top Bar designs) */
-.an-term-title { font-family: "Space Mono", ui-monospace, monospace; font-weight: 700; letter-spacing: 0.5px; color: #f2f2f2; text-transform: uppercase; }
+.an-term-title { font-family: var(--an-font-mono); font-weight: 700; letter-spacing: 0.5px; color: #f2f2f2; text-transform: uppercase; }
 .an-term-sub { font-family: "Noto Sans JP", ui-sans-serif, sans-serif; font-size: 8px; letter-spacing: 1px; color: #5a5a5d; margin-top: 2px; }
-.an-term-mono { font-family: "Space Mono", ui-monospace, monospace; }
+.an-term-mono { font-family: var(--an-font-mono); }
 
 /* ===== SYSTEM // COMMON BUTTON ===== Like the chat send: transparent behind + corner-tick
    brackets, a solid accent block inside; only the accent (--acc/--ink) swaps. Apply
@@ -963,7 +970,7 @@ body {
   gap: 8px;
   width: 100%;
   padding: 20px 14px; /* 7px bracket gap + 13px fill padding */
-  font-family: "Space Mono", ui-monospace, monospace;
+  font-family: var(--an-font-mono);
   font-weight: 700;
   font-size: 13px;
   letter-spacing: 2px;
@@ -1008,14 +1015,14 @@ body {
 .an-btn-danger::before, .an-btn-danger::after { display: none; }
 
 /* terminal form field (input / textarea) + its mono label */
-.an-term-label { font-family: "Space Mono", ui-monospace, monospace; font-weight: 700; font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase; color: #6a6a6a; }
+.an-term-label { font-family: var(--an-font-mono); font-weight: 700; font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase; color: #6a6a6a; }
 .an-term-field {
   width: 100%;
   border: 1px solid #232327;
   border-radius: 0;
   background: #0c0c0d;
   padding: 12px 14px;
-  font-family: "Space Mono", ui-monospace, monospace;
+  font-family: var(--an-font-mono);
   font-weight: 700;
   font-size: 12px;
   letter-spacing: 0.3px;
@@ -1116,7 +1123,7 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
   background: #0a0a0b;
   border-radius: 10px;
   color: #e8e8e8;
-  font-family: "Space Mono", ui-monospace, monospace;
+  font-family: var(--an-font-mono);
   font-weight: 700;
   font-size: 12px;
   letter-spacing: 1.5px;
@@ -1163,7 +1170,7 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
 }
 .an-chatmenu-title {
   padding: 0.85rem 1rem 0.65rem;
-  font-family: "Space Mono", ui-monospace, monospace;
+  font-family: var(--an-font-mono);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.3px;
@@ -1178,7 +1185,7 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
   width: 100%;
   padding: 0.95rem 1rem;
   text-align: left;
-  font-family: "Space Mono", ui-monospace, monospace;
+  font-family: var(--an-font-mono);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 1px;
@@ -1337,7 +1344,7 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
   background: #52525b;
 }
 .md code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--an-font-code);
   font-size: 0.88em;
 }
 .md :not(pre) > code {
@@ -1504,7 +1511,7 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
   overflow: hidden;
   border-radius: 2px;
   border: 1px solid color-mix(in srgb, var(--brk) 42%, transparent);
-  font-family: "Space Mono", ui-monospace, monospace;
+  font-family: var(--an-font-mono);
   background:
     linear-gradient(var(--brk), var(--brk)) left top    / 14px 2px no-repeat,
     linear-gradient(var(--brk), var(--brk)) left top    / 2px 14px no-repeat,
@@ -1537,7 +1544,7 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
 .an-appr-div { border-top: 1px solid color-mix(in srgb, var(--brk) 22%, transparent); }
 
 /* the "1 / N" queue counter above the card */
-.an-appr-count { font: 700 11px "Space Mono", ui-monospace, monospace; letter-spacing: 0.5px; }
+.an-appr-count { font: 700 11px var(--an-font-mono); letter-spacing: 0.5px; }
 
 /* three-up action buttons (Approve / Always / Deny), uppercased in CSS */
 .an-appr-btn {
@@ -1546,7 +1553,7 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
   padding: 11px 6px;
   border: 1px solid transparent;
   border-radius: 2px;
-  font: 700 10px "Space Mono", ui-monospace, monospace;
+  font: 700 10px var(--an-font-mono);
   letter-spacing: 1.5px;
   text-transform: uppercase;
   cursor: pointer;
@@ -1574,7 +1581,7 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
   border-radius: 2px;
   background: var(--accent);
   color: var(--accent-ink);
-  font: 700 12px "Space Mono", ui-monospace, monospace;
+  font: 700 12px var(--an-font-mono);
   letter-spacing: 2px;
   text-transform: uppercase;
   cursor: pointer;
@@ -1588,7 +1595,7 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
   border-radius: 3px;
   background: color-mix(in srgb, var(--an-green) 18%, transparent);
   color: color-mix(in srgb, var(--an-green) 80%, var(--an-fg));
-  font: 700 9px "Space Mono", ui-monospace, monospace;
+  font: 700 9px var(--an-font-mono);
   letter-spacing: 1px;
   text-transform: uppercase;
 }
@@ -1639,7 +1646,7 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
   border: 1px solid color-mix(in srgb, var(--an-fg) 20%, transparent);
   background: color-mix(in srgb, var(--an-bg-0) 82%, transparent);
   color: var(--an-fg);
-  font: 400 12px "Space Mono", ui-monospace, monospace;
+  font: 400 12px var(--an-font-mono);
   line-height: 1.55;
   padding: 10px 12px;
   outline: none;
@@ -1700,7 +1707,7 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
   letter-spacing: 0.07em;
   font-weight: 900;
   font-size: clamp(38px, 13vw, 62px);
-  font-family: "Doto", ui-monospace, "Space Mono", monospace;
+  font-family: "Doto", ui-monospace, var(--an-font-mono);
 }
 .cmp-label {
   margin-top: 18px;
@@ -1709,7 +1716,7 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
   letter-spacing: 0.18em;
   font-weight: 700;
   font-size: clamp(13px, 3.6vw, 18px);
-  font-family: "Doto", ui-monospace, "Space Mono", monospace;
+  font-family: "Doto", ui-monospace, var(--an-font-mono);
   animation: cmpRise 0.5s ease 0.1s both;
 }
 @keyframes cmpPop {

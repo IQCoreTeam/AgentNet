@@ -392,7 +392,7 @@ export function Sessions({
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5 6.5 9H3v6h3.5L11 19V5Z" /><path d="M15 9a4 4 0 0 1 0 6M17.5 6.5a8 8 0 0 1 0 11" /></svg>
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[1.12rem] font-semibold leading-tight" style={{ color: "var(--an-fg)" }}>Unlock sound</span>
+                  <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-fg)" }}>Unlock sound</span>
                   <span className="an-term-mono mt-1 block text-[10px] uppercase leading-tight" style={{ color: "var(--an-fg-mute)" }}>{unlockSound ? "On" : "Muted"}</span>
                 </span>
                 <span className="relative h-[1.35rem] w-[2.4rem] shrink-0 rounded-full transition" style={{ background: unlockSound ? "var(--an-green)" : "var(--an-bg-2)" }}>
@@ -422,7 +422,7 @@ export function Sessions({
                       <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="M11 7v4l2.5 2" /></svg>
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[1.12rem] font-semibold leading-tight" style={{ color: "var(--an-fg)" }}>Background execution</span>
+                      <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-fg)" }}>Background execution</span>
                       <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>{bgExec ? "Runs in the background only while a task is active" : "Agent stops when you leave the app"}</span>
                     </span>
                     <span className="relative h-[1.35rem] w-[2.4rem] shrink-0 rounded-full transition" style={{ background: bgExec ? "var(--an-green)" : "var(--an-bg-2)" }}>
@@ -451,7 +451,7 @@ export function Sessions({
                       <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M16.8 14.6A7 7 0 0 1 7.4 5.2 7 7 0 1 0 16.8 14.6Z" /><path d="M14.8 5.2v2.6M13.5 6.5h2.6" /></svg>
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[1.12rem] font-semibold leading-tight" style={{ color: "var(--an-fg)" }}>Keep working while locked</span>
+                      <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-fg)" }}>Keep working while locked</span>
                       <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>
                         {!bgExec ? "Turn on background execution first" : screenOffExec ? "Keeps active tasks running with the screen off" : "Pauses may occur after the screen turns off"}
                       </span>
@@ -479,7 +479,7 @@ export function Sessions({
                   <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 4.5H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2.5" /><path d="M14 15l3-4-3-4M17 11H8.5" /></svg>
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[1.12rem] font-semibold leading-tight" style={{ color: "#f87171" }}>Disconnect wallet</span>
+                  <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "#f87171" }}>Disconnect wallet</span>
                   <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>Clears the saved session on this device</span>
                 </span>
               </button>
@@ -490,7 +490,7 @@ export function Sessions({
                 style={{ background: "var(--an-green-dim)", border: "1px solid var(--an-green-line)" }}
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[1.12rem] font-semibold leading-tight" style={{ color: "var(--an-green)" }}>Unlock AgentNet</span>
+                  <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-green)" }}>Unlock AgentNet</span>
                   <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>Connect a wallet for identity and writes</span>
                 </span>
                 <span className="an-term-mono" style={{ color: "var(--an-green)" }}>›</span>
