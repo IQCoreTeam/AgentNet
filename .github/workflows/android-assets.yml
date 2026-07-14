@@ -56,20 +56,26 @@ jobs:
           path: .termux-packages
       - name: Build patched PRoot from source
         shell: bash
+        # run-docker.sh reads ./scripts/profile-relaxed.apparmor relative to CWD, so it must
+        # run from the termux-packages root (not the workspace root, or it fails "No such file").
+        working-directory: .termux-packages
         run: |
           case "${{ github.event.inputs.abi }}" in
             arm64) TERMUX_ARCH=aarch64 ;;
             x86_64) TERMUX_ARCH=x86_64 ;;
           esac
-          cp surfaces/android/proot/patches/0001-copy-on-link.patch \
-            .termux-packages/packages/proot/0001-copy-on-link.patch
+          cp ../surfaces/android/proot/patches/0001-copy-on-link.patch \
+            packages/proot/0001-copy-on-link.patch
+          # The repo is bind-mounted at /home/builder/termux-packages inside the builder, but
+          # `docker exec` lands in /home/builder — so cd into the mount before build-package.sh.
           CI=true CONTAINER_NAME=agentnet-proot-builder \
             TERMUX_BUILDER_IMAGE_NAME=ghcr.io/termux/package-builder@sha256:fa23eb4238ef8eda877cd991a06152ce76e9f274d1cae0d42f28fee3e5cd6016 \
-            .termux-packages/scripts/run-docker.sh ./build-package.sh \
-              -a "$TERMUX_ARCH" -f -I proot
-          PROOT_PACKAGE=$(ls .termux-packages/output/proot_*_"$TERMUX_ARCH".deb | tail -1)
+            ./scripts/run-docker.sh \
+              bash -c 'cd /home/builder/termux-packages && ./build-package.sh -a '"$TERMUX_ARCH"' -f -I proot'
+          PROOT_PACKAGE=$(ls output/proot_*_"$TERMUX_ARCH".deb | tail -1)
           test -s "$PROOT_PACKAGE"
-          echo "PROOT_DEB=/work/$PROOT_PACKAGE" >> "$GITHUB_ENV"
+          # Asset step mounts the workspace at /work, so the .deb is under /work/.termux-packages.
+          echo "PROOT_DEB=/work/.termux-packages/$PROOT_PACKAGE" >> "$GITHUB_ENV"
 
       # Run the asset build inside an arm64 Ubuntu container (root + target arch). The
       # container has the chroot/apt the rootfs step needs; ALLOW_CROSS lets the script
