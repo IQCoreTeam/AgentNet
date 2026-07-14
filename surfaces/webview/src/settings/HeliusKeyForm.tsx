@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useStore } from "../state/store";
 
-export function HeliusKeyForm({ onDone }: { onDone?: () => void }) {
+export function HeliusKeyForm({ onDone, skipLabel = "Use Default" }: { onDone?: () => void; skipLabel?: string }) {
   const { state, send } = useStore();
   const [key, setKey] = useState("");
   const [saving, setSaving] = useState(false);
@@ -30,44 +30,45 @@ export function HeliusKeyForm({ onDone }: { onDone?: () => void }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-sm text-zinc-400">
-        A Helius key powers fast NFT indexing, agent lists, and skill search. It is stored locally and never synced.
+      <p className="text-xs leading-relaxed text-zinc-500">
+        Stored locally, never synced. Speeds up NFT indexing, agent lists, and skill search.
       </p>
-      <a
-        href="https://www.helius.dev/docs/quickstart"
-        target="_blank"
-        rel="noreferrer"
-        className="text-xs font-medium text-an-green active:text-[#00d068]"
-      >
-        Helius quickstart
-      </a>
       {state.rpcStatus?.hasKey && (
-        <div className="rounded-lg border border-green-800/40 bg-green-900/10 px-3 py-2 text-xs text-green-500">
+        <div className="an-term-mono border border-[color:var(--an-green-line)] bg-[color:var(--an-green-dim)] px-3 py-2 text-[11px] text-[color:var(--an-green)]">
           {state.rpcStatus.network} · {state.rpcStatus.masked}
         </div>
       )}
+      <label className="an-term-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--an-fg-dim)]">
+        &gt;HELIUS_API_KEY<span className="unlock-cursor">_</span>
+      </label>
       <input
-        className="w-full rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-green-500/50 font-mono"
-        placeholder="xxxx-xxxx-xxxx or https://…helius-rpc.com/?api-key=…"
+        className="an-term-mono w-full border border-[color:var(--an-line)] bg-[color:var(--an-bg-1)] px-3 py-3 text-sm text-[color:var(--an-fg)] placeholder-[color:var(--an-fg-mute)] focus:border-[color:var(--an-green-line)] focus:outline-none"
+        placeholder="paste key or rpc url"
         value={key}
         onChange={(e) => setKey(e.target.value)}
         type="password"
       />
-      <div className="flex gap-2">
-        <button
-          onClick={save}
-          disabled={saving || !key.trim()}
-          className="flex-1 rounded-xl bg-green-600 py-2.5 text-sm font-semibold text-white active:bg-green-500 disabled:opacity-50"
-        >
-          {saving ? "Saving…" : "Save Key"}
-        </button>
-        <button
-          onClick={clear}
-          className="rounded-xl border border-zinc-700 px-4 py-2.5 text-sm text-zinc-400 active:bg-zinc-800"
-        >
-          Use Default
-        </button>
-      </div>
+      <a
+        href="https://www.helius.dev/docs/quickstart"
+        target="_blank"
+        rel="noreferrer"
+        className="an-term-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--an-green)] active:opacity-70"
+      >
+        &gt; Get_your_key · helius.dev
+      </a>
+      <button
+        onClick={save}
+        disabled={saving || !key.trim()}
+        className="an-btn an-btn-green mt-1 w-full disabled:opacity-50"
+      >
+        {saving ? "Saving…" : "Save Key"}
+      </button>
+      <button
+        onClick={clear}
+        className="an-term-mono min-h-11 w-full text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--an-fg-dim)] active:opacity-70"
+      >
+        &gt; {skipLabel}
+      </button>
     </div>
   );
 }

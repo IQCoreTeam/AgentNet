@@ -108,10 +108,10 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
     if (!wasUnlocked.current && unlocked && open) {
       localStorage.removeItem(PROGRESS_KEY);
       localStorage.setItem(LEGACY_PITCH_KEY, "1");
-      setScreen("done");
+      // Wallet just linked → step 3 (optional Market RPC) BEFORE the granted screen,
+      // matching the tutorial order. Save-or-skip there advances to "done".
+      setScreen("advanced");
       haptics.unlock();
-      playUnlockSound();
-      timers.current.push(window.setTimeout(() => haptics.celebrate(), 180));
     }
     wasUnlocked.current = unlocked;
   }, [unlocked, open]);
@@ -148,6 +148,14 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
     if (next === "installed") haptics.step1();
     else if (next === "connect") haptics.step2();
     else haptics.tick();
+  }
+
+  // Leaving the optional RPC step (saved or skipped) → the Access Granted screen. This is the
+  // single success moment: one celebrate buzz + the unlock chime (only if the setting is on).
+  // Per-step presses stay silent — no ding while advancing the tutorial.
+  function enterGranted() {
+    setScreen("done");
+    haptics.celebrate();
     playUnlockSound();
   }
 
@@ -157,7 +165,7 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
       {open && (
         <div className="fixed inset-0 z-[60] flex items-end justify-center" role="dialog" aria-modal="true" aria-label="Unlock AgentNet">
           <button type="button" className="absolute inset-0 bg-black/70" aria-label="Close unlock tutorial" onClick={unlocked ? continueAction : dismiss} />
-          <section className="unlock-sheet relative z-10 flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-b-0 border-[color:var(--an-line)] bg-[color:var(--an-bg-0)]">
+          <section className="unlock-sheet relative z-10 flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden border border-b-0 border-[color:var(--an-line)] bg-[color:var(--an-bg-0)]">
             <div className="border-b border-[color:var(--an-line)]">
               <div className="an-term-mono flex items-center justify-between gap-2 px-4 pt-3 pb-2 text-[10px] uppercase tracking-[0.14em]" style={{ color: "var(--an-fg-mute)" }}>
                 <span>&gt;UNLOCK_SEQ {SEQ[screen]}/03</span><span>アクセス ******</span>
@@ -183,7 +191,7 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
               )}
               {screen === "connect" && (
                 <StepScreen step={2} title="Connect wallet" detail="One signature links your agent. No payment is made.">
-                  <div className="mt-6 rounded-xl bg-[color:var(--an-bg-1)] p-4"><ConnectWallet embedded /></div>
+                  <div className="mt-6"><ConnectWallet embedded /></div>
                   <p className="mt-4 text-center text-caption leading-relaxed text-[color:var(--an-fg-dim)]">Close this at any time. This step will be waiting when you return.</p>
                 </StepScreen>
               )}
@@ -201,19 +209,12 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
                     ))}
                   </div>
                   <button type="button" onClick={continueAction} className="an-btn an-btn-green mt-7 w-full">{copy.returnLabel}</button>
-                  <button type="button" onClick={() => setScreen("advanced")} className="mt-3 min-h-11 w-full text-label font-medium text-[color:var(--an-fg-dim)]">Advanced: configure Market RPC</button>
                 </div>
               )}
               {screen === "advanced" && (
-                <div className="mx-auto max-w-sm">
-                  <button type="button" onClick={() => setScreen("done")} className="mb-5 flex min-h-11 items-center gap-2 text-label text-[color:var(--an-fg-dim)]">
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
-                    Back to unlocked
-                  </button>
-                  <h3 className="text-title font-semibold text-[color:var(--an-fg)]">Optional Market RPC</h3>
-                  <p className="mb-5 mt-2 text-body-dense text-[color:var(--an-fg-dim)]">The public RPC works by default. Add Helius only for faster market indexing.</p>
-                  <HeliusKeyForm onDone={() => setScreen("done")} />
-                </div>
+                <StepScreen step={3} title="Market RPC" detail="Optional. The public RPC works by default — add a Helius key only for faster market indexing.">
+                  <div className="mt-6"><HeliusKeyForm onDone={enterGranted} skipLabel="Skip for now" /></div>
+                </StepScreen>
               )}
             </div>
           </section>

@@ -73,6 +73,15 @@ function ProgressiveMenuRow({ reason, unlocked, onUnlocked, ...row }: Omit<MenuR
   return <LockedGate reason={reason} onUnlocked={onUnlocked}><MenuRow {...row} locked onClick={onUnlocked} /></LockedGate>;
 }
 
+// Terminal toggle switch (sharp, scanlined) — one place for every settings switch.
+function Toggle({ on }: { on: boolean }) {
+  return (
+    <span className={`an-toggle${on ? " on" : ""}`} aria-hidden="true">
+      <span className="an-toggle-knob" />
+    </span>
+  );
+}
+
 // One row in the Storage radio picker: a filled dot marks the active backend, tap to switch.
 // Compact + token-styled to sit naturally in the settings drawer (no emoji / em-dash).
 function StorageOption({ active, title, subtitle, onClick }: { active: boolean; title: string; subtitle: string; onClick: () => void }) {
@@ -395,9 +404,7 @@ export function Sessions({
                   <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-fg)" }}>Unlock sound</span>
                   <span className="an-term-mono mt-1 block text-[10px] uppercase leading-tight" style={{ color: "var(--an-fg-mute)" }}>{unlockSound ? "On" : "Muted"}</span>
                 </span>
-                <span className="relative h-[1.35rem] w-[2.4rem] shrink-0 rounded-full transition" style={{ background: unlockSound ? "var(--an-green)" : "var(--an-bg-2)" }}>
-                  <span className="absolute top-[0.15rem] h-[1.05rem] w-[1.05rem] rounded-full bg-white transition-all" style={{ left: unlockSound ? "1.2rem" : "0.15rem" }} />
-                </span>
+                <Toggle on={unlockSound} />
               </button>
               {/* Android shell only: keep the agent running (and notify on approvals)
                   while the app is backgrounded — but ONLY while a task is active. Off =
@@ -425,9 +432,7 @@ export function Sessions({
                       <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-fg)" }}>Background run</span>
                       <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>{bgExec ? "Runs in the background only while a task is active" : "Agent stops when you leave the app"}</span>
                     </span>
-                    <span className="relative h-[1.35rem] w-[2.4rem] shrink-0 rounded-full transition" style={{ background: bgExec ? "var(--an-green)" : "var(--an-bg-2)" }}>
-                      <span className="absolute top-[0.15rem] h-[1.05rem] w-[1.05rem] rounded-full bg-white transition-all" style={{ left: bgExec ? "1.2rem" : "0.15rem" }} />
-                    </span>
+                    <Toggle on={bgExec} />
                   </button>
                   {bgExec && (
                     <p className="px-2.5 pb-1 text-[0.68rem] leading-snug" style={{ color: "var(--an-fg-mute)" }}>
@@ -456,9 +461,7 @@ export function Sessions({
                         {!bgExec ? "Turn on background execution first" : screenOffExec ? "Keeps active tasks running with the screen off" : "Pauses may occur after the screen turns off"}
                       </span>
                     </span>
-                    <span className="relative h-[1.35rem] w-[2.4rem] shrink-0 rounded-full transition" style={{ background: screenOffExec ? "var(--an-green)" : "var(--an-bg-2)" }}>
-                      <span className="absolute top-[0.15rem] h-[1.05rem] w-[1.05rem] rounded-full bg-white transition-all" style={{ left: screenOffExec ? "1.2rem" : "0.15rem" }} />
-                    </span>
+                    <Toggle on={screenOffExec} />
                   </button>
                   <p id="screen-off-exec-note" className="px-2.5 pb-1 text-[0.68rem] leading-snug" style={{ color: "var(--an-fg-mute)" }}>
                     Uses more battery during active tasks. Approval requests and completed turns vibrate on the lock screen.
