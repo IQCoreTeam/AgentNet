@@ -111,6 +111,8 @@ export type ClientMessage =
   | { type: "approvalDecision"; id: string; outcome: ApprovalOutcome; reason?: string; updatedInput?: Record<string, unknown>; questionResponses?: ApprovalQuestionResponse[] }
   // setup/auth:
   | { type: "connectWallet"; address: string; signature: number[] }
+  // Make a device-local keypair the connected wallet (no external app, no signing prompt).
+  | { type: "makeLocalWallet" }
   | { type: "startClaudeLogin" }
   | { type: "claudeAuthCode"; code: string }
   | { type: "cancelClaudeLogin" }

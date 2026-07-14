@@ -118,13 +118,23 @@ export function ConnectWallet({ embedded = false }: { embedded?: boolean } = {})
     }
   }
 
-  const controls = (
+  const [mode, setMode] = useState<"choose" | "web">("choose");
+
+  // The recommended path: mint/adopt a device-local keypair server-side. No wallet app and
+  // no signature prompt — the server flips us to unlocked via `walletConnected`.
+  function makeLocal() {
+    setBusy("local");
+    send({ type: "makeLocalWallet" });
+  }
+
+  // The wallet-app connect list (native MWA on Android; injected providers on web).
+  const webControls = (
     <>
       {android ? (
         // Android shell: one button drives the native wallet picker (Phantom/Solflare/…).
         <>
           <OnboardingButton disabled={busy !== null} onClick={connectAndroid}>
-            {busy ? "Connecting…" : hint ? phantomStore().label : "Connect Wallet"}
+            {busy === "Wallet" ? "Connecting…" : hint ? phantomStore().label : "Connect Wallet"}
           </OnboardingButton>
           {hint ? (
             <p className="text-center text-sm text-zinc-500">{hint}</p>
@@ -155,6 +165,42 @@ export function ConnectWallet({ embedded = false }: { embedded?: boolean } = {})
       )}
     </>
   );
+
+  const controls =
+    mode === "choose" ? (
+      <div className="space-y-3">
+        <button
+          type="button"
+          disabled={busy !== null}
+          onClick={makeLocal}
+          className="an-btn an-btn-green w-full"
+          style={{ flexDirection: "column", gap: 2, paddingTop: 14, paddingBottom: 14 }}
+        >
+          <span className="font-semibold">{busy === "local" ? "Creating wallet…" : "Make local wallet"}</span>
+          <span style={{ fontSize: "0.72rem", fontWeight: 600, opacity: 0.72 }}>Recommended · no signing needed</span>
+        </button>
+        <button
+          type="button"
+          disabled={busy !== null}
+          onClick={() => setMode("web")}
+          className="an-btn an-btn-outline w-full"
+        >
+          Connect web wallet
+        </button>
+      </div>
+    ) : (
+      <div className="space-y-3">
+        <button
+          type="button"
+          onClick={() => { setMode("choose"); setHint(null); }}
+          className="min-h-11 text-left text-sm text-zinc-400"
+        >
+          ‹ Back
+        </button>
+        {webControls}
+        <p className="text-center text-xs text-zinc-500">Check the App Store version of your wallet app.</p>
+      </div>
+    );
 
   if (embedded) return controls;
   return (

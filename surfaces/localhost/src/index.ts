@@ -323,13 +323,15 @@ async function submitGoogleAuthCode(c: Client, code: string) {
   }
 }
 
-// Build the runtime from a freshly connected wallet (idempotent for this host: a
-// second connect with the same address is a no-op so re-opened tabs don't rebuild).
-async function connectWallet(address: string, signature: Uint8Array): Promise<void> {
+// The one path a wallet takes to become THE connected wallet, whatever produced it
+// (external web/MWA wallet or a device-local keypair). Migrate the guest's work into the
+// new wallet's store, swap it in, and rebuild the runtime so the WebView reopens straight
+// into the unlocked state. Idempotent per host: re-connecting the same address is a no-op
+// so re-opened tabs don't rebuild. Adapters below build the Wallet; this owns the connect.
+async function adoptWallet(connected: Wallet, address: string): Promise<void> {
   if (walletAddress === address) return;
-  const connected = webWallet(address, signature, signTransactionViaUi);
-  // A damaged guest store must never lock the user out of connecting a wallet —
-  // the guest copy stays on disk, so a later connect can retry the migration.
+  // A damaged guest store must never lock the user out of connecting — the guest copy
+  // stays on disk, so a later connect can retry the migration.
   try {
     await migrateGuestSessions(connected);
   } catch (e) {
@@ -338,9 +340,24 @@ async function connectWallet(address: string, signature: Uint8Array): Promise<vo
   wallet = connected;
   walletAddress = address;
   walletEpoch += 1;
-  // Local storage is always available. Rebuild now so the WebView can reopen directly into
-  // the unlocked runtime without routing through the old blocking storage setup.
   await rebuildRuntime(connected);
+}
+
+// Adapter: an external wallet (Phantom/Solflare via MWA, or an injected web provider). The
+// signature over the fixed session message is what proves ownership; on-chain signing then
+// routes back out to that UI.
+function connectWallet(address: string, signature: Uint8Array): Promise<void> {
+  return adoptWallet(webWallet(address, signature, signTransactionViaUi), address);
+}
+
+// Adapter: a device-local Solana keypair at the CLI default path — no external app, no
+// signing prompt (it signs in-process). The "recommended" mobile path, where MWA/web-wallet
+// round-trips are flaky. Unlike the guest key this one CAN sign transactions, so on-chain
+// actions work once funded (devnet airdrop). Returns the connected address.
+async function connectLocalWallet(): Promise<string> {
+  const loaded = await localWallet(); // ~/.config/solana/id.json, generated if missing
+  await adoptWallet(loaded.wallet, loaded.address);
+  return loaded.address;
 }
 
 // ── one connected UI (one SSE stream) ──
@@ -1006,6 +1023,19 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
 
 function attachWalletConnection(c: Client) {
   c.recvs.push(async (m: any) => {
+    // Local-wallet path: mint/adopt a device keypair with no external app or signature.
+    if (m?.type === "makeLocalWallet") {
+      try {
+        await connectLocalWallet();
+      } catch (e) {
+        c.send({ type: "toast", text: "Local wallet failed: " + (e as Error).message });
+        return;
+      }
+      c.send({ type: "walletConnected", address: walletAddress, storageOptions: STORAGE_OPTIONS, storageConfigured: await isCloudConnected() });
+      c.send({ type: "storage", info: await getStorageInfo(), options: STORAGE_OPTIONS, googleCredsConfigured: await hasGoogleCreds() });
+      await pushCliStatus(c);
+      return;
+    }
     if (m?.type !== "connectWallet" || typeof m.address !== "string" || !Array.isArray(m.signature)) return;
     try {
       await connectWallet(m.address, Uint8Array.from(m.signature));
