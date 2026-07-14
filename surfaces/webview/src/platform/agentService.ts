@@ -12,7 +12,7 @@ declare global {
       openUrl?(url: string): void;
       // Promote (true) / demote (false) the foreground service. `clientId` lets the
       // persistent notification's Stop action reach /rpc.
-      setAgentActive?(active: boolean, clientId: string): void;
+      setAgentActive?(active: boolean, clientId: string, keepWhileLocked: boolean): void;
       // Raise an approval notification. `sessionId` lets a tap deep-link to that chat.
       // `force` = notify even in foreground (the request is for a session the user isn't
       // viewing — chat-app style ping). When force is false the shell still no-ops in
@@ -26,11 +26,14 @@ declare global {
       // First time the user enables background exec: prompt for battery-optimization
       // exemption so Android doesn't reap a long task. Guarded native-side against nagging.
       onBackgroundEnabled?(): void;
+      // Raise a softer completion alert when the display is off.
+      notifyTurnComplete?(sessionId: string): void;
     };
   }
 }
 
 const KEY = "agentnet.backgroundExec";
+const LOCKED_KEY = "agentnet.keepWorkingLocked";
 
 // Only true inside the Android shell — gates the settings toggle's visibility.
 export function hasAgentService(): boolean {
@@ -44,6 +47,12 @@ export function backgroundExecEnabled(): boolean {
   return localStorage.getItem(KEY) !== "0";
 }
 
+// Screen-off execution is deliberately opt-in and cannot outlive its background-execution
+// dependency. Missing storage means OFF.
+export function screenOffExecEnabled(): boolean {
+  return backgroundExecEnabled() && localStorage.getItem(LOCKED_KEY) === "1";
+}
+
 // Default-on means the user never taps the toggle, so the one-time battery-exemption prompt
 // (normally fired on enable) wouldn't show. Call this once on launch so a default-on user
 // still gets it. The shell guards against nagging, so repeat calls are safe no-ops.
@@ -51,16 +60,36 @@ export function ensureBackgroundConsent(): void {
   if (backgroundExecEnabled()) window.AgentNetShell?.onBackgroundEnabled?.();
 }
 
-export function setBackgroundExecEnabled(on: boolean, clientId: string | null): void {
+export function setBackgroundExecEnabled(on: boolean, active: boolean, clientId: string | null): void {
   localStorage.setItem(KEY, on ? "1" : "0");
-  if (on) window.AgentNetShell?.onBackgroundEnabled?.();
-  else window.AgentNetShell?.setAgentActive?.(false, clientId ?? ""); // demote at once when off
+  if (on) {
+    window.AgentNetShell?.onBackgroundEnabled?.();
+    window.AgentNetShell?.setAgentActive?.(active, clientId ?? "", screenOffExecEnabled());
+  } else {
+    localStorage.setItem(LOCKED_KEY, "0");
+    window.AgentNetShell?.setAgentActive?.(false, clientId ?? "", false); // demote at once when off
+  }
+}
+
+export function setScreenOffExecEnabled(on: boolean, active: boolean, clientId: string | null): void {
+  const enabled = on && backgroundExecEnabled();
+  localStorage.setItem(LOCKED_KEY, enabled ? "1" : "0");
+  if (enabled) window.AgentNetShell?.onBackgroundEnabled?.();
+  window.AgentNetShell?.setAgentActive?.(active && backgroundExecEnabled(), clientId ?? "", enabled);
 }
 
 // Reflect agent activity to the shell. Promotes only when background exec is enabled AND a
 // turn is active; otherwise demotes so the idle process can be reclaimed.
 export function syncAgentService(active: boolean, clientId: string | null): void {
-  window.AgentNetShell?.setAgentActive?.(active && backgroundExecEnabled(), clientId ?? "");
+  window.AgentNetShell?.setAgentActive?.(
+    active && backgroundExecEnabled(),
+    clientId ?? "",
+    screenOffExecEnabled(),
+  );
+}
+
+export function notifyTurnComplete(sessionId: string): void {
+  if (screenOffExecEnabled()) window.AgentNetShell?.notifyTurnComplete?.(sessionId);
 }
 
 // Ask the shell to surface a pending approval. `force` makes it notify even in foreground
