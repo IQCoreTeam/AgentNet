@@ -219,7 +219,12 @@ export function MarketScreen({ tab, onBack }: { tab: ShellTab; onBack?: () => vo
       {isSkills && (
         <div
           className="mx-3 mt-2 flex shrink-0 items-center justify-between"
-          style={{ background: "var(--an-green)", color: "var(--an-on-green)", padding: "8px 12px" }}
+          style={{
+            backgroundColor: "var(--an-green)",
+            backgroundImage: "repeating-linear-gradient(0deg, rgba(0,0,0,0.09) 0, rgba(0,0,0,0.09) 1px, transparent 1px, transparent 4px)",
+            color: "var(--an-on-green)",
+            padding: "8px 12px",
+          }}
         >
           <span className="an-term-mono text-[13px] font-bold uppercase tracking-[0.16em]">Skills</span>
           <span className="an-term-mono flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em]">
