@@ -153,12 +153,12 @@ export function App() {
 }
 
 // The value-first shell from issue #118 as a horizontal pager:
-// Chat · Market · Rank · Settings. A single floating bar slides its highlight as you
+// Chat · Skills · Rank · Market. A single floating bar slides its highlight as you
 // swipe between pages. Chat stays mounted (composer draft + scroll survive); the market
 // machine mounts only for the active page (it shares one store, so multiple live copies
 // would fight). Chat history lives in a left push-reveal drawer, opened by a right swipe
 // from Chat (page 0) — every other horizontal swipe pages between tabs.
-const LAST = 3; // Chat(0) Market(1) Rank(2) Settings(3)
+const LAST = 3; // Chat(0) Skills(1) Rank(2) Market(3)
 
 function TabShell() {
   const { state, send } = useStore();
@@ -318,9 +318,9 @@ function TabShell() {
             <div className="an-page">
               <ChatScreen onOpenDrawer={() => changeDrawer(true)} />
             </div>
-            <MarketPage marketTab="market" active={idx === 1} />
+            <MarketPage marketTab="skills" active={idx === 1} />
             <MarketPage marketTab="profile" active={idx === 2} />
-            <SettingsPage active={idx === 3} />
+            <MarketPage marketTab="market" active={idx === 3} />
           </div>
         </div>
 
@@ -350,34 +350,6 @@ function MarketPage({ marketTab, active }: { marketTab: "skills" | "profile" | "
         <div className="flex h-full items-center justify-center bg-zinc-950">
           <span className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-700 border-t-transparent" />
         </div>
-      )}
-    </div>
-  );
-}
-
-function SettingsPage({ active }: { active: boolean }) {
-  const [showSkills, setShowSkills] = useState(false);
-  if (!active) {
-    return (
-      <div className="an-page">
-        <div className="flex h-full items-center justify-center bg-zinc-950">
-          <span className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-700 border-t-transparent" />
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="an-page">
-      {showSkills ? (
-        <MarketScreen tab="skills" onBack={() => setShowSkills(false)} />
-      ) : (
-        <Sessions
-          embedded
-          initialMode="configure"
-          settingsRoot
-          onClose={() => undefined}
-          onOpenSkills={() => setShowSkills(true)}
-        />
       )}
     </div>
   );

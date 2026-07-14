@@ -2,11 +2,11 @@ import { useRef } from "react";
 import { useElementHeightVariable } from "../layoutEffects";
 import { useStore } from "../state/store";
 
-// Issue #118's value-first shell: chat and both public discovery surfaces are available
-// before wallet setup; Settings owns progressive account, sync, and skill configuration.
-export type TabKey = "chat" | "market" | "profile" | "settings";
+// The four top-level domains as an ordered pager: Chat · Skills · Rank · Market.
+// Skills = your owned collection; account/sync/settings live in the chat drawer.
+export type TabKey = "chat" | "skills" | "profile" | "market";
 
-export const TAB_ORDER: TabKey[] = ["chat", "market", "profile", "settings"];
+export const TAB_ORDER: TabKey[] = ["chat", "skills", "profile", "market"];
 
 // VAR_01 "mono invert" glyphs (16x16, stroke 1.8), matched to the Nav Dock design.
 function ChatGlyph() {
@@ -17,11 +17,13 @@ function ChatGlyph() {
     </svg>
   );
 }
-function SettingsGlyph() {
+function SkillsGlyph() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1-2.9 2.9-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21h-4v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1-2.9-2.9.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3v-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1 2.9-2.9.1.1a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V3h4v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1 2.9 2.9-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1h.1v4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
+      <rect x="4" y="4" width="6.5" height="6.5" rx="1" />
+      <rect x="13.5" y="4" width="6.5" height="6.5" rx="1" />
+      <rect x="4" y="13.5" width="6.5" height="6.5" rx="1" />
+      <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1" />
     </svg>
   );
 }
@@ -48,9 +50,9 @@ function MarketGlyph() {
 
 const TABS: { key: TabKey; label: string; Glyph: () => JSX.Element }[] = [
   { key: "chat", label: "CHAT", Glyph: ChatGlyph },
-  { key: "market", label: "MARKET", Glyph: MarketGlyph },
+  { key: "skills", label: "SKILLS", Glyph: SkillsGlyph },
   { key: "profile", label: "RANK", Glyph: AgentGlyph },
-  { key: "settings", label: "SETTINGS", Glyph: SettingsGlyph },
+  { key: "market", label: "MARKET", Glyph: MarketGlyph },
 ];
 
 // Compact centered "NAV_DOCK" (Nav Dock design, VAR_01 · mono invert): a 296px terminal bar with
