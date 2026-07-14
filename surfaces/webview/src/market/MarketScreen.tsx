@@ -215,6 +215,19 @@ export function MarketScreen({ tab, onBack }: { tab: ShellTab; onBack?: () => vo
         )}
       </header>
 
+      {/* Skills tab: a green terminal title bar that shows the lock state at a glance. */}
+      {isSkills && (
+        <div
+          className="mx-3 mt-2 flex shrink-0 items-center justify-between"
+          style={{ background: "var(--an-green)", color: "var(--an-on-green)", padding: "8px 12px" }}
+        >
+          <span className="an-term-mono text-[13px] font-bold uppercase tracking-[0.16em]">Skills</span>
+          <span className="an-term-mono flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em]">
+            {unlocked ? "● Online" : <><LockIcon className="h-3.5 w-3.5" /> Locked</>}
+          </span>
+        </div>
+      )}
+
       {/* RPC status nudge (market only) */}
       {isMarket && state.rpcStatus && !state.rpcStatus.hasKey && (
         <button
@@ -301,7 +314,7 @@ export function MarketScreen({ tab, onBack }: { tab: ShellTab; onBack?: () => vo
       <div className="flex-1 overflow-y-auto px-3 an-tabbar-inset">
         {isSkills ? (
           !unlocked ? (
-            <SkillsLocked owned={ownedCards} onUnlock={() => requestUnlock("skills")} />
+            <SkillsLocked onUnlock={() => requestUnlock("skills")} />
           ) : ownedLoading && state.marketOwned.length === 0 ? (
             <MarketListSkeleton />
           ) : state.marketOwned.length === 0 ? (
@@ -361,19 +374,28 @@ export function MarketScreen({ tab, onBack }: { tab: ShellTab; onBack?: () => vo
   );
 }
 
-// The Skills tab before a wallet is connected: the real skill chips sit dimmed behind an
+// Mockup skills shown (dimmed) behind the locked panel — a teaser of what unlocking opens,
+// so the empty pre-wallet Skills tab still reads as "there's a market here".
+const MOCK_SKILLS = [
+  { id: "mock-1", name: "PRICE FEED", price: "100000000", category: "data" },
+  { id: "mock-2", name: "TOKEN SCREENER", price: "250000000", category: "data" },
+  { id: "mock-3", name: "TX SUMMARIZER", price: "150000000", category: "text" },
+  { id: "mock-4", name: "WALLET WATCHER", price: "200000000", category: "data" },
+  { id: "mock-5", name: "AIRDROP SCOUT", price: "120000000", category: "defi" },
+  { id: "mock-6", name: "NFT MINTER", price: "300000000", category: "nft" },
+] as SkillCard[];
+
+// The Skills tab before a wallet is connected: mockup skill chips sit dimmed behind an
 // "Access Denied" terminal panel, so the value is visible but gated. Tapping Unlock routes
 // into the shared unlock flow (same as every other LockedGate).
-function SkillsLocked({ owned, onUnlock }: { owned: SkillCard[]; onUnlock: () => void }) {
+function SkillsLocked({ onUnlock }: { onUnlock: () => void }) {
   return (
     <div className="relative min-h-full pt-3">
-      {owned.length > 0 && (
-        <div className="pointer-events-none grid grid-cols-3 gap-3.5 opacity-25" style={{ filter: "saturate(0.35)" }} aria-hidden="true">
-          {owned.map((card) => (
-            <SkillSdCard key={card.id} card={card} owned onOpen={() => undefined} />
-          ))}
-        </div>
-      )}
+      <div className="pointer-events-none grid grid-cols-3 gap-3.5 opacity-25" style={{ filter: "saturate(0.35)" }} aria-hidden="true">
+        {MOCK_SKILLS.map((card) => (
+          <SkillSdCard key={card.id} card={card} owned={false} onOpen={() => undefined} />
+        ))}
+      </div>
       <div className="absolute inset-0 flex items-center justify-center p-5">
         <div
           className="an-bracket w-full max-w-[280px] p-5 text-center"
