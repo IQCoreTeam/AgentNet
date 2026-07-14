@@ -122,8 +122,15 @@ body {
 .unlock-pop { animation: unlock-pop var(--dur-celebrate) var(--ease-emphasized-decelerate); }
 .unlock-gate-reveal { animation: unlock-gate-reveal 520ms var(--ease-emphasized-decelerate) var(--unlock-delay) both; }
 .unlock-badge-open { animation: unlock-badge-open 420ms var(--ease-emphasized-decelerate) var(--unlock-delay) both; }
-/* Access-denied panel: sits hidden, then whooshes up ~0.3s after the tab settles. */
-.unlock-denied-in { animation: unlock-denied-in 440ms var(--ease-emphasized-decelerate) 300ms both; }
+/* Access-denied panel: stays dark, then boots in ~0.3s after the tab settles with a
+   CRT power-on flicker (premium terminal feel) rather than a plain slide. */
+.unlock-denied-in { animation: unlock-flicker 900ms steps(1) 300ms both; }
+/* CRT flicker for tags/banners flipping state on unlock. */
+.unlock-flicker { animation: unlock-flicker 900ms steps(1) both; }
+/* Reward rows type in one after another on the granted screen. */
+.unlock-reward { animation: unlock-reward 400ms var(--ease-emphasized-decelerate) both; }
+/* Blinking terminal cursor for unlock-sheet eyebrows. */
+.unlock-cursor { animation: unlock-blink 1.1s steps(1) infinite; }
 @keyframes unlock-sheet-in {
   from { opacity: 0; transform: translateY(24px); }
   to { opacity: 1; transform: translateY(0); }
@@ -141,10 +148,20 @@ body {
   0% { opacity: 0; transform: rotate(-28deg) scale(0.7); }
   100% { opacity: 1; transform: rotate(0) scale(1); }
 }
-@keyframes unlock-denied-in {
-  0% { opacity: 0; transform: translateY(16px) scale(0.95); }
-  100% { opacity: 1; transform: translateY(0) scale(1); }
+@keyframes unlock-flicker {
+  0% { opacity: 0; }
+  6% { opacity: 1; }
+  10% { opacity: 0.3; }
+  14% { opacity: 1; }
+  22% { opacity: 0.5; }
+  28% { opacity: 1; }
+  100% { opacity: 1; }
 }
+@keyframes unlock-reward {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes unlock-blink { 50% { opacity: 0; } }
 
 /* ── Mobile component primitives (extension concept, thumb-sized) ──────────── */
 
@@ -1735,5 +1752,5 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
   100% { transform: translateY(0); opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .cmp-wrap, .cmp-label, .unlock-sheet, .unlock-pop, .unlock-gate-reveal, .unlock-badge-open, .unlock-denied-in { animation-duration: 0.01ms; animation-delay: 0ms; }
+  .cmp-wrap, .cmp-label, .unlock-sheet, .unlock-pop, .unlock-gate-reveal, .unlock-badge-open, .unlock-denied-in, .unlock-flicker, .unlock-reward { animation-duration: 0.01ms; animation-delay: 0ms; }
 }

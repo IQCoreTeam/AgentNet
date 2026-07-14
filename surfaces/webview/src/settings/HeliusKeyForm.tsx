@@ -75,7 +75,7 @@ export function HeliusKeyForm({ onDone }: { onDone?: () => void }) {
 export function HeliusSetupPanel({ onBack }: { onBack: () => void }) {
   return (
     <div className="flex flex-col h-full bg-zinc-950">
-      <header className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2 shrink-0">
+      <header className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2 shrink-0" style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))" }}>
         <button onClick={onBack} className="text-zinc-400 active:text-zinc-200 px-1 text-lg">←</button>
         <span className="font-medium text-sm">Helius API Key</span>
       </header>

@@ -403,17 +403,32 @@ function SkillsLocked({ onUnlock }: { onUnlock: () => void }) {
       </div>
       <div className="absolute inset-0 flex items-center justify-center p-5">
         <div
-          className="an-bracket unlock-denied-in w-full max-w-[280px] p-5 text-center"
+          className="an-bracket unlock-denied-in w-full max-w-[290px] p-4 pb-5"
           style={{ border: "1px solid #1d3a26", "--ts": "12px", "--bk": "var(--an-bg-0)", "--tk": "#2f6b46" } as CSSProperties}
         >
-          <span className="mx-auto mb-4 grid h-16 w-16 place-items-center" style={{ border: "1px solid #1d3a26", background: "var(--an-green-dim)", color: "var(--an-green)" }}>
-            <LockIcon className="h-8 w-8" />
+          {/* terminal auth-check meta line */}
+          <div className="an-term-mono flex items-center justify-between pb-3 text-[9px] uppercase tracking-[0.14em]" style={{ color: "var(--an-fg-mute)" }}>
+            <span>&gt;AUTH_CHECK</span><span>アクセス拒否</span>
+          </div>
+          <span className="mx-auto mb-3 grid h-14 w-14 place-items-center" style={{ border: "1px solid #1d3a26", background: "var(--an-green-dim)", color: "var(--an-green)" }}>
+            <LockIcon className="h-7 w-7" />
           </span>
-          <div className="an-term-mono text-[15px] font-bold uppercase tracking-[0.2em]" style={{ color: "var(--an-green)" }}>Access Denied</div>
-          <p className="an-term-mono mx-auto mt-3 max-w-[220px] text-[10px] uppercase leading-relaxed tracking-wide" style={{ color: "var(--an-fg-dim)" }}>
-            Connect a wallet to browse, collect, and publish skills.
+          {/* green scanline banner — the "Access Denied" bar (matches the Skills title bar) */}
+          <div
+            className="an-term-mono text-center text-[15px] font-extrabold uppercase tracking-[0.2em]"
+            style={{
+              backgroundColor: "var(--an-green)",
+              backgroundImage: "repeating-linear-gradient(0deg, rgba(0,0,0,0.11) 0, rgba(0,0,0,0.11) 1px, transparent 1px, transparent 4px)",
+              color: "var(--an-on-green)",
+              padding: "9px 10px",
+            }}
+          >
+            Access Denied
+          </div>
+          <p className="an-term-mono mx-auto mt-3 max-w-[240px] text-center text-[10px] uppercase leading-relaxed tracking-wide" style={{ color: "var(--an-fg-dim)" }}>
+            6 skills detected. Connect a wallet to browse, collect, and publish.
           </p>
-          <button onClick={onUnlock} className="an-btn an-btn-green mt-5 w-full">Unlock Agent</button>
+          <button onClick={onUnlock} className="an-btn an-btn-green mt-4 w-full">Unlock Agent</button>
         </div>
       </div>
     </div>

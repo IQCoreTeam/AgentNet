@@ -13,6 +13,10 @@ type UnlockAction = (walletAddress: string) => void;
 const PROGRESS_KEY = "agentnet.unlock.progress.v1";
 const LEGACY_PITCH_KEY = "agentnet.unlock.pitchSeen";
 
+// CRT scanline overlay reused by the green terminal bars (title bar, Access Granted banner).
+const SCANLINES = "repeating-linear-gradient(0deg, rgba(0,0,0,0.11) 0, rgba(0,0,0,0.11) 1px, transparent 1px, transparent 4px)";
+const SEQ: Record<UnlockScreen, string> = { pitch: "00", installed: "01", connect: "02", done: "03", advanced: "03" };
+
 const REASON_COPY: Record<UnlockReason, { title: string; returnLabel: string }> = {
   skills: { title: "Build your skill collection", returnLabel: "Open my skills" },
   buy: { title: "Collect this skill", returnLabel: "Continue purchase" },
@@ -154,17 +158,14 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
         <div className="fixed inset-0 z-[60] flex items-end justify-center" role="dialog" aria-modal="true" aria-label="Unlock AgentNet">
           <button type="button" className="absolute inset-0 bg-black/70" aria-label="Close unlock tutorial" onClick={unlocked ? continueAction : dismiss} />
           <section className="unlock-sheet relative z-10 flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-b-0 border-[color:var(--an-line)] bg-[color:var(--an-bg-0)]">
-            <div className="flex items-center justify-between border-b border-[color:var(--an-line)] px-5 py-4">
-              <div className="flex min-w-0 items-center gap-3">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[color:var(--an-green-dim)] text-[color:var(--an-green)]"><LockIcon className="h-5 w-5" /></span>
-                <div className="min-w-0">
-                  <h2 className="truncate text-title font-semibold text-[color:var(--an-fg)]">{copy.title}</h2>
-                  <p className="text-caption text-[color:var(--an-fg-dim)]">Chat and the local Linux sandbox stay available.</p>
-                </div>
+            <div className="border-b border-[color:var(--an-line)]">
+              <div className="an-term-mono flex items-center justify-between gap-2 px-4 pt-3 pb-2 text-[10px] uppercase tracking-[0.14em]" style={{ color: "var(--an-fg-mute)" }}>
+                <span>&gt;UNLOCK_SEQ {SEQ[screen]}/03</span><span>アクセス ******</span>
               </div>
-              <button type="button" onClick={unlocked ? continueAction : dismiss} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-[color:var(--an-fg-dim)] active:bg-[color:var(--an-bg-2)]" aria-label="Close">
-                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
-              </button>
+              <div className="mx-3 mb-3 flex items-center justify-between gap-2" style={{ backgroundColor: "var(--an-green)", backgroundImage: SCANLINES, color: "var(--an-on-green)", padding: "9px 12px" }}>
+                <h2 className="an-term-mono truncate text-[13px] font-bold uppercase tracking-[0.14em]">{copy.title}</h2>
+                <button type="button" onClick={unlocked ? continueAction : dismiss} className="an-term-mono shrink-0 text-[13px] font-bold leading-none active:opacity-70" aria-label="Close">[x]</button>
+              </div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
@@ -187,11 +188,21 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
                 </StepScreen>
               )}
               {screen === "done" && (
-                <StepScreen step={3} title="Agent unlocked" detail="Identity, skills, earning, comments, and session sync are now available." complete>
-                  <span className="mx-auto mt-7 grid h-20 w-20 place-items-center rounded-full bg-[color:var(--an-green)] text-[color:var(--an-on-green)] unlock-pop"><CheckIcon className="h-10 w-10" /></span>
+                <div className="mx-auto max-w-sm">
+                  <Progress value={3} />
+                  <div className="unlock-flicker an-term-mono mt-6 text-center text-[17px] font-extrabold uppercase tracking-[0.18em]" style={{ backgroundColor: "var(--an-green)", backgroundImage: SCANLINES, color: "var(--an-on-green)", padding: "12px 10px" }}>Access Granted</div>
+                  <div className="mt-5 flex flex-col gap-3">
+                    {["Skills index", "Earning", "Comments", "Session sync"].map((label, i) => (
+                      <div key={label} className="unlock-reward an-term-mono flex items-baseline gap-2 text-[11px] uppercase tracking-wide" style={{ color: "var(--an-green)", animationDelay: `${0.15 * (i + 1)}s` }}>
+                        <span>+ {label}</span>
+                        <span className="mb-[3px] flex-1 self-end border-b border-dotted" style={{ borderColor: "var(--an-fg-mute)" }} />
+                        <span>[OK]</span>
+                      </div>
+                    ))}
+                  </div>
                   <button type="button" onClick={continueAction} className="an-btn an-btn-green mt-7 w-full">{copy.returnLabel}</button>
                   <button type="button" onClick={() => setScreen("advanced")} className="mt-3 min-h-11 w-full text-label font-medium text-[color:var(--an-fg-dim)]">Advanced: configure Market RPC</button>
-                </StepScreen>
+                </div>
               )}
               {screen === "advanced" && (
                 <div className="mx-auto max-w-sm">
@@ -231,7 +242,7 @@ function ValuePitch({ page, onPageChange, onContinue }: { page: number; onPageCh
   }
   return (
     <div className="mx-auto max-w-sm">
-      <p className="text-center text-caption font-medium text-[color:var(--an-green)]">Why unlock AgentNet?</p>
+      <p className="an-term-mono text-center text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--an-green)]">&gt;WHY_UNLOCK<span className="unlock-cursor">_</span></p>
       <div ref={scroller} onScroll={(event) => onPageChange(Math.round(event.currentTarget.scrollLeft / Math.max(1, event.currentTarget.clientWidth)))} className="mt-3 flex snap-x snap-mandatory overflow-x-auto [scrollbar-width:none]">
         {cards.map((card) => (
           <article key={card.title} className="w-full shrink-0 snap-center px-1 py-3 text-center">
@@ -250,10 +261,15 @@ function ValuePitch({ page, onPageChange, onContinue }: { page: number; onPageCh
 }
 
 function Progress({ value }: { value: 1 | 2 | 3 }) {
+  const on = value * 4; // 12 segments, 4 lit per completed step
   return (
     <div aria-label={`Unlock progress ${value} of 3`}>
-      <div className="mb-2 flex justify-between text-caption text-[color:var(--an-fg-dim)]"><span>Unlock progress</span><span>{value}/3</span></div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-[color:var(--an-bg-2)]"><span className="block h-full rounded-full bg-[color:var(--an-green)] transition-[width] duration-300" style={{ width: `${value * 33.333}%` }} /></div>
+      <div className="an-term-mono mb-1.5 flex justify-between text-[10px] uppercase tracking-[0.14em] text-[color:var(--an-fg-dim)]"><span>Unlock_Progress</span><span className="text-[color:var(--an-green)]">{value}/3</span></div>
+      <div className="flex gap-[3px] border border-[color:var(--an-line)] p-1" style={{ background: "rgba(255,255,255,0.02)" }}>
+        {Array.from({ length: 12 }).map((_, i) => (
+          <span key={i} className="h-2.5 flex-1" style={{ background: i < on ? "var(--an-green)" : "var(--an-bg-2)" }} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -263,9 +279,9 @@ function StepScreen({ step, title, detail, complete = false, children }: { step:
     <div className="mx-auto max-w-sm">
       <Progress value={step} />
       <div className="mt-7 text-center">
-        <span className="mx-auto grid h-12 w-12 place-items-center rounded-full border border-current text-title font-semibold" style={{ color: complete ? "var(--an-green)" : "var(--an-fg-dim)" }}>{complete ? <CheckIcon className="h-6 w-6" /> : step}</span>
-        <p className="mt-4 text-caption text-[color:var(--an-fg-dim)]">Step {step} of 3</p>
-        <h3 className="mt-1 text-heading font-semibold text-[color:var(--an-fg)]">{title}</h3>
+        <span className="an-term-mono mx-auto grid h-12 w-12 place-items-center border text-[13px] font-bold" style={complete ? { borderColor: "var(--an-green)", background: "var(--an-green)", color: "var(--an-on-green)" } : { borderColor: "var(--an-line)", color: "var(--an-fg-dim)" }}>{complete ? "[OK]" : step}</span>
+        <p className="an-term-mono mt-4 text-[10px] uppercase tracking-[0.14em] text-[color:var(--an-fg-dim)]">Step {step}/3</p>
+        <h3 className="an-term-mono mt-1.5 text-[19px] font-bold uppercase tracking-[0.06em] text-[color:var(--an-fg)]">{title}</h3>
         <p className="mx-auto mt-2 max-w-xs text-body-dense leading-relaxed text-[color:var(--an-fg-dim)]">{detail}</p>
       </div>
       {children}
