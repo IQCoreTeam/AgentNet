@@ -2,8 +2,8 @@ import { useRef } from "react";
 import { useElementHeightVariable } from "../layoutEffects";
 import { useStore } from "../state/store";
 
-// The four top-level domains as an ordered pager (screen-rearrangement.md §9):
-// Chat · Skills · Agent · Market. Agent = "My Agent".
+// The four top-level domains as an ordered pager: Chat · Skills · Rank · Market.
+// Skills = your owned collection; account/sync/settings live in the chat drawer.
 export type TabKey = "chat" | "skills" | "profile" | "market";
 
 export const TAB_ORDER: TabKey[] = ["chat", "skills", "profile", "market"];
@@ -51,7 +51,7 @@ function MarketGlyph() {
 const TABS: { key: TabKey; label: string; Glyph: () => JSX.Element }[] = [
   { key: "chat", label: "CHAT", Glyph: ChatGlyph },
   { key: "skills", label: "SKILLS", Glyph: SkillsGlyph },
-  { key: "profile", label: "AGENT", Glyph: AgentGlyph },
+  { key: "profile", label: "RANK", Glyph: AgentGlyph },
   { key: "market", label: "MARKET", Glyph: MarketGlyph },
 ];
 

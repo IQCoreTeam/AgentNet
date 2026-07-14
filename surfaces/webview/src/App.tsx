@@ -14,7 +14,7 @@ import { TabBar } from "./shell/TabBar";
 import { Toast } from "./Toast";
 import { useVisualViewportVars, useKeyboardChrome } from "./layoutEffects";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { syncAgentService, notifyApproval, clearApprovalNotice, ensureBackgroundConsent } from "./platform/agentService";
+import { syncAgentService, notifyApproval, clearApprovalNotice, ensureBackgroundConsent, notifyTurnComplete } from "./platform/agentService";
 import { haptics } from "./haptics";
 
 // Phase router:
@@ -35,6 +35,16 @@ export function App() {
   // enabled background exec; demote otherwise. No-op off the Android shell.
   const agentActive = state.typing || state.approvals.length > 0;
   useEffect(() => { syncAgentService(agentActive, getClientId()); }, [agentActive, getClientId]);
+
+  // A real active -> idle transition means the turn ended. Native checks that the display is
+  // still off before posting, and the helper checks the user's screen-off opt-in.
+  const wasTyping = useRef(false);
+  useEffect(() => {
+    if (wasTyping.current && !state.typing && state.approvals.length === 0) {
+      notifyTurnComplete(state.activeSessionId ?? "");
+    }
+    wasTyping.current = state.typing;
+  }, [state.typing, state.approvals.length, state.activeSessionId]);
 
   // Default-on background exec: prompt once for battery-optimization exemption on launch.
   useEffect(() => { ensureBackgroundConsent(); }, []);
@@ -142,13 +152,13 @@ export function App() {
   );
 }
 
-// The 4-domain shell (screen-rearrangement.md §9) as a horizontal pager:
-// Chat · Skills · Agent · Market. A single floating glass bar slides its highlight as you
+// The value-first shell from issue #118 as a horizontal pager:
+// Chat · Skills · Rank · Market. A single floating bar slides its highlight as you
 // swipe between pages. Chat stays mounted (composer draft + scroll survive); the market
 // machine mounts only for the active page (it shares one store, so multiple live copies
 // would fight). Chat history lives in a left push-reveal drawer, opened by a right swipe
 // from Chat (page 0) — every other horizontal swipe pages between tabs.
-const LAST = 3; // Chat(0) Skills(1) Agent(2) Market(3)
+const LAST = 3; // Chat(0) Skills(1) Rank(2) Market(3)
 
 function TabShell() {
   const { state, send } = useStore();
@@ -344,4 +354,3 @@ function MarketPage({ marketTab, active }: { marketTab: "skills" | "profile" | "
     </div>
   );
 }
-

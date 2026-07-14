@@ -84,16 +84,18 @@ class DirectProotExec(private val layout: Paths.Layout) : GuestExec {
         // (The earlier belief that newer Android needs NO_SECCOMP for set_robust_list was
         // wrong for this path; seccomp-on is both correct AND faster.)
         env["PROOT_TMP_DIR"] = Paths.dir("${layout.rootfs}/tmp").absolutePath
-        env["PROOT_L2S_DIR"] = Paths.dir("${layout.rootfs}/.l2s").absolutePath // stable link2symlink db
+        // PROOT_L2S_DIR is gone with --link2symlink (#115/#116): without the extension loaded,
+        // proot never reads it. Old installs may still carry a rootfs/.l2s dir with orphaned
+        // .l2s.* backing files from before the fix; harmless, and their symlinks still resolve.
         pb.redirectErrorStream(true)
 
         return pb.start()
     }
 
     // Build the proot invocation that enters the Ubuntu guest and runs `guestCommand` as a
-    // login shell. Flags mirror proot-distro's defaults; --kill-on-exit ties guest
-    // processes to ours so nothing is orphaned, --link2symlink is guest compatibility, and
-    // /dev,/proc,/sys are bound through from Android.
+    // login shell. Flags mirror proot-distro's defaults minus --link2symlink (removed as the
+    // #115 root cause, see below); --kill-on-exit ties guest processes to ours so nothing is
+    // orphaned, and /dev,/proc,/sys are bound through from Android.
     // We launch proot through a host /system/bin/sh that first `cd`s into filesDir, then
     // `exec`s proot. This is load-bearing: an Android app process has cwd = "/", which is
     // unreadable under SELinux, so proot's startup getcwd() fails ("sh: 0: getcwd()
@@ -112,7 +114,7 @@ class DirectProotExec(private val layout: Paths.Layout) : GuestExec {
         val guestArgv = listOf(
             layout.proot,
             "--kill-on-exit",
-            // #115 ROOT CAUSE: DO NOT add --link2symlink. In the untrusted_app domain the
+            // #115 ROOT CAUSE + fix: DO NOT add --link2symlink. In the untrusted_app domain the
             // kernel denies hardlinks (verified on-device: `ln a b` -> EACCES). --link2symlink
             // "helpfully" catches that and FAKES success (pokes syscall result 0) by swapping in a
             // symlink-refcount scheme — but the fake defeats callers' own error handling: git's
@@ -120,13 +122,15 @@ class DirectProotExec(private val layout: Paths.Layout) : GuestExec {
             // FAILS, but never when it lies with a 0. Result: silent object loss ("remote did not
             // send all necessary objects") and broken pnpm installs. With l2s OFF, linkat fails
             // honestly with EACCES and both tools fall back correctly (verified on-device: git
-            // 50/50 objects survive, pnpm 589/589 files, real clone clean).
+            // 50/50 objects survive, pnpm 589/589 files, real clone clean). One flag removed fixes
+            // every link()-using tool with a fallback — no proot rebuild, no per-tool config.
             //
-            // #117 closes the remaining no-fallback gap (notably dpkg): our published GPLv2 PRoot
-            // patch adds --copy-on-link. A native hardlink is attempted first; only EACCES retries
-            // as an O_EXCL regular-file byte copy. That is honest data preservation, unlike l2s's
-            // dangling-symlink false success. Other link errors and unsupported file types remain
-            // unchanged. The git config from #116 remains belt-and-suspenders.
+            // #117 closes the remaining no-fallback gap (notably dpkg, which has NO copy fallback):
+            // our published GPLv2 PRoot patch adds --copy-on-link. A native hardlink is attempted
+            // first; only EACCES retries as an O_EXCL regular-file byte copy. Honest data
+            // preservation, unlike l2s's dangling-symlink false success. Other link errors and
+            // unsupported file types are unchanged. The core.createObject=rename gitconfig from #116
+            // stays as belt-and-suspenders.
             *copyOnLinkArgs,
             // NOTE: kept to flags the Termux proot build supports. --sysvipc is dropped
             // (node doesn't need SysV IPC). -L and --kernel-release are likewise omitted as

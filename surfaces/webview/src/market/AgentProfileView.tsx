@@ -12,6 +12,7 @@ import { mediaUrl } from "./mediaUrl";
 import { CompleteCelebration } from "./CompleteCelebration";
 import { SkillSdCard } from "./SkillSdCard";
 import { RegisterWorkRepo } from "../onboarding/RegisterWorkRepo";
+import { LockedGate } from "../unlock/UnlockProvider";
 
 function PenIcon({ className }: { className?: string }) {
   return (
@@ -291,6 +292,7 @@ function NoteComposer({
   posting,
   disabled,
   withTitle,
+  autoFocus,
   onSubmit,
 }: {
   placeholder: string;
@@ -298,6 +300,7 @@ function NoteComposer({
   posting?: boolean;
   disabled?: boolean;
   withTitle?: boolean;
+  autoFocus?: boolean;
   onSubmit: (fields: NoteFields) => void;
 }) {
   const [title, setTitle] = useState("");
@@ -318,7 +321,7 @@ function NoteComposer({
       {withTitle && (
         <input className="an-term-field" placeholder="Title (optional)" value={title} disabled={busy} onChange={(e) => setTitle(e.target.value)} />
       )}
-      <textarea className="an-term-field resize-none leading-relaxed" rows={5} placeholder={placeholder} value={text} disabled={busy} onChange={(e) => setText(e.target.value)} />
+      <textarea autoFocus={autoFocus} className="an-term-field resize-none leading-relaxed" rows={5} placeholder={placeholder} value={text} disabled={busy} onChange={(e) => setText(e.target.value)} />
       <input className="an-term-field" placeholder="Image link / on-chain address / tx id (optional)" value={image} disabled={busy} onChange={(e) => setImage(e.target.value)} />
       {!imageOk && <p className="text-xs" style={{ color: "var(--an-red, #f87171)" }}>Image must be an https link, on-chain address, or tx id.</p>}
       {img && imageOk && mediaUrl(img) && <img src={mediaUrl(img)} alt="" referrerPolicy="no-referrer" className="h-20 w-20 rounded-lg object-cover" style={{ border: "1px solid var(--an-line)" }} />}
@@ -458,6 +461,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   const [composeMode, setComposeMode] = useState<null | "blog" | "repo">(null);
   const [posting, setPosting] = useState(false);
   const [replyTo, setReplyTo] = useState<string | null>(null); // GH #101: id of the comment being replied to
+  const [resumeComment, setResumeComment] = useState(false);
   const [celebrate, setCelebrate] = useState<{ label: string } | null>(null);
   const [showAllRepos, setShowAllRepos] = useState(false);
   const [repoSkills, setRepoSkills] = useState<VRepo | null>(null);
@@ -873,8 +877,15 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                       placeholder="Share your experience with this agent..."
                       submitLabel="Comment"
                       posting={posting}
+                      autoFocus={resumeComment}
                       onSubmit={submitNote}
                     />
+                  ) : !state.walletAddress ? (
+                    <LockedGate reason="comment" onUnlocked={() => { setResumeComment(true); send({ type: "getAgentProfile", wallet: profile.wallet }); }}>
+                      <button className="w-full rounded-xl px-2.5 py-2 text-left text-[11px]" style={{ background: "var(--an-bg-1)", border: "1px solid var(--an-line)", color: "var(--an-fg-dim)" }}>
+                        Connect a wallet to comment
+                      </button>
+                    </LockedGate>
                   ) : (
                     <p className="rounded-xl px-2.5 py-2 text-[11px]" style={{ background: "var(--an-bg-1)", border: "1px solid var(--an-line)", color: "var(--an-fg-mute)" }}>
                       Hold a skill to comment.
@@ -897,13 +908,15 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
           className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-10 an-tabbar-inset"
           style={{ background: "linear-gradient(to top, color-mix(in srgb, var(--an-bg-0) 60%, transparent), transparent)" }}
         >
-          <button onClick={handleBuyAll} disabled={buyingAll} className="an-btn an-btn-orange pointer-events-auto">
-            {buyingAll
-              ? "Buying..."
-              : unownedSkills.length === allSkills.length
-                ? `Buy all ${unownedSkills.length} skill${unownedSkills.length !== 1 ? "s" : ""}`
-                : `Buy ${unownedSkills.length} more skill${unownedSkills.length !== 1 ? "s" : ""}`}
-          </button>
+          <LockedGate reason="buy" onUnlocked={handleBuyAll} className="pointer-events-auto">
+            <button onClick={handleBuyAll} disabled={buyingAll} className="an-btn an-btn-orange">
+              {buyingAll
+                ? "Buying..."
+                : unownedSkills.length === allSkills.length
+                  ? `Buy all ${unownedSkills.length} skill${unownedSkills.length !== 1 ? "s" : ""}`
+                  : `Buy ${unownedSkills.length} more skill${unownedSkills.length !== 1 ? "s" : ""}`}
+            </button>
+          </LockedGate>
         </div>
       )}
 

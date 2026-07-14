@@ -8,6 +8,8 @@ import { AgentProfileView } from "./AgentProfileView";
 import type { SkillCard } from "../transport/protocol";
 import { HeliusSetupPanel } from "../settings/HeliusKeyForm";
 import { SkillDetailSkeleton, MarketListSkeleton, AgentProfileSkeleton } from "./Skeletons";
+import { LockedGate, useUnlock } from "../unlock/UnlockProvider";
+import { LockIcon } from "../icons";
 
 type MarketView = "browse" | "publish" | "helius";
 export type ShellTab = "market" | "skills" | "profile";
@@ -20,8 +22,9 @@ export type ShellTab = "market" | "skills" | "profile";
 //              the product store, so the agents directory moved OUT of Market and lives here.
 // Owned is no longer an internal tab (it is the Skills tab) and there is no back-to-chat
 // button (the bottom tab bar owns navigation).
-export function MarketScreen({ tab }: { tab: ShellTab }) {
+export function MarketScreen({ tab, onBack }: { tab: ShellTab; onBack?: () => void }) {
   const { state, send, setMarketTab, marketSearching, clearMarketDetail, clearAgentProfile } = useStore();
+  const { unlocked, requestUnlock } = useUnlock();
   // Search text is LOCAL: keying it into the global store re-rendered the whole app on every
   // keystroke. Only MarketScreen reads it, so it lives here (matches AgentDirectory's search).
   const [query, setQuery] = useState("");
@@ -170,7 +173,7 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
   const isSkills = tab === "skills";
   const isAgents = tab === "profile";
   const isMarket = tab === "market";
-  const headerTitle = isSkills ? "My Skills" : isAgents ? "Agents" : "Market";
+  const headerTitle = isSkills ? "My Skills" : isAgents ? "Agent Rank" : "Market";
   const headerSub = isSkills ? "マイスキル" : isAgents ? "エージェント" : "マーケット";
   const balanceSol = state.marketBalance != null ? (state.marketBalance / 1_000_000_000).toFixed(3) : null;
 
@@ -181,6 +184,11 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
         className="flex items-start gap-2.5 border-b px-3.5 shrink-0"
         style={{ borderColor: "#1d1d20", paddingTop: "max(0.5rem, env(safe-area-inset-top))", paddingBottom: "0.7rem" }}
       >
+        {onBack && (
+          <button onClick={onBack} className="an-iconbtn shrink-0" aria-label="Back to settings">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m15 18-6-6 6-6" /></svg>
+          </button>
+        )}
         <div className="min-w-0 flex-1">
           <div className="an-term-title text-[18px] leading-none">{headerTitle}</div>
           <div className="an-term-sub leading-none">{headerSub}</div>
@@ -195,15 +203,35 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
         {/* MARKET: SOL balance + publish */}
         {isMarket && balanceSol && <span className="an-term-mono shrink-0 text-xs font-bold" style={{ color: "#bdbdbd", letterSpacing: "0.5px" }}>{balanceSol} ◎</span>}
         {isMarket && (
-          <button
-            onClick={() => setView("publish")}
-            className="an-term-mono shrink-0 text-[10px] font-bold uppercase tracking-wider active:opacity-80"
-            style={{ color: "#4ade80", border: "1px solid #1d3a26", background: "#0d140f", padding: "7px 11px" }}
-          >
-            + Publish
-          </button>
+          <LockedGate reason="publish" onUnlocked={() => setView("publish")} className="shrink-0" badge={false}>
+            <button
+              onClick={() => setView("publish")}
+              className="an-term-mono text-[10px] font-bold uppercase tracking-wider active:opacity-80"
+              style={{ color: "#4ade80", border: "1px solid #1d3a26", background: "#0d140f", padding: "7px 11px" }}
+            >
+              + Publish
+            </button>
+          </LockedGate>
         )}
       </header>
+
+      {/* Skills tab: a green terminal title bar that shows the lock state at a glance. */}
+      {isSkills && (
+        <div
+          className="mx-3 mt-2 flex shrink-0 items-center justify-between"
+          style={{
+            backgroundColor: "var(--an-green)",
+            backgroundImage: "repeating-linear-gradient(0deg, rgba(0,0,0,0.09) 0, rgba(0,0,0,0.09) 1px, transparent 1px, transparent 4px)",
+            color: "var(--an-on-green)",
+            padding: "8px 12px",
+          }}
+        >
+          <span className="an-term-mono text-[13px] font-bold uppercase tracking-[0.16em]">Skills</span>
+          <span className="an-term-mono flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em]">
+            {unlocked ? "● Online" : <><LockIcon className="h-3.5 w-3.5" /> Locked</>}
+          </span>
+        </div>
+      )}
 
       {/* RPC status nudge (market only) */}
       {isMarket && state.rpcStatus && !state.rpcStatus.hasKey && (
@@ -290,7 +318,9 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-3 an-tabbar-inset">
         {isSkills ? (
-          ownedLoading && state.marketOwned.length === 0 ? (
+          !unlocked ? (
+            <SkillsLocked onUnlock={() => requestUnlock("skills")} />
+          ) : ownedLoading && state.marketOwned.length === 0 ? (
             <MarketListSkeleton />
           ) : state.marketOwned.length === 0 ? (
             <div className="py-8 text-center text-sm text-zinc-600">
@@ -344,6 +374,62 @@ export function MarketScreen({ tab }: { tab: ShellTab }) {
             )}
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+// Mockup skills shown (dimmed) behind the locked panel — a teaser of what unlocking opens,
+// so the empty pre-wallet Skills tab still reads as "there's a market here".
+const MOCK_SKILLS = [
+  { id: "mock-1", name: "PRICE FEED", price: "100000000", category: "data" },
+  { id: "mock-2", name: "TOKEN SCREENER", price: "250000000", category: "data" },
+  { id: "mock-3", name: "TX SUMMARIZER", price: "150000000", category: "text" },
+  { id: "mock-4", name: "WALLET WATCHER", price: "200000000", category: "data" },
+  { id: "mock-5", name: "AIRDROP SCOUT", price: "120000000", category: "defi" },
+  { id: "mock-6", name: "NFT MINTER", price: "300000000", category: "nft" },
+] as SkillCard[];
+
+// The Skills tab before a wallet is connected: mockup skill chips sit dimmed behind an
+// "Access Denied" terminal panel, so the value is visible but gated. Tapping Unlock routes
+// into the shared unlock flow (same as every other LockedGate).
+function SkillsLocked({ onUnlock }: { onUnlock: () => void }) {
+  return (
+    <div className="relative min-h-full pt-3">
+      <div className="pointer-events-none grid grid-cols-3 gap-3.5 opacity-25" style={{ filter: "saturate(0.35)" }} aria-hidden="true">
+        {MOCK_SKILLS.map((card) => (
+          <SkillSdCard key={card.id} card={card} owned={false} onOpen={() => undefined} />
+        ))}
+      </div>
+      <div className="absolute inset-0 flex items-center justify-center p-5">
+        <div
+          className="an-bracket unlock-denied-in w-full max-w-[290px] p-4 pb-5"
+          style={{ border: "1px solid #1d3a26", "--ts": "12px", "--bk": "var(--an-bg-0)", "--tk": "#2f6b46" } as CSSProperties}
+        >
+          {/* terminal auth-check meta line */}
+          <div className="an-term-mono flex items-center justify-between pb-3 text-[9px] uppercase tracking-[0.14em]" style={{ color: "var(--an-fg-mute)" }}>
+            <span>&gt;AUTH_CHECK</span><span>アクセス拒否</span>
+          </div>
+          <span className="mx-auto mb-3 grid h-14 w-14 place-items-center" style={{ border: "1px solid #1d3a26", background: "var(--an-green-dim)", color: "var(--an-green)" }}>
+            <LockIcon className="h-7 w-7" />
+          </span>
+          {/* green scanline banner — the "Access Denied" bar (matches the Skills title bar) */}
+          <div
+            className="an-term-mono text-center text-[15px] font-extrabold uppercase tracking-[0.2em]"
+            style={{
+              backgroundColor: "var(--an-green)",
+              backgroundImage: "repeating-linear-gradient(0deg, rgba(0,0,0,0.11) 0, rgba(0,0,0,0.11) 1px, transparent 1px, transparent 4px)",
+              color: "var(--an-on-green)",
+              padding: "9px 10px",
+            }}
+          >
+            Access Denied
+          </div>
+          <p className="an-term-mono mx-auto mt-3 max-w-[240px] text-center text-[10px] uppercase leading-relaxed tracking-wide" style={{ color: "var(--an-fg-dim)" }}>
+            6 skills detected. Connect a wallet to browse, collect, and publish.
+          </p>
+          <button onClick={onUnlock} className="an-btn an-btn-green mt-4 w-full">Unlock Agent</button>
+        </div>
       </div>
     </div>
   );

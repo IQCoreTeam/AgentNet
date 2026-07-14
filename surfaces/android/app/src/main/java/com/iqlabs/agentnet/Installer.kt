@@ -251,12 +251,12 @@ class Installer(private val ctx: Context) {
             .onFailure { Log.w(TAG, "could not write guest /etc/gitconfig (#115 fix)", it) }
     }
 
-    // #117: the source-built PRoot's --copy-on-link now handles bun's default hardlink backend
-    // universally (unwrapped/default backend: 594 files, require() OK). One unrelated bun quirk
-    // remains: with node_modules absent it exits on "ENOENT: could not open the node_modules
-    // directory" before linking anything. This minimal wrapper only pre-creates that directory;
-    // it no longer selects a bun-specific link backend. Every launch => reaches existing installs;
-    // skipped if the guest has no /usr/bin/bun.
+    // #117: /usr/local/bin/bun wrapper (see BUN_WRAPPER for the two nudges + why). Pre-creates
+    // node_modules (bun exits "ENOENT: could not open the node_modules directory" otherwise —
+    // unrelated to hardlinks, so --copy-on-link doesn't cover it) and forces --backend=copyfile as
+    // belt-and-suspenders alongside PRoot's --copy-on-link, so bun works even if an older (pre-
+    // patch) android-assets artifact is reused. Every launch => reaches existing installs; skipped
+    // if the guest has no /usr/bin/bun.
     private fun writeBunWrapper(p: Paths.Layout) {
         runCatching {
             if (!File(p.rootfs, "usr/bin/bun").exists()) return

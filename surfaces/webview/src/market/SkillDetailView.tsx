@@ -6,6 +6,7 @@ import { SkillIcon } from "../icons";
 import { mediaUrl } from "./mediaUrl";
 import { walletAvatarSvg } from "./walletAvatar";
 import { CompleteCelebration } from "./CompleteCelebration";
+import { LockedGate } from "../unlock/UnlockProvider";
 
 function shortAddr(w?: string) {
   return w ? `${w.slice(0, 4)}…${w.slice(-4)}` : "";
@@ -24,6 +25,8 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
   const [noteText, setNoteText] = useState("");
   const [noteGitLink, setNoteGitLink] = useState("");
   const [commentDone, setCommentDone] = useState(false);
+  const [resumeComment, setResumeComment] = useState(false);
+  const noteInput = useRef<HTMLTextAreaElement>(null);
   const awaitingNote = useRef(false);
   const lastToast = useRef(state.toast);
   const { card, skillText, notes } = detail;
@@ -63,11 +66,18 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
     }
   }, [state.toast]);
 
+  useEffect(() => {
+    if (!owned || !resumeComment) return;
+    noteInput.current?.focus();
+    noteInput.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setResumeComment(false);
+  }, [owned, resumeComment]);
+
   return (
     <div className="relative flex flex-col h-full">
       {commentDone && <CompleteCelebration label="COMMENT POSTED" onDone={() => setCommentDone(false)} />}
-      <header className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2 shrink-0">
-        <button onClick={() => { haptics.tick(); onBack(); }} className="text-zinc-400 active:text-zinc-200 px-1 text-lg">←</button>
+      <header className="flex items-center gap-2 border-b border-zinc-800 px-2.5 shrink-0" style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))", paddingBottom: "0.55rem" }}>
+        <button onClick={() => { haptics.tick(); onBack(); }} className="an-iconbtn shrink-0" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg></button>
         {isWorkflow && (
           <span className="shrink-0 rounded px-1 py-0.5 text-[9px] font-bold tracking-wide bg-amber-500/20 text-amber-300">WORKFLOW</span>
         )}
@@ -139,13 +149,15 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
                   Required skills · <span className={allRequiredOwned ? "text-green-400" : "text-amber-300"}>{ownedRequiredCount}/{requiredCards.length} collected</span>
                 </p>
                 {unowned.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => { haptics.strong(); send({ type: "buyRequiredSkills", items: unowned.map((r) => ({ skillId: r.id, creatorWallet: r.creator })) }); }}
-                    className="rounded-lg bg-amber-400 px-2.5 py-1 text-[11px] font-semibold text-zinc-900 active:bg-amber-300"
-                  >
-                    Collect all {unowned.length}{totalSol ? ` · ${totalSol} SOL` : ""}
-                  </button>
+                  <LockedGate reason="buy" onUnlocked={() => { haptics.strong(); send({ type: "buyRequiredSkills", items: unowned.map((r) => ({ skillId: r.id, creatorWallet: r.creator })) }); }}>
+                    <button
+                      type="button"
+                      onClick={() => { haptics.strong(); send({ type: "buyRequiredSkills", items: unowned.map((r) => ({ skillId: r.id, creatorWallet: r.creator })) }); }}
+                      className="rounded-lg bg-amber-400 px-2.5 py-1 text-[11px] font-semibold text-zinc-900 active:bg-amber-300"
+                    >
+                      Collect all {unowned.length}{totalSol ? ` · ${totalSol} SOL` : ""}
+                    </button>
+                  </LockedGate>
                 )}
               </div>
               <div className="space-y-2">
@@ -202,6 +214,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
           <div className="space-y-2.5">
             <p className="text-[11px] text-zinc-500 uppercase tracking-wide">Leave a comment</p>
             <textarea
+              ref={noteInput}
               className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-3.5 text-base text-zinc-200 leading-relaxed resize-none focus:outline-none focus:border-green-500/50"
               rows={4}
               placeholder="Share your experience…"
@@ -223,6 +236,16 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
             </button>
           </div>
         )}
+        {!owned && !state.walletAddress && (
+          <LockedGate reason="comment" onUnlocked={() => { setResumeComment(true); send({ type: "ownedSkills" }); send({ type: "getSkillDetail", mint: card.id }); }}>
+            <button className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-3 text-left text-sm text-zinc-400">
+              Connect a wallet to comment
+            </button>
+          </LockedGate>
+        )}
+        {!owned && !!state.walletAddress && (
+          <p className="rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-3 text-sm text-zinc-500">Collect this skill before commenting.</p>
+        )}
       </div>
 
       {owned && (
@@ -243,17 +266,19 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
 
       {!owned && !disposed && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-8 an-tabbar-inset" style={{ background: "linear-gradient(to top, color-mix(in srgb, var(--an-bg-0) 60%, transparent), transparent)" }}>
-          <button
-            onClick={handleBuy}
-            disabled={buying || (isWorkflow && !allRequiredOwned)}
-            className="an-btn an-btn-orange"
-          >
-            {buying
-              ? "Buying…"
-              : isWorkflow && !allRequiredOwned
-                ? `Collect ${requiredCards.length - ownedRequiredCount} more skill${requiredCards.length - ownedRequiredCount === 1 ? "" : "s"} to buy`
-                : priceSol ? `Buy for ${priceSol} SOL` : "Buy (free)"}
-          </button>
+          <LockedGate reason="buy" onUnlocked={handleBuy} className="pointer-events-auto">
+            <button
+              onClick={handleBuy}
+              disabled={buying || (isWorkflow && !allRequiredOwned)}
+              className="an-btn an-btn-orange"
+            >
+              {buying
+                ? "Buying…"
+                : isWorkflow && !allRequiredOwned
+                  ? `Collect ${requiredCards.length - ownedRequiredCount} more skill${requiredCards.length - ownedRequiredCount === 1 ? "" : "s"} to buy`
+                  : priceSol ? `Buy for ${priceSol} SOL` : "Buy (free)"}
+            </button>
+          </LockedGate>
         </div>
       )}
     </div>

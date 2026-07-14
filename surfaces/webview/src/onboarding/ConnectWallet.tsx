@@ -53,7 +53,7 @@ function phantomStore(): { label: string; url: string } {
     : { label: "Go to Play Store", url: "https://play.google.com/store/apps/details?id=app.phantom" };
 }
 
-export function ConnectWallet() {
+export function ConnectWallet({ embedded = false }: { embedded?: boolean } = {}) {
   const { send } = useStore();
   const [busy, setBusy] = useState<string | null>(null);
   // Android-only: MWA can't tell us a wallet is missing until we try, so we surface the
@@ -118,25 +118,40 @@ export function ConnectWallet() {
     }
   }
 
-  return (
-    <OnboardingShell
-      title="Connect your wallet"
-      subtitle="One signature derives your session key. Your keys stay in your wallet."
-    >
+  const [mode, setMode] = useState<"choose" | "web">("choose");
+
+  // The recommended path: mint/adopt a device-local keypair server-side. No wallet app and
+  // no signature prompt — the server flips us to unlocked via `walletConnected`.
+  function makeLocal() {
+    setBusy("local");
+    send({ type: "makeLocalWallet" });
+  }
+
+  // The wallet-app connect list (native MWA on Android; injected providers on web).
+  const webControls = (
+    <>
       {android ? (
         // Android shell: one button drives the native wallet picker (Phantom/Solflare/…).
         <>
           <OnboardingButton disabled={busy !== null} onClick={connectAndroid}>
-            {busy ? "Connecting…" : hint ? phantomStore().label : "Connect Wallet"}
+            {busy === "Wallet" ? "Connecting…" : hint ? phantomStore().label : "Connect Wallet"}
           </OnboardingButton>
           {hint ? (
             <p className="text-center text-sm text-zinc-500">{hint}</p>
           ) : null}
         </>
       ) : wallets.length === 0 ? (
-        <p className="text-center text-sm text-zinc-500">
-          No Solana wallet detected. Install Phantom, Solflare, or Backpack and reload.
-        </p>
+        <div className="space-y-3 text-center">
+          <p className="text-sm text-zinc-500">No Solana wallet detected. Install a wallet, then reload this page.</p>
+          <a
+            href="https://phantom.com/download"
+            target="_blank"
+            rel="noreferrer"
+            className="an-btn an-btn-green inline-flex w-full items-center justify-center"
+          >
+            Install Phantom
+          </a>
+        </div>
       ) : (
         wallets.map(({ name, provider }) => (
           <OnboardingButton
@@ -148,6 +163,52 @@ export function ConnectWallet() {
           </OnboardingButton>
         ))
       )}
+    </>
+  );
+
+  const controls =
+    mode === "choose" ? (
+      <div className="space-y-3">
+        <button
+          type="button"
+          disabled={busy !== null}
+          onClick={makeLocal}
+          className="an-btn an-btn-green w-full"
+          style={{ flexDirection: "column", gap: 2, paddingTop: 14, paddingBottom: 14 }}
+        >
+          <span className="font-semibold">{busy === "local" ? "Creating wallet…" : "Make local wallet"}</span>
+          <span style={{ fontSize: "0.72rem", fontWeight: 600, opacity: 0.72 }}>Recommended · no signing needed</span>
+        </button>
+        <button
+          type="button"
+          disabled={busy !== null}
+          onClick={() => setMode("web")}
+          className="an-btn an-btn-outline w-full"
+        >
+          Connect web wallet
+        </button>
+      </div>
+    ) : (
+      <div className="space-y-3">
+        <button
+          type="button"
+          onClick={() => { setMode("choose"); setHint(null); }}
+          className="min-h-11 text-left text-sm text-zinc-400"
+        >
+          ‹ Back
+        </button>
+        {webControls}
+        <p className="text-center text-xs text-zinc-500">Check the App Store version of your wallet app.</p>
+      </div>
+    );
+
+  if (embedded) return controls;
+  return (
+    <OnboardingShell
+      title="Connect your wallet"
+      subtitle="One signature derives your session key. Your keys stay in your wallet."
+    >
+      {controls}
     </OnboardingShell>
   );
 }
