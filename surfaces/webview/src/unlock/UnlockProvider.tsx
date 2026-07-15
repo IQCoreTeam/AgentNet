@@ -14,6 +14,9 @@ type UnlockAction = (walletAddress: string) => void;
 
 // CRT scanline overlay reused by the green terminal bars (title bar, Access Granted banner).
 const SCANLINES = "repeating-linear-gradient(0deg, rgba(0,0,0,0.11) 0, rgba(0,0,0,0.11) 1px, transparent 1px, transparent 4px)";
+// Denser scanline over solid green fills (active pip) — matches .an-btn::after so the button
+// and the pip beside it read as the same textured green.
+const GREEN_SCANLINES = "repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0, rgba(0,0,0,0.16) 1px, transparent 1px, transparent 3px)";
 // Four steps now (wallet · cloud · rpc are 02·03·04); the pitch is 00. Header reads xx/04.
 const SEQ: Record<UnlockScreen, string> = { pitch: "00", installed: "01", connect: "02", cloud: "03", advanced: "04", done: "04" };
 
@@ -148,7 +151,7 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
       {open && (
         <div className="fixed inset-0 z-[60] flex items-end justify-center" role="dialog" aria-modal="true" aria-label="Unlock AgentNet">
           <button type="button" className="absolute inset-0 bg-black/70" aria-label="Close unlock tutorial" onClick={unlocked ? continueAction : dismiss} />
-          <section className="unlock-sheet relative z-10 flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden border border-b-0 border-[color:var(--an-line)] bg-[color:var(--an-bg-0)]">
+          <section className="an-term-mono unlock-sheet relative z-10 flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden border border-b-0 border-[color:var(--an-line)] bg-[color:var(--an-bg-0)]">
             <div className="border-b border-[color:var(--an-line)]">
               <div className="an-term-mono flex items-center justify-between gap-2 px-4 pt-3 pb-2 text-[10px] uppercase tracking-[0.14em]" style={{ color: "var(--an-fg-mute)" }}>
                 <span>&gt;UNLOCK_SEQ {SEQ[screen]}/04</span><span>アクセス {screen === "done" ? "OK" : "******"}</span>
@@ -288,7 +291,7 @@ function ValuePitch({ page, onPageChange, onContinue }: { page: number; onPageCh
     const bounded = Math.max(0, Math.min(cards.length - 1, next));
     onPageChange(bounded);
     scroller.current?.scrollTo({ left: bounded * scroller.current.clientWidth, behavior: "smooth" });
-    haptics.cardTurn();
+    haptics.step1(); // same "지지징" rise as a setup-step transition
   }
   const last = page >= cards.length - 1;
   return (
@@ -312,8 +315,18 @@ function ValuePitch({ page, onPageChange, onContinue }: { page: number; onPageCh
           </article>
         ))}
       </div>
-      <div className="mt-4 flex justify-center gap-2" aria-label={`Pitch ${page + 1} of ${cards.length}`}>
-        {cards.map((_, index) => <button key={index} onClick={() => goPage(index)} className={`h-2 rounded-full transition-all ${index === page ? "w-7 bg-[color:var(--an-green)]" : "w-2 bg-[color:var(--an-bg-2)]"}`} aria-label={`Show card ${index + 1}`} />)}
+      <div className="mt-4 flex justify-center gap-1.5" aria-label={`Pitch ${page + 1} of ${cards.length}`}>
+        {cards.map((_, index) => (
+          <button
+            key={index}
+            onClick={() => goPage(index)}
+            className="h-2 w-4 transition-colors"
+            style={index === page
+              ? { backgroundColor: "var(--an-green)", backgroundImage: GREEN_SCANLINES }
+              : { backgroundColor: "var(--an-bg-2)", border: "1px solid var(--an-line)" }}
+            aria-label={`Show card ${index + 1}`}
+          />
+        ))}
       </div>
       <button type="button" onClick={() => (last ? onContinue() : goPage(page + 1))} className="an-btn an-btn-green mt-6 w-full">{last ? "Start setup" : "Next"}</button>
       <p className="mt-3 text-center text-caption text-[color:var(--an-fg-mute)]">{cards[page].caption}</p>

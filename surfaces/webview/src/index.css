@@ -1096,12 +1096,14 @@ body {
     linear-gradient(var(--tk), var(--tk)) right bottom / 1.5px 9px no-repeat,
     transparent;
 }
-.an-btn::after { /* the solid accent fill, inset by the bracket gap */
+.an-btn::after { /* the accent fill + CRT scanline, inset by the bracket gap */
   content: "";
   position: absolute;
   inset: 7px;
   z-index: -1;
-  background: var(--acc);
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.16) 0, rgba(0, 0, 0, 0.16) 1px, transparent 1px, transparent 3px),
+    var(--acc);
 }
 .an-btn:active { opacity: 0.85; }
 .an-btn:disabled { opacity: 0.4; }
