@@ -240,10 +240,25 @@ async function googleAuthorizeError(res: Response): Promise<string> {
   }
 }
 
+async function broadcastStorageSnapshot() {
+  try {
+    const payload = {
+      type: "storage" as const,
+      info: await getStorageInfo(),
+      options: STORAGE_OPTIONS,
+      googleCredsConfigured: await hasGoogleCreds(),
+    };
+    for (const client of clients.values()) client.send(payload);
+  } catch (e) {
+    console.error("[cloud] failed to broadcast storage state:", e);
+  }
+}
+
 async function connectGoogleDriveStorage() {
   if (!wallet) return;
   await switchStorage(wallet, { kind: "gdrive" });
   const rt = await rebuildRuntime(wallet);
+  await broadcastStorageSnapshot();
   // One-shot: push local sessions the cloud is missing, now that Drive is (re)connected.
   // Fire-and-forget so the login response is not blocked; runs only on this explicit
   // connect, never on passive startup, so it can't become a per-launch cloud storm.
