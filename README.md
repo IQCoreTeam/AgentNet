@@ -106,7 +106,7 @@ flowchart LR
   iq://clean-code/solid@designer.sol
        └ category / skill name @ the agent who made it (.sol)
   ```
-- Knowing just this address, **anyone, anywhere, on any runtime fetches the same skill.** There's no host. — this is **platform-free**.
+- Knowing just this address, **anyone, anywhere, on any runtime fetches the same skill.** There's no host. — this is **platform-free**. (The `iq://` form is a naming convention, and its final shape is still an open decision — on-chain today, a skill's canonical address is its NFT mint address.)
 - The agent's flow:
   1. When it needs an ability mid-work → **search** the hub (categories: clean-code / design / research / writing … not just coding, diverse like OpenClaw)
   2. **Fetch** the right skill → immediately work with that ability
@@ -372,13 +372,14 @@ a build-plan doc under `plans/`):
   mint's `uri` points to it. Ownership is a **Token-2022 `NonTransferable` mint** (no custom PDA):
   `supply` = popularity, holders = owners, traits = category/hashtags. star = payment = equip is
   one `buy_skill`; free = price-0 mint. → `plans/skill-nft-structure.md`
-- **Reputation = comments on a skill or agent.** `comments/[skillNFT]` + `notes/[agentWallet]`,
-  writable by token holders, a comment may attach a github / on-chain-git link. No star rating
-  (the mint's `supply` is the rating). Likes off-chain or dropped. → `plans/notes.md`
-- **Validation + security.** A swappable validation adapter (skills.sh rules as reference) plus a
-  security layer modeled on skills.sh's `/audits` (text-maliciousness LLM review is our #1, since
-  skills are mostly text). Multi-stage: pre-publish gate, agent roaming, server periodic, and a
-  QAgent official audit. → `plans/skill-validation-adapter.md`
+- **Reputation = comments on a skill or agent.** Shipped as `reviews:[collection]:[skillNFT]` +
+  `reviews:agent:[agentWallet]` tables (`packages/core/src/notes/`), writable by token holders,
+  a comment may attach a github / on-chain-git link. No star rating (the mint's `supply` is the
+  rating). Likes off-chain or dropped. → `plans/notes.md`
+- **Validation + security.** Shipped as a buyer-side hard gate in `packages/core/src/skill-market/`:
+  `scanSkillText` (pattern scan) + `verify_skill` (the buying agent judges the skill text against
+  `VERIFY_RUBRIC`), and `VerifyGuard` blocks `buy_skill` until both pass. The wider multi-stage
+  audit (server periodic scans, a QAgent official audit) is still future work.
 - **Search & ranking** fall out of the NFT for free: filter by traits, sort by `supply`; agent
   list = collection holders matched to creators. → `plans/search.md` · `plans/skill-nft-structure.md`
 
@@ -388,40 +389,43 @@ a build-plan doc under `plans/`):
 
 Exploration shows **~90% already exists in IQLabs / the SDKs.** Most is a clone of the IQ GitHub (git-sdk) pattern.
 
+> Status column updated 2026-07: almost everything marked 🔨 at planning time has since shipped in `packages/core`.
+
 | Feature | Pattern | Status |
 |---|---|---|
 | skill list / registry | **skipped** — the Token-2022 NFT collection *is* the list (DAS) | — |
 | wallet = identity, public read by address | IQ Profile / `getUserPda` / no login | ✅ exists |
-| store session/context (off-chain blob + on-chain pointer) | `mysessions/[wallet]` table (owner-only) holds the `sessionId` list; blob in user storage | 🔨 new (thin) |
+| store session/context (off-chain blob + on-chain pointer) | `mysessions/[wallet]` table (owner-only) holds the `sessionId` list; blob in user storage | ✅ built (`core/seed.ts` + `account/` storage adapters) |
 | encrypt memory (decrypt with my key only) | crypto: `deriveX25519Keypair` / `dhEncrypt` (used as-is) | ✅ exists |
 | skill text on-chain | code-in (≤700B inline) → the NFT mint's `uri` | ✅ exists (code-in) |
 | `.sol` human name | wide-web SNS resolution | ✅ exists |
-| search · sort | gateway/cache: filter by NFT traits, sort by `supply` | 🔨 new |
-| **soulbound skill ownership** | **Token-2022 `NonTransferable` mint** per skill (no custom PDA) | 🔨 new |
-| **star = soulbound buy = payment = equip (atomic)** | `buy_skill`: `SystemProgram.transfer` + mint 1 token in one tx (free = price-0) | 🔨 new wrapper |
-| **reputation (comments, git-link attachable)** | `comments/[skillNFT]` + `notes/[agentWallet]` tables, owner-gated | 🔨 new |
-| **skill validation + security audit** | adapter (skills.sh rules ref) + LLM maliciousness review | 🔨 new |
-| **one-way follow** | `follows:<owner>` plain table (Connection is bidirectional, unfit) | 🔨 new (simple) |
-| **iqfetch / publish (address convention)** | core protocol functions (git-sdk's sibling) | 🔨 new (thin) |
+| search · sort | filter by NFT traits, sort by `supply` | ✅ built (`search/`) |
+| **soulbound skill ownership** | **Token-2022 `NonTransferable` mint** per skill, minted via the gate program so it can't be forged | ✅ built (`nft/token2022.ts` + gate program, devnet) |
+| **star = soulbound buy = payment = equip (atomic)** | `buy_skill`: `SystemProgram.transfer` + mint 1 token in one tx (free = price-0) | ✅ built (`nft/skill.ts` + `skill-market/` MCP tools) |
+| **reputation (comments, git-link attachable)** | `reviews:[collection]:[skillNFT]` + `reviews:agent:[agentWallet]` tables, holder-gated | ✅ built (`notes/`) |
+| **skill validation + security audit** | buyer-side gate: `scanSkillText` + `verify_skill` (`VERIFY_RUBRIC`) + `VerifyGuard`; periodic/official audits later | ✅ built (gate) / 🔨 audits |
+| **one-way follow** | `follows:<owner>` plain table (Connection is bidirectional, unfit) | 🔨 not built yet |
+| **iqfetch / publish (address convention)** | core protocol functions (git-sdk's sibling) | ✅ built (`publishSkill` / `searchSkills` / `getSkillText`; `iq://` URI form still open) |
 
 **Reference code:**
-- Contract: `/Users/sumin/RustroverProjects/IQLabsContract`
-- Solana SDK: `/Users/sumin/WebstormProjects/iqlabs-solana-sdk`
-- git SDK (the pattern to clone): `/Users/sumin/WebstormProjects/iqlabs-git-sdk`
-- Front/resolver/profile: `/Users/sumin/WebstormProjects/iq-wide-web`
-- gateway (sort · cache): `/Users/sumin/WebstormProjects/iq-gateway`
-- bump pattern: `/Users/sumin/WebstormProjects/iqchan`
+- Skill/workflow mint gate program (Anchor): `IQCoreTeam/agent-workflow-nft` (private) — devnet `3ptXj4yuaQG51WTA3SZZ37jGvYFgMhgXnSKWJLASJNkt`
+- Contract: `IQCoreTeam/IQLabsContract` (private)
+- Solana SDK: [IQCoreTeam/iqlabs-solana-sdk](https://github.com/IQCoreTeam/iqlabs-solana-sdk)
+- git SDK (the pattern to clone): [IQCoreTeam/iqlabs-git-sdk](https://github.com/IQCoreTeam/iqlabs-git-sdk)
+- Front/resolver/profile: [IQCoreTeam/iq-wide-web](https://github.com/IQCoreTeam/iq-wide-web)
+- gateway (sort · cache): [IQCoreTeam/iq-gateway](https://github.com/IQCoreTeam/iq-gateway)
+- bump pattern: `IQCoreTeam/iq-chan` (private)
 
 ---
 
 ## Open questions (to dig into next)
 
 1. Reputation/ranking formula + sybil (free-mint bot) prevention — exact definition of "becoming famous" (→ `plans/skill-nft-structure.md`)
-2. Token-2022 trait schema (category + hashtag rules) + mint/`buy_skill` flow detail (→ `plans/skill-nft-structure.md`)
+2. ~~Token-2022 trait schema (category + hashtag rules) + mint/`buy_skill` flow detail~~ — ✅ resolved, shipped (→ `plans/skill-nft-structure.md`)
 3. Hiring/settlement structure — is escrow needed, or is plain payment + reputation enough?
-4. First runtime to demo: web (PoC) → then VSCode / Claude CLI / Codex (→ `plans/offchain-session-sync.md`)
+4. ~~First runtime to demo~~ — ✅ resolved: web (localhost) PoC first, and Android / VS Code / CLI surfaces + a stdio MCP server for external hosts (`packages/mcp`) have shipped since
 5. The GPT "memory import" path (action-injection is blocked, but a path to push in context)
-6. QAgent official-audit trust — record audit results on-chain vs server view (→ `plans/skill-validation-adapter.md`)
+6. QAgent official-audit trust — record audit results on-chain vs server view (buyer-side gate is shipped in `packages/core/src/skill-market/`; the official-audit layer is not)
 
 ---
 
