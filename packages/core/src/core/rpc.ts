@@ -15,6 +15,10 @@ import { getNetwork, getPublicRpcUrl, type Network } from "./seed.js";
 
 const PROVIDER = "helius";
 
+// Where users get a free key. Single source for every surface's "get your key" link
+// (CLI onboarding + welcome panel, VSCode onboarding, mobile settings) so the URL never drifts.
+export const HELIUS_QUICKSTART_URL = "https://www.helius.dev/docs/quickstart";
+
 interface StoredKey {
   api_key: string;
 }

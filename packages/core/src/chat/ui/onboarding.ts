@@ -1,13 +1,19 @@
 // Onboarding webview (HTML + inline JS) — the FIRST screen before chat.
 //
-// Two steps, and storage is OPTIONAL:
+// Three steps; storage AND rpc are OPTIONAL:
 //   1) Connect wallet     -> {type:"connectWallet"}        -> ext loads local keypair
-//   2) Storage (optional) -> {type:"chooseStorage", kind}  primary = connect a cloud
-//                            {type:"skipStorage"}          grey = "maybe later" (local only)
+//   2) Storage (optional) -> stashed on the client, applied at step 3
+//   3) Marketplace RPC    -> {type:"chooseStorage"|"skipStorage", heliusKey?}
+//                            primary = save key · ghost = skip (default RPC)
 //
-// The extension owns all real work (loadOrCreateWallet / initialize / connect);
+// Steps 2 and 3 finish together: the storage choice is held on the client through the
+// rpc screen, then sent as ONE message so the extension applies both in one finish().
+//
+// The extension owns all real work (loadOrCreateWallet / initialize / connect / saveHeliusKey);
 // this view just collects clicks and shows state. Local-save and cloud-save are
 // tracked SEPARATELY: you always have local; a cloud is an extra you can add now or later.
+
+import { HELIUS_QUICKSTART_URL } from "../../core/rpc.js";
 
 export function onboardingHtml(): string {
   return /* html */ `<!DOCTYPE html>
@@ -56,7 +62,7 @@ export function onboardingHtml(): string {
                   background: var(--vscode-input-background); color: var(--vscode-input-foreground);
                   border: 1px solid var(--vscode-input-border); border-radius: 6px; }
   .fieldLabel { display: block; font-size: 0.8em; opacity: 0.6; margin-bottom: 5px; }
-  #walletPath { width: 100%; box-sizing: border-box; padding: 9px 10px; margin-bottom: 6px;
+  #walletPath, #rpcInput { width: 100%; box-sizing: border-box; padding: 9px 10px; margin-bottom: 6px;
                 font-family: var(--vscode-editor-font-family); font-size: 0.85em;
                 background: var(--vscode-input-background); color: var(--vscode-input-foreground);
                 border: 1px solid var(--vscode-input-border); border-radius: 6px; }
@@ -125,9 +131,6 @@ export function onboardingHtml(): string {
       <input id="customAuth" placeholder="Authorization header (optional)" />
     </div>
 
-    <p style="margin:14px 0 0">Marketplace RPC <span style="opacity:.5">(recommended)</span></p>
-    <div class="sub">The skill marketplace reads on-chain data via an RPC. The built-in default is rate-limited and can't load the market; a free <b>Helius</b> key (devnet tier) fixes it. You can start now and add the key anytime from the wallet menu &rarr; RPC.</div>
-
     <button class="primary" id="connectStorageBtn">Connect cloud &amp; continue</button>
     <button class="ghost" id="skipBtn">Keep on this device only (maybe later)</button>
 
@@ -137,6 +140,16 @@ export function onboardingHtml(): string {
       If a device and the cloud were compromised at the same time, someone could
       reach your sessions. Nothing to fear, just worth managing well.
     </div>
+  </div>
+
+  <!-- STEP 3: marketplace RPC (optional) -->
+  <div class="step" id="step-rpc">
+    <h1>Marketplace RPC</h1>
+    <div class="sub">The skill market reads on-chain data via an RPC. The built-in default is rate-limited and can't load the market; a free <b>Helius</b> key (devnet tier) fixes it.</div>
+    <input id="rpcInput" spellcheck="false" placeholder="paste Helius key or RPC url" />
+    <div class="hint">Get a free key at <a id="rpcLink" target="_blank" rel="noreferrer">${HELIUS_QUICKSTART_URL}</a> — paste the key or the full RPC URL. You can also add it later from the wallet menu &rarr; RPC.</div>
+    <button class="primary" id="rpcSaveBtn">Save &amp; continue</button>
+    <button class="ghost" id="rpcSkipBtn">Skip for now (use default RPC)</button>
   </div>
 </div>
 <script>
@@ -286,16 +299,26 @@ export function onboardingHtml(): string {
     }
   }
 
+  // The storage choice is held here and only sent once the rpc step finishes, so the
+  // extension applies storage + rpc in one finish(). An optional heliusKey rides along.
+  let pendingFinish = null;
   $('connectStorageBtn').addEventListener('click', () => {
     if (!chosenKind) { vscode.postMessage({ type: 'toast', text: 'Pick a storage option first.' }); return; }
-    const msg = { type: 'chooseStorage', kind: chosenKind };
+    pendingFinish = { type: 'chooseStorage', kind: chosenKind };
     if (chosenKind === 'custom') {
-      msg.location = $('customUrl').value.trim();
-      msg.authHeader = $('customAuth').value.trim() || undefined;
+      pendingFinish.location = $('customUrl').value.trim();
+      pendingFinish.authHeader = $('customAuth').value.trim() || undefined;
     }
-    vscode.postMessage(msg);
+    show('rpc');
   });
-  $('skipBtn').addEventListener('click', () => vscode.postMessage({ type: 'skipStorage' }));
+  $('skipBtn').addEventListener('click', () => { pendingFinish = { type: 'skipStorage' }; show('rpc'); });
+
+  $('rpcLink').href = ${JSON.stringify(HELIUS_QUICKSTART_URL)};
+  $('rpcSaveBtn').addEventListener('click', () => {
+    pendingFinish.heliusKey = $('rpcInput').value.trim();
+    vscode.postMessage(pendingFinish);
+  });
+  $('rpcSkipBtn').addEventListener('click', () => vscode.postMessage(pendingFinish));
 
   let cloudPreselect = null; // a cloud kind to mark chosen if one was already connected
   window.addEventListener('message', (e) => {

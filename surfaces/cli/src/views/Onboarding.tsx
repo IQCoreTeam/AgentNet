@@ -2,24 +2,27 @@ import React, { useState, useEffect } from "react";
 import { Box, Text } from "ink";
 import { Select, TextInput } from "@inkjs/ui";
 import open from "open";
-import { STORAGE_OPTIONS, type StorageConfig, type StorageKind, startCodexLogin, markCodexConnected, saveCodexApiKey, startGoogleLogin, type GoogleLogin } from "@iqlabs-official/agent-sdk";
+import { STORAGE_OPTIONS, type StorageConfig, type StorageKind, startCodexLogin, markCodexConnected, saveCodexApiKey, startGoogleLogin, type GoogleLogin, saveHeliusKey, HELIUS_QUICKSTART_URL } from "@iqlabs-official/agent-sdk";
 import type { CliReport, CliStatus } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../theme.js";
 import { Iggy } from "../components/Iggy.js";
 
-// First-run setup. Sequence: engine pick → codex login (if needed) → storage.
+// First-run setup. Sequence: engine pick → codex login (if needed) → storage → rpc.
 //
 // Engine pick: Claude or Codex. Both work end-to-end. Claude has no onboarding
 // login step here (user runs `claude auth login` separately if needed — detectCli
 // reports status up front). Codex with no-login status drives `codex login
 // --device-auth` inline: shows URL + one-time code; CLI auto-polls, no stdin needed.
+//
+// RPC is the last step: every storage path (local/cloud/gdrive) funnels through it so the
+// user is offered a Helius key once before landing in chat. Skipping = the default RPC.
 function statusBadge(s: CliStatus) {
   if (s === "ok") return <Text color={colors.ok}>{glyph.ok} ready</Text>;
   if (s === "no-login") return <Text color={colors.warn}>! not logged in</Text>;
   return <Text color={colors.err}>{glyph.fail} not installed</Text>;
 }
 
-type OnboardStep = "engine" | "codexAuthChoice" | "codexLogin" | "codexApiKey" | "storage" | "location" | "gdriveLogin";
+type OnboardStep = "engine" | "codexAuthChoice" | "codexLogin" | "codexApiKey" | "storage" | "location" | "gdriveLogin" | "rpc";
 
 export function Onboarding({
   report,
@@ -34,6 +37,26 @@ export function Onboarding({
   const [engine, setEngine] = useState<"claude" | "codex">("claude");
   const [kind, setKind] = useState<StorageKind | null>(null);
   const [location, setLocation] = useState("");
+  // storage choice resolved but not yet applied — held while the final RPC step runs.
+  const [pendingCfg, setPendingCfg] = useState<StorageConfig | undefined>(undefined);
+  const [rpcErr, setRpcErr] = useState<string | null>(null);
+
+  // Every storage path ends here: stash the chosen config and show the RPC step.
+  function beginRpc(cfg?: StorageConfig) {
+    setPendingCfg(cfg);
+    setStep("rpc");
+  }
+
+  // Finish onboarding. A key persists to the local Helius store; empty = keep default RPC.
+  async function finishRpc(key: string) {
+    try {
+      if (key.trim()) await saveHeliusKey(key.trim());
+    } catch (e: unknown) {
+      setRpcErr(e instanceof Error ? e.message : String(e));
+      return;
+    }
+    onDone(engine, pendingCfg);
+  }
 
   // codex device-auth state
   const [codexUrl, setCodexUrl] = useState<string | null>(null);
@@ -106,7 +129,7 @@ export function Onboarding({
       session.done.then((ok) => {
         if (cancelled) return;
         if (ok) {
-          onDone(engine, { kind: "gdrive" });
+          beginRpc({ kind: "gdrive" });
         } else {
           setGdriveErr(session.error ?? "Google sign-in was not completed.");
         }
@@ -130,7 +153,7 @@ export function Onboarding({
   }
 
   function chooseKind(k: StorageKind) {
-    if (k === "local") return onDone(engine);
+    if (k === "local") return beginRpc();
     if (k === "gdrive") {
       setStep("gdriveLogin");
       return;
@@ -251,8 +274,21 @@ export function Onboarding({
           <TextInput
             placeholder={kind === "icloud" ? "~/Library/Mobile Documents/…" : "https://…"}
             onChange={setLocation}
-            onSubmit={(v) => onDone(engine, { kind, location: v || location })}
+            onSubmit={(v) => beginRpc({ kind, location: v || location })}
           />
+        </Box>
+      )}
+
+      {step === "rpc" && (
+        <Box flexDirection="column">
+          <Text color={colors.iqCyan}>connect a Helius RPC? (optional)</Text>
+          <Text dimColor>the default RPC can't read NFTs, agent lists, or skill search — a free key can.</Text>
+          <Text dimColor>get a free key at <Text color={colors.iqCyan}>{HELIUS_QUICKSTART_URL}</Text></Text>
+          <TextInput
+            placeholder="paste key or rpc url — or [enter] to skip for now"
+            onSubmit={finishRpc}
+          />
+          {rpcErr && <Text color={colors.err}>{rpcErr}</Text>}
         </Box>
       )}
     </Box>

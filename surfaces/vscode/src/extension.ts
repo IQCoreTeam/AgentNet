@@ -218,8 +218,10 @@ function openOnboarding(context: vscode.ExtensionContext) {
   );
   panel.webview.html = onboardingHtml();
 
-  // Finish onboarding → mark seen, build runtime (local always; cloud if `cfg`), go to chat.
-  async function finish(cfg?: StorageConfig) {
+  // Finish onboarding → save rpc key (if given), mark seen, build runtime (local always;
+  // cloud if `cfg`), go to chat. Empty/absent heliusKey keeps the default RPC.
+  async function finish(cfg?: StorageConfig, heliusKey?: string) {
+    if (heliusKey && heliusKey.trim()) await saveHeliusKey(heliusKey.trim());
     if (cfg) await initialize(cfg, openExternal); // connect a cloud mirror (optional)
     await context.globalState.update("onboarded", true);
     runtime = await connect(wallet!, cloudStatusCb);
@@ -253,10 +255,10 @@ function openOnboarding(context: vscode.ExtensionContext) {
         break;
       }
       case "chooseStorage":
-        await finish({ kind: m.kind, location: m.location, authHeader: m.authHeader });
+        await finish({ kind: m.kind, location: m.location, authHeader: m.authHeader }, m.heliusKey);
         break;
       case "skipStorage":
-        await finish(); // local-only (no cloud); add one later from the chat header
+        await finish(undefined, m.heliusKey); // local-only (no cloud); add one later from the chat header
         break;
       case "toast":
         if (typeof m.text === "string") vscode.window.showWarningMessage(m.text);

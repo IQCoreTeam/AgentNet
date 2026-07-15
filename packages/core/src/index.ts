@@ -47,7 +47,7 @@ export { resolveMinter, tryMinterPubkey, resetMinterCache } from "./nft/minter.j
 export { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes, getBalance, getSolBalance, canAffordSkill, TX_FEE_BUFFER_LAMPORTS } from "./notes/index.js";
 export type { PostNoteInput, ReadNotesOptions, PostAgentNoteInput } from "./notes/index.js";
 // RPC resolution (issue #23): a registered Helius key wins over env over the default
-export { resolveRpcUrl, saveHeliusKey, loadHeliusKey, hasDasRpc, heliusUrl, maskedHeliusKey, saveGithubToken, loadGithubToken, maskedGithubToken } from "./core/rpc.js";
+export { resolveRpcUrl, saveHeliusKey, loadHeliusKey, hasDasRpc, heliusUrl, maskedHeliusKey, HELIUS_QUICKSTART_URL, saveGithubToken, loadGithubToken, maskedGithubToken } from "./core/rpc.js";
 export { getNetwork, NETWORK } from "./core/seed.js";
 export { registerVerifiedWork, parseRepo as parseGithubRepo } from "./core/verifiedWork.js";
 export type { Network } from "./core/seed.js";

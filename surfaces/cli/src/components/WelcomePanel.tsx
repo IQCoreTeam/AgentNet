@@ -1,6 +1,7 @@
 import React from "react";
 import { Box, Text, useInput } from "ink";
 import BigText from "ink-big-text";
+import { HELIUS_QUICKSTART_URL } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../theme.js";
 
 // Focusable rows, in order. settings first, then one row per owned skill, then the market
@@ -8,9 +9,6 @@ import { colors, glyph } from "../theme.js";
 // key on a settings row drives onEdit; skill/market rows are handled by their own index.
 export type PanelField = "wallet" | "cloud" | "engine" | "helius";
 const SETTINGS: PanelField[] = ["wallet", "cloud", "engine", "helius"];
-
-// Where to get a (free) Helius key — shown when the user opens the key editor.
-const HELIUS_QUICKSTART = "https://www.helius.dev/docs/quickstart";
 
 // A clickable terminal hyperlink (OSC 8). Modern terminals (iTerm2, VS Code,
 // kitty, …) render `label` underlined and open `url` on ⌘/Ctrl-click; the rest
@@ -182,7 +180,7 @@ export function WelcomePanel({
           <Box flexDirection="column" marginTop={1}>
             <Text dimColor>
               1. get a free key at{" "}
-              <Text color={colors.iqCyan}>{link(HELIUS_QUICKSTART, HELIUS_QUICKSTART)}</Text>
+              <Text color={colors.iqCyan}>{link(HELIUS_QUICKSTART_URL, HELIUS_QUICKSTART_URL)}</Text>
             </Text>
             <Text dimColor> (⌘/ctrl-click the link, then copy your API key)</Text>
             <Text dimColor>2. paste it on the line above: the key or the full RPC URL</Text>
