@@ -15,6 +15,7 @@ export const haptics = {
   strong: () => buzz(40),               // heavy confirm: on-chain submits, forge approval
   error: () => buzz([30, 60, 30]),      // failure / deny / blocked action
   castStart: () => buzz([10, 40, 10]),  // light double tap when a skill starts casting
+  cardTurn: () => buzz([6, 16, 12]),    // turning a "why unlock" pitch card — a small rise, lighter than a step
   // Rising "swish" ladder. navigator.vibrate has no amplitude, so a rising feel is faked by
   // a pulse train whose gaps SHRINK and pulses GROW — it reads as an accelerating build into a
   // hit, not a flat buzz. Used across the onboarding tutorial so each step feels like it climbs.

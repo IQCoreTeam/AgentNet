@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { useElementHeightVariable } from "../layoutEffects";
 import { useStore } from "../state/store";
+import { useUnlock } from "../unlock/UnlockProvider";
 
 // The four top-level domains as an ordered pager: Chat · Skills · Rank · Market.
 // Skills = your owned collection; account/sync/settings live in the chat drawer.
@@ -47,6 +48,15 @@ function MarketGlyph() {
     </svg>
   );
 }
+// Small padlock badge for a gated tab (matches the Nav Dock "locked state" design).
+function LockGlyph() {
+  return (
+    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="square">
+      <rect x="5" y="10.5" width="14" height="9.5" />
+      <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
+    </svg>
+  );
+}
 
 const TABS: { key: TabKey; label: string; Glyph: () => JSX.Element }[] = [
   { key: "chat", label: "CHAT", Glyph: ChatGlyph },
@@ -65,6 +75,7 @@ export function TabBar({ position, instant, onChange }: { position: number; inst
   const navRef = useRef<HTMLElement>(null);
   useElementHeightVariable(navRef, "--tabbar-height");
   const { state } = useStore();
+  const { unlocked } = useUnlock();
   const accent = state.cli === "claude" ? "var(--claude)" : "var(--an-green)";
   const activeIndex = Math.round(position);
   return (
@@ -85,16 +96,24 @@ export function TabBar({ position, instant, onChange }: { position: number; inst
           />
           {TABS.map(({ key, label, Glyph }, i) => {
             const on = activeIndex === i;
+            // Only the FOCUSED tab shows state: its blinking dot becomes a lock while that
+            // section is gated (skills/rank/market before the unlock tutorial). Unfocused
+            // tabs stay clean; chat is never locked.
+            const locked = on && !unlocked && key !== "chat";
             return (
               <button
                 key={key}
                 type="button"
-                aria-label={label}
+                aria-label={locked ? `${label} (locked)` : label}
                 aria-current={on ? "page" : undefined}
                 onClick={() => onChange(i)}
                 className={`an-navseg ${on ? "is-on" : ""}`}
               >
-                {on && <span className="an-navseg-dot" />}
+                {locked ? (
+                  <span className="an-navseg-lock"><LockGlyph /></span>
+                ) : on ? (
+                  <span className="an-navseg-dot" />
+                ) : null}
                 <Glyph />
                 <span className="an-navseg-label">{label}</span>
               </button>

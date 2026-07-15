@@ -812,6 +812,17 @@ body {
   background: var(--an-bg-0);
   animation: an-navblink 1.4s steps(1) infinite;
 }
+/* Locked-tab indicator: the focused tab's blinking dot becomes a small padlock while that
+   section is gated (before the unlock tutorial). Only ever shown on the active tab, so it
+   sits dark on the engine-tinted fill, same as the dot it replaces. */
+.an-navseg-lock {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  display: flex;
+  color: var(--an-bg-0);
+  animation: an-navblink 1.4s steps(1) infinite;
+}
 @keyframes an-navblink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0.18; } }
 /* The active screen fills this; the docked tab bar sits below it (no overlap). */
 .an-shell-panels {

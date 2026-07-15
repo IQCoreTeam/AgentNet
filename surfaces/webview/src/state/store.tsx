@@ -326,8 +326,11 @@ function reducer(state: State, ev: Action): State {
     case "googleLoginUrl":
       return { ...state, googleLoginUrl: ev.url, googleLoginError: null };
     case "googleLoginStatus":
+      // Drive is connected progressively now — from the unlock tutorial's Cloud_Backup step
+      // while the user is already in chat. Do NOT move the phase (the old storageSelect step
+      // that advanced to engineSelect here is gone); staying put keeps the overlay/chat mounted.
       return ev.status === "done"
-        ? { ...state, googleLoginUrl: null, googleLoginError: null, phase: "engineSelect" }
+        ? { ...state, googleLoginUrl: null, googleLoginError: null }
         : { ...state, googleLoginUrl: null, googleLoginError: ev.error ?? "Login failed." };
     case "openUrl":
       openExternalUrl(ev.url);

@@ -1,7 +1,5 @@
 import { useStore } from "./state/store";
-import { ConnectWallet } from "./onboarding/ConnectWallet";
 import { Splash } from "./onboarding/Splash";
-import { ConnectStorage } from "./onboarding/ConnectStorage";
 import { PickEngine } from "./onboarding/PickEngine";
 import { ConnectClaude } from "./onboarding/ConnectClaude";
 import { ConnectCodex } from "./onboarding/ConnectCodex";
@@ -17,11 +15,11 @@ import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { syncAgentService, notifyApproval, clearApprovalNotice, ensureBackgroundConsent, notifyTurnComplete } from "./platform/agentService";
 import { haptics } from "./haptics";
 
-// Phase router:
+// Phase router. First run only needs the engine (Claude/Codex) login — wallet, cloud storage
+// and Market RPC are all progressive now and live behind the unlock tutorial (UnlockProvider),
+// never blocking entry. `init` drops a fresh user straight into a device-local guest chat.
 //   connecting   → opening SSE stream / sent `ready`, waiting for init|sessions
-//   onboarding   → no runtime yet → connect a wallet
-//   storageSelect→ wallet connected → choose cloud/local storage mirror configuration
-//   engineSelect → wallet in → pick which engine to activate (claude or codex)
+//   engineSelect → pick which engine to activate (claude or codex)
 //   claudeAuth   → claude chosen, not logged in → connect the Claude subscription
 //   codexAuth    → codex chosen, not logged in → device-auth (open URL, enter code)
 //   chat         → runtime ready → the tab shell
@@ -136,8 +134,6 @@ export function App() {
     <>
       <div className="app-viewport">
         {(state.phase === "connecting" || state.phase === "restoring") && <Splash />}
-        {state.phase === "onboarding" && <ConnectWallet />}
-        {state.phase === "storageSelect" && <ConnectStorage />}
         {state.phase === "engineSelect" && <PickEngine />}
         {state.phase === "claudeAuth" && <ConnectClaude />}
         {state.phase === "codexAuth" && <ConnectCodex />}
