@@ -16,7 +16,7 @@ export function FundModal() {
     <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
       <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.6)" }} onClick={closeFund} aria-hidden="true" />
       <div
-        className="relative flex w-full flex-col overflow-hidden rounded-t-2xl border sm:max-w-md sm:rounded-2xl"
+        className="unlock-flicker relative flex w-full flex-col overflow-hidden rounded-t-2xl border sm:max-w-md sm:rounded-2xl"
         style={{ background: "var(--an-bg-1)", borderColor: "var(--an-line)" }}
       >
         <div className="flex shrink-0 items-center justify-between border-b px-4 py-3.5" style={{ borderColor: "var(--an-line)" }}>

@@ -7,12 +7,12 @@ import { CompleteOverlay } from "./CompleteOverlay";
 // action (SKILL PURCHASED / WORKFLOW PURCHASED / SKILL CREATED / WORKFLOW BUILT / COMMENT POSTED
 // / POST PUBLISHED / GITHUB REGISTERED). Callers pass the label + onDone; this owns the haptic
 // buzz and the ~1.8s auto-dismiss so no two success UIs can drift apart.
-export function CompleteCelebration({ label, onDone }: { label: string; onDone: () => void }) {
+export function CompleteCelebration({ label, onDone, flicker = false }: { label: string; onDone: () => void; flicker?: boolean }) {
   useEffect(() => {
     haptics.celebrate();
     const t = setTimeout(onDone, 1800);
     return () => clearTimeout(t);
   }, []);
 
-  return <CompleteOverlay label={label} onClick={onDone} />;
+  return <CompleteOverlay label={label} onClick={onDone} flicker={flicker} />;
 }

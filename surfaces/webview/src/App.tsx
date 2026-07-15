@@ -140,7 +140,7 @@ export function App() {
         {state.phase === "chat" && <TabShell />}
       </div>
       <Alert />
-      {state.buyCelebrate && <CompleteCelebration label={state.buyCelebrateLabel ?? "SKILL PURCHASED"} onDone={clearCelebrate} />}
+      {state.buyCelebrate && <CompleteCelebration label={state.buyCelebrateLabel ?? "SKILL PURCHASED"} onDone={clearCelebrate} flicker />}
       {state.fundOpen && <FundModal />}
       {publishCelebrate && <CompleteCelebration label={state.publishKind === "workflow" ? "WORKFLOW BUILT" : "SKILL CREATED"} onDone={() => setPublishCelebrate(false)} />}
       {repoCelebrate && <CompleteCelebration label="GITHUB REGISTERED" onDone={() => setRepoCelebrate(false)} />}
