@@ -32,7 +32,6 @@ import {
   setScreenOffExecEnabled,
 } from "../platform/agentService";
 import { LockedGate, useUnlock, type UnlockReason } from "../unlock/UnlockProvider";
-import { setUnlockSoundEnabled, unlockSoundEnabled } from "../unlock/sound";
 
 // Chat list drawer — the mobile answer to vscode's multi-panel "new tab": instead of
 // splitting the screen, the ☰ menu slides this in and you pick ONE chat to show. Telegram
@@ -150,7 +149,6 @@ export function Sessions({
   const [bgExec, setBgExec] = useState(backgroundExecEnabled());
   const [screenOffExec, setScreenOffExec] = useState(screenOffExecEnabled());
   const [showManualCode, setShowManualCode] = useState(false);
-  const [unlockSound, setUnlockSound] = useState(unlockSoundEnabled);
 
   // Long-press a chat row to reveal a delete menu (replaces the always-on per-row x).
   // `pressFired` suppresses the row's open-on-click that would otherwise follow pointerup.
@@ -397,28 +395,6 @@ export function Sessions({
                 onClick={() => { send({ type: "getGithubStatus" }); setSettingsMode("github"); }}
                 icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 16.5c-3 .9-3-1.5-4.2-1.8M15 19v-3.1c0-.8-.3-1.4-.8-1.8 2.6-.3 5.3-1.3 5.3-5.7 0-1.3-.4-2.3-1.2-3.2.1-.3.5-1.6-.1-3.1 0 0-1-.3-3.3 1.2a11.5 11.5 0 0 0-6 0C6.6 1.8 5.6 2.1 5.6 2.1c-.6 1.5-.2 2.8-.1 3.1-.8.9-1.2 2-1.2 3.2 0 4.4 2.7 5.4 5.3 5.7-.4.4-.7.9-.8 1.6V19" /></svg>}
               />
-              <button
-                type="button"
-                role="switch"
-                aria-checked={unlockSound}
-                onClick={() => {
-                  const enabled = !unlockSound;
-                  setUnlockSound(enabled);
-                  setUnlockSoundEnabled(enabled);
-                  haptics.tick();
-                }}
-                className="flex w-full items-center gap-3.5 px-1 py-4 text-left transition active:opacity-80"
-                style={{ borderBottom: "1px solid var(--an-line)" }}
-              >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center" style={{ color: "var(--an-fg-dim)" }}>
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5 6.5 9H3v6h3.5L11 19V5Z" /><path d="M15 9a4 4 0 0 1 0 6M17.5 6.5a8 8 0 0 1 0 11" /></svg>
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-fg)" }}>Unlock sound</span>
-                  <span className="an-term-mono mt-1 block text-[10px] uppercase leading-tight" style={{ color: "var(--an-fg-mute)" }}>{unlockSound ? "On" : "Muted"}</span>
-                </span>
-                <Toggle on={unlockSound} />
-              </button>
               {/* Android shell only: keep the agent running (and notify on approvals)
                   while the app is backgrounded — but ONLY while a task is active. Off =
                   idle process is reclaimed. Turning OFF mid-turn is foreground-only: the

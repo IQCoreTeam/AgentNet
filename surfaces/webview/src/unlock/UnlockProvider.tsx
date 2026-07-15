@@ -4,7 +4,6 @@ import { ConnectWallet } from "../onboarding/ConnectWallet";
 import { HeliusKeyForm } from "../settings/HeliusKeyForm";
 import { CheckIcon, LockIcon } from "../icons";
 import { haptics } from "../haptics";
-import { playUnlockSound } from "./sound";
 
 export type UnlockReason = "skills" | "buy" | "publish" | "comment" | "identity" | "sync";
 type UnlockScreen = "pitch" | "installed" | "connect" | "done" | "advanced";
@@ -151,12 +150,10 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
   }
 
   // Leaving the optional RPC step (saved or skipped) → the Access Granted screen. This is the
-  // single success moment: one celebrate buzz + the unlock chime (only if the setting is on).
-  // Per-step presses stay silent — no ding while advancing the tutorial.
+  // single success moment: one celebrate buzz. Feedback is haptic only — no sound.
   function enterGranted() {
     setScreen("done");
     haptics.celebrate();
-    playUnlockSound();
   }
 
   return (
