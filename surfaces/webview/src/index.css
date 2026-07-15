@@ -169,6 +169,67 @@ body {
 }
 @keyframes unlock-blink { 50% { opacity: 0; } }
 
+/* ── Alert overlay (design: Component · Alert) ─────────────────────────────────
+   One terminal-styled plaque used for every transient alert. It flickers in like
+   a CRT boot, holds, then blinks out — mimicking a real alert() vanishing. Green
+   corner brackets are drawn with 8 gradient bars (same trick as the image frame). */
+.an-alert {
+  position: relative;
+  width: 100%;
+  max-width: 300px;
+  background: var(--an-bg-0);
+  border: 1px solid var(--an-green-line);
+  padding: 12px 12px 14px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+  font-family: var(--an-font-mono);
+  color: var(--an-fg);
+}
+.an-alert::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--an-green), var(--an-green)) left top/12px 2px no-repeat,
+    linear-gradient(var(--an-green), var(--an-green)) left top/2px 12px no-repeat,
+    linear-gradient(var(--an-green), var(--an-green)) right top/12px 2px no-repeat,
+    linear-gradient(var(--an-green), var(--an-green)) right top/2px 12px no-repeat,
+    linear-gradient(var(--an-green), var(--an-green)) left bottom/12px 2px no-repeat,
+    linear-gradient(var(--an-green), var(--an-green)) left bottom/2px 12px no-repeat,
+    linear-gradient(var(--an-green), var(--an-green)) right bottom/12px 2px no-repeat,
+    linear-gradient(var(--an-green), var(--an-green)) right bottom/2px 12px no-repeat;
+}
+.an-alert-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--an-fg-mute); }
+.an-alert-x { background: none; border: 0; padding: 0; margin: 0; font: inherit; letter-spacing: 0.14em; color: var(--an-fg-mute); cursor: pointer; }
+.an-alert-x:active { opacity: 0.6; }
+.an-alert-msg { margin: 10px 0 0; font-size: 12px; line-height: 1.55; color: var(--an-fg-dim); word-break: break-word; }
+.an-alert-row { display: flex; gap: 6px; margin-top: 14px; }
+.an-alert-btn { flex: 1; min-height: 36px; border: 1px solid var(--an-green-line); background: var(--an-green-dim); color: var(--an-green); font: 700 10px var(--an-font-mono); letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; }
+.an-alert-btn:active { opacity: 0.8; }
+.an-alert-btn.solid { background: var(--an-green); border-color: var(--an-green); color: var(--an-on-green); }
+.an-alert-btn.ghost { background: transparent; border-color: var(--an-line); color: var(--an-fg-dim); }
+.an-alert-enter { animation: an-alert-in 900ms steps(1) both; }
+.an-alert-leave { animation: an-alert-out 420ms steps(1) both; }
+@keyframes an-alert-in {
+  0% { opacity: 0; }
+  6% { opacity: 1; }
+  10% { opacity: 0.3; }
+  14% { opacity: 1; }
+  22% { opacity: 0.5; }
+  28% { opacity: 1; }
+  100% { opacity: 1; }
+}
+@keyframes an-alert-out {
+  0% { opacity: 1; }
+  20% { opacity: 0.3; }
+  40% { opacity: 1; }
+  60% { opacity: 0.12; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .an-alert-enter, .an-alert-leave { animation-duration: 1ms; }
+}
+
 /* ── Mobile component primitives (extension concept, thumb-sized) ──────────── */
 
 /* Glassy sticky header — sits over the scrolling log, blurs content beneath it. */

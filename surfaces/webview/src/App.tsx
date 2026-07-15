@@ -9,7 +9,7 @@ import { CompleteCelebration } from "./market/CompleteCelebration";
 import { FundModal } from "./market/FundModal";
 import { Sessions } from "./chat/Sessions";
 import { TabBar } from "./shell/TabBar";
-import { Toast } from "./Toast";
+import { Alert } from "./Alert";
 import { useVisualViewportVars, useKeyboardChrome } from "./layoutEffects";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { syncAgentService, notifyApproval, clearApprovalNotice, ensureBackgroundConsent, notifyTurnComplete } from "./platform/agentService";
@@ -139,7 +139,7 @@ export function App() {
         {state.phase === "codexAuth" && <ConnectCodex />}
         {state.phase === "chat" && <TabShell />}
       </div>
-      <Toast />
+      <Alert />
       {state.buyCelebrate && <CompleteCelebration label={state.buyCelebrateLabel ?? "SKILL PURCHASED"} onDone={clearCelebrate} />}
       {state.fundOpen && <FundModal />}
       {publishCelebrate && <CompleteCelebration label={state.publishKind === "workflow" ? "WORKFLOW BUILT" : "SKILL CREATED"} onDone={() => setPublishCelebrate(false)} />}
