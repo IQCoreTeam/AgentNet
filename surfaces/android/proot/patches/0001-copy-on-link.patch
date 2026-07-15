@@ -1,0 +1,223 @@
+diff --git a/src/GNUmakefile b/src/GNUmakefile
+index 0adb88b..87cd66f 100644
+--- a/src/GNUmakefile
++++ b/src/GNUmakefile
+@@ -88,6 +88,7 @@ OBJECTS += \
+ 	extension/sysvipc/sysvipc_sem.o \
+ 	extension/sysvipc/sysvipc_shm.o \
+ 	extension/link2symlink/link2symlink.o \
++	extension/copy_on_link/copy_on_link.o \
+ 	extension/fix_symlink_size/fix_symlink_size.o
+ 
+ define define_from_arch.h
+diff --git a/src/cli/proot.c b/src/cli/proot.c
+index 29365e8..cf473af 100644
+--- a/src/cli/proot.c
++++ b/src/cli/proot.c
+@@ -293,6 +293,17 @@ static int handle_option_link2symlink(Tracee *tracee, const Cli *cli UNUSED, con
+ 	return 0;
+ }
+ 
++static int handle_option_copy_on_link(Tracee *tracee, const Cli *cli UNUSED, const char *value UNUSED)
++{
++	int status;
++
++	status = initialize_extension(tracee, copy_on_link_callback, NULL);
++	if (status < 0)
++		note(tracee, WARNING, INTERNAL, "copy-on-link not initialized");
++
++	return 0;
++}
++
+ static int handle_option_ashmem_memfd(Tracee *tracee, const Cli *cli UNUSED, const char *value UNUSED)
+ {
+ 	int status;
+diff --git a/src/cli/proot.h b/src/cli/proot.h
+index 3f61931..c974375 100644
+--- a/src/cli/proot.h
++++ b/src/cli/proot.h
+@@ -61,6 +61,7 @@ static int handle_option_i(Tracee *tracee, const Cli *cli, const char *value);
+ static int handle_option_R(Tracee *tracee, const Cli *cli, const char *value);
+ static int handle_option_S(Tracee *tracee, const Cli *cli, const char *value);
+ static int handle_option_link2symlink(Tracee *tracee, const Cli *cli, const char *value);
++static int handle_option_copy_on_link(Tracee *tracee, const Cli *cli, const char *value);
+ static int handle_option_ashmem_memfd(Tracee *tracee, const Cli *cli, const char *value);
+ static int handle_option_sysvipc(Tracee *tracee, const Cli *cli, const char *value);
+ static int handle_option_kill_on_exit(Tracee *tracee, const Cli *cli, const char *value);
+@@ -241,6 +242,15 @@ Copyright (C) 2015 STMicroelectronics, licensed under GPL v2 or later.",
+ 	  .description = "Replace hard links with symlinks, pretending they are really hardlinks",
+ 	  .detail = "\tEmulates hard links with symbolic links when SELinux policies\n\
+ \tdo not allow hard links.",
++	},
++	{ .class = "Extension options",
++	  .arguments = {
++		{ .name = "--copy-on-link", .separator = '\0', .value = NULL },
++		{ .name = NULL, .separator = '\0', .value = NULL } },
++	  .handler = handle_option_copy_on_link,
++	  .description = "Copy regular files when hard links are denied",
++	  .detail = "\tWhen link(2) or linkat(2) fails with EACCES, create an independent\n\
++\tbyte-for-byte copy at the destination. Other failures are unchanged.",
+ 	},
+ 	{ .class = "Extension options",
+ 	  .arguments = {
+diff --git a/src/extension/extension.h b/src/extension/extension.h
+index 24409b9..66a9d91 100644
+--- a/src/extension/extension.h
++++ b/src/extension/extension.h
+@@ -204,6 +204,7 @@ extern int fake_id0_callback(Extension *extension, ExtensionEvent event, intptr_
+ extern int hidden_files_callback(Extension *extension, ExtensionEvent event, intptr_t d1, intptr_t d2);
+ extern int port_switch_callback(Extension *extension, ExtensionEvent event, intptr_t d1, intptr_t d2);
+ extern int link2symlink_callback(Extension *extension, ExtensionEvent event, intptr_t d1, intptr_t d2);
++extern int copy_on_link_callback(Extension *extension, ExtensionEvent event, intptr_t d1, intptr_t d2);
+ extern int fix_symlink_size_callback(Extension *extension, ExtensionEvent event, intptr_t d1, intptr_t d2);
+ extern int ashmem_memfd_callback(Extension *extension, ExtensionEvent event, intptr_t d1, intptr_t d2);
+ extern int mountinfo_callback(Extension *extension, ExtensionEvent event, intptr_t d1, intptr_t d2);
+diff --git a/src/extension/copy_on_link/copy_on_link.c b/src/extension/copy_on_link/copy_on_link.c
+new file mode 100644
+index 0000000..482465d
+--- /dev/null
++++ b/src/extension/copy_on_link/copy_on_link.c
+@@ -0,0 +1,143 @@
++#include <errno.h>
++#include <fcntl.h>
++#include <limits.h>
++#include <sys/stat.h>
++#include <unistd.h>
++
++#include "attribute.h"
++#include "extension/extension.h"
++#include "tracee/mem.h"
++#include "tracee/reg.h"
++#include "syscall/sysnum.h"
++
++static int copy_regular_file(const char *source, const char *target)
++{
++	char buffer[64 * 1024];
++	struct stat statbuf;
++	ssize_t count;
++	int source_fd;
++	int target_fd;
++	int status = 0;
++
++	source_fd = open(source, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
++	if (source_fd < 0)
++		return -errno;
++
++	if (fstat(source_fd, &statbuf) < 0) {
++		status = -errno;
++		goto close_source;
++	}
++	if (!S_ISREG(statbuf.st_mode)) {
++		status = -EACCES;
++		goto close_source;
++	}
++
++	target_fd = open(target, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC,
++			 statbuf.st_mode & 07777);
++	if (target_fd < 0) {
++		status = -errno;
++		goto close_source;
++	}
++
++	while ((count = read(source_fd, buffer, sizeof(buffer))) != 0) {
++		ssize_t written = 0;
++
++		if (count < 0) {
++			if (errno == EINTR)
++				continue;
++			status = -errno;
++			goto fail_target;
++		}
++		while (written < count) {
++			ssize_t result = write(target_fd, buffer + written, count - written);
++			if (result < 0 && errno == EINTR)
++				continue;
++			if (result <= 0) {
++				status = result < 0 ? -errno : -EIO;
++				goto fail_target;
++			}
++			written += result;
++		}
++	}
++
++	if (fchmod(target_fd, statbuf.st_mode & 07777) < 0) {
++		status = -errno;
++		goto fail_target;
++	}
++	if (close(target_fd) < 0) {
++		status = -errno;
++		unlink(target);
++		goto close_source;
++	}
++	close(source_fd);
++	return 0;
++
++fail_target:
++	close(target_fd);
++	unlink(target);
++close_source:
++	close(source_fd);
++	return status;
++}
++
++static int copy_failed_link(Tracee *tracee)
++{
++	char source[PATH_MAX];
++	char target[PATH_MAX];
++	Reg source_arg;
++	Reg target_arg;
++	ssize_t size;
++	Sysnum sysnum = get_sysnum(tracee, ORIGINAL);
++
++	if ((int) peek_reg(tracee, CURRENT, SYSARG_RESULT) != -EACCES)
++		return 0;
++
++	if (sysnum == PR_link) {
++		source_arg = SYSARG_1;
++		target_arg = SYSARG_2;
++	} else if (sysnum == PR_linkat) {
++		/* AT_EMPTY_PATH links an fd, not a pathname; preserve EACCES. */
++		if ((peek_reg(tracee, ORIGINAL, SYSARG_5) & AT_EMPTY_PATH) != 0)
++			return 0;
++		source_arg = SYSARG_2;
++		target_arg = SYSARG_4;
++	} else {
++		return 0;
++	}
++
++	/* MODIFIED arguments point at PRoot's canonicalized host paths. */
++	size = read_string(tracee, source,
++			   peek_reg(tracee, MODIFIED, source_arg), sizeof(source));
++	if (size < 0 || size >= (ssize_t) sizeof(source))
++		return 0;
++	size = read_string(tracee, target,
++			   peek_reg(tracee, MODIFIED, target_arg), sizeof(target));
++	if (size < 0 || size >= (ssize_t) sizeof(target))
++		return 0;
++
++	if (copy_regular_file(source, target) == 0)
++		poke_reg(tracee, SYSARG_RESULT, 0);
++
++	/* A failed fallback leaves the kernel's original EACCES intact. */
++	return 0;
++}
++
++int copy_on_link_callback(Extension *extension, ExtensionEvent event,
++			  intptr_t data1 UNUSED, intptr_t data2 UNUSED)
++{
++	switch (event) {
++	case INITIALIZATION: {
++		static FilteredSysnum filtered_sysnums[] = {
++			{ PR_link, FILTER_SYSEXIT },
++			{ PR_linkat, FILTER_SYSEXIT },
++			FILTERED_SYSNUM_END,
++		};
++		extension->filtered_sysnums = filtered_sysnums;
++		return 0;
++	}
++	case SYSCALL_EXIT_END:
++		return copy_failed_link(TRACEE(extension));
++	default:
++		return 0;
++	}
++}

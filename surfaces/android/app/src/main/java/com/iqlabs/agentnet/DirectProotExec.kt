@@ -19,6 +19,17 @@ class DirectProotExec(private val layout: Paths.Layout) : GuestExec {
         private const val TAG = "AgentNet/Server"
     }
 
+    // android-apk can temporarily reuse an older android-assets artifact while a new heavy
+    // source build is pending. Never pass an unknown option to that old binary (which would
+    // prevent the entire guest from booting). The patched binary embeds its CLI option string.
+    private val copyOnLinkSupported: Boolean by lazy {
+        runCatching {
+            File(layout.proot).readBytes()
+                .toString(Charsets.ISO_8859_1)
+                .contains("--copy-on-link")
+        }.getOrDefault(false)
+    }
+
     override fun launch(guestEnv: List<String>, guestCommand: String): Process {
         // prootCommand wraps the launch in `sh -c 'cd <filesDir> && exec proot …'`, so the
         // host cwd is already pinned to a readable dir before proot runs (see the comment
@@ -94,6 +105,12 @@ class DirectProotExec(private val layout: Paths.Layout) : GuestExec {
     // before exec, makes proot start from a readable cwd. The guest env + args are passed
     // verbatim to that shell as a single argv.
     private fun prootCommand(guestEnv: List<String>, guestCommand: String): List<String> {
+        val copyOnLinkArgs = if (copyOnLinkSupported) {
+            arrayOf("--copy-on-link")
+        } else {
+            Log.w(TAG, "bundled PRoot predates --copy-on-link; rebuild android-assets")
+            emptyArray()
+        }
         val guestArgv = listOf(
             layout.proot,
             "--kill-on-exit",
@@ -107,8 +124,14 @@ class DirectProotExec(private val layout: Paths.Layout) : GuestExec {
             // honestly with EACCES and both tools fall back correctly (verified on-device: git
             // 50/50 objects survive, pnpm 589/589 files, real clone clean). One flag removed fixes
             // every link()-using tool with a fallback — no proot rebuild, no per-tool config.
-            // (The core.createObject=rename gitconfig from #116 is now belt-and-suspenders: it just
-            // skips the doomed link attempt for git specifically.)
+            //
+            // #117 closes the remaining no-fallback gap (notably dpkg, which has NO copy fallback):
+            // our published GPLv2 PRoot patch adds --copy-on-link. A native hardlink is attempted
+            // first; only EACCES retries as an O_EXCL regular-file byte copy. Honest data
+            // preservation, unlike l2s's dangling-symlink false success. Other link errors and
+            // unsupported file types are unchanged. The core.createObject=rename gitconfig from #116
+            // stays as belt-and-suspenders.
+            *copyOnLinkArgs,
             // NOTE: kept to flags the Termux proot build supports. --sysvipc is dropped
             // (node doesn't need SysV IPC). -L and --kernel-release are likewise omitted as
             // non-essential (add back only if a specific build is confirmed to accept them).
@@ -116,6 +139,7 @@ class DirectProotExec(private val layout: Paths.Layout) : GuestExec {
             "-0",                       // present as uid 0 inside the guest (fake root)
             "-b", "/dev",
             "-b", "/proc",
+            *fakeProcBinds().toTypedArray(),  // #117: shadow the /proc files Android denies us
             "-b", "/sys",
             "-b", "${layout.rootfs}/tmp:/dev/shm", // Android has no /dev/shm; bind a guest tmp dir
             "-w", "/root",
@@ -127,6 +151,31 @@ class DirectProotExec(private val layout: Paths.Layout) : GuestExec {
         val inner = "cd " + shQuote(layout.filesDir) + " && exec " + guestArgv.joinToString(" ") { shQuote(it) }
         return listOf("/system/bin/sh", "-c", inner)
     }
+
+    // #117 basement hardening: build `-b <fake>:/proc/X` binds for exactly the /proc files
+    // Android denies the guest under untrusted_app. We test readability from THIS (the app)
+    // process — the guest inherits our SELinux domain, so what we can't read, it can't either.
+    // Bind only the denied ones (never shadow a /proc that actually works) and only if the
+    // fake file exists (Installer.writeFakeSysdata lays them down; missing => skip, no bad bind).
+    // Same conditional-bind pattern as proot-distro's fake_proc_bindings(). Fixes the whole
+    // "tool reads a blocked /proc file" class (node os.loadavg/os.cpus, inotify watchers,
+    // capsh, id-mapping) in one place — not one tool at a time.
+    private fun fakeProcBinds(): List<String> {
+        val dir = sysdataDir(layout.rootfs)
+        val binds = ArrayList<String>()
+        for ((realPath, name, _) in FAKE_PROC) {
+            val fake = File(dir, name)
+            if (fake.exists() && !realReadable(realPath)) {
+                binds.add("-b"); binds.add("${fake.absolutePath}:$realPath")
+            }
+        }
+        return binds
+    }
+
+    // True iff this process can actually read `path`. File.canRead()/access() can disagree
+    // with SELinux, so we open + read one byte and trust the exception (Permission denied).
+    private fun realReadable(path: String): Boolean =
+        runCatching { java.io.FileInputStream(path).use { it.read() }; true }.getOrDefault(false)
 
     // POSIX single-quote escaping so paths/args with spaces or metacharacters survive the
     // host shell unmodified ( ' -> '\'' ).

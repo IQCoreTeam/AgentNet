@@ -5,6 +5,66 @@ import android.system.Os
 import android.util.Log
 import java.io.File
 
+// #117 basement hardening: fake /proc content. Under untrusted_app, Android DENIES the app
+// (and therefore the proot guest that inherits its SELinux domain) read access to a set of
+// /proc files — proven on-device (SM-A356E): `cat /proc/loadavg` -> "Permission denied",
+// same for /proc/version and /proc/sys/fs/inotify/max_user_watches. This breaks tools that
+// read them: node os.loadavg()/os.cpus() (loadavg, stat), vite/chokidar & other inotify
+// watchers (max_user_watches), capsh/apt (cap_last_cap), id-mapping (overflowuid/gid).
+// proot-distro solves this by bind-mounting fake files ONLY where the real one is unreadable.
+// We mirror that: Installer lays these down, DirectProotExec binds the unreadable ones.
+// One list = the single source of truth for both. (realProcPath, fakeFileName, content)
+// Note: /proc/vmstat is in proot-distro's set but has no consumer in our node/agent
+// stack — skipped; add a row here if a tool ever needs it.
+internal val FAKE_PROC: List<Triple<String, String, String>> = listOf(
+    Triple("/proc/loadavg", "loadavg", "0.12 0.07 0.02 2/165 765\n"),
+    Triple(
+        "/proc/stat", "stat",
+        // cpu + per-cpu lines: node os.cpus() parses cpu0..cpuN for CPU times. 8 cores.
+        "cpu  1957 0 2877 93280 262 342 254 87 0 0\n" +
+            "cpu0 31 0 226 12027 82 10 4 9 0 0\n" +
+            "cpu1 45 0 664 11144 21 263 233 12 0 0\n" +
+            "cpu2 494 0 537 11283 27 10 3 8 0 0\n" +
+            "cpu3 359 0 234 11723 24 26 5 7 0 0\n" +
+            "cpu4 295 0 268 11772 10 12 2 12 0 0\n" +
+            "cpu5 270 0 251 11833 15 3 1 10 0 0\n" +
+            "cpu6 430 0 520 11386 30 8 1 12 0 0\n" +
+            "cpu7 30 0 172 12108 50 8 1 13 0 0\n" +
+            "ctxt 140223\nbtime 1680020856\nprocesses 772\n" +
+            "procs_running 2\nprocs_blocked 0\n",
+    ),
+    Triple("/proc/uptime", "uptime", "124.08 932.80\n"),
+    Triple("/proc/version", "version", "Linux version 5.15.0-android13 (proot@agentnet) #1 SMP PREEMPT\n"),
+    Triple("/proc/sys/kernel/cap_last_cap", "sysctl_cap_last_cap", "40\n"),
+    Triple("/proc/sys/fs/inotify/max_user_watches", "sysctl_inotify_max_user_watches", "4096\n"),
+    Triple("/proc/sys/kernel/overflowuid", "sysctl_overflowuid", "65534\n"),
+    Triple("/proc/sys/kernel/overflowgid", "sysctl_overflowgid", "65534\n"),
+)
+
+// Directory (in the rootfs) holding the fake /proc files DirectProotExec binds from.
+internal fun sysdataDir(rootfs: String): File = File(rootfs, ".sysdata")
+
+// #117: /usr/local/bin/bun wrapper — makes `bun add/install` work under proot/untrusted_app.
+// See Installer.writeBunWrapper for the why. Kept minimal; forwards everything else verbatim.
+private val BUN_WRAPPER = """
+#!/bin/sh
+# AgentNet #117: bun under proot/untrusted_app needs two nudges (both proven on-device):
+#  (1) it won't create node_modules itself ("ENOENT: could not open node_modules") -> pre-create.
+#      This is unrelated to hardlinks, so --copy-on-link does NOT cover it — always needed.
+#  (2) its default hardlink backend hits the kernel hardlink denial -> force --backend=copyfile.
+# copyfile is belt-and-suspenders alongside PRoot's --copy-on-link (like git's core.createObject=
+# rename in #116): it works whether or not the shipped PRoot is the patched build, so bun never
+# regresses while a source-built binary is pending. Keeping it costs nothing (same result, bun
+# just copies in userspace instead of PRoot copying on the EACCES).
+case "${'$'}1" in
+  add|install|i|update|remove|rm|link|unlink|ci)
+    mkdir -p node_modules 2>/dev/null
+    case " ${'$'}* " in *" --backend"*) : ;; *) set -- "${'$'}@" --backend=copyfile ;; esac
+    ;;
+esac
+exec /usr/bin/bun "${'$'}@"
+""".trimStart()
+
 // First-run setup: lay down the Ubuntu rootfs and our server bundle into app storage.
 // Idempotent — a marker file means "already installed", so this is a no-op on every
 // launch after the first.
@@ -24,11 +84,11 @@ import java.io.File
 class Installer(private val ctx: Context) {
     companion object {
         private const val TAG = "AgentNet/Installer"
-        // Bumped v3 -> v5 (v4 skipped) to force a one-time rootfs re-extraction on existing
-        // installs: issue #112's fix ships IN the rootfs (python3-dulwich + the git-clone shim
-        // at /usr/local/bin/git — native git clone is corrupted by proot under targetSdk-35's
-        // untrusted_app domain), so a server-bundle-only update is not enough. Marker bumps
-        // are how heavy rootfs fixes reach devices: the MARKER only re-extracts on a fresh
+        // Bumped v3 -> v5 (v4 skipped) to force a one-time rootfs re-extraction when issue
+        // #112's dulwich clone shim shipped IN the rootfs. That shim has since been removed
+        // (#115 fixed the root cause at the proot launch layer; removeLegacyCloneShim cleans
+        // it off existing installs every launch — no marker bump needed). Marker bumps remain
+        // how heavy rootfs changes reach devices: the MARKER only re-extracts on a fresh
         // marker, and the re-extract is from the bundled tar (no network download).
         private const val MARKER = ".installed-v5"
         // Server bundle is small and changes every app build; its marker holds the app's
@@ -87,6 +147,9 @@ class Installer(private val ctx: Context) {
             // /etc/gitconfig and git would stay broken. This write is idempotent + tiny, so do it
             // on every launch — far cheaper than a MARKER bump + full rootfs re-extract.
             writeGuestGitConfig(p)
+            writeFakeSysdata(p) // #117: idempotent + tiny; every-launch so existing installs get it
+            writeBunWrapper(p)
+            removeLegacyCloneShim(p)
             // Heavy artifacts (proot + rootfs) are in place. But the server bundle changes
             // every build — refresh it if this APK shipped a different one.
             if (serverUpToDate(serverCrc)) {
@@ -169,6 +232,9 @@ class Installer(private val ctx: Context) {
         writeFresh(File(p.rootfs, "etc/resolv.conf"), "nameserver 8.8.8.8\nnameserver 8.8.4.4\n")
         writeFresh(File(p.rootfs, "etc/hosts"), "127.0.0.1 localhost\n::1 localhost\n")
         writeGuestGitConfig(p)
+        writeFakeSysdata(p)
+        writeBunWrapper(p)
+        removeLegacyCloneShim(p)
         val tmp = File(p.rootfs, "tmp").apply { mkdirs() }
         runCatching { android.system.Os.chmod(tmp.absolutePath, 0b001_111_111_111) } // 1777
     }
@@ -185,6 +251,43 @@ class Installer(private val ctx: Context) {
     private fun writeGuestGitConfig(p: Paths.Layout) {
         runCatching { writeFresh(File(p.rootfs, "etc/gitconfig"), "[core]\n\tcreateObject = rename\n") }
             .onFailure { Log.w(TAG, "could not write guest /etc/gitconfig (#115 fix)", it) }
+    }
+
+    // #117: /usr/local/bin/bun wrapper (see BUN_WRAPPER for the two nudges + why). Pre-creates
+    // node_modules (bun exits "ENOENT: could not open the node_modules directory" otherwise —
+    // unrelated to hardlinks, so --copy-on-link doesn't cover it) and forces --backend=copyfile as
+    // belt-and-suspenders alongside PRoot's --copy-on-link, so bun works even if an older (pre-
+    // patch) android-assets artifact is reused. Every launch => reaches existing installs; skipped
+    // if the guest has no /usr/bin/bun.
+    private fun writeBunWrapper(p: Paths.Layout) {
+        runCatching {
+            if (!File(p.rootfs, "usr/bin/bun").exists()) return
+            val wrapper = File(p.rootfs, "usr/local/bin/bun")
+            writeFresh(wrapper, BUN_WRAPPER)
+            Os.chmod(wrapper.absolutePath, 0b000_111_101_101) // 0755
+        }.onFailure { Log.w(TAG, "could not write guest bun wrapper (#117)", it) }
+    }
+
+    // The #112 dulwich clone shim is removed from fresh rootfs builds, but existing installs
+    // (and fresh extracts of a pre-#115 bundled tar) still have it baked in at
+    // /usr/local/bin/git, shadowing the real git that now works. Delete it every launch —
+    // same reach-existing-installs pattern as the writes above; a MARKER bump (full rootfs
+    // re-extract) would be overkill for two files. python3-dulwich stays (harmless).
+    private fun removeLegacyCloneShim(p: Paths.Layout) {
+        runCatching {
+            File(p.rootfs, "usr/local/bin/git").delete()
+            File(p.rootfs, "usr/local/bin/agentnet-git-clone.py").delete()
+        }.onFailure { Log.w(TAG, "could not remove legacy #112 clone shim", it) }
+    }
+
+    // #117: write the fake /proc files (see FAKE_PROC). DirectProotExec binds them over the
+    // real, denied /proc entries at launch. Idempotent — overwrite each launch so content
+    // fixes reach existing installs without a rootfs re-extract.
+    private fun writeFakeSysdata(p: Paths.Layout) {
+        runCatching {
+            val dir = sysdataDir(p.rootfs).apply { mkdirs() }
+            for ((_, name, content) in FAKE_PROC) File(dir, name).writeText(content)
+        }.onFailure { Log.w(TAG, "could not write fake /proc sysdata (#117 hardening)", it) }
     }
 
     // Write `text` to `file`, first removing any existing symlink/file at that path so
