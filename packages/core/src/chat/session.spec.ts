@@ -50,7 +50,7 @@ const waitForNotice = async (transport: any, text: string) => {
   throw new Error(`notice "${text}" was never sent`);
 };
 
-function harness(opts: { cwd?: string; ownedSkills?: string[] } = {}) {
+function harness(opts: { cwd?: string; ownedSkills?: string[]; googleCredsConfigured?: boolean } = {}) {
   const handles: ReturnType<typeof fakeHandle>[] = [];
   const startSession = vi.fn(async (opts: any) => {
     const h = fakeHandle("sess-" + handles.length, opts.cli);
@@ -65,7 +65,7 @@ function harness(opts: { cwd?: string; ownedSkills?: string[] } = {}) {
     cwd: () => opts.cwd ?? "/tmp",
     approval: { onDecision: () => {}, request: async () => "deny" },
     walletAddress: () => null,
-    storageInfo: async () => ({ info: {}, options: [] }),
+    storageInfo: async () => ({ info: {}, options: [], googleCredsConfigured: opts.googleCredsConfigured }),
     ownedSkills: opts.ownedSkills ? async () => opts.ownedSkills : undefined,
   };
   const chat = createChatSession(startSessionRuntime(startSession), transport as any, env);
@@ -81,6 +81,22 @@ function startSessionRuntime(startSession: any): any {
     loadSessionLocal: async () => ({ messages: [], hasMore: false, cursor: 0 }),
   };
 }
+
+describe("chat/session — storage setup state", () => {
+  it("preserves whether Google OAuth credentials are configured", async () => {
+    const { fromUI, transport } = harness({ googleCredsConfigured: true });
+
+    fromUI({ type: "ready" });
+    await flush();
+
+    expect(transport.send).toHaveBeenCalledWith({
+      type: "storage",
+      info: {},
+      options: [],
+      googleCredsConfigured: true,
+    });
+  });
+});
 
 describe("chat/session — permission mode never interrupts a live turn", () => {
   it("toggling mode keeps the running handle; next send re-spawns with the new mode + same session", async () => {

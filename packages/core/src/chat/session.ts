@@ -54,7 +54,7 @@ export interface ChatEnv {
   disconnectWallet?(): Promise<void>;
   openCloud?(kind: string, location?: string): Promise<void>;
   walletAddress(): string | null; // for the "My Wallet" view
-  storageInfo(): Promise<{ info: unknown; options: unknown }>; // header storage pill
+  storageInfo(): Promise<{ info: unknown; options: unknown; googleCredsConfigured?: boolean }>; // header storage pill
   // marketplace (issue #17): search + buy need the wallet + a chain connection, which
   // are host-held (the extension owns them), so they're delegated like wallet/cloud.
   // buySkill installs the bought skill's SKILL.md into the runtime skills dir as part
@@ -424,8 +424,8 @@ export function createChatSession(
   }
 
   async function pushStorage() {
-    const { info, options } = await env.storageInfo();
-    transport.send({ type: "storage", info, options });
+    const { info, options, googleCredsConfigured } = await env.storageInfo();
+    transport.send({ type: "storage", info, options, googleCredsConfigured });
   }
 
   async function pushSkillShopping() {
