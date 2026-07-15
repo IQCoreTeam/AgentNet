@@ -12,9 +12,6 @@ export type UnlockReason = "skills" | "buy" | "publish" | "comment" | "identity"
 type UnlockScreen = "pitch" | "installed" | "connect" | "cloud" | "advanced" | "done";
 type UnlockAction = (walletAddress: string) => void;
 
-const PROGRESS_KEY = "agentnet.unlock.progress.v1";
-const LEGACY_PITCH_KEY = "agentnet.unlock.pitchSeen";
-
 // CRT scanline overlay reused by the green terminal bars (title bar, Access Granted banner).
 const SCANLINES = "repeating-linear-gradient(0deg, rgba(0,0,0,0.11) 0, rgba(0,0,0,0.11) 1px, transparent 1px, transparent 4px)";
 // Four steps now (wallet · cloud · rpc are 02·03·04); the pitch is 00. Header reads xx/04.
@@ -38,20 +35,6 @@ const REVEAL_DELAY: Record<UnlockReason, number> = {
   sync: 450,
 };
 
-function savedProgress(): { screen: UnlockScreen; pitchPage: number } {
-  try {
-    const saved = JSON.parse(localStorage.getItem(PROGRESS_KEY) ?? "null") as { screen?: UnlockScreen; pitchPage?: number } | null;
-    if (saved?.screen && ["pitch", "installed", "connect"].includes(saved.screen)) {
-      return { screen: saved.screen, pitchPage: Math.max(0, Math.min(1, saved.pitchPage ?? 0)) };
-    }
-  } catch {
-    // A malformed preference should never block the unlock action.
-  }
-  return localStorage.getItem(LEGACY_PITCH_KEY) === "1"
-    ? { screen: "installed", pitchPage: 1 }
-    : { screen: "pitch", pitchPage: 0 };
-}
-
 type UnlockContextValue = {
   unlocked: boolean;
   celebrating: boolean;
@@ -69,11 +52,10 @@ export function useUnlock(): UnlockContextValue {
 export function UnlockProvider({ children }: { children: ReactNode }) {
   const { state } = useStore();
   const unlocked = !!state.walletAddress;
-  const initial = useRef(savedProgress());
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<UnlockReason>("identity");
-  const [screen, setScreen] = useState<UnlockScreen>(initial.current.screen);
-  const [pitchPage, setPitchPage] = useState(initial.current.pitchPage);
+  const [screen, setScreen] = useState<UnlockScreen>("pitch");
+  const [pitchPage, setPitchPage] = useState(0);
   const [celebrating, setCelebrating] = useState(false);
   const pending = useRef<UnlockAction | null>(null);
   const wasUnlocked = useRef(unlocked);
@@ -94,23 +76,17 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
       onUnlocked?.(state.walletAddress);
       return;
     }
-    const saved = savedProgress();
     pending.current = onUnlocked ?? null;
     setReason(nextReason);
-    setScreen(saved.screen);
-    setPitchPage(saved.pitchPage);
+    // The unlock flow is a tutorial: always start from the >WHY_UNLOCK pitch. Progress is
+    // intentionally not persisted, so reopening it replays the intro from the top every time.
+    setScreen("pitch");
+    setPitchPage(0);
     setOpen(true);
   }
 
   useEffect(() => {
-    if (!open || unlocked || screen === "done" || screen === "advanced" || screen === "cloud") return;
-    localStorage.setItem(PROGRESS_KEY, JSON.stringify({ screen, pitchPage }));
-  }, [open, unlocked, screen, pitchPage]);
-
-  useEffect(() => {
     if (!wasUnlocked.current && unlocked && open) {
-      localStorage.removeItem(PROGRESS_KEY);
-      localStorage.setItem(LEGACY_PITCH_KEY, "1");
       // Wallet just linked → step 3 (optional Cloud_Backup) BEFORE the optional Market RPC and
       // the granted screen, matching the tutorial order. Connect-or-skip advances through both.
       setScreen("cloud");
