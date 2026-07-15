@@ -194,10 +194,12 @@ flowchart LR
 
 ## 5. Build order
 
-1. ⬜ Skill search pipeline: keyword on name + **category/trait filter → sort by `supply`**
-   (the §0 flow). Depends on NFT traits ([`skill-nft-structure.md`](skill-nft-structure.md)).
-2. ⬜ Result view: **reader-side verify before buy** — buyer's agent runs a "verify"
-   skill over the candidate + the ⚠️ "verify before you trust" note (§2c).
+1. ✅ Skill search pipeline: keyword on name + **category/trait filter → sort by `supply`**
+   (the §0 flow). Shipped — see the §4 "Decided / built" note (`agentnet-nft-indexer` +
+   `packages/core/src/search/`).
+2. ✅ Result view: **reader-side verify before buy** — shipped as a hard gate:
+   `verify_skill` (agent judges against `VERIFY_RUBRIC`) + `scanSkillText`, and
+   `VerifyGuard` blocks `buy_skill` until verified (`packages/core/src/skill-market/`).
 3. ⬜ **Agent search** (§2b): collection holders → match creators → rank by their skills'
    total `supply`.
 4. ⬜ Semantic query→category mapper (embed the small category/hashtag set; map the query

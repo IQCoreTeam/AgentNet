@@ -170,20 +170,17 @@ fields (enabled skill names, the mcp server handle, the verify append text) so
 
 ## 7. Open risks / unverified (resolve during implementation)
 
-These are assumptions the design rests on but that are **not yet verified** — runtime-tested
-or, for #1–#2, not yet decided. Listed worst-first.
+These are assumptions the design rests on but that were **not yet verified** at writing time.
+Listed worst-first. (Status 2026-07: #1–#2 and #6–#7 shipped/resolved; #3–#5 still unverified.)
 
-1. **`verify` skill does not exist yet.** Only
-   [`skill-shopping.md`](../packages/core/src/skill-market/skill-shopping.md) is in the repo.
-   The entire passive flow assumes a `verify` SKILL.md is authored (and published to the net,
-   or bundled as fallback). **Action:** author `verify/SKILL.md` before any of this works;
-   decide net-published vs bundled-only.
-2. **Passive verify is a soft instruction, not a hard gate.** `systemPrompt.append` /
-   AGENTS.md "always verify before buy" can be skipped by the model (the leaked harness §1b
-   leans on heavy *repeated* reminders for exactly this reason). If verify must be guaranteed,
-   it needs **code enforcement** — e.g. `handleToolCall` rejects `buy_skill` unless a verify
-   pass for that `skillId` was recorded this session. **Decide:** soft directive vs hard
-   interception. Recommend hard for a safety gate.
+1. ✅ **Resolved — verify shipped, but not as a SKILL.md.** The verify instructions live in
+   `VERIFY_RUBRIC` (`packages/core/src/skill-market/rubric.ts`), returned by the
+   `verify_skill` tool alongside the skill body — no standalone `verify/SKILL.md`, nothing
+   net-published or bundled.
+2. ✅ **Resolved — hard interception won.** `VerifyGuard`
+   (`packages/core/src/skill-market/index.ts`) records per-skill verify passes and
+   `buy_skill` is rejected until `isVerified(skillId)` — plus a `scanSkillText` pattern
+   pass before the model is consulted.
 3. **Claude `skills` + freshly-dropped project skill timing.** Design writes
    `verify/SKILL.md` in `injectAtStart` then spawns with `skills:[…]` +
    `settingSources:['project']`. Grounded in `sdk.d.ts`, but **not runtime-tested** that the
@@ -197,13 +194,13 @@ or, for #1–#2, not yet decided. Listed worst-first.
 5. **2% skills context budget.** Read from the binary string "Exceeded skills context budget
    of 2%"; exact semantics (2% of which window, overflow behavior — drop? error?) **inferred,
    not confirmed.** Matters if many bought skills accumulate. **Verify** the cap + failure mode.
-6. **MCP bridge is a sketch.** `createSdkMcpServer` exists (sdk.d.ts:485) and our `Server` is
-   low-level, so the re-register plan is sound — but the adapter isn't written and the
-   `getAgentNetTools()` schema → SDK tool-def shape mapping is **unverified**. **Build + test**
-   the `createAgentSdkMcpServer()` adapter in isolation first.
-7. **Codex MCP is heavier than Claude's.** No in-process option — needs an `mcp_servers` TOML
-   entry pointing at a stdio MCP binary (§4). The "small AgentNet MCP binary" doesn't exist;
-   scope it or defer Codex MCP past v1 (Claude-first).
+6. ✅ **Resolved — the adapter is written and wired.** `createAgentSdkMcpServer()`
+   (`packages/core/src/skill-market/sdk.ts`) reuses `SKILL_TOOLS` + `handleToolCall` and is
+   wired into `runtime/spawn.ts`.
+7. ✅ **Resolved — the stdio MCP binary exists.** `packages/mcp` bundles the tools as a
+   single-file stdio server (`agentnet-mcp.js`) for Codex and external hosts
+   (Hermes / OpenClaw / Eliza) — see `packages/mcp/README.md` and
+   [`qa/external-hosts-qa.md`](qa/external-hosts-qa.md).
 
 ---
 

@@ -2,6 +2,11 @@
 
 This document provides a comprehensive, deep-dive assessment of the AgentNet monorepo surfaces, connection protocols, and active development branches. It details how the surfaces interact, how session synchronization operates, and maps out the exact state of implementation across the codebase.
 
+> **Doc drift fixed 2026-07:** this was a point-in-time parity snapshot. Since then: the CLI
+> merged to `main` (`surfaces/cli`), and web/Android on-chain signing is **real** — the
+> web wallet round-trips transactions to the wallet app (Phantom in browser, MWA on Android)
+> and only throws when no round-trip transport is wired (§5B). The §7 branch list is historical.
+
 ---
 
 ## 1. Overview of Surfaces & Repository Layout
@@ -35,8 +40,8 @@ Inside VS Code, the extension acts as the host instead of the localhost Node pro
 
 ### C. Android Shell ⇄ WebView ⇄ Wallet (Kotlin MWA Bridge)
 Because mobile WebViews do not have injected browser wallet extensions (e.g. Phantom, Solflare), Android requires a custom native-to-JS bridge.
-- **Javascript Interface:** The Kotlin side injects `window.AgentNetWallet` via `addJavascriptInterface` inside [MainActivity.kt](file:///Users/parthagrawal99/Desktop/iq-labs/AgentNet/surfaces/android/app/src/main/java/com/iqlabs/agentnet/MainActivity.kt).
-- **Asynchronous Execution:** The JS side ([androidWallet.ts](file:///Users/parthagrawal99/Desktop/iq-labs/AgentNet/surfaces/webview/src/onboarding/androidWallet.ts)) wraps requests in a Promise, invoking `AgentNetWallet.connect(requestJson)` with a callback ID. The Kotlin bridge launches a coroutine to run the Mobile Wallet Adapter (MWA) `transact` loop.
+- **Javascript Interface:** The Kotlin side injects `window.AgentNetWallet` via `addJavascriptInterface` inside [MainActivity.kt](../surfaces/android/app/src/main/java/com/iqlabs/agentnet/MainActivity.kt).
+- **Asynchronous Execution:** The JS side ([androidWallet.ts](../surfaces/webview/src/onboarding/androidWallet.ts)) wraps requests in a Promise, invoking `AgentNetWallet.connect(requestJson)` with a callback ID. The Kotlin bridge launches a coroutine to run the Mobile Wallet Adapter (MWA) `transact` loop.
 - **MWA Transact Loop:** The wallet adapter prompts the user to select an installed wallet app, requests authorization, and signs the session key derivation message using `signMessagesDetached`.
 - **Callback Delivery:** Once complete, Kotlin serializes the results (pubkey bytes, signature bytes) and invokes `window.__onWalletResult(resultJson)` on the UI thread to resolve the JS Promise.
 
@@ -92,12 +97,12 @@ To restore sessions across devices, the application checks the blockchain for se
 
 | Feature | CLI (`surfaces/cli`) | VS Code Extension | Localhost Server | Webview | Android Shell |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Status** | Unmerged (`feat/agentnet-cli`) | Merged to `main` | Merged to `main` | Merged to `main` | Merged to `main` |
+| **Status** | Merged to `main` (`surfaces/cli`) | Merged to `main` | Merged to `main` | Merged to `main` | Merged to `main` |
 | **Engine Selection** | Yes (Claude & Codex) | Yes (Claude & Codex) | Yes (Claude & Codex) | Yes (Claude & Codex) | Yes (Claude & Codex) |
 | **Auth Flows** | Claude (CLI prompt) / Codex (Device OAuth or API Key) | Claude (WebView) / Codex (Device OAuth or API Key) | Handles OAuth/Device Auth redirection | Connects to host via proxy messages | Connects via local server proxy |
 | **Session Persistence** | Local files + Cloud mirror config | Local files + Cloud mirror config | Managed by host adapter | Displays list / sends RPC messages | Local server files + Cloud mirror |
 | **Wallet signing type** | **Keypair Wallet** (file-based) | **Keypair Wallet** (file-based) | **Web Wallet** (replayed signature) | Browser injected (Phantom, etc.) | **Mobile Wallet Adapter (MWA)** |
-| **On-Chain Transactions** | **Real** (Full Keypair signing) | **Real** (Full Keypair signing) | **Mocked / Unsupported** (Throws) | Depends on host | **Mocked / Unsupported** (Throws) |
+| **On-Chain Transactions** | **Real** (Full Keypair signing) | **Real** (Full Keypair signing) | **Real** (round-trip to the connected client's wallet) | **Real** (browser wallet, e.g. Phantom) | **Real** (round-trip via MWA) |
 | **RPC Configuration** | Missing (No Helius UI) | Missing on `main` (In `rpc-onboarding`) | Passive routing | Displays status | Passive routing |
 | **Interactive Tool Diffs** | Yes (Green/Red inline shading) | No (Basic JSON parameters) | Serves text diffs | Renders simple diff text | Renders simple diff text |
 | **Danger Heuristics** | Yes (Regex checking + warning) | No | No | No | No |
@@ -107,7 +112,7 @@ To restore sessions across devices, the application checks the blockchain for se
 ## 5. Wallet & Transaction Signing (Real vs. Mocked)
 
 ### A. Real On-Chain Signing (CLI & VS Code)
-The CLI and VS Code extension load keypairs directly from a file path (defaulting to the Solana standard `~/.config/solana/id.json`). They instantiate the wallet using [keypairWallet.ts](file:///Users/parthagrawal99/Desktop/iq-labs/AgentNet/packages/core/src/account/keypairWallet.ts).
+The CLI and VS Code extension load keypairs directly from a file path (defaulting to the Solana standard `~/.config/solana/id.json`). They instantiate the wallet using [keypairWallet.ts](../packages/core/src/account/keypairWallet.ts).
 - Because they hold the keypair in memory, their `signTransaction` and `signAllTransactions` methods call the Solana Web3 library directly:
   ```typescript
   async signTransaction<T extends Transaction | VersionedTransaction>(tx: T): Promise<T> {
@@ -118,15 +123,11 @@ The CLI and VS Code extension load keypairs directly from a file path (defaultin
   ```
 - **Result:** CLI and VS Code are fully capable of executing on-chain actions like purchasing or publishing skills and workflows.
 
-### B. Mocked On-Chain Signing (Localhost & Android)
-The Localhost server (and the web/mobile clients connecting to it) only receives the initial address and the session signature during onboarding. The server does not hold the private key, so it instantiates the wallet using [webWallet.ts](file:///Users/parthagrawal99/Desktop/iq-labs/AgentNet/packages/core/src/account/webWallet.ts).
-- Since it cannot generate on-chain signatures, its transaction methods are mocked:
-  ```typescript
-  async signTransaction<T extends Transaction | VersionedTransaction>(_tx: T): Promise<T> {
-    throw new Error("on-chain signing not wired through the web wallet yet (Track 2).");
-  }
-  ```
-- **Result:** Running AgentNet in a browser or inside the Android shell will throw a runtime error if the agent attempts to call `buy_skill`.
+### B. Round-Trip On-Chain Signing (Localhost & Android) — *updated 2026-07*
+The Localhost server (and the web/mobile clients connecting to it) only receives the initial address and the session signature during onboarding. The server does not hold the private key, so it instantiates the wallet using [webWallet.ts](../packages/core/src/account/webWallet.ts).
+- Transactions are signed by **round-tripping to the client's wallet app**: `signTransaction` forwards the serialized transaction to the connected client, which signs it with the browser wallet (Phantom etc.) or the Mobile Wallet Adapter on Android, and returns the signed bytes.
+- Only when **no round-trip transport is wired** (e.g. CLI/tests, which build a `keypairWallet` instead) does it throw: `"on-chain signing not wired through the web wallet yet (Track 2)."`
+- **Result:** `buy_skill` and other on-chain actions work for real in the browser and the Android shell — this section previously described them as mocked, which is no longer true.
 
 ---
 
@@ -135,7 +136,7 @@ The Localhost server (and the web/mobile clients connecting to it) only receives
 The unmerged CLI branch (`feat/agentnet-cli`) implements advanced UX capabilities that the VS Code extension and Webviews currently lack. These TUI capabilities bring it closer to the functionality of "Claude Code":
 
 1. **Interactive TUI Diff Viewer:** Calculates inline Longest Common Subsequence diffs (green background for additions, red for deletions) inside tool cards (`Edit`, `MultiEdit`, `Write`) to let users inspect file changes before approving them.
-2. **Shell Danger Flag Heuristics:** Scans shell commands using regular expressions in [spawn.ts](file:///Users/parthagrawal99/Desktop/iq-labs/AgentNet/packages/core/src/runtime/spawn.ts) to intercept dangerous actions:
+2. **Shell Danger Flag Heuristics:** Scans shell commands using regular expressions in [spawn.ts](../packages/core/src/runtime/spawn.ts) to intercept dangerous actions:
    - Destructive files removals (`rm -rf`, `rm -f`).
    - Root privilege executions (`sudo`).
    - Destructive Git operations (`git push --force`, `git reset --hard`, `git clean -fd`).

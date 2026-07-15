@@ -27,7 +27,7 @@ flowchart TB
     end
 
     subgraph Surfaces["📺 surfaces (apps that USE the SDK — separate block)"]
-        SF["VSCode · terminal · chat-ui · mobile"]
+        SF["vscode · cli · webview+localhost · android"]
     end
 
     subgraph Backend["🔧 ⑤ backend (later — open, owns nothing)"]
@@ -263,9 +263,10 @@ agentnet-sdk/                       package: @iqlabs-official/agent-sdk
 ```
 surfaces/                           ⑦ I/O surfaces — thin bindings over the SDK
 ├── vscode/                         extension
-├── terminal/                      CLI
-├── chat-ui/                       our chat program
-└── mobile/                        app
+├── cli/                            terminal (Ink TUI)
+├── webview/                        chat UI (React SPA — protocol only, no core import)
+├── localhost/                      Node HTTP host serving the webview (also the Android backend)
+└── android/                        app (Kotlin shell + proot guest running the localhost server)
 ```
 
 Each surface just imports the SDK and renders/binds (wallet signature + UI). The wrapper
@@ -486,8 +487,8 @@ just assembly.
 
 ## Step 6 — surfaces (bind the SDK to real UIs)
 - **Read:** [`actions-and-adapters.md`](actions-and-adapters.md) §1 (action catalog) + §5 (per-env).
-- **Build:** `surfaces/` apps — web first (PoC already from Step 1), then VSCode / terminal /
-  chat-ui / mobile. Each = wallet-sign + render over the SDK; reuse `runtime/` for CLI surfaces.
+- **Build:** `surfaces/` apps — web first (PoC already from Step 1), then vscode / cli /
+  webview+localhost / android. Each = wallet-sign + render over the SDK; reuse `runtime/` for CLI surfaces.
 - **Done when:** the full loop (connect → pick agent → session syncs → buy skill → it shows in
   the runtime) works in at least the web surface.
 

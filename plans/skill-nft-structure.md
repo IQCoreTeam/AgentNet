@@ -228,11 +228,14 @@ Together: **wallet = abilities (on-chain) + memory (off-chain), portable across 
 
 ## 7. Build order
 
-1. ⬜ Publish: code-in the skill text → mint a Token-2022 skill into the collection
+1. ✅ Publish: code-in the skill text → mint a Token-2022 skill into the collection
    (`uri` = code-in txid, `NonTransferable`, `TokenMetadata` traits). No registry table.
-2. ⬜ `buy_skill` instruction — star + payment + free-equip in one atomic tx (price 0 → skip
+   → `publishSkill()` in `packages/core/src/nft/skill.ts` (minting via the gate program).
+2. ✅ `buy_skill` instruction — star + payment + free-equip in one atomic tx (price 0 → skip
    transfer; >0 → creator + iqfee; always mint 1 token, `supply`++).
-3. ⬜ Ranking/holders off-chain (§6) via the `CacheLayer`.
+   → `buySkill()` in `packages/core/src/nft/skill.ts` + the `buy_skill` MCP tool in `skill-market/`.
+3. ✅ Ranking/holders off-chain (§6) — shipped as the `agentnet-nft-indexer` backend +
+   `packages/core/src/search/` (see [`search.md`](search.md) §4).
 4. ⬜ (optional) premium resellable tier (§5).
 
 ## 8. Open decisions

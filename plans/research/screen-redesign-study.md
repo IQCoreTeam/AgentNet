@@ -374,7 +374,7 @@ execution), with a live preview thumbnail. Cancel / Save.
 
 ### Deferred (not in v1)
 - **Comment replies / threads** → later. v1 ships **flat comments only**. Once the community
-  foundation is in place, reference `/Users/sumin/WebstormProjects/iqchan` (reply format) and
+  foundation is in place, reference `IQCoreTeam/iq-chan` (reply format) and
   upgrade. iqchan = **format reference only**.
 - **Blog like/comment counts** → only if backed by real data; otherwise omit.
 - Rarity color bands, "X% of agents own this" (needs distinct-holder query on the indexer),

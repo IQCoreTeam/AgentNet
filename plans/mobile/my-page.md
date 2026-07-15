@@ -222,7 +222,7 @@ what "my page" means — only the layout adapts to the surface.
 
 ## Appendix A. Indexer verified-work API (actual current state, audited)
 
-Repo: `/Users/sumin/WebstormProjects/agentnet-nft-indexer`. This is what EXISTS today (so we
+Repo: `IQCoreTeam/agentnet-nft-indexer` (private). This is what EXISTS today (so we
 don't re-investigate). Base URL: `https://nft-index.iqlabs.dev` (`core/seed.ts` `getIndexerUrl()`).
 
 Routes:

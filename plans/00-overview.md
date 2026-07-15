@@ -19,8 +19,9 @@ flowchart TB
         VS["VSCode"]:::rt
         CL["Claude CLI"]:::rt
         CX["Codex CLI"]:::rt
-        WEB["Web (PoC)"]:::rt
-        HER["Hermes / OpenClaw (later)"]:::rt
+        WEB["Web (localhost)"]:::rt
+        AND["Android app"]:::rt
+        HER["Hermes / OpenClaw / Eliza<br/>(stdio MCP, packages/mcp)"]:::rt
     end
 
     %% ===================== IDENTITY =====================
@@ -165,13 +166,13 @@ The coding plan lives in [`coding-info.md`](coding-info.md): **§A** module brea
 ## 4. Reference material (code + docs to consult)
 
 **Our repos (the patterns to reuse):**
-- Contract: `/Users/sumin/RustroverProjects/IQLabsContract`
-- Solana SDK (crypto, writeRow, codeIn): `/Users/sumin/WebstormProjects/iqlabs-solana-sdk`
-- git-SDK (on-chain git, for comment attachments): `/Users/sumin/WebstormProjects/iqlabs-git-sdk`
-- Front/resolver/profile (Phantom, getUserPda, SNS): `/Users/sumin/WebstormProjects/iq-wide-web`
-- Gateway (sort/cache, off-chain aggregation): `/Users/sumin/WebstormProjects/iq-gateway`
-- Bump pattern: `/Users/sumin/WebstormProjects/iqchan`
-- Encryption usage example: `/Users/sumin/WebstormProjects/iq-locker`
+- Contract: `IQCoreTeam/IQLabsContract` (private)
+- Solana SDK (crypto, writeRow, codeIn): [IQCoreTeam/iqlabs-solana-sdk](https://github.com/IQCoreTeam/iqlabs-solana-sdk)
+- git-SDK (on-chain git, for comment attachments): [IQCoreTeam/iqlabs-git-sdk](https://github.com/IQCoreTeam/iqlabs-git-sdk)
+- Front/resolver/profile (Phantom, getUserPda, SNS): [IQCoreTeam/iq-wide-web](https://github.com/IQCoreTeam/iq-wide-web)
+- Gateway (sort/cache, off-chain aggregation): [IQCoreTeam/iq-gateway](https://github.com/IQCoreTeam/iq-gateway)
+- Bump pattern: `IQCoreTeam/iq-chan` (private)
+- Encryption usage example: `IQCoreTeam/iq-locker` (private)
 
 **External references:**
 - IQ6900 NFT (mpl-core + code-in, fully on-chain NFT) — model for optional resellable skills

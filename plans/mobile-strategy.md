@@ -167,9 +167,16 @@ flowchart TB
 - **No proot.** Because claude = Agent SDK (JS), a node-only rootfs suffices. Ship a trimmed
   Termux rootfs with node pre-baked → delete AnyClaw's apt/dpkg/proot/path-patching (~80% of
   its CodexServerManager). [refs #4, #5]
+  > **Superseded:** the shipped app DOES run proot — a full Ubuntu guest rootfs with node,
+  > via `DirectProotExec` (see [`engine-native-exec.md`](engine-native-exec.md) §1 and the
+  > proot hardening work, PR #115/#122).
 - **W^X bypass = `targetSdk=28`** (Termux's method) — apps targeting API ≤28 may execve from
   app home dir; API 29+ can't. minSdk 24 / compileSdk 35 / **targetSdk 28**. Trade-off: no
   Play Store (sideload/F-Droid), same as Termux. [ref #4]
+  > **Superseded 2026-07:** shipped `targetSdk = 35` — proot loads guest binaries via its own
+  > loader mmap, which survives the API 35 W^X policy, so the ≤28 exemption is no longer
+  > needed (see [`raise-targetsdk-exec.md`](raise-targetsdk-exec.md) and
+  > `surfaces/android/app/build.gradle.kts`).
 - **Background = Kotlin Foreground Service** (`START_STICKY`, persistent notification). The node
   process is a separate OS process kept alive by app priority, not by any JS runtime. Approvals
   while backgrounded → push notifications (this is what `ApprovalChannel` was abstracted for).
