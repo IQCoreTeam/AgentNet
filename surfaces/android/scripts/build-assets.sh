@@ -187,8 +187,8 @@ cp "$ANDROID_DIR/guest/AGENTS.md" /root/AGENTS.md
 # faking link() success under untrusted_app — is fixed at the proot launch layer, so native
 # `git clone` works. No shim shadowing /usr/bin/git anymore; real git is used for every command.
 
-# Keep rseq disabled for login shells. Not the fix for #112 (that's the clone shim above —
-# the app-domain transport corruption survives rseq-off), but rseq-under-ptrace is a real,
+# Keep rseq disabled for login shells. Not the fix for #112 (that was the link2symlink false
+# success, fixed at the proot launch layer — #115), but rseq-under-ptrace is a real,
 # separately-measured corruption vector, so this stays as a low-cost guard. The app covers
 # node + children via guest env; this profile.d covers adb/manual proot entry too.
 cat > /etc/profile.d/00-agentnet-rseq.sh <<'RSEQ'

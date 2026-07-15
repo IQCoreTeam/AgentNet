@@ -14,7 +14,7 @@ import java.io.File
 // proot-distro solves this by bind-mounting fake files ONLY where the real one is unreadable.
 // We mirror that: Installer lays these down, DirectProotExec binds the unreadable ones.
 // One list = the single source of truth for both. (realProcPath, fakeFileName, content)
-// ponytail: /proc/vmstat is in proot-distro's set but has no consumer in our node/agent
+// Note: /proc/vmstat is in proot-distro's set but has no consumer in our node/agent
 // stack — skipped; add a row here if a tool ever needs it.
 internal val FAKE_PROC: List<Triple<String, String, String>> = listOf(
     Triple("/proc/loadavg", "loadavg", "0.12 0.07 0.02 2/165 765\n"),
@@ -84,11 +84,11 @@ exec /usr/bin/bun "${'$'}@"
 class Installer(private val ctx: Context) {
     companion object {
         private const val TAG = "AgentNet/Installer"
-        // Bumped v3 -> v5 (v4 skipped) to force a one-time rootfs re-extraction on existing
-        // installs: issue #112's fix ships IN the rootfs (python3-dulwich + the git-clone shim
-        // at /usr/local/bin/git — native git clone is corrupted by proot under targetSdk-35's
-        // untrusted_app domain), so a server-bundle-only update is not enough. Marker bumps
-        // are how heavy rootfs fixes reach devices: the MARKER only re-extracts on a fresh
+        // Bumped v3 -> v5 (v4 skipped) to force a one-time rootfs re-extraction when issue
+        // #112's dulwich clone shim shipped IN the rootfs. That shim has since been removed
+        // (#115 fixed the root cause at the proot launch layer; removeLegacyCloneShim cleans
+        // it off existing installs every launch — no marker bump needed). Marker bumps remain
+        // how heavy rootfs changes reach devices: the MARKER only re-extracts on a fresh
         // marker, and the re-extract is from the bundled tar (no network download).
         private const val MARKER = ".installed-v5"
         // Server bundle is small and changes every app build; its marker holds the app's
@@ -149,6 +149,7 @@ class Installer(private val ctx: Context) {
             writeGuestGitConfig(p)
             writeFakeSysdata(p) // #117: idempotent + tiny; every-launch so existing installs get it
             writeBunWrapper(p)
+            removeLegacyCloneShim(p)
             // Heavy artifacts (proot + rootfs) are in place. But the server bundle changes
             // every build — refresh it if this APK shipped a different one.
             if (serverUpToDate(serverCrc)) {
@@ -233,6 +234,7 @@ class Installer(private val ctx: Context) {
         writeGuestGitConfig(p)
         writeFakeSysdata(p)
         writeBunWrapper(p)
+        removeLegacyCloneShim(p)
         val tmp = File(p.rootfs, "tmp").apply { mkdirs() }
         runCatching { android.system.Os.chmod(tmp.absolutePath, 0b001_111_111_111) } // 1777
     }
@@ -264,6 +266,18 @@ class Installer(private val ctx: Context) {
             writeFresh(wrapper, BUN_WRAPPER)
             Os.chmod(wrapper.absolutePath, 0b000_111_101_101) // 0755
         }.onFailure { Log.w(TAG, "could not write guest bun wrapper (#117)", it) }
+    }
+
+    // The #112 dulwich clone shim is removed from fresh rootfs builds, but existing installs
+    // (and fresh extracts of a pre-#115 bundled tar) still have it baked in at
+    // /usr/local/bin/git, shadowing the real git that now works. Delete it every launch —
+    // same reach-existing-installs pattern as the writes above; a MARKER bump (full rootfs
+    // re-extract) would be overkill for two files. python3-dulwich stays (harmless).
+    private fun removeLegacyCloneShim(p: Paths.Layout) {
+        runCatching {
+            File(p.rootfs, "usr/local/bin/git").delete()
+            File(p.rootfs, "usr/local/bin/agentnet-git-clone.py").delete()
+        }.onFailure { Log.w(TAG, "could not remove legacy #112 clone shim", it) }
     }
 
     // #117: write the fake /proc files (see FAKE_PROC). DirectProotExec binds them over the
