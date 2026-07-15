@@ -162,7 +162,9 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+            {/* key={screen} replays the CRT flicker each time the content swaps, so every
+                step "시시식" flickers in like a terminal boot. */}
+            <div key={screen} className="unlock-flicker min-h-0 flex-1 overflow-y-auto px-5 py-5">
               {screen === "pitch" && (
                 <ValuePitch
                   page={pitchPage}
