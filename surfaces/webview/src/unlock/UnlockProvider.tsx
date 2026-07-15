@@ -296,18 +296,20 @@ function ValuePitch({ page, onPageChange, onContinue }: { page: number; onPageCh
   const last = page >= cards.length - 1;
   return (
     <div className="mx-auto max-w-sm">
-      <p className="an-term-mono text-center text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--an-green)]">&gt;WHY_UNLOCK<span className="unlock-cursor">_</span></p>
-      <div ref={scroller} onScroll={(event) => onPageChange(Math.round(event.currentTarget.scrollLeft / Math.max(1, event.currentTarget.clientWidth)))} className="mt-4 flex snap-x snap-mandatory overflow-x-auto [scrollbar-width:none]">
+      <p className="an-term-mono text-center text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--an-green)]">&gt;WHY_UNLOCK<span className="unlock-cursor">_</span></p>
+      {/* pt-2: overflow-x-auto forces overflow-y to auto (CSS spec), which would clip the
+          image's corner brackets that sit 5px above each frame — the top padding gives them room. */}
+      <div ref={scroller} onScroll={(event) => onPageChange(Math.round(event.currentTarget.scrollLeft / Math.max(1, event.currentTarget.clientWidth)))} className="mt-4 flex snap-x snap-mandatory overflow-x-auto pt-2 [scrollbar-width:none]">
         {cards.map((card, index) => (
           <article key={index} className="w-full shrink-0 snap-center px-1 text-center">
             <FramedImage src={card.img} position={card.position} />
-            <h3 className="mt-6 text-heading font-semibold leading-tight text-[color:var(--an-fg)]">{card.title}</h3>
-            <p className="mx-auto mt-3 max-w-xs text-body leading-relaxed text-[color:var(--an-fg-dim)]">{card.text}</p>
+            <h3 className="mt-6 text-[19px] font-bold uppercase leading-[1.3] tracking-[0.08em] text-[color:var(--an-fg)]">{card.title}</h3>
+            <p className="mx-auto mt-3 max-w-[280px] text-[13px] leading-[1.65] text-[color:var(--an-fg-dim)]">{card.text}</p>
             {card.link && (
               <a href={card.link.href} target="_blank" rel="noreferrer" className="mt-4 flex items-center gap-2 border border-[color:var(--an-line)] px-3 py-2.5 text-left no-underline active:opacity-80">
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="an-term-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--an-green)]">&gt;{card.link.label}</span>
-                  <span className="truncate text-caption text-[color:var(--an-fg-dim)]">{card.link.sub}</span>
+                  <span className="truncate text-[11px] text-[color:var(--an-fg-dim)]">{card.link.sub}</span>
                 </span>
                 <span className="an-term-mono shrink-0 text-[11px] text-[color:var(--an-fg-mute)]">[↗]</span>
               </a>
@@ -329,7 +331,7 @@ function ValuePitch({ page, onPageChange, onContinue }: { page: number; onPageCh
         ))}
       </div>
       <button type="button" onClick={() => (last ? onContinue() : goPage(page + 1))} className="an-btn an-btn-green mt-6 w-full">{last ? "Start setup" : "Next"}</button>
-      <p className="mt-3 text-center text-caption text-[color:var(--an-fg-mute)]">{cards[page].caption}</p>
+      <p className="mt-3 text-center text-[11px] text-[color:var(--an-fg-mute)]">{cards[page].caption}</p>
     </div>
   );
 }
