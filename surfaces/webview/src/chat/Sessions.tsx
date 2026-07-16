@@ -459,34 +459,40 @@ export function Sessions({
               )}
             </div>
             {state.walletAddress ? (
-              <button
-                onClick={() => {
-                  forgetAndroidWallet(); // clear the Keystore creds so we don't silently reconnect
-                  send({ type: "disconnectWallet" });
-                  onClose();
-                }}
-                className="mt-2 flex w-full items-center gap-3.5 rounded-2xl px-2.5 py-3 text-left transition active:bg-red-500/10"
-              >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center" style={{ color: "#f87171" }}>
-                  <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 4.5H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2.5" /><path d="M14 15l3-4-3-4M17 11H8.5" /></svg>
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "#f87171" }}>Disconnect wallet</span>
-                  <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>Clears the saved session on this device</span>
-                </span>
-              </button>
+              <div className="mt-2">
+                <p className="an-sfcap">&gt;CONNECTED · <span style={{ background: "var(--an-bg-2)", color: "var(--an-fg-dim)", padding: "2px 6px" }}>{`${state.walletAddress.slice(0, 4)}…${state.walletAddress.slice(-4)}`}</span> · <span style={{ color: "var(--an-green)" }}>ONLINE</span></p>
+                <button
+                  onClick={() => {
+                    forgetAndroidWallet(); // clear the Keystore creds so we don't silently reconnect
+                    send({ type: "disconnectWallet" });
+                    onClose();
+                  }}
+                  className="an-sfcta an-sfcta-disc"
+                >
+                  <span className="ico">
+                    <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="square"><path d="M8.5 4.5H4v13h4.5" /><path d="M14 15l3-4-3-4M17 11H8.5" /></svg>
+                  </span>
+                  <span className="grow">
+                    <span className="ttl">Disconnect_Wallet</span>
+                    <span className="sub">Clears the saved session on this device</span>
+                  </span>
+                  <span className="xmk">[x]</span>
+                </button>
+              </div>
             ) : (
-              <button
-                onClick={() => requestUnlock("identity")}
-                className="mt-2 flex w-full items-center gap-3.5 rounded-2xl px-2.5 py-3 text-left transition active:opacity-80"
-                style={{ background: "var(--an-green-dim)", border: "1px solid var(--an-green-line)" }}
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-green)" }}>Unlock AgentNet</span>
-                  <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>Connect a wallet for identity and writes</span>
-                </span>
-                <span className="an-term-mono" style={{ color: "var(--an-green)" }}>›</span>
-              </button>
+              <div className="mt-2">
+                <p className="an-sfcap">&gt;GUEST · NOT_CONNECTED<span className="unlock-cursor">_</span></p>
+                <button onClick={() => requestUnlock("identity")} className="an-sfcta an-sfcta-unlock">
+                  <span className="ico">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square"><rect x="5" y="10.5" width="14" height="9.5" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" /><path d="M12 14v3" /></svg>
+                  </span>
+                  <span className="grow">
+                    <span className="ttl">Unlock_AgentNet</span>
+                    <span className="sub">Connect a wallet for identity and writes</span>
+                  </span>
+                  <span className="chev">&gt;&gt;</span>
+                </button>
+              </div>
             )}
           </div>
         ) : settingsMode === "helius" ? (
