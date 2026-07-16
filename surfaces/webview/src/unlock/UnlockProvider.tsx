@@ -106,9 +106,14 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
   const value = useMemo(() => ({ unlocked, celebrating, requestUnlock }), [unlocked, celebrating, state.walletAddress]);
   const copy = REASON_COPY[reason];
 
+  // Leaving mid-setup must not leave a half-finished "ghost" screen behind: reset the tutorial
+  // to the top so the ONLY thing that decides locked-vs-unlocked is the wallet (state.walletAddress).
+  // No seen/read marker is persisted — reopening always replays the full setup while there's no wallet.
   function dismiss() {
     setOpen(false);
     pending.current = null;
+    setScreen("pitch");
+    setPitchPage(0);
     if (unlocked) startBadgeReveal();
   }
 
@@ -162,9 +167,9 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
               </div>
             </div>
 
-            {/* key={screen} replays the CRT flicker each time the content swaps, so every
-                step "시시식" flickers in like a terminal boot. */}
-            <div key={screen} className="unlock-flicker min-h-0 flex-1 overflow-y-auto px-5 py-5">
+            {/* key={screen} remounts the content on each step swap (so the pitch imagery
+                replays its short flicker); the step content itself no longer flickers. */}
+            <div key={screen} className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
               {screen === "pitch" && (
                 <ValuePitch
                   page={pitchPage}
@@ -249,7 +254,7 @@ const IMAGE_BRACKETS: CSSProperties = {
 
 function FramedImage({ src, position }: { src: string; position?: string }) {
   return (
-    <div className="relative mx-auto" style={{ width: 200, height: 132, border: "1px solid var(--an-green-line)" }}>
+    <div className="unlock-img-flicker relative mx-auto" style={{ width: 200, height: 132, border: "1px solid var(--an-green-line)" }}>
       <img src={src} alt="" style={{ display: "block", width: "100%", height: "100%", objectFit: "cover", objectPosition: position ?? "50% 50%", filter: "saturate(0.7)" }} />
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "repeating-linear-gradient(0deg, rgba(0,0,0,0.22) 0, rgba(0,0,0,0.22) 1px, transparent 1px, transparent 3px)" }} />
       <div style={IMAGE_BRACKETS} />

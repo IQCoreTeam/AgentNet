@@ -127,6 +127,8 @@ body {
 .unlock-denied-in { animation: unlock-flicker 900ms steps(1) 300ms both; }
 /* CRT flicker for tags/banners flipping state on unlock. */
 .unlock-flicker { animation: unlock-flicker 900ms steps(1) both; }
+/* Shorter flicker for just the pitch imagery — the card text/controls stay calm. */
+.unlock-img-flicker { animation: unlock-flicker 460ms steps(1) both; }
 /* Reward rows type in one after another on the granted screen. */
 .unlock-reward { animation: unlock-reward 400ms var(--ease-emphasized-decelerate) both; }
 /* Blinking terminal cursor for unlock-sheet eyebrows. */
