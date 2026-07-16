@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "../state/store";
 import { haptics } from "../haptics";
 import { ImageIcon, SkillIcon } from "../icons";
@@ -21,46 +21,53 @@ function PublishProgressView({ progress }: { progress: { phase: "store" | "mint"
   const sub = progress?.phase === "store" && progress.percent != null ? progress.percent / 100 : idx > 0 ? 1 : 0;
   const overall = Math.min(100, Math.round(((idx + sub) / phases.length) * 100));
   const signed = progress?.signed ?? 0;
+  const kind = progress?.kind ?? "skill";
+  const fg = FORGE_TINT[kind];
+  const filled = Math.round((overall / 100) * 14);
 
   return (
     <div className="flex flex-col h-full">
-      <header className={`flex items-center gap-2 border-b ${t.border} px-3.5 shrink-0`} style={{ paddingTop: "max(0.85rem, env(safe-area-inset-top))", paddingBottom: "0.85rem" }}>
-        <span className={`font-medium text-[15px] ${t.head}`}>Forging your {t.noun}</span>
-      </header>
-      <div className={`flex-1 flex flex-col items-center justify-center gap-5 p-6 text-center bg-gradient-to-b ${t.wash} to-transparent`}>
-        <SkillIcon className={`h-12 w-12 ${t.icon} publish-forge-pulse`} />
-
-        <div className="w-full max-w-xs space-y-3">
-          {/* Phase steps */}
-          <div className="flex items-center justify-between gap-1">
+      <div className="an-forge-meta" style={{ paddingTop: "max(0.6rem, env(safe-area-inset-top))" }}>
+        <span>&gt;SKILL_FORGE 0{Math.min(idx + 1, 3)}/03</span><span>鍛造中 ******</span>
+      </div>
+      <div className="an-forge-title" style={{ background: fg.grad }}>
+        <span>Forging_{kind === "workflow" ? "Workflow" : "Skill"}</span>
+        <span style={{ fontSize: 10, letterSpacing: "0.12em" }}>RUNNING<span className="unlock-cursor">_</span></span>
+      </div>
+      <div className="flex-1 flex flex-col items-center justify-center gap-5 p-6 text-center">
+        <SkillIcon className="h-12 w-12 publish-forge-pulse" style={{ color: fg.accent }} />
+        <div className="w-full max-w-xs" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div className="flex items-center justify-between gap-1.5">
             {phases.map((p, i) => (
-              <div key={p.key} className="flex-1 flex flex-col items-center gap-1">
-                <div
-                  className={`h-1.5 w-full rounded-full ${i < idx ? t.on : i === idx ? `${t.on} publish-forge-pulse` : "bg-zinc-700"}`}
-                />
-                <span className={`text-[10px] ${i === idx ? t.onText : "text-zinc-600"}`}>{i + 1}/{phases.length}</span>
+              <div key={p.key} className="flex-1 flex flex-col items-center gap-1.5">
+                <div className={`h-1.5 w-full ${i === idx ? "publish-forge-pulse" : ""}`} style={{ background: i < idx ? fg.mid : i === idx ? fg.accent : "var(--an-bg-2)" }} />
+                <span className="text-[10px]" style={{ color: i === idx ? fg.accent : "var(--an-fg-mute)" }}>{i + 1}/{phases.length}</span>
               </div>
             ))}
           </div>
-
-          {/* Gauge */}
-          <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-800">
-            <div className={`h-full rounded-full bg-gradient-to-r ${t.bar} transition-[width] duration-300`} style={{ width: `${overall}%` }} />
+          <div className="an-forge-seg">
+            {Array.from({ length: 14 }, (_, i) => (
+              <span key={i} className={i < filled - 1 ? "on" : i === filled - 1 ? "now" : ""} style={i < filled - 1 ? { background: fg.mid } : i === filled - 1 ? { background: fg.accent } : undefined} />
+            ))}
           </div>
-
-          <p className={`text-sm font-medium ${t.label}`}>{phases[idx].label}</p>
-          <p className="text-xs text-zinc-500">
-            {signed > 0 ? `${signed} signature${signed === 1 ? "" : "s"} approved` : "Waiting for the first signature…"}
+          <p className="an-term-mono" style={{ margin: 0, fontWeight: 700, fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase", color: fg.accent }}>&gt;{phases[idx].label.replace(/ /g, "_")}<span className="unlock-cursor">_</span></p>
+          <p style={{ margin: 0, fontSize: 11, letterSpacing: "0.08em", color: "var(--an-fg-mute)" }}>
+            {signed > 0 ? `${signed}/3 SIGNATURES_APPROVED` : "AWAITING_FIRST_SIGNATURE"}
           </p>
         </div>
-
-        <p className="text-[11px] text-zinc-600 max-w-xs leading-relaxed">
+        <p className="text-[11px] max-w-xs leading-relaxed" style={{ color: "#52525b" }}>
           Publishing takes several wallet signatures. Approve each prompt — this can&apos;t be batched because every step builds on the previous transaction.
         </p>
       </div>
     </div>
   );
 }
+
+// Violet for skills, amber for workflows — the forge titlebar/gauge tint (matches card colors).
+const FORGE_TINT = {
+  skill: { grad: "linear-gradient(180deg,#8b5cf6,#7c3aed)", accent: "#c4b5fd", mid: "#8b5cf6" },
+  workflow: { grad: "linear-gradient(180deg,#f0913e,#d97706)", accent: "#fcd34d", mid: "#f0913e" },
+} as const;
 
 interface Props {
   onBack: () => void;
@@ -87,7 +94,6 @@ export function PublishForm({ onBack, initialKind = "skill" }: Props) {
   // Required-skills picker (workflow mode only): mint -> selected.
   const [reqSel, setReqSel] = useState<Record<string, boolean>>({});
 
-  const t = PUBLISH_THEME[kind];
   const result = state.publishResult;
 
   // Skills the wallet actually owns and can require: must have a resolvable mint, and must
@@ -145,17 +151,21 @@ export function PublishForm({ onBack, initialKind = "skill" }: Props) {
   // Only SUCCESS takes over the screen (the mint address + celebration). A FAILURE keeps
   // the form mounted and shows the error as a bubble above the button — no page bounce.
   if (result?.ok) {
+    const fg = FORGE_TINT[kind];
     return (
       <div className="flex flex-col h-full">
-        <header className={`flex items-center gap-2 border-b ${t.border} px-2.5 shrink-0`} style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))", paddingBottom: "0.55rem" }}>
-          <button onClick={() => { haptics.tick(); clearPublishResult(); onBack(); }} className="an-iconbtn shrink-0" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg></button>
-          <span className="font-medium text-sm">Publish {kind === "workflow" ? "Workflow" : "Skill"}</span>
-        </header>
-        <div className={`flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center bg-gradient-to-b ${t.wash} to-transparent`}>
-          <SkillIcon className={`h-10 w-10 ${t.icon}`} />
-          <p className={`${t.label} font-semibold`}>{kind === "workflow" ? "Workflow minted!" : "Skill minted!"}</p>
-          {result.mint && <p className="font-mono text-xs text-zinc-500">{result.mint}</p>}
-          <button onClick={() => { haptics.tick(); clearPublishResult(); onBack(); }} className="mt-2 text-sm text-zinc-400 underline">Back to market</button>
+        <div className="an-forge-meta" style={{ paddingTop: "max(0.6rem, env(safe-area-inset-top))" }}>
+          <span>&gt;SKILL_FORGE 03/03</span><span>鋳造完了</span>
+        </div>
+        <div className="an-forge-title" style={{ background: fg.grad }}>
+          <span>{kind === "workflow" ? "Workflow_Minted" : "Skill_Minted"}</span>
+          <span style={{ fontSize: 10, letterSpacing: "0.12em" }}>[OK]</span>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6 text-center">
+          <SkillIcon className="h-10 w-10" style={{ color: fg.accent }} />
+          <p className="an-term-mono" style={{ margin: 0, fontWeight: 700, fontSize: 14, letterSpacing: "0.1em", textTransform: "uppercase", color: fg.accent }}>&gt;{kind === "workflow" ? "Workflow_Minted" : "Skill_Minted"}<span className="unlock-cursor">_</span></p>
+          {result.mint && <p className="font-mono text-[11px]" style={{ color: "#71717a", wordBreak: "break-all", maxWidth: 280 }}>{result.mint}</p>}
+          <button onClick={() => { haptics.tick(); clearPublishResult(); onBack(); }} className="an-term-mono" style={{ marginTop: 6, fontWeight: 700, fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: fg.accent, background: "none", border: 0, cursor: "pointer" }}>&gt; Back_to_Market [&gt;]</button>
         </div>
       </div>
     );
@@ -177,17 +187,13 @@ export function PublishForm({ onBack, initialKind = "skill" }: Props) {
 
   return (
     <div className="flex flex-col h-full">
-      <header className="flex items-center gap-3 border-b px-3.5 py-3 shrink-0" style={{ borderColor: "#1d1d20", paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}>
-        <button
-          onClick={() => { haptics.tick(); onBack(); }}
-          aria-label="Back"
-          className="an-bracket flex shrink-0 items-center justify-center"
-          style={{ width: "32px", height: "32px", border: "1px solid #1f1f23", color: "#cfcfcf", "--ts": "7px", "--bk": "#0d0d0e", "--tk": "#6e6e72" } as CSSProperties}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 6l-6 6 6 6" /></svg>
-        </button>
-        <span className="an-term-title text-[16px]">Publish {kind === "workflow" ? "Workflow" : "Skill"}</span>
-      </header>
+      <div className="an-forge-meta shrink-0" style={{ paddingTop: "max(0.6rem, env(safe-area-inset-top))" }}>
+        <span>&gt;SKILL_FORGE</span><span>スキル作成</span>
+      </div>
+      <div className="an-forge-title shrink-0" style={{ background: FORGE_TINT[kind].grad }}>
+        <button onClick={() => { haptics.tick(); onBack(); }} aria-label="Back" className="tb-x" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>[&lt;]&nbsp;Publish_{kind === "workflow" ? "Workflow" : "Skill"}</button>
+        <button onClick={() => { haptics.tick(); onBack(); }} aria-label="Close" className="tb-x">[x]</button>
+      </div>
 
       <div className="flex-1 overflow-y-auto p-3.5 space-y-4">
         {/* Skill/workflow toggle: a workflow is defined by the skills it requires (the
@@ -261,7 +267,7 @@ export function PublishForm({ onBack, initialKind = "skill" }: Props) {
             )}
           </Field>
         ) : (
-          <Field label="SKILL.md content *">
+          <Field label="SKILL.md *">
             <textarea
               className="an-term-field"
               rows={8}
@@ -271,31 +277,37 @@ export function PublishForm({ onBack, initialKind = "skill" }: Props) {
             />
           </Field>
         )}
-        <Field label="Category">
-          <input
-            className="an-term-field"
-            placeholder="e.g. coding, writing"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-          />
-        </Field>
-        <Field label="Hashtags (comma-separated)">
+        <div className="flex gap-2.5">
+          <div className="min-w-0 flex-1">
+            <Field label="Category">
+              <input
+                className="an-term-field"
+                placeholder="coding"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              />
+            </Field>
+          </div>
+          <div style={{ flex: "0 0 116px" }}>
+            <Field label="Price · SOL">
+              <input
+                className="an-term-field"
+                type="number"
+                min="0"
+                step="0.001"
+                placeholder="0.00"
+                value={priceSol}
+                onChange={(e) => setPriceSol(e.target.value)}
+              />
+            </Field>
+          </div>
+        </div>
+        <Field label="Hashtags">
           <input
             className="an-term-field"
             placeholder="ai, productivity"
             value={hashtags}
             onChange={(e) => setHashtags(e.target.value)}
-          />
-        </Field>
-        <Field label="Price (SOL)">
-          <input
-            className="an-term-field"
-            type="number"
-            min="0"
-            step="0.001"
-            placeholder="0"
-            value={priceSol}
-            onChange={(e) => setPriceSol(e.target.value)}
           />
         </Field>
         <Field label="Cover Image (optional)">
@@ -344,10 +356,12 @@ export function PublishForm({ onBack, initialKind = "skill" }: Props) {
             !imageValid ||
             (kind === "skill" ? !text.trim() : chosenReqMints.length === 0 || chosenReqMints.length > MAX_REQUIRED_SKILLS)
           }
-          className={`an-btn ${kind === "workflow" ? "an-btn-orange" : "an-btn-violet"}`}
+          className="an-forge-btn"
+          style={{ background: FORGE_TINT[kind].grad }}
         >
-          {submitting ? "Minting NFT…" : `Mint & Publish${kind === "workflow" ? " Workflow" : ""}`}
+          {submitting ? "Minting NFT…" : `Mint & Publish${kind === "workflow" ? " Workflow" : ""} >`}
         </button>
+        <p className="an-term-mono mt-2.5 text-center text-[10px]" style={{ color: "var(--an-fg-mute)", letterSpacing: "0.08em" }}>Minting signs 3 transactions with your wallet.</p>
       </div>
     </div>
   );
@@ -356,7 +370,7 @@ export function PublishForm({ onBack, initialKind = "skill" }: Props) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <label className="an-term-label block">{label}</label>
+      <label className="an-term-label block">&gt;{label}</label>
       {children}
     </div>
   );

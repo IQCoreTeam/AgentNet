@@ -259,6 +259,30 @@ body {
 .an-rcpt-seg span { flex: 1; height: 6px; background: var(--an-bg-2); }
 .an-rcpt-seg span.on { background: var(--an-green); }
 .an-rcpt-foot { margin: 0; font-size: 11px; line-height: 1.5; color: var(--an-fg-dim); }
+
+/* Skill-forge (publish flow) — violet gradient titlebar + CRT scanline, terminal segment gauge. */
+.an-forge-meta { display: flex; justify-content: space-between; gap: 10px; padding: 9px 14px 4px; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--an-fg-mute); }
+.an-forge-title { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 10px 4px; padding: 10px 12px; background: linear-gradient(180deg, #8b5cf6, #7c3aed); color: #0d0714; font: 700 13px var(--an-font-mono); letter-spacing: 0.06em; text-transform: uppercase; }
+.an-forge-title::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0, rgba(0,0,0,0.16) 1px, transparent 1px, transparent 3px); }
+.an-forge-title .tb-x { background: none; border: 0; padding: 0; color: inherit; font: 800 13px var(--an-font-mono); cursor: pointer; }
+.an-forge-img { position: relative; width: 200px; height: 132px; }
+.an-forge-img > .scan { position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0,0,0,0.22) 0, rgba(0,0,0,0.22) 1px, transparent 1px, transparent 3px); }
+.an-forge-img > .tk { position: absolute; inset: -5px; pointer-events: none; background:
+  linear-gradient(#8b5cf6,#8b5cf6) left top/10px 2px no-repeat,
+  linear-gradient(#8b5cf6,#8b5cf6) left top/2px 10px no-repeat,
+  linear-gradient(#8b5cf6,#8b5cf6) right top/10px 2px no-repeat,
+  linear-gradient(#8b5cf6,#8b5cf6) right top/2px 10px no-repeat,
+  linear-gradient(#8b5cf6,#8b5cf6) left bottom/10px 2px no-repeat,
+  linear-gradient(#8b5cf6,#8b5cf6) left bottom/2px 10px no-repeat,
+  linear-gradient(#8b5cf6,#8b5cf6) right bottom/10px 2px no-repeat,
+  linear-gradient(#8b5cf6,#8b5cf6) right bottom/2px 10px no-repeat; }
+.an-forge-seg { display: flex; gap: 3px; border: 1px solid rgba(139, 92, 246, 0.4); padding: 3px; }
+.an-forge-seg span { flex: 1; height: 10px; background: var(--an-bg-2); }
+.an-forge-seg span.on { background: #8b5cf6; }
+.an-forge-seg span.now { background: #c4b5fd; animation: unlock-blink 1.1s steps(1) infinite; }
+.an-forge-btn { position: relative; overflow: hidden; width: 100%; padding: 14px; border: 0; background: linear-gradient(180deg, #8b5cf6, #7c3aed); color: #0d0714; font: 700 13px var(--an-font-mono); letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; }
+.an-forge-btn::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0, rgba(0,0,0,0.16) 1px, transparent 1px, transparent 3px); }
+.an-forge-btn:disabled { opacity: 0.4; }
 .an-alert-enter { animation: an-alert-in 900ms steps(1) both; }
 .an-alert-leave { animation: an-alert-out 420ms steps(1) both; }
 @keyframes an-alert-in {
