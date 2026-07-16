@@ -488,7 +488,6 @@ export function Sessions({
                   </span>
                   <span className="grow">
                     <span className="ttl">Unlock_AgentNet</span>
-                    <span className="sub">Connect a wallet for identity and writes</span>
                   </span>
                   <span className="chev">&gt;&gt;</span>
                 </button>
