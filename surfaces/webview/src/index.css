@@ -238,6 +238,27 @@ body {
 .an-sfcta-disc .ttl, .an-sfcta-disc .ico { color: #f87171; }
 .an-sfcta-disc .sub { color: var(--an-fg-mute); }
 .an-sfcta-disc .xmk { color: #f87171; font: 700 12px var(--an-font-mono); flex: 0 0 auto; }
+
+/* Skill-purchased receipt popup — green terminal panel with corner-tick brackets. */
+.an-rcpt { position: relative; width: 100%; max-width: 300px; background: var(--an-bg-0); border: 1px solid var(--an-green-line); padding: 14px 14px 18px; box-shadow: 0 24px 70px rgba(0,0,0,0.65); font-family: var(--an-font-mono); color: var(--an-fg); }
+.an-rcpt::before { content: ""; position: absolute; inset: -5px; pointer-events: none; background:
+  linear-gradient(var(--an-green),var(--an-green)) left top/12px 2px no-repeat,
+  linear-gradient(var(--an-green),var(--an-green)) left top/2px 12px no-repeat,
+  linear-gradient(var(--an-green),var(--an-green)) right top/12px 2px no-repeat,
+  linear-gradient(var(--an-green),var(--an-green)) right top/2px 12px no-repeat,
+  linear-gradient(var(--an-green),var(--an-green)) left bottom/12px 2px no-repeat,
+  linear-gradient(var(--an-green),var(--an-green)) left bottom/2px 12px no-repeat,
+  linear-gradient(var(--an-green),var(--an-green)) right bottom/12px 2px no-repeat,
+  linear-gradient(var(--an-green),var(--an-green)) right bottom/2px 12px no-repeat; }
+.an-rcpt-meta { display: flex; justify-content: space-between; gap: 10px; padding: 0 0 10px; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--an-fg-mute); }
+.an-rcpt-banner { background: var(--an-green); color: var(--an-on-green); text-align: center; padding: 8px 4px; font-weight: 800; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
+.an-rcpt-k { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--an-fg-mute); }
+.an-rcpt-name { margin: 0; font: 700 12px var(--an-font-mono); color: var(--an-green); word-break: break-word; }
+.an-rcpt-row { display: flex; justify-content: space-between; gap: 8px; font: 600 10px var(--an-font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.an-rcpt-seg { display: flex; gap: 2px; }
+.an-rcpt-seg span { flex: 1; height: 6px; background: var(--an-bg-2); }
+.an-rcpt-seg span.on { background: var(--an-green); }
+.an-rcpt-foot { margin: 0; font-size: 11px; line-height: 1.5; color: var(--an-fg-dim); }
 .an-alert-enter { animation: an-alert-in 900ms steps(1) both; }
 .an-alert-leave { animation: an-alert-out 420ms steps(1) both; }
 @keyframes an-alert-in {
