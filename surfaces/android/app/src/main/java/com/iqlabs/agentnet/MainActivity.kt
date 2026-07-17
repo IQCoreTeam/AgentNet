@@ -120,7 +120,7 @@ class MainActivity : AppCompatActivity() {
     // ActivityResultSender registers an activity-result callback in its constructor, which
     // must happen before the activity reaches STARTED — so build it as a field, not lazily.
     private val activityResultSender = ActivityResultSender(this)
-    // MUST match the app's on-chain network (core seed.ts `NETWORK`, currently devnet). If
+    // MUST match the app's on-chain network (core seed.ts `NETWORK`, currently mainnet). If
     // the wallet signs on a different cluster than the one the app builds and submits the tx
     // to, the buyer account has no lamports there and every buy fails at fee payment with
     // "Attempt to debit an account but found no record of a prior credit. Logs: []". Keep
@@ -131,7 +131,7 @@ class MainActivity : AppCompatActivity() {
             iconUri = Uri.parse(IDENTITY_ICON),
             identityName = IDENTITY_NAME,
         ),
-    ).apply { blockchain = Solana.Devnet }
+    ).apply { blockchain = Solana.Mainnet }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
