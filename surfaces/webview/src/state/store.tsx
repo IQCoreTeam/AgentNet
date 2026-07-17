@@ -555,8 +555,20 @@ function reducer(state: State, ev: Action): State {
       const rest = state.firingSkills.filter((f) => f.name !== ev.name);
       return { ...state, firingSkills: [...rest, { name: ev.name, kind }].slice(-5) };
     }
-    case "publishResult":
-      return { ...state, publishResult: ev, publishProgress: null };
+    case "publishResult": {
+      // A mid-sequence signing failure can land while the publish form is hidden (the
+      // wallet app is foreground), so the form's inline bubble alone can go unseen:
+      // raise the global alert plaque, naming where the sequence stopped.
+      const p = state.publishProgress;
+      return {
+        ...state,
+        publishResult: ev,
+        publishProgress: null,
+        toast: ev.ok
+          ? state.toast
+          : `Publish failed${p ? ` at ${p.phase} (${p.signed} signed)` : ""}: ${ev.error ?? "unknown"}`,
+      };
+    }
     case "publishProgress":
       return { ...state, publishProgress: { phase: ev.phase, signed: ev.signed, percent: ev.percent, kind: ev.kind }, publishKind: ev.kind };
     case "postNoteResult":
