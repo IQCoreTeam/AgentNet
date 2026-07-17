@@ -55,7 +55,7 @@ export type Network = "devnet" | "mainnet";
  * endpoint, the UI badge) derives from this — flip it here (or AGENTNET_NETWORK) and
  * the whole app retargets. We're on devnet for testing.
  */
-export const NETWORK: Network = "devnet";
+export const NETWORK: Network = "mainnet";
 
 /** The active network (env override wins). */
 export function getNetwork(): Network {
@@ -131,11 +131,11 @@ export function getPublicRpcUrl(): string {
   return ENDPOINTS[getNetwork()].publicRpc;
 }
 
-/** Devnet test ids — the single source. Swap here (or via env) to retarget. */
-export const SKILLS_COLLECTION_MINT = "5TPKvxXTpPVFrj9MUnFUr6XiGFEdtetsTvwRh6bKQ9Qg";
-export const WORKFLOWS_COLLECTION_MINT = "F474VEn2uevpCotRqrPEbZ4XvWyqrqL4iGmNnmp9zvNe";
+/** Mainnet ids — the single source. Swap here (or via env) to retarget. */
+export const SKILLS_COLLECTION_MINT = "BUGHnCh2Pf93tgcxAEfhjd6tUjbY56JrSZdCRXyt7uS5";
+export const WORKFLOWS_COLLECTION_MINT = "6vmWMRWUD34LEjA8eGefegKe5E38WufveMAe2pTm61i8";
 /** agent-workflow-nft gate program — publish_workflow / buy_workflow. */
-export const WORKFLOW_GATE_PROGRAM_ID = "3ptXj4yuaQG51WTA3SZZ37jGvYFgMhgXnSKWJLASJNkt";
+export const WORKFLOW_GATE_PROGRAM_ID = "8YmcHuCx323RtqC8mzTJ5CH4oVT8mPKJ7xarcPKbdgof";
 /**
  * Protocol fee treasury. On every priced buy the gate program sends FEE_BPS of
  * the price here (out of the price — the buyer pays exactly `price`, the creator
