@@ -125,6 +125,29 @@ body {
 /* Access-denied panel: stays dark, then boots in ~0.3s after the tab settles with a
    CRT power-on flicker (premium terminal feel) rather than a plain slide. */
 .unlock-denied-in { animation: unlock-flicker 900ms steps(1) 300ms both; }
+/* v2 lock indicator: the corner LOCKED / [OK] terminal tag on gated content (design ttag/gbadge) */
+.an-gate-tag {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 7px;
+  border: 1px solid var(--an-line);
+  background: var(--an-bg-0);
+  color: var(--an-fg-dim);
+  font-family: var(--an-font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.an-gate-tag-ok {
+  border-color: var(--an-green-line);
+  color: var(--an-green);
+}
 /* CRT flicker for tags/banners flipping state on unlock. */
 .unlock-flicker { animation: unlock-flicker 900ms steps(1) both; }
 /* Shorter flicker for just the pitch imagery — the card text/controls stay calm. */

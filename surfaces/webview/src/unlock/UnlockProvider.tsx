@@ -384,7 +384,8 @@ export function LockedGate({ reason, onUnlocked, children, className = "", badge
     return (
       <div className={`relative unlock-gate-reveal ${className}`} style={{ "--unlock-delay": `${REVEAL_DELAY[reason]}ms` } as CSSProperties}>
         {children}
-        {badge && <span className="pointer-events-none absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-[color:var(--an-green)] text-[color:var(--an-on-green)] unlock-badge-open"><CheckIcon className="h-4 w-4" /></span>}
+        {/* v2 lock indicators: the corner tag flips to [OK] with a CRT flicker on reveal */}
+        {badge && <span className="an-gate-tag an-gate-tag-ok unlock-flicker pointer-events-none"><CheckIcon className="h-[11px] w-[11px]" />[OK]</span>}
       </div>
     );
   }
@@ -397,8 +398,9 @@ export function LockedGate({ reason, onUnlocked, children, className = "", badge
       tabIndex={0}
       aria-label={`Locked: ${REASON_COPY[reason].title}`}
     >
-      <div className="pointer-events-none opacity-55">{children}</div>
-      {badge && <span className="pointer-events-none absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-[color:var(--an-bg-0)] text-[color:var(--an-green)]"><LockIcon className="h-4 w-4" /></span>}
+      {/* v2 lock indicators: content dims to 50% AND desaturates behind a corner LOCKED tag */}
+      <div className="pointer-events-none opacity-50" style={{ filter: "saturate(0.4)" }}>{children}</div>
+      {badge && <span className="an-gate-tag pointer-events-none"><LockIcon className="h-[11px] w-[11px]" />LOCKED</span>}
     </div>
   );
 }

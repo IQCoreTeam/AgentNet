@@ -314,7 +314,7 @@ function TabShell() {
             <div className="an-page">
               <ChatScreen onOpenDrawer={() => changeDrawer(true)} />
             </div>
-            <MarketPage marketTab="skills" active={idx === 1} />
+            <MarketPage marketTab="skills" active={idx === 1} onGoMarket={() => setIdx(3)} />
             <MarketPage marketTab="profile" active={idx === 2} />
             <MarketPage marketTab="market" active={idx === 3} />
           </div>
@@ -337,11 +337,11 @@ function TabShell() {
 // One pager cell for a market tab. Only the active cell mounts the (store-backed)
 // MarketScreen; inactive cells show a light placeholder so the shared store isn't driven
 // by three live copies at once. Bottom inset clears the floating tab bar.
-function MarketPage({ marketTab, active }: { marketTab: "skills" | "profile" | "market"; active: boolean }) {
+function MarketPage({ marketTab, active, onGoMarket }: { marketTab: "skills" | "profile" | "market"; active: boolean; onGoMarket?: () => void }) {
   return (
     <div className="an-page">
       {active ? (
-        <MarketScreen tab={marketTab} />
+        <MarketScreen tab={marketTab} onGoMarket={onGoMarket} />
       ) : (
         <div className="flex h-full items-center justify-center bg-zinc-950">
           <span className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-700 border-t-transparent" />

@@ -24,7 +24,7 @@ export type ShellTab = "market" | "skills" | "profile";
 //              the product store, so the agents directory moved OUT of Market and lives here.
 // Owned is no longer an internal tab (it is the Skills tab) and there is no back-to-chat
 // button (the bottom tab bar owns navigation).
-export function MarketScreen({ tab, onBack }: { tab: ShellTab; onBack?: () => void }) {
+export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBack?: () => void; onGoMarket?: () => void }) {
   const { state, send, setMarketTab, marketSearching, clearMarketDetail, clearAgentProfile } = useStore();
   const { unlocked, requestUnlock } = useUnlock();
   // Search text is LOCAL: keying it into the global store re-rendered the whole app on every
@@ -340,8 +340,29 @@ export function MarketScreen({ tab, onBack }: { tab: ShellTab; onBack?: () => vo
           ) : ownedLoading && state.marketOwned.length === 0 ? (
             <MarketListSkeleton />
           ) : state.marketOwned.length === 0 ? (
-            <div className="py-8 text-center text-sm text-zinc-600">
-              No owned skills yet. Browse the Market to get one.
+            /* unlock-flow-v2 "Empty state · No owned skills": dashed slot grid + basket glyph */
+            <div className="flex min-h-[420px] items-center justify-center">
+              <div className="flex max-w-[260px] flex-col items-center text-center">
+                <div className="relative grid grid-cols-3 gap-1.5" aria-hidden="true">
+                  {Array.from({ length: 6 }, (_, i) => (
+                    <span key={i} className="h-16 w-16" style={{ border: "1px dashed rgba(255,255,255,0.16)", background: "rgba(255,255,255,0.02)" }} />
+                  ))}
+                  <div className="absolute inset-0 flex items-center justify-center" style={{ color: "var(--an-fg-mute)" }}>
+                    <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square"><path d="M5 9h14l-1.5 11h-11z" /><path d="M9 9V7a3 3 0 0 1 6 0v2" /></svg>
+                  </div>
+                </div>
+                <p className="an-term-mono mt-4 text-[12px] font-bold uppercase tracking-[0.14em]" style={{ color: "var(--an-fg-dim)" }}>Inventory_Empty</p>
+                <p className="an-term-mono mt-2 text-[11px] leading-relaxed" style={{ color: "var(--an-fg-mute)" }}>
+                  No owned skills yet. Slots are waiting. Grab your first one from the market.
+                </p>
+                <button
+                  onClick={() => { haptics.tap(); setMarketTab("skill"); onGoMarket?.(); }}
+                  className="an-term-mono mt-4 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] active:opacity-80"
+                  style={{ border: "1px solid var(--an-line)", color: "var(--an-fg-dim)", background: "transparent" }}
+                >
+                  &gt; Browse_Market
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-3 gap-3.5 pt-3">
