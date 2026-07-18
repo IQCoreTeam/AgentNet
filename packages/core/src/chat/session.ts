@@ -96,6 +96,8 @@ export interface ChatEnv {
   registerWorkRepo?(repo: string, skillMints: string[]): Promise<{ ok: boolean; count?: number; repo?: string; error?: string }>;
   // make-skill: publish a new skill from the UI. priceSol is the human SOL string; the
   // host converts to lamports and calls core publishSkill. Returns the new mint on success.
+  // onProgress (optional to honor) streams the multi-signature mint gauge — the dispatcher
+  // forwards it as `publishProgress` market events.
   publishSkill?(input: {
     name: string;
     description: string;
@@ -104,7 +106,7 @@ export interface ChatEnv {
     hashtags?: string[];
     priceSol: string;
     image?: string;
-  }): Promise<{ ok: boolean; mint?: string; error?: string }>;
+  }, onProgress?: (p: { phase: "store" | "mint" | "list"; signed: number; total?: number; percent?: number; kind: "skill" | "workflow" }) => void): Promise<{ ok: boolean; mint?: string; error?: string }>;
   // install every owned skill NFT into the runtime skills dir (session start + after a
   // buy), so the agent always has its owned skills present + discoverable. Returns slugs.
   loadOwnedSkills?(): Promise<string[]>;
@@ -871,7 +873,12 @@ export function createChatSession(
       case "publishSkill": {
         const req = m as Extract<MarketRequest, { type: "publishSkill" }>;
         if (!env.publishSkill) break; // another handler owns this on some surfaces — don't emit a phantom failure
-        const res = await env.publishSkill(req);
+        // Stream the multi-signature mint progress to the UI. Local keypair wallets sign
+        // silently but still tick the counter (core trackSignatures), so the forge gauge
+        // runs without any prompt — hosts whose publishSkill ignores the callback just
+        // show no gauge, same as before.
+        const res = await env.publishSkill(req, (p) =>
+          sendMarket({ type: "publishProgress", phase: p.phase, signed: p.signed, total: p.total, percent: p.percent, kind: p.kind }));
         sendMarket({ type: "publishResult", ok: res.ok, mint: res.mint, error: res.error });
         if (res.ok) {
           // a fresh skill is owned by its creator — refresh owned + the market list

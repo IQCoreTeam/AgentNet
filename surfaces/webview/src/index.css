@@ -603,7 +603,7 @@ body {
   border-radius: inherit;
   pointer-events: none;
   z-index: 3;
-  opacity: 0.52;
+  opacity: 0.62; /* nudged up to match the design's noise.png grain, which reads stronger */
   mix-blend-mode: overlay;
   background-size: 64px 64px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='1.7' intercept='-0.35'/%3E%3CfeFuncG type='linear' slope='1.7' intercept='-0.35'/%3E%3CfeFuncB type='linear' slope='1.7' intercept='-0.35'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
@@ -647,17 +647,28 @@ body {
   background-size: 13px 13px;
 }
 .an-sd.is-firing .an-sd-label { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip) 70%, transparent); }
-/* category mark — top-left, dropped one line below the grade box. 3a removed the barcode and
-   gives its slot to the star, so the "[ CAT / SKILL ]" mark sits under it at top: 26px. */
+/* 2a layout (unlock-flow-v2 "SD-card skill chip · 2a"): the barcode alone owns the top-left
+   slot; the "[ CAT / SKILL ]" mark and the star grade share the RIGHT axis below the notch. */
+.an-sd-bar {
+  position: absolute;
+  top: 6px;
+  left: 7px;
+  z-index: 3;
+  width: 26px;
+  height: 9px;
+  opacity: 0.7;
+  background: repeating-linear-gradient(90deg, #d4d5ea 0 1px, transparent 1px 2px, #d4d5ea 2px 4px, transparent 4px 5px);
+}
 .an-sd-mark {
   position: absolute;
-  top: 26px;
-  left: 7px;
+  top: 21px;
+  right: 7px;
   z-index: 3;
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.6px;
   white-space: nowrap;
+  text-align: right;
 }
 .an-sd-mark .br { color: #9a9ca6; } /* the [ ] brackets */
 .an-sd-mark .cat { color: #c7c8d0; } /* light grey — the cartridge is dark now */
@@ -699,28 +710,47 @@ body {
 }
 .an-sd-big { font-size: 14px; font-weight: 700; color: #2a0f06; line-height: 1; }
 .an-sd-meta { font-size: 6px; line-height: 1.3; color: #3a160a; font-weight: 700; letter-spacing: 0.2px; }
-/* 3a "gold subtle box": the star grade sits in the barcode's old slot (top-left) as a thin
-   translucent-gold box — gold text, 1px gold border, NO fill and NO glow so reputation reads
-   quiet and apart from the coral commerce chip. Summed GitHub stars of repos using this skill
-   (issue #89). Hidden at 0 stars so plain skills stay clean. */
+/* 2a star grade: right column under the mark, gold text framed by two corner BRACKETS
+   (top-left + bottom-right ticks, not a full box) so reputation reads quiet and apart from
+   the coral commerce chip. Summed GitHub stars of repos using this skill (issue #89).
+   Hidden at 0 stars so plain skills stay clean. */
 .an-sd-grade {
   position: absolute;
-  top: 5px;
-  left: 5px;
+  top: 33px;
+  right: 2px;
   z-index: 6;
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 2px 5px;
-  border: 1px solid rgba(255, 223, 126, 0.35);
-  border-radius: 1px;
+  padding: 3px 5px;
   color: #ffdf7e;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.5px;
   line-height: 1.2;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
-.an-sd-grade .st { font-size: 11px; line-height: 1; } /* the ★ glyph, same gold as the count */
+.an-sd-grade::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  border-top: 1.5px solid #ffdf7e;
+  border-left: 1.5px solid #ffdf7e;
+}
+.an-sd-grade::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 6px;
+  height: 6px;
+  border-bottom: 1.5px solid #ffdf7e;
+  border-right: 1.5px solid #ffdf7e;
+}
+.an-sd-grade .st { font-size: 12px; line-height: 1; } /* the ★ glyph, same gold as the count */
 
 /* Skeleton shimmer. Animate an OPAQUE fill (not opacity) so overlapping placeholders fully
    occlude instead of stacking into darker patches. All skeleton blocks use .an-skel. */

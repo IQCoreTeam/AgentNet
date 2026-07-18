@@ -33,7 +33,9 @@ export function SkillSdCard({ card, owned, disposed, firing, dim, onOpen }: Prop
       <span className="an-sd-tab" />
       <div className="an-sd-label">
         <svg className="an-sd-art" viewBox="0 0 120 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true" dangerouslySetInnerHTML={{ __html: sigil }} />
-        <div className="an-sd-mark"><span className="br">[</span><span className="cat">{cat}</span> <span className="ty">{ty}</span><span className="br">]</span></div>
+        {/* 2a layout: barcode alone top-left; mark + star share the right axis */}
+        <span className="an-sd-bar" aria-hidden="true" />
+        <div className="an-sd-mark"><span className="cat">{cat}</span> <span className="ty">{ty}</span></div>
         {/* the hero: the name big over the sigil, shadowed for legibility */}
         <div className="an-sd-name">{card.name}</div>
         {/* the data chip: copies big, price + state stacked small */}
@@ -41,8 +43,8 @@ export function SkillSdCard({ card, owned, disposed, firing, dim, onOpen }: Prop
           <span className="an-sd-big">{card.supply ?? "—"}</span>
           <span className="an-sd-meta">{priceSol ? `${priceSol}◎` : "FREE"}<br />{state}</span>
         </div>
-        {/* 3a gold star grade: summed GitHub stars of repos using this skill (issue #89), a thin
-            translucent-gold box in the barcode's old top-left slot. Hidden at 0 so plain skills stay clean. */}
+        {/* 2a gold star grade: summed GitHub stars of repos using this skill (issue #89), corner
+            brackets on the right axis under the mark. Hidden at 0 so plain skills stay clean. */}
         {card.stars ? (
           <div className="an-sd-grade"><span className="st">★</span>{card.stars}</div>
         ) : null}

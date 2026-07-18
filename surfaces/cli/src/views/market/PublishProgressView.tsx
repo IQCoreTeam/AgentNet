@@ -27,6 +27,9 @@ export function PublishProgressView({ progress }: { progress: PublishProgress | 
   // heuristic remains as the fallback for an older core without the estimate.
   const sub = progress?.phase === "store" && progress.percent != null ? progress.percent / 100 : idx > 0 ? 1 : 0;
   const overall = progress ? Math.min(100, Math.round((total ? signed / total : (idx + sub) / PHASES.length) * 100)) : 0;
+  // Segmented forge gauge, mirroring the webview's 14-cell bar (unlock-flow design).
+  const CELLS = 14;
+  const filled = Math.round((overall / 100) * CELLS);
   return (
     <Box flexDirection="column" marginTop={1}>
       {PHASES.map((p, i) => (
@@ -34,7 +37,12 @@ export function PublishProgressView({ progress }: { progress: PublishProgress | 
           {i < idx ? "✓" : i === idx ? "▸" : "○"} {p.label}
         </Text>
       ))}
-      <Text dimColor>{overall}% · {signed > 0 ? `${signed}${total ? `/${total}` : ""} signature${signed === 1 && !total ? "" : "s"} approved` : "waiting for the first signature…"}</Text>
+      <Text>
+        <Text color={colors.iqCyan}>{"▰".repeat(filled)}</Text>
+        <Text color={colors.dim}>{"▱".repeat(CELLS - filled)}</Text>
+        <Text dimColor> {overall}%</Text>
+      </Text>
+      <Text dimColor>{signed > 0 ? `${signed}${total ? `/${total}` : ""} signatures approved` : "waiting for the first signature…"}</Text>
     </Box>
   );
 }

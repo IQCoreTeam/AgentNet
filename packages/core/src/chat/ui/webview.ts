@@ -731,7 +731,7 @@ export function chatHtml(): string {
   .an-sd::before { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
                    z-index: 2; background: radial-gradient(135% 90% at 26% -6%, rgba(255,255,255,0.06), rgba(255,255,255,0) 52%); }
   .an-sd::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
-                  z-index: 3; opacity: 0.22; mix-blend-mode: overlay; background-size: 150px 150px;
+                  z-index: 3; opacity: 0.62; mix-blend-mode: overlay; background-size: 64px 64px;
                   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='1.7' intercept='-0.35'/%3E%3CfeFuncG type='linear' slope='1.7' intercept='-0.35'/%3E%3CfeFuncB type='linear' slope='1.7' intercept='-0.35'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E"); }
   .an-sd.is-workflow { background: linear-gradient(166deg, #d7fffaeb 0%, #c7fdeceb 56%, #8dc3baeb 100%); }
   .an-sd:active { transform: scale(0.97); }
@@ -748,9 +748,11 @@ export function chatHtml(): string {
                                            linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
                          background-size: 13px 13px; }
   .an-sd.is-firing .an-sd-label { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip) 70%, transparent); }
-  .an-sd-mark { position: absolute; top: 26px; left: 7px; z-index: 3; font-size: 8px; font-weight: 700;
-                letter-spacing: 0.6px; white-space: nowrap; }
-  .an-sd-mark .br { color: #9a9ca6; }
+  /* 2a layout (unlock-flow-v2): barcode alone top-left; mark + star share the right axis */
+  .an-sd-bar { position: absolute; top: 6px; left: 7px; z-index: 3; width: 26px; height: 9px; opacity: 0.7;
+               background: repeating-linear-gradient(90deg, #d4d5ea 0 1px, transparent 1px 2px, #d4d5ea 2px 4px, transparent 4px 5px); }
+  .an-sd-mark { position: absolute; top: 21px; right: 7px; z-index: 3; font-size: 8px; font-weight: 700;
+                letter-spacing: 0.6px; white-space: nowrap; text-align: right; }
   .an-sd-mark .cat { color: #c7c8d0; }
   .an-sd-mark .ty { color: #9a9ca6; }
   .an-sd-name { position: absolute; left: 7px; right: 8px; bottom: 38px; z-index: 4;
@@ -763,14 +765,17 @@ export function chatHtml(): string {
                 box-shadow: inset 0 -1px 0 rgba(0,0,0,0.16); }
   .an-sd-big { font-size: 14px; font-weight: 700; color: #2a0f06; line-height: 1; }
   .an-sd-meta { font-size: 6px; line-height: 1.3; color: #3a160a; font-weight: 700; letter-spacing: 0.2px; }
-  /* 3a "gold subtle box": the star grade sits in the barcode's old top-left slot as a thin
-     translucent-gold box — gold text, 1px gold border, NO fill and NO glow so reputation reads
-     quiet and apart from the coral commerce chip. Hidden at 0 stars. */
-  .an-sd-grade { position: absolute; top: 5px; left: 5px; z-index: 6; display: inline-flex;
-                 align-items: center; gap: 3px; padding: 2px 5px; border-radius: 1px;
-                 border: 1px solid rgba(255,223,126,0.35); color: #ffdf7e;
-                 font-size: 10px; font-weight: 700; letter-spacing: 0.5px; line-height: 1.2; }
-  .an-sd-grade .st { font-size: 11px; line-height: 1; }
+  /* 2a star grade: right column under the mark, gold text framed by two corner brackets
+     (top-left + bottom-right ticks, not a full box). Hidden at 0 stars. */
+  .an-sd-grade { position: absolute; top: 33px; right: 2px; z-index: 6; display: inline-flex;
+                 align-items: center; gap: 3px; padding: 3px 5px; color: #ffdf7e;
+                 font-size: 11px; font-weight: 700; letter-spacing: 0.5px; line-height: 1.2;
+                 text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+  .an-sd-grade::before { content: ''; position: absolute; top: 0; left: 0; width: 6px; height: 6px;
+                         border-top: 1.5px solid #ffdf7e; border-left: 1.5px solid #ffdf7e; }
+  .an-sd-grade::after { content: ''; position: absolute; bottom: 0; right: 0; width: 6px; height: 6px;
+                        border-bottom: 1.5px solid #ffdf7e; border-right: 1.5px solid #ffdf7e; }
+  .an-sd-grade .st { font-size: 12px; line-height: 1; }
 
   /* ── Skeleton loaders (shimmer) ─────────────────────────────────────────
      Shown the instant a grid or profile starts fetching, so the first paint
@@ -4437,7 +4442,8 @@ export function chatHtml(): string {
       '<span class="an-sd-tab"></span>' +
       '<div class="an-sd-label">' +
         '<svg class="an-sd-art" viewBox="0 0 120 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true">' + skillSigilSvg(nm) + '</svg>' +
-        '<div class="an-sd-mark"><span class="br">[</span><span class="cat"></span> <span class="ty"></span><span class="br">]</span></div>' +
+        '<span class="an-sd-bar" aria-hidden="true"></span>' +
+        '<div class="an-sd-mark"><span class="cat"></span> <span class="ty"></span></div>' +
         '<div class="an-sd-name"></div>' +
         '<div class="an-sd-chip"><span class="an-sd-big"></span><span class="an-sd-meta"></span></div>' +
       '</div>';
@@ -4449,8 +4455,8 @@ export function chatHtml(): string {
     meta.textContent = priceSol ? (priceSol + '\\u25ce') : 'FREE';
     meta.appendChild(document.createElement('br'));
     meta.appendChild(document.createTextNode(state));
-    // 3a gold star grade: summed GitHub stars of repos using this skill, a thin translucent-gold
-    // box in the barcode's old top-left slot. Only when there are stars (0-star skills stay clean).
+    // 2a gold star grade: summed GitHub stars of repos using this skill, corner brackets on the
+    // right axis under the mark. Only when there are stars (0-star skills stay clean).
     const stars = Number(card.stars) || 0;
     if (stars > 0) {
       const grade = document.createElement('div');
@@ -5460,6 +5466,13 @@ export function chatHtml(): string {
       }
     }
     else if (m.type === 'balance') { solLamports = m.lamports; renderBalance(); }
+    // make-skill: live mint gauge — each wallet signature ticks the submit button label.
+    // A local keypair wallet signs silently (no prompts), so this text is the only
+    // feedback during the multi-transaction mint; web wallets see it between prompts.
+    else if (m.type === 'publishProgress') {
+      const phaseLabel = m.phase === 'store' ? 'Storing on-chain' : m.phase === 'mint' ? 'Minting the NFT' : 'Listing for sale';
+      pubSubmit.textContent = 'Publishing… ' + (m.total ? m.signed + '/' + m.total + ' signed · ' : '') + phaseLabel;
+    }
     // make-skill: publish finished — reset the button, then on success celebrate + go to market
     else if (m.type === 'publishResult') {
       pubSubmit.disabled = false; pubSubmit.textContent = pubKind === 'workflow' ? 'Publish workflow' : 'Publish skill';

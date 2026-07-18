@@ -384,7 +384,7 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
     buyAllSkills: async (w) => (await marketPromise).buyAllSkills(w),
     postAgentNote: async (w, t, l, ti, im, p) => (await marketPromise).postAgentNote(w, t, l, ti, im, p),
     solBalance: async () => (await marketPromise).solBalance(),
-    publishSkill: async (input) => (await marketPromise).publishSkill(input),
+    publishSkill: async (input, onProgress) => (await marketPromise).publishSkill(input, onProgress),
     loadOwnedSkills: async () => (await marketPromise).loadOwnedSkills(),
     // RPC config (issue #23): capture the Helius key via a native secret input — it
     // never passes through the webview as plain text — then save it like an OAuth token.
