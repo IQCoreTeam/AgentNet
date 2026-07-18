@@ -21,6 +21,7 @@ import {
   readTableRows,
   readCodeIn as sdkReadCodeIn,
 } from "@iqlabs-official/solana-sdk/reader";
+import { setRpcUrl } from "@iqlabs-official/solana-sdk";
 import {
   toSeedBytes,
   type SignerInput,
@@ -79,6 +80,12 @@ async function accountExists(pda: PublicKey): Promise<boolean> {
 
 export function init(rpcConnection: Connection): void {
   connection = rpcConnection;
+  // The SDK's READER functions (readCodeIn / readTableRows) take no Connection — they
+  // resolve a module-global RPC (setRpcUrl → env vars → the public mainnet default).
+  // Without this call that global never gets set, so the reader fallbacks ignored the
+  // user's Helius key AND the network switch (a devnet run would silently read mainnet).
+  // Point the global at the exact endpoint of the injected connection.
+  setRpcUrl(rpcConnection.rpcEndpoint);
 }
 
 export async function ensureDbRoot(signer: DomainSignerInput): Promise<string | null> {
