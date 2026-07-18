@@ -250,7 +250,9 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
 
       {owned && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-8 an-tabbar-inset" style={{ background: "linear-gradient(to top, color-mix(in srgb, var(--an-bg-0) 60%, transparent), transparent)" }}>
-          <button onClick={() => { haptics.tap(); send({ type: "disposeSkill", skillId: card.id }); }} className="an-btn an-btn-danger">
+          {/* pointer-events-auto: the fade wrapper is pointer-events-none (so it can't block
+              the list scroll), which otherwise swallows the tap too — see the Buy gate below. */}
+          <button onClick={() => { haptics.tap(); send({ type: "disposeSkill", skillId: card.id }); }} className="an-btn an-btn-danger pointer-events-auto">
             Remove Skill
           </button>
         </div>
@@ -258,7 +260,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
 
       {!owned && disposed && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-8 an-tabbar-inset" style={{ background: "linear-gradient(to top, color-mix(in srgb, var(--an-bg-0) 60%, transparent), transparent)" }}>
-          <button onClick={() => { haptics.tap(); send({ type: "reEquipSkill", skillId: card.id }); }} className="an-btn an-btn-green">
+          <button onClick={() => { haptics.tap(); send({ type: "reEquipSkill", skillId: card.id }); }} className="an-btn an-btn-green pointer-events-auto">
             Re-equip Skill
           </button>
         </div>

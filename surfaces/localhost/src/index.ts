@@ -844,6 +844,16 @@ function attachMarketHandlers(c: Client) {
         } catch { c.send({ type: "balance", lamports: null }); }
         return;
       }
+      // Un-equip / re-equip are LOCAL-ONLY (the soulbound NFT stays owned) — marketplaceEnv
+      // reports its own failures as { ok:false, error }, so no try/catch here.
+      case "disposeSkill": {
+        c.send({ type: "disposeResult", skillId: m.skillId, ...(await mkt.disposeSkill(m.skillId)) });
+        return;
+      }
+      case "reEquipSkill": {
+        c.send({ type: "reEquipResult", skillId: m.skillId, ...(await mkt.reEquipSkill(m.skillId)) });
+        return;
+      }
       case "airdrop": {
         // Manual "Get devnet SOL" from the fund prompt (mobile/web wallet has no keypair here,
         // but a faucet grant needs no signature). mkt.airdrop already reports its own failures.
