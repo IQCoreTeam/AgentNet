@@ -14,7 +14,7 @@ import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
 
 import { codeIn, signerAddress, ensureDbRoot } from "../core/chain.js";
 import { getWorkflowsCollectionMint } from "../core/seed.js";
-import { trackSignatures, type PublishProgress } from "./skill.js";
+import { trackSignatures, estimatePublishSigns, type PublishProgress } from "./skill.js";
 import { createSkillMint } from "./token2022.js";
 import { checkWorkflowFormat, FormatError } from "./checkFormat.js";
 import {
@@ -49,20 +49,11 @@ export async function publishWorkflow(
     throw new FormatError(format.errors);
   }
 
-  // Same signature-counting gauge as publishSkill, tagged "workflow" so the UI tints it
-  // amber instead of violet. `phase` is updated before each on-chain stage.
-  let phase: PublishProgress["phase"] = "store";
-  let signed = 0;
-  const tx = onProgress
-    ? trackSignatures(signer, () => { signed += 1; onProgress({ phase, signed, kind: "workflow" }); })
-    : signer;
-
-  await ensureDbRoot(tx);
-
   // code-in the standard NFT JSON (skill-nft-json.md §2, §4b): same shape as a
   // skill — category once, each hashtag a repeated "skill" trait — plus one
   // "requiredSkill" trait per prerequisite (valued by the skill's mint id, §4b).
   // The body (recipe) goes in skillText. Traits live here, not on the mint.
+  // Built before the first tx so the signature total can be predicted.
   const attributes: { trait_type: string; value: string }[] = [];
   if (input.category) attributes.push({ trait_type: "category", value: input.category });
   for (const tag of input.hashtags ?? []) attributes.push({ trait_type: "skill", value: tag });
@@ -73,13 +64,28 @@ export async function publishWorkflow(
     attributes,
     skillText: input.text,
   });
+
+  // Same signature-counting gauge as publishSkill, tagged "workflow" so the UI tints it
+  // amber instead of violet. `phase` is updated before each on-chain stage.
+  let phase: PublishProgress["phase"] = "store";
+  let signed = 0;
+  const total = onProgress
+    ? await estimatePublishSigns(conn, signer, workflowJson, `${input.name}.json`)
+    : undefined;
+  const tx = onProgress
+    ? trackSignatures(signer, () => { signed += 1; onProgress({ phase, signed, total, kind: "workflow" }); })
+    : signer;
+  if (onProgress) onProgress({ phase, signed, total, kind: "workflow" }); // 0/N before the first prompt
+
+  await ensureDbRoot(tx);
+
   phase = "store";
   const workflowTxid = await codeIn(
     tx,
     workflowJson,
     `${input.name}.json`,
     "application/json",
-    onProgress ? (percent) => onProgress({ phase: "store", signed, percent, kind: "workflow" }) : undefined,
+    onProgress ? (percent) => onProgress({ phase: "store", signed, total, percent, kind: "workflow" }) : undefined,
   );
 
   // Pre-generate the mint so we know its address → derive the gate PDA that will
@@ -95,7 +101,7 @@ export async function publishWorkflow(
   const collectionMint = new PublicKey(collectionStr);
 
   phase = "mint";
-  if (onProgress) onProgress({ phase, signed, kind: "workflow" });
+  if (onProgress) onProgress({ phase, signed, total, kind: "workflow" });
   await createSkillMint(conn, tx, {
     name: input.name,
     symbol: input.name.substring(0, 8).toUpperCase(),
@@ -119,7 +125,7 @@ export async function publishWorkflow(
     group: collectionMint, // workflows collection — publish_item enrolls the mint
   });
   phase = "list";
-  if (onProgress) onProgress({ phase, signed, kind: "workflow" });
+  if (onProgress) onProgress({ phase, signed, total, kind: "workflow" });
   await sendTx(conn, tx, [ataIx, ix]);
 
   return workflowMint.toBase58();

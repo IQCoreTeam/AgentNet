@@ -165,6 +165,6 @@ export type MarketEvent =
   // make-skill: result of a UI publish. mint = the new skill's mint address on success.
   | { type: "publishResult"; ok: boolean; mint?: string; error?: string }
   // live publish progress (per wallet signature) while a chat/agent publish runs.
-  | { type: "publishProgress"; phase: "store" | "mint" | "list"; signed: number; percent?: number; kind: "skill" | "workflow" };
+  | { type: "publishProgress"; phase: "store" | "mint" | "list"; signed: number; total?: number; percent?: number; kind: "skill" | "workflow" };
 
 export type MarketMessage = MarketRequest | MarketEvent;

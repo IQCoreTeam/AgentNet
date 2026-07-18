@@ -71,7 +71,7 @@ export interface State {
   rpcStatus: RpcStatus | null;
   publishResult: { ok: boolean; mint?: string; error?: string } | null;
   // Live publish progress while a multi-signature publish runs (web wallet); null when idle.
-  publishProgress: { phase: "store" | "mint" | "list"; signed: number; percent?: number; kind: "skill" | "workflow" } | null;
+  publishProgress: { phase: "store" | "mint" | "list"; signed: number; total?: number; percent?: number; kind: "skill" | "workflow" } | null;
   // Kind of the in-flight/just-finished publish — outlives publishProgress so the success
   // celebration can tint to match (skill = violet, workflow = amber). Cleared with the result.
   publishKind: "skill" | "workflow" | null;
@@ -570,7 +570,7 @@ function reducer(state: State, ev: Action): State {
       };
     }
     case "publishProgress":
-      return { ...state, publishProgress: { phase: ev.phase, signed: ev.signed, percent: ev.percent, kind: ev.kind }, publishKind: ev.kind };
+      return { ...state, publishProgress: { phase: ev.phase, signed: ev.signed, total: ev.total, percent: ev.percent, kind: ev.kind }, publishKind: ev.kind };
     case "postNoteResult":
       return { ...state, toast: ev.ok ? "Comment posted." : `Comment failed: ${ev.error ?? "unknown"}` };
     case "workRepoRegistered":

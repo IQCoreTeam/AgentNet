@@ -17,7 +17,12 @@ import {
   TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
 import type { SignerInput, WalletSigner } from "@iqlabs-official/solana-sdk/utils";
-import { codeIn, signerAddress, ensureDbRoot } from "../core/chain.js";
+import {
+  CHUNK_SIZE,
+  DIRECT_METADATA_MAX_BYTES,
+} from "@iqlabs-official/solana-sdk/constants";
+import { getUserInventoryPda, PROGRAM_ID as CODE_IN_PROGRAM_ID } from "@iqlabs-official/solana-sdk/contract";
+import { codeIn, signerAddress, ensureDbRoot, dbRootExists } from "../core/chain.js";
 import { getSkillsCollectionMint } from "../core/seed.js";
 import { createSkillMint } from "./token2022.js";
 import { checkFormat, FormatError } from "./checkFormat.js";
@@ -29,22 +34,105 @@ export const DEFAULT_SKILL_PRICE_LAMPORTS = 100_000_000n;
 
 // Publish is several on-chain txs (code-in the body → mint → list), each a separate
 // wallet signature — and the body itself may chunk into many code-in signatures. With a
-// web wallet that's a prompt per signature, so we surface progress. The exact total isn't
-// known up front (chunk count depends on body size), so we report named phases + a live
-// signature count; `percent` carries the code-in sub-progress within the store phase.
+// web wallet that's a prompt per signature, so we surface progress. The total IS known
+// up front (estimatePublishSigns predicts the chunk count + one-time inits from the same
+// rules the SDK applies), so the UI can render a true signed/total gauge; `percent`
+// carries the code-in sub-progress within the store phase.
 export interface PublishProgress {
   phase: "store" | "mint" | "list";
   signed: number; // cumulative wallet signatures so far
+  total?: number; // predicted total signatures for this publish (estimatePublishSigns)
   percent?: number; // 0..100 within the store (code-in) phase
   kind: "skill" | "workflow"; // colors the gauge/celebration (skill = violet, workflow = amber)
 }
 
+// How many chunks the SDK's toChunks() will cut `data` into — same walk, count only.
+function chunkCount(data: string): number {
+  if (Buffer.byteLength(data, "utf8") <= CHUNK_SIZE) return 1;
+  let count = 0;
+  let chunkBytes = 0;
+  for (const char of data) {
+    const charBytes = Buffer.byteLength(char, "utf8");
+    if (chunkBytes + charBytes > CHUNK_SIZE) {
+      count += 1;
+      chunkBytes = charBytes;
+    } else {
+      chunkBytes += charBytes;
+    }
+  }
+  return chunkBytes > 0 ? count + 1 : count;
+}
+
+/**
+ * Predict how many wallet signatures a publish will take, BEFORE the first prompt:
+ *
+ *   [db-root init]      +1 only on the very first agentnet write ever (rare)
+ *   [code-in user init] +1 only on this wallet's first code-in
+ *   store               1 tx when the JSON inlines into the metadata (small skill),
+ *                       otherwise one tx per chunk + the db code-in finalizer
+ *   mint                1 (createSkillMint)
+ *   list                1 (publish_item + creator ATA)
+ *
+ * Chunking/inline rules mirror the SDK's prepareCodeIn exactly (CHUNK_SIZE /
+ * DIRECT_METADATA_MAX_BYTES, metadata key order included) so the estimate matches the
+ * real signature count. On an RPC read failure the one-time inits are assumed done —
+ * better to slightly under-promise than to block the publish on a status read.
+ */
+export async function estimatePublishSigns(
+  conn: Connection,
+  signer: SignerInput,
+  json: string,
+  filename: string,
+): Promise<number> {
+  const chunks = chunkCount(json);
+  const inlineMetadata = JSON.stringify({
+    filetype: "application/json",
+    method: 0,
+    filename,
+    total_chunks: chunks,
+    data: json,
+  });
+  const useInline = chunks === 1 && Buffer.byteLength(inlineMetadata, "utf8") <= DIRECT_METADATA_MAX_BYTES;
+  const storeTxs = useInline ? 1 : chunks + 1;
+
+  const user = new PublicKey(await signerAddress(signer));
+  const [rootReady, userReady] = await Promise.all([
+    dbRootExists().catch(() => true),
+    conn
+      .getAccountInfo(getUserInventoryPda(user, CODE_IN_PROGRAM_ID))
+      .then((info) => info !== null)
+      .catch(() => true),
+  ]);
+  return (rootReady ? 0 : 1) + (userReady ? 0 : 1) + storeTxs + 2;
+}
+
 // Count every wallet signature by wrapping signTransaction. Keypair signers sign locally
-// with no prompt, so they pass through untouched (no progress is meaningful there). Shared
-// with publishWorkflow so both publish flows report signatures identically.
+// with no prompt, but their signatures still count toward the publish gauge — wrap them
+// in a WalletSigner shape so every tx passes through signTransaction and ticks the
+// counter (the local-wallet publish otherwise showed a frozen gauge). Shared with
+// publishWorkflow so both publish flows report signatures identically.
 export function trackSignatures(signer: SignerInput, onSign: () => void): SignerInput {
+  if ("secretKey" in (signer as object)) {
+    const kp = signer as Keypair;
+    const signOne = (tx: Parameters<WalletSigner["signTransaction"]>[0]) => {
+      if ("partialSign" in tx) tx.partialSign(kp);
+      else tx.sign([kp]);
+      onSign();
+    };
+    return {
+      publicKey: kp.publicKey,
+      async signTransaction(tx: Parameters<WalletSigner["signTransaction"]>[0]) {
+        signOne(tx);
+        return tx;
+      },
+      async signAllTransactions(txs: Parameters<WalletSigner["signTransaction"]>[0][]) {
+        txs.forEach(signOne);
+        return txs;
+      },
+    } as SignerInput;
+  }
   const ws = signer as Partial<WalletSigner>;
-  if (typeof ws.signTransaction !== "function" || "secretKey" in (signer as object)) {
+  if (typeof ws.signTransaction !== "function") {
     return signer;
   }
   return {
@@ -101,20 +189,11 @@ export async function publishSkill(
     throw new FormatError(format.errors);
   }
 
-  // Wrap the signer so each wallet signature advances the publish gauge. `phase` is
-  // updated before each on-chain stage; the wrapper reads it at sign time.
-  let phase: PublishProgress["phase"] = "store";
-  let signed = 0;
-  const tx = onProgress
-    ? trackSignatures(signer, () => { signed += 1; onProgress({ phase, signed, kind: "skill" }); })
-    : signer;
-
-  await ensureDbRoot(tx);
-
   // code-in the standard NFT JSON (skill-nft-json.md §2): name/description +
   // standard `attributes` (category once, each hashtag as a repeated "skill"
   // trait, §4) + the SKILL.md body in `skillText`. One inscription holds
-  // everything search/detail needs — traits do NOT go on the mint.
+  // everything search/detail needs — traits do NOT go on the mint. Built before
+  // the first tx so the signature total can be predicted from the JSON size.
   const attributes: { trait_type: string; value: string }[] = [];
   if (input.category) attributes.push({ trait_type: "category", value: input.category });
   for (const tag of input.hashtags ?? []) attributes.push({ trait_type: "skill", value: tag });
@@ -125,13 +204,29 @@ export async function publishSkill(
     attributes,
     skillText: input.text,
   });
+
+  // Wrap the signer so each wallet signature advances the publish gauge. `phase` is
+  // updated before each on-chain stage; the wrapper reads it at sign time. The total is
+  // predicted up front so the gauge is signed/total, not an open-ended count.
+  let phase: PublishProgress["phase"] = "store";
+  let signed = 0;
+  const total = onProgress
+    ? await estimatePublishSigns(conn, signer, skillJson, `${input.name}.json`)
+    : undefined;
+  const tx = onProgress
+    ? trackSignatures(signer, () => { signed += 1; onProgress({ phase, signed, total, kind: "skill" }); })
+    : signer;
+  if (onProgress) onProgress({ phase, signed, total, kind: "skill" }); // 0/N before the first prompt
+
+  await ensureDbRoot(tx);
+
   phase = "store";
   const skillTxid = await codeIn(
     tx,
     skillJson,
     `${input.name}.json`,
     "application/json",
-    onProgress ? (percent) => onProgress({ phase: "store", signed, percent, kind: "skill" }) : undefined,
+    onProgress ? (percent) => onProgress({ phase: "store", signed, total, percent, kind: "skill" }) : undefined,
   );
 
   // Pre-generate the mint → derive the gate PDA that will own the mint authority.
@@ -146,7 +241,7 @@ export async function publishSkill(
   const collectionMint = new PublicKey(collectionStr);
 
   phase = "mint";
-  if (onProgress) onProgress({ phase, signed, kind: "skill" });
+  if (onProgress) onProgress({ phase, signed, total, kind: "skill" });
   await createSkillMint(conn, tx, {
     name: input.name,
     symbol: input.name.substring(0, 8).toUpperCase(),
@@ -170,7 +265,7 @@ export async function publishSkill(
     group: collectionMint, // skills collection — publish_item enrolls the mint
   });
   phase = "list";
-  if (onProgress) onProgress({ phase, signed, kind: "skill" });
+  if (onProgress) onProgress({ phase, signed, total, kind: "skill" });
   await sendTx(conn, tx, [ataIx, ix]);
 
   return skillMint.toBase58();

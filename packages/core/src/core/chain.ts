@@ -342,6 +342,12 @@ export async function tableExists(hint: string): Promise<boolean> {
   return accountExists(tablePda(hint));
 }
 
+/** Whether the agentnet DbRoot is already on-chain — publishers use this to predict
+ *  whether ensureDbRoot will cost a signature (see estimatePublishSigns). */
+export async function dbRootExists(): Promise<boolean> {
+  return accountExists(DB_ROOT);
+}
+
 export function getTablePdaRef(hint: string): PublicKey {
   return tablePda(hint);
 }

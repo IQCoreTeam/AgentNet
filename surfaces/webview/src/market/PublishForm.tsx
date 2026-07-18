@@ -9,7 +9,7 @@ const PUBLISH_THEME = {
   workflow: { noun: "workflow", head: "text-amber-200", border: "border-amber-700/40", wash: "from-amber-900/25", icon: "text-amber-300", on: "bg-amber-400", onText: "text-amber-300", bar: "from-amber-500 to-amber-300", label: "text-amber-200" },
 } as const;
 
-function PublishProgressView({ progress }: { progress: { phase: "store" | "mint" | "list"; signed: number; percent?: number; kind: "skill" | "workflow" } | null }) {
+function PublishProgressView({ progress }: { progress: { phase: "store" | "mint" | "list"; signed: number; total?: number; percent?: number; kind: "skill" | "workflow" } | null }) {
   const t = PUBLISH_THEME[progress?.kind ?? "skill"];
   const phases = [
     { key: "store", label: `Storing ${t.noun} on-chain` },
@@ -17,13 +17,26 @@ function PublishProgressView({ progress }: { progress: { phase: "store" | "mint"
     { key: "list", label: "Listing for sale" },
   ] as const;
   const idx = progress ? Math.max(0, phases.findIndex((p) => p.key === progress.phase)) : 0;
-  // Completed phases + the code-in sub-percent of the store phase fill the gauge.
-  const sub = progress?.phase === "store" && progress.percent != null ? progress.percent / 100 : idx > 0 ? 1 : 0;
-  const overall = Math.min(100, Math.round(((idx + sub) / phases.length) * 100));
   const signed = progress?.signed ?? 0;
+  const total = progress?.total;
+  // The gauge tracks real signatures when the server predicts the total (each signature is
+  // one discrete on-chain step, so signed/total IS the progress). Servers that predate the
+  // estimate omit `total`; fall back to the old phase+percent heuristic there.
+  const sub = progress?.phase === "store" && progress.percent != null ? progress.percent / 100 : idx > 0 ? 1 : 0;
+  const frac = total ? Math.min(1, signed / total) : (idx + sub) / phases.length;
+  const overall = Math.min(100, Math.round(frac * 100));
   const kind = progress?.kind ?? "skill";
   const fg = FORGE_TINT[kind];
   const filled = Math.round((overall / 100) * 14);
+  // Store is every signature except the final mint + list (1 each) — fill its segment by
+  // its own signature count so the bar visibly follows a long chunked code-in.
+  const storeTotal = total ? Math.max(1, total - 2) : null;
+  const segFill = (i: number): number => {
+    if (i < idx) return 1;
+    if (i > idx) return 0;
+    if (i === 0 && storeTotal) return Math.min(1, signed / storeTotal);
+    return 0.4; // current mint/list phase: one pending signature, show it in motion
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -40,7 +53,10 @@ function PublishProgressView({ progress }: { progress: { phase: "store" | "mint"
           <div className="flex items-center justify-between gap-1.5">
             {phases.map((p, i) => (
               <div key={p.key} className="flex-1 flex flex-col items-center gap-1.5">
-                <div className={`h-1.5 w-full ${i === idx ? "publish-forge-pulse" : ""}`} style={{ background: i < idx ? fg.mid : i === idx ? fg.accent : "var(--an-bg-2)" }} />
+                {/* each segment carries its own fill so the store bar tracks chunk signs */}
+                <div className={`h-1.5 w-full ${i === idx ? "publish-forge-pulse" : ""}`} style={{ background: "var(--an-bg-2)" }}>
+                  <div className="h-full" style={{ width: `${segFill(i) * 100}%`, background: i < idx ? fg.mid : fg.accent, transition: "width 0.3s ease" }} />
+                </div>
                 <span className="text-[10px]" style={{ color: i === idx ? fg.accent : "var(--an-fg-mute)" }}>{i + 1}/{phases.length}</span>
               </div>
             ))}
@@ -52,7 +68,11 @@ function PublishProgressView({ progress }: { progress: { phase: "store" | "mint"
           </div>
           <p className="an-term-mono" style={{ margin: 0, fontWeight: 700, fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase", color: fg.accent }}>&gt;{phases[idx].label.replace(/ /g, "_")}<span className="unlock-cursor">_</span></p>
           <p style={{ margin: 0, fontSize: 11, letterSpacing: "0.08em", color: "var(--an-fg-mute)" }}>
-            {signed > 0 ? `${signed}/3 SIGNATURES_APPROVED` : "AWAITING_FIRST_SIGNATURE"}
+            {signed > 0
+              ? `${signed}${total ? `/${total}` : ""} SIGNATURES_APPROVED`
+              : total
+                ? `0/${total} AWAITING_FIRST_SIGNATURE`
+                : "AWAITING_FIRST_SIGNATURE"}
           </p>
         </div>
         <p className="text-[11px] max-w-xs leading-relaxed" style={{ color: "#52525b" }}>
@@ -363,7 +383,7 @@ export function PublishForm({ onBack, initialKind = "skill" }: Props) {
         >
           {submitting ? "Minting NFT…" : `Mint & Publish${kind === "workflow" ? " Workflow" : ""} >`}
         </button>
-        <p className="an-term-mono mt-2.5 text-center text-[10px]" style={{ color: "var(--an-fg-mute)", letterSpacing: "0.08em" }}>Minting signs 3 transactions with your wallet.</p>
+        <p className="an-term-mono mt-2.5 text-center text-[10px]" style={{ color: "var(--an-fg-mute)", letterSpacing: "0.08em" }}>Minting signs several wallet transactions. Longer skill text needs more.</p>
       </div>
     </div>
   );

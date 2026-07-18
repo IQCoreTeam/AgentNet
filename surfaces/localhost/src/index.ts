@@ -869,7 +869,7 @@ function attachMarketHandlers(c: Client) {
         try {
           const r = await mkt.publishSkill(
             { name: m.name, description: m.description, text: m.text, category: m.category, hashtags: m.hashtags, priceSol: m.priceSol, image: m.image },
-            (p) => c.send({ type: "publishProgress", phase: p.phase, signed: p.signed, percent: p.percent, kind: p.kind }),
+            (p) => c.send({ type: "publishProgress", phase: p.phase, signed: p.signed, total: p.total, percent: p.percent, kind: p.kind }),
           );
           c.send({ type: "publishResult", ...r });
         } catch (e) {
