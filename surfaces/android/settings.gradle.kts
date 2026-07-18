@@ -22,3 +22,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "AgentNet"
 include(":app")
+// Play Asset Delivery pack holding the heavy Ubuntu rootfs tar (kept out of the base
+// module, which has a 500MB Play compressed-download cap). See rootfs/build.gradle.kts.
+include(":rootfs")

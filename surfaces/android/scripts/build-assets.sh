@@ -220,8 +220,13 @@ tar -cpf "$ROOTFS_TAR" \
   --exclude="./tmp" --exclude="./var/tmp" --exclude="./var/cache/apt" \
   --exclude="$REPO_REL" \
   -C / .
-mkdir -p "$ASSETS"
-mv "$ROOTFS_TAR" "$ASSETS/rootfs-$ABI.tar"
+# The rootfs goes into the Play Asset Delivery pack module (:rootfs), NOT base assets —
+# base/assets/rootfs-*.tar (~500MB compressed) exceeded Play's 500MB per-module download cap.
+# install-time delivery still fuses it back into sideload / bundletool-universal APKs, so the
+# non-Google direct-install path keeps shipping the rootfs. (agentnet-server.tar stays in base.)
+PACK_ASSETS="$ANDROID_DIR/rootfs/src/main/assets"
+mkdir -p "$PACK_ASSETS"
+mv "$ROOTFS_TAR" "$PACK_ASSETS/rootfs-$ABI.tar"
 
 # 3) The server bundle = the localhost node server AND the React webview build it
 # serves. Both are arch-independent JS, so a host build is fine to reuse (CI builds them

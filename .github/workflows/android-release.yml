@@ -110,10 +110,12 @@ jobs:
       - name: Stage assets into the source tree
         run: |
           set -e
-          mkdir -p surfaces/android/app/src/main/assets
+          mkdir -p surfaces/android/app/src/main/assets surfaces/android/rootfs/src/main/assets
           rm -rf surfaces/android/app/src/main/jniLibs
           cp -R ci-assets/jniLibs surfaces/android/app/src/main/jniLibs
-          cp ci-assets/assets/rootfs-*.tar surfaces/android/app/src/main/assets/
+          # rootfs -> Play Asset Delivery pack module (:rootfs), NOT base assets — this is what
+          # keeps the release AAB's base module under Play's 500MB per-module download cap.
+          cp ci-assets/assets/rootfs-*.tar surfaces/android/rootfs/src/main/assets/
           STAGE="$(mktemp -d)/server-bundle"
           mkdir -p "$STAGE/webview"
           cp -R surfaces/localhost/dist/. "$STAGE/"

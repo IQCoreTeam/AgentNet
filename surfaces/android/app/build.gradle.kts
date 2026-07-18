@@ -21,6 +21,12 @@ android {
     namespace = "com.iqlabs.agentnet"
     compileSdk = 35
 
+    // The heavy Ubuntu rootfs tar ships in a Play Asset Delivery pack (install-time), NOT in
+    // base/assets — base/assets/rootfs-*.tar exceeded Play's 500MB per-module download cap.
+    // install-time delivery keeps it one seamless install and reachable via the normal
+    // AssetManager, so Installer.kt's ctx.assets.open("rootfs-<abi>.tar") is unchanged.
+    assetPacks += listOf(":rootfs")
+
     defaultConfig {
         applicationId = "com.iqlabs.agentnet"
         minSdk = 24

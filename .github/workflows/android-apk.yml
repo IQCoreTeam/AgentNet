@@ -116,10 +116,13 @@ jobs:
           set -e
           # assets/ is gitignored (its tars never get committed), so it doesn't exist on a
           # fresh checkout — create it before copying.
-          mkdir -p surfaces/android/app/src/main/assets
+          mkdir -p surfaces/android/app/src/main/assets surfaces/android/rootfs/src/main/assets
           rm -rf surfaces/android/app/src/main/jniLibs
           cp -R ci-assets/jniLibs surfaces/android/app/src/main/jniLibs
-          cp ci-assets/assets/rootfs-*.tar surfaces/android/app/src/main/assets/
+          # rootfs -> Play Asset Delivery pack module (:rootfs), NOT base assets (500MB Play cap).
+          # For this debug-APK build the install-time pack is fused back into the APK, so the
+          # sideload APK still ships the rootfs.
+          cp ci-assets/assets/rootfs-*.tar surfaces/android/rootfs/src/main/assets/
           # Repack the server bundle FRESH from this run's dist (don't reuse the artifact's
           # stale agentnet-server.tar) so the APK carries the current UI.
           STAGE="$(mktemp -d)/server-bundle"

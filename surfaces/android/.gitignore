@@ -18,4 +18,7 @@ app/src/main/jniLibs/
 app/src/main/assets/proot-*
 app/src/main/assets/rootfs-*
 app/src/main/assets/agentnet-server.tar
+# rootfs now ships in the Play Asset Delivery pack (:rootfs) — same heavy tar, still generated
+# (build-assets.sh) / CI-staged, never committed.
+rootfs/src/main/assets/rootfs-*
 .assets-build/

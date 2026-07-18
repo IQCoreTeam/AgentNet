@@ -137,6 +137,24 @@ class Installer(private val ctx: Context) {
         File(ctx.filesDir, SERVER_MARKER).writeText(crc)
     }
 
+    // Open the Ubuntu rootfs tar for extraction. It ships in a Play Asset Delivery pack
+    // ("rootfs", install-time): on a Play install it is served through the ordinary
+    // AssetManager, and on a sideload / bundletool-universal APK the install-time pack is fused
+    // back into the APK — so the SAME ctx.assets.open finds it either way (Google Play AND
+    // non-Google direct install, incl. China). Some OEM builds only expose install-time pack
+    // assets through a fresh package context, so we retry that way before giving up.
+    //
+    // This is also the single seam for a future thin/download build: a channel that ships WITHOUT
+    // a bundled rootfs (low-bandwidth / non-Google CDN) would, on the getOrElse branch, fall back
+    // to streaming rootfs-<abi>.tar from a GitHub release / CDN instead of a local asset. Nothing
+    // else in the extraction path would change.
+    private fun openRootfsTar(abi: String): java.io.InputStream {
+        val name = "rootfs-$abi.tar"
+        return runCatching { ctx.assets.open(name) }.getOrElse {
+            ctx.createPackageContext(ctx.packageName, 0).assets.open(name)
+        }
+    }
+
     // Extract everything. onProgress reports a short status for the setup UI.
     fun install(onProgress: (String) -> Unit) {
         val p = Paths.layout(ctx)
@@ -178,7 +196,7 @@ class Installer(private val ctx: Context) {
         val preservedHome = preserveGuestHome(p)
         File(p.rootfs).deleteRecursively()
         Paths.dir(p.rootfs)
-        TarExtractor.extract(ctx.assets.open("rootfs-$abi.tar"), File(p.rootfs))
+        TarExtractor.extract(openRootfsTar(abi), File(p.rootfs))
         restoreGuestHome(p, preservedHome)
         configureGuest(p) // DNS/hosts/tmp — Android doesn't provide these to the guest
 
