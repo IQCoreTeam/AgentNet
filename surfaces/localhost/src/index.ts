@@ -23,7 +23,7 @@
 // and every later client (e.g. the chat page after onboarding) shares that runtime.
 
 import { createServer, type ServerResponse } from "node:http";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join, normalize, extname } from "node:path";
 import { homedir } from "node:os";
@@ -132,6 +132,40 @@ const GUEST_WALLET_PATH = join(
   process.env.AGENTNET_HOME || join(homedir(), ".agentnet"),
   "guest-wallet.json",
 );
+
+// The user's last wallet choice, persisted so a server restart can't silently change it:
+// "local" re-adopts the device keypair at boot; "external" leaves reconnection to the
+// wallet-app flow (per-action authorization — MWA Keystore restore or a fresh connect
+// prompt). Cleared on explicit disconnect. Only an explicit user connect switches modes;
+// the UI's silent restore is ignored while the persisted mode says local.
+type WalletMode = "local" | "external";
+const WALLET_MODE_PATH = join(
+  process.env.AGENTNET_HOME || join(homedir(), ".agentnet"),
+  "wallet-mode.json",
+);
+
+async function loadWalletMode(): Promise<WalletMode | null> {
+  try {
+    const { mode } = JSON.parse(await readFile(WALLET_MODE_PATH, "utf8"));
+    return mode === "local" || mode === "external" ? mode : null;
+  } catch {
+    return null; // missing/corrupt file = no standing choice
+  }
+}
+
+async function saveWalletMode(mode: WalletMode): Promise<void> {
+  // Best-effort: a failed write must never block the connect itself.
+  try {
+    await mkdir(dirname(WALLET_MODE_PATH), { recursive: true });
+    await writeFile(WALLET_MODE_PATH, JSON.stringify({ mode }));
+  } catch (e) {
+    console.error("[wallet] could not persist wallet mode:", e);
+  }
+}
+
+function clearWalletMode(): Promise<void> {
+  return rm(WALLET_MODE_PATH, { force: true });
+}
 
 async function deviceGuestWallet(): Promise<Wallet> {
   if (guestWallet) return guestWallet;
@@ -361,8 +395,9 @@ async function adoptWallet(connected: Wallet, address: string): Promise<void> {
 // Adapter: an external wallet (Phantom/Solflare via MWA, or an injected web provider). The
 // signature over the fixed session message is what proves ownership; on-chain signing then
 // routes back out to that UI.
-function connectWallet(address: string, signature: Uint8Array): Promise<void> {
-  return adoptWallet(webWallet(address, signature, signTransactionViaUi), address);
+async function connectWallet(address: string, signature: Uint8Array): Promise<void> {
+  await adoptWallet(webWallet(address, signature, signTransactionViaUi), address);
+  await saveWalletMode("external");
 }
 
 // Adapter: a device-local Solana keypair at the CLI default path — no external app, no
@@ -372,6 +407,7 @@ function connectWallet(address: string, signature: Uint8Array): Promise<void> {
 async function connectLocalWallet(): Promise<string> {
   const loaded = await localWallet(); // ~/.config/solana/id.json, generated if missing
   await adoptWallet(loaded.wallet, loaded.address);
+  await saveWalletMode("local");
   return loaded.address;
 }
 
@@ -939,6 +975,7 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
       }
     },
     disconnectWallet: async () => {
+      await clearWalletMode(); // explicit disconnect = the standing choice is gone
       await disconnectCloud();
       walletAddress = null;
       runtime = null;
@@ -1052,6 +1089,10 @@ function attachWalletConnection(c: Client) {
       return;
     }
     if (m?.type !== "connectWallet" || typeof m.address !== "string" || !Array.isArray(m.signature)) return;
+    // A SILENT restore must never override the user's standing choice: drop it when a
+    // wallet is already connected (the boot local reconnect won) or the persisted mode
+    // says local. Only an explicit user connect (no `restored` flag) may switch modes.
+    if (m.restored && (walletAddress || (await loadWalletMode()) === "local")) return;
     try {
       await connectWallet(m.address, Uint8Array.from(m.signature));
     } catch (e) {
@@ -1203,3 +1244,19 @@ const http = createServer(async (req, res) => {
 http.listen(PORT, () => {
   console.log(`AgentNet localhost → http://localhost:${PORT}/  (guest chat ready)`);
 });
+
+// Boot reconnect: if the user's last choice was the device-local wallet, re-adopt it now.
+// The connected wallet lives in memory only, so without this every restart dropped the
+// local wallet and the next unlock could silently land on a different wallet. External
+// wallets are NOT reconnected here — they authorize per action, so reconnection belongs
+// to the UI (MWA Keystore restore / a fresh connect prompt). Runs concurrently with
+// listen: a UI that attaches mid-reconnect sees guest until its next `ready`.
+void (async () => {
+  if ((await loadWalletMode()) !== "local") return;
+  try {
+    await connectLocalWallet();
+    console.log(`AgentNet wallet → local wallet reconnected (${walletAddress})`);
+  } catch (e) {
+    console.error("[wallet] local wallet reconnect failed:", e);
+  }
+})();

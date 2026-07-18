@@ -110,7 +110,9 @@ export type ClientMessage =
   | { type: "setSkillShopping"; on: boolean }
   | { type: "approvalDecision"; id: string; outcome: ApprovalOutcome; reason?: string; updatedInput?: Record<string, unknown>; questionResponses?: ApprovalQuestionResponse[] }
   // setup/auth:
-  | { type: "connectWallet"; address: string; signature: number[] }
+  // `restored` marks the silent Keystore-restore path; the server ignores it when it
+  // would override the persisted wallet mode (see localhost attachWalletConnection).
+  | { type: "connectWallet"; address: string; signature: number[]; restored?: boolean }
   // Make a device-local keypair the connected wallet (no external app, no signing prompt).
   | { type: "makeLocalWallet" }
   | { type: "startClaudeLogin" }

@@ -747,7 +747,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     void (async () => {
       const creds = await restoreAndroidWallet().catch(() => null);
       if (cancelled) return;
-      if (creds) void transportRef.current?.post({ type: "connectWallet", address: creds.address, signature: creds.signature });
+      // `restored: true` marks this as the silent path — the server drops it whenever it
+      // would override a standing choice (a boot-reconnected local wallet, or wallet-mode
+      // "local"), so a background restore can never flip the user's wallet mode.
+      if (creds) void transportRef.current?.post({ type: "connectWallet", address: creds.address, signature: creds.signature, restored: true });
     })();
     return () => { cancelled = true; };
   }, [state.phase, state.walletAddress]);
