@@ -26,7 +26,9 @@ export function SkillCardTile({ card, owned, disposed, firing, layout = "row", o
   const Glyph = isWorkflow ? CollectionIcon : BookIcon; // skill = book, workflow = grid
   const glyphStyle = { color: owned ? ownColor : "var(--an-fg-mute)" } as const;
   const wfTag = isWorkflow ? `WF${reqCount > 0 ? `·${reqCount}` : ""}` : null;
-  const base = `rounded-xl bg-an-bg-1 text-left transition active:scale-[0.98] ${disposed ? "opacity-55 grayscale" : ""}`;
+  // Darken (brightness down), not fade: an opacity drop on the dark page reads as
+  // "washed out" rather than visibly off — same treatment as .an-sd.is-disposed.
+  const base = `rounded-xl bg-an-bg-1 text-left transition active:scale-[0.98] ${disposed ? "grayscale brightness-[.55]" : ""}`;
 
   // ── Tile (2-col) — NAME-focused card: a small type glyph (colored when owned) beside the
   //    title, then the description + meta fill the height so it reads as a card, not a row. ──

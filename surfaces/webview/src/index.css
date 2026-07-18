@@ -612,7 +612,9 @@ body {
   background: linear-gradient(166deg, #d7fffaeb 0%, #c7fdeceb 56%, #8dc3baeb 100%);
 }
 .an-sd:active { transform: scale(0.97); }
-.an-sd.is-disposed { opacity: 0.5; filter: grayscale(1); }
+/* un-equipped: actually DARKEN (brightness down), not fade — on the dark page background
+   a plain opacity drop reads as "washed out", which users don't notice as "off". */
+.an-sd.is-disposed { filter: grayscale(1) brightness(0.55); }
 .an-sd.is-owned-dim { opacity: 0.5; filter: grayscale(0.55); } /* market: already-owned reads muted */
 .an-sd-tab {
   position: absolute;
