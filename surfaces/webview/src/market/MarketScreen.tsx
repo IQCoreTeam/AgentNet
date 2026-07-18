@@ -10,6 +10,8 @@ import { HeliusSetupPanel } from "../settings/HeliusKeyForm";
 import { SkillDetailSkeleton, MarketListSkeleton, AgentProfileSkeleton } from "./Skeletons";
 import { LockedGate, useUnlock } from "../unlock/UnlockProvider";
 import { LockIcon } from "../icons";
+import { AlertCard } from "../Alert";
+import { haptics } from "../haptics";
 
 type MarketView = "browse" | "publish" | "helius";
 export type ShellTab = "market" | "skills" | "profile";
@@ -40,6 +42,21 @@ export function MarketScreen({ tab, onBack }: { tab: ShellTab; onBack?: () => vo
   // Skills tab has no store-level loading flag, so show a skeleton briefly on entry (until
   // owned skills arrive or a short timeout) instead of flashing "No owned skills yet".
   const [ownedLoading, setOwnedLoading] = useState(tab === "skills");
+  // Helius retry prompt: when a market search FAILS (rate-limit / timeout / RPC error) — NOT
+  // when it merely returns empty — the keyless indexer path couldn't serve the catalog, which
+  // a Helius key can fix. Surface an actionable alert that buzzes on appear and shortcuts to the
+  // SAME Helius setup the tutorial uses. Fires on each fresh failure (the null->error edge), so
+  // a re-search that fails again re-buzzes but a plain re-render doesn't.
+  const [showHeliusPrompt, setShowHeliusPrompt] = useState(false);
+  const prevSearchErr = useRef<string | null>(null);
+  useEffect(() => {
+    const err = state.marketSearchError;
+    if (err && prevSearchErr.current == null) {
+      setShowHeliusPrompt(true);
+      haptics.error(); // failure buzz as the popup appears
+    }
+    prevSearchErr.current = err;
+  }, [state.marketSearchError]);
 
   // Each tab drives the machine to its root + refreshes data. Clearing detail/profile
   // first stops one tab's open detail or self-profile leaking into another tab.
@@ -375,6 +392,34 @@ export function MarketScreen({ tab, onBack }: { tab: ShellTab; onBack?: () => vo
           </>
         )}
       </div>
+
+      {/* Helius retry prompt — alert-style plaque that buzzes in on a failed market load and
+          shortcuts to the same key setup the tutorial uses. Only on the market tab's browse
+          view (that's the only place a search runs / errors). */}
+      {isMarket && view === "browse" && showHeliusPrompt && (
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center px-6">
+          <div className="pointer-events-auto w-full max-w-[300px]">
+            <AlertCard
+              kind="ERROR"
+              className="an-alert-enter"
+              message={
+                state.rpcStatus?.hasKey
+                  ? "Market load failed — your Helius key may be rate-limited or down. Update it and retry?"
+                  : "Market load failed (rate-limited or timed out). Add your own Helius key for reliable results, then retry?"
+              }
+              onClose={() => setShowHeliusPrompt(false)}
+              actions={[
+                {
+                  label: state.rpcStatus?.hasKey ? "UPDATE KEY" : "ADD HELIUS KEY",
+                  onClick: () => { setShowHeliusPrompt(false); setView("helius"); },
+                  variant: "solid",
+                },
+                { label: "DISMISS", onClick: () => setShowHeliusPrompt(false), variant: "ghost" },
+              ]}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
