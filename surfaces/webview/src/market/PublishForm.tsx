@@ -88,7 +88,9 @@ export function PublishForm({ onBack, initialKind = "skill" }: Props) {
   const [text, setText] = useState("");
   const [category, setCategory] = useState("");
   const [hashtags, setHashtags] = useState("");
-  const [priceSol, setPriceSol] = useState("0");
+  // Default 0.1 SOL, in lockstep with the CLI form and the make-skill MCP tool — type 0
+  // explicitly to publish free. A 0 default made every mobile publish silently free.
+  const [priceSol, setPriceSol] = useState("0.1");
   const [imageUrl, setImageUrl] = useState(""); // http/on-chain link only — no file upload
   const [submitting, setSubmitting] = useState(false);
   // Required-skills picker (workflow mode only): mint -> selected.
@@ -141,7 +143,7 @@ export function PublishForm({ onBack, initialKind = "skill" }: Props) {
       text: body,
       category: category.trim() || undefined,
       hashtags: hashtags.split(",").map((h) => h.trim()).filter(Boolean),
-      priceSol: priceSol || "0",
+      priceSol: priceSol.trim() || "0.1", // cleared field = the default, same as the CLI
       image: imageUrl.trim() || undefined,
       ...(kind === "workflow" ? { kind: "workflow" as const, requiredSkills: chosenReqMints } : {}),
     });
@@ -295,7 +297,7 @@ export function PublishForm({ onBack, initialKind = "skill" }: Props) {
                 type="number"
                 min="0"
                 step="0.001"
-                placeholder="0.00"
+                placeholder="0.1"
                 value={priceSol}
                 onChange={(e) => setPriceSol(e.target.value)}
               />
