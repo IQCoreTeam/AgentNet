@@ -7,7 +7,7 @@ import { createAgentSdkMcpServer } from "./sdk.js";
 import { codexMcpFlags } from "../runtime/spawn.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { readSkillManifest } from "./registry.js";
+import { readDisposed } from "./equipState.js";
 import { searchSkills } from "../search/search.js";
 import { buySkill, publishSkill } from "../nft/skill.js";
 import { postNote, postAgentNote } from "../notes/notes.js";
@@ -280,8 +280,8 @@ describe("skill-market", () => {
       expect(result.content[0].text).toContain("Un-equipped skill");
       // un-equip is local-only: it must NOT buy/sell/transfer on-chain
       expect(buySkill).not.toHaveBeenCalled();
-      const m = await readSkillManifest();
-      expect(m.disposed).toContain("skillX");
+      // recorded in the signer wallet's synced equip state (wallet-scoped, not the manifest)
+      expect([...(await readDisposed("mockSignerAddress"))]).toContain("skillX");
     } finally {
       process.env.AGENTNET_HOME = prev;
       await rm(home, { recursive: true, force: true });

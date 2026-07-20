@@ -16,6 +16,7 @@ import { manualStorage, migrateLocalSessions } from "./storage/manual.js";
 import { mirrorStorage, type CloudStatus } from "./storage/mirror.js";
 import { migrateLegacyDriveSessions } from "./storage/gdrive.js";
 import { googleLogin, isSignedIn, googleAccount, hasGoogleTokenProvider } from "./storage/oauth.js";
+import { syncEquipState } from "../skill-market/equipState.js";
 import type { StorageAdapter, Wallet } from "../runtime/contract.js";
 
 export interface Session {
@@ -106,6 +107,10 @@ export async function login(
   if (cfg?.kind === "gdrive") {
     void migrateLegacyDriveSessions(addr).catch(() => {}); // move old flat-folder files
   }
+  // The wallet's skill equip state syncs on the same connect event as sessions:
+  // pull + last-write-wins merge + register the pusher for later un-equips.
+  // Fire-and-forget — equip state must never delay or fail a login.
+  void syncEquipState(wallet, cloud).catch(() => {});
   return { wallet, storage: mirrorStorage(local, cloud, onCloudStatus) };
 }
 

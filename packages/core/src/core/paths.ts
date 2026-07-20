@@ -170,6 +170,20 @@ export function skillsManifestFile(): string {
   return join(rootDir(), "skills.json");
 }
 
+// ── wallet-scoped equip state (skill-market/equipState.ts): which owned skills a wallet
+// has un-equipped. Unlike skills.json (a DEVICE fact about folders), this is the WALLET's
+// preference, so it is keyed per wallet here and mirrored into the wallet's cloud storage
+// so the choice follows the wallet across devices like sessions do.
+
+export function skillStateDir(): string {
+  return join(rootDir(), "skill-state");
+}
+
+/** This wallet's equip-state file (local tier of the wallet-synced state). */
+export function skillStateFile(wallet: string): string {
+  return join(skillStateDir(), `${wallet}.json`);
+}
+
 /** Ensure a directory exists (mkdir -p) with 0o700 so only the owner can enter. */
 export async function ensureDir(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true, mode: 0o700 });

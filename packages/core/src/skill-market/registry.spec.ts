@@ -10,8 +10,6 @@ import {
   readSkillManifest,
   recordNftSkill,
   forgetNftSkill,
-  disposeNftSkill,
-  undisposeNftSkill,
 } from "./registry.js";
 import { PASSIVE_SKILL_SLUG } from "./passive.js";
 import { skillsManifestFile } from "../core/paths.js";
@@ -42,18 +40,6 @@ describe("skill-origin registry", () => {
   it("a missing manifest reads as empty (best-effort, no throw)", async () => {
     const m = await readSkillManifest();
     expect(m).toEqual({ version: 1, nft: {}, disposed: [] });
-  });
-
-  it("disposes a mint (sticky) then un-disposes it (re-equip), deduped", async () => {
-    await disposeNftSkill("MINT_D1");
-    await disposeNftSkill("MINT_D1"); // idempotent — no dupes
-    await disposeNftSkill("MINT_D2");
-    let m = await readSkillManifest();
-    expect(m.disposed).toEqual(["MINT_D1", "MINT_D2"]);
-
-    await undisposeNftSkill("MINT_D1");
-    m = await readSkillManifest();
-    expect(m.disposed).toEqual(["MINT_D2"]);
   });
 
   it("records an NFT skill with its mint, then forgets it (round-trip)", async () => {

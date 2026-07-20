@@ -8,7 +8,7 @@
 // marketplace UI (marketplaceEnv.buySkill) and the agent's buy_skill MCP tool, so a
 // purchase equips identically however it was triggered.
 
-import { access, rename, rm, writeFile } from "node:fs/promises";
+import { access, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Connection } from "@solana/web3.js";
 import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
@@ -24,18 +24,18 @@ import {
   extraSkillDirs,
 } from "../../core/paths.js";
 import { readSkillMintMetadata } from "../../nft/token2022.js";
-import { ownedSkillMints } from "../../core/skillSource.js";
+import { ownedSkillMints, cachedCatalog } from "../../core/skillSource.js";
 import { buySkill } from "../../nft/skill.js";
 import { signerAddress } from "../../core/chain.js";
-import { invalidateHeldMints } from "../../notes/holdings.js";
+import { invalidateHeldMints, heldSkillMints } from "../../notes/holdings.js";
 import {
   recordNftSkill,
   forgetNftSkill,
-  disposeNftSkill,
-  undisposeNftSkill,
   readSkillManifest,
+  BUNDLED_SKILLS,
 } from "../registry.js";
-import { toSkillMd, skillSlug } from "./convert.js";
+import { readDisposed, disposeMint, undisposeMint } from "../equipState.js";
+import { toSkillMd, skillSlug, slugifyName, skillBodyKey } from "./convert.js";
 
 export type Cli = "claude" | "codex";
 
@@ -170,16 +170,76 @@ export class SkillSync {
    * the slugs installed. No RPC / no owned mints → installs nothing.
    */
   async injectOwned(cli: Cli, owner: string): Promise<string[]> {
-    const mints = await ownedSkillMints(owner);
+    // ONE holdings read powers install AND reconcile: heldSkillMints is the cached
+    // retry+last-good wrapper around the same getTokenAccountsByOwner call
+    // ownedSkillMints would make itself, so passing the set through adds zero RPC.
+    // null = the read failed every attempt with no last-good fallback — install still
+    // proceeds (ownedSkillMints does its own read, preserving old behavior) but
+    // reconcile is SKIPPED: never prune on a read we can't trust.
+    const held = await heldSkillMints(owner).catch(() => null);
+    const mints = await ownedSkillMints(owner, undefined, held ?? undefined);
     // Skip skills the wallet deliberately disposed: they're still owned on-chain (soulbound,
-    // no refund) so they'd reappear here every session — the disposed list is what makes a
-    // dispose stick. Re-equipping clears the mint from this set.
-    const disposed = new Set((await readSkillManifest().catch(() => ({ disposed: [] as string[] }))).disposed);
+    // no refund) so they'd reappear here every session — the wallet-synced disposed list is
+    // what makes a dispose stick across devices. Re-equipping clears the mint from it.
+    const disposed = await readDisposed(owner).catch(() => new Set<string>());
     const keep = mints.filter((m) => !disposed.has(m));
     const slugs = await Promise.all(
       keep.map((m) => this.installBought(cli, m).catch(() => null)),
     );
+    if (held) await this.reconcile(cli, held, disposed).catch(() => {});
     return slugs.filter((s): s is string => !!s);
+  }
+
+  /**
+   * Make the skills dir agree with chain truth (runs on every owned-sync, i.e. on
+   * connect / session start / after a buy — the moments a skill is about to be used).
+   * The dir is a MATERIALIZATION of on-chain ownership plus the wallet's synced
+   * un-equip choice, so anything that contradicts those moves OUT to the holding dir
+   * (never deleted — a wrong move self-heals on the next sync, which reinstalls
+   * anything genuinely owned):
+   *
+   *   nft-origin folder whose mint this wallet doesn't hold  → out. Covers another
+   *     wallet's leftovers, devnet leftovers after the mainnet flip, and a forged
+   *     manifest entry (a mint written by hand is not in the wallet).
+   *   nft-origin folder whose mint is disposed               → out. A dispose made on
+   *     another device lands here via the synced equip state.
+   *   local folder that verbatim-copies an unowned paid skill → out (quarantinePirated).
+   *
+   * Everything else local is the user's own work and is never touched.
+   */
+  private async reconcile(cli: Cli, held: Set<string>, disposed: Set<string>): Promise<void> {
+    const entries = await readdir(skillsDir(cli), { withFileTypes: true }).catch(() => []);
+    const manifest = await readSkillManifest();
+    for (const e of entries) {
+      if (!e.isDirectory() || BUNDLED_SKILLS.includes(e.name)) continue;
+      const rec = manifest.nft[e.name];
+      if (rec) {
+        if (!held.has(rec.mint) || disposed.has(rec.mint)) {
+          await this.moveSkill(cli, e.name, "out").catch(() => false);
+        }
+      } else {
+        await this.quarantinePirated(cli, e.name, held).catch(() => {});
+      }
+    }
+  }
+
+  /** The "make piracy annoying" floor (not a hard lock): a local-origin slug that
+   *  collides with a catalog item the wallet does NOT own is fetched once and compared
+   *  by content — a verbatim copy is moved to the holding dir. Name-only collisions
+   *  (someone legitimately reusing a name) never match on content and stay untouched.
+   *  Costs nothing until a collision actually happens: the catalog is the 30s-cached
+   *  list the owned-sync already fetched, and the metadata read fires only on collision. */
+  private async quarantinePirated(cli: Cli, slug: string, held: Set<string>): Promise<void> {
+    const item = (await cachedCatalog())?.find((c) => slugifyName(c.name) === slug && !held.has(c.id));
+    if (!item) return;
+    const local = await readFile(join(skillsDir(cli), slug, "SKILL.md"), "utf8").catch(() => null);
+    if (!local) return;
+    const meta = await readSkillMintMetadata(this.conn, item.id).catch(() => null);
+    if (!meta) return;
+    const key = skillBodyKey(local);
+    if (key && key === skillBodyKey(toSkillMd(meta, item.id))) {
+      await this.moveSkill(cli, slug, "out");
+    }
   }
 
   /** Remove an installed skill from a runtime's skills dir (e.g. on un-equip). The origin
@@ -231,7 +291,7 @@ export class SkillSync {
    * mint as disposed (so the session-start owned-sync doesn't re-add it, and the UI greys it
    * out). The wallet still owns the NFT; re-equip restores it instantly. Returns the slug.
    */
-  async dispose(skillMint: string): Promise<string | null> {
+  async dispose(skillMint: string, owner: string): Promise<string | null> {
     const slug = await this.slugForMint(skillMint);
     if (slug) {
       await this.moveSkill("claude", slug, "out").catch(() => false);
@@ -243,8 +303,9 @@ export class SkillSync {
         external.map((d) => rm(join(d, slug), { recursive: true, force: true }).catch(() => {})),
       );
     }
-    // Record the mint (survives a slug rename; the key injectOwned + the UI grey-out check).
-    await disposeNftSkill(skillMint);
+    // Record the mint in the wallet's synced equip state (survives a slug rename; the key
+    // injectOwned + the UI grey-out check, and it follows the wallet to other devices).
+    await disposeMint(owner, skillMint);
     return slug;
   }
 
@@ -254,8 +315,8 @@ export class SkillSync {
    * exists (disposed on another device, or never installed here), reinstall from chain so
    * re-equip still works. Returns the slug.
    */
-  async reEquip(skillMint: string): Promise<string | null> {
-    await undisposeNftSkill(skillMint);
+  async reEquip(skillMint: string, owner: string): Promise<string | null> {
+    await undisposeMint(owner, skillMint);
     const slug = await this.slugForMint(skillMint);
     let restored = false;
     if (slug) {

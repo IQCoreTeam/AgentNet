@@ -11,11 +11,28 @@
 
 import type { SkillMintMetadata } from "../../nft/token2022.js";
 
-// A safe directory/skill slug: lowercase, [a-z0-9-], matching the SKILL.md `name`
-// convention (Claude requires name ≤64 chars of [a-z0-9-]). Falls back to the mint.
+// A safe directory/skill slug from a display name: lowercase, [a-z0-9-], ≤64 chars —
+// the SKILL.md `name` convention (Claude requires it). "" when the name has no usable chars.
+export function slugifyName(name: string): string {
+  return (name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
+}
+
+// A mint's install slug: its slugified name, falling back to the mint id.
 export function skillSlug(meta: SkillMintMetadata, mint: string): string {
-  const base = (meta.name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-  return (base || `skill-${mint.slice(0, 8).toLowerCase()}`).slice(0, 64);
+  return slugifyName(meta.name) || `skill-${mint.slice(0, 8).toLowerCase()}`;
+}
+
+// Content identity of a SKILL.md: the body with frontmatter stripped and whitespace
+// collapsed. Frontmatter is excluded because a hand-copied file and an on-chain render
+// may synthesize it differently while the actual skill content is byte-for-byte the same.
+// Equality of two NON-EMPTY keys means "verbatim copy of that skill's content" — the
+// pirate check's bar (a name-only collision never matches on content alone).
+export function skillBodyKey(md: string): string {
+  return md
+    .replace(/^﻿/, "")
+    .replace(/^---\s*\n[\s\S]*?\n---\s*(\n|$)/, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 // Does the skill body already start with its own YAML frontmatter block?

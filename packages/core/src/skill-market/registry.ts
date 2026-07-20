@@ -37,11 +37,10 @@ export interface NftSkillRecord {
 export interface SkillManifest {
   version: 1;
   nft: Record<string, NftSkillRecord>; // slug → record
-  // Mints the wallet OWNS on-chain but has deliberately disposed (un-equipped). Soulbound
-  // tokens can't be sold or burned, so disposal is local + sticky: this list is what makes
-  // it stick — injectOwned (the session-start owned-sync) skips these, so a disposed skill
-  // doesn't silently re-install every session. Keyed by mint (the on-chain id, survives a
-  // slug rename). Re-equipping a skill removes its mint from here.
+  // LEGACY, read-only: the pre-wallet-scoping disposed list. The disposed set is the
+  // WALLET's preference (not a device fact about folders), so it moved to the wallet-scoped,
+  // cloud-synced equipState.ts — which adopts a non-empty list from here once, on a wallet's
+  // first read. Nothing writes this field anymore.
   disposed: string[];
 }
 
@@ -78,34 +77,6 @@ export async function forgetNftSkill(slug: string): Promise<void> {
     const m = await readSkillManifest();
     if (m.nft[slug]) {
       delete m.nft[slug];
-      await writeSkillManifest(m);
-    }
-  } catch {
-    /* best-effort */
-  }
-}
-
-/** Mark a mint as disposed so the session-start owned-sync (injectOwned) stops re-installing
- *  it. Idempotent (deduped). Best-effort — a write failure must never block a dispose. */
-export async function disposeNftSkill(mint: string): Promise<void> {
-  try {
-    const m = await readSkillManifest();
-    if (!m.disposed.includes(mint)) {
-      m.disposed.push(mint);
-      await writeSkillManifest(m);
-    }
-  } catch {
-    /* best-effort */
-  }
-}
-
-/** Un-dispose a mint (re-equip): drop it from the disposed list so the owned-sync installs
- *  it again. Best-effort. */
-export async function undisposeNftSkill(mint: string): Promise<void> {
-  try {
-    const m = await readSkillManifest();
-    if (m.disposed.includes(mint)) {
-      m.disposed = m.disposed.filter((x) => x !== mint);
       await writeSkillManifest(m);
     }
   } catch {

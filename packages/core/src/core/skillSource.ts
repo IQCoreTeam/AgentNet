@@ -303,7 +303,7 @@ export async function ownedAssetIds(owner: string): Promise<Set<string>> {
 // ownedSkillMints backstops anything a slightly-stale catalog misses.
 let catalogCache: { at: number; skills: Skill[] } | null = null;
 const CATALOG_TTL_MS = 30_000;
-async function cachedCatalog(): Promise<Skill[] | undefined> {
+export async function cachedCatalog(): Promise<Skill[] | undefined> {
   const now = Date.now();
   if (catalogCache && now - catalogCache.at < CATALOG_TTL_MS) return catalogCache.skills;
   try {
@@ -339,12 +339,14 @@ async function cachedCatalog(): Promise<Skill[] | undefined> {
  *
  * Returns [] if collections aren't configured (best-effort caller).
  */
-export async function ownedSkillMints(owner: string, catalog?: Skill[]): Promise<string[]> {
+export async function ownedSkillMints(owner: string, catalog?: Skill[], heldIds?: Set<string>): Promise<string[]> {
   const { getSkillsCollectionMint, getWorkflowsCollectionMint } = await import("./seed.js");
   const ours = new Set([getSkillsCollectionMint(), getWorkflowsCollectionMint()].filter(Boolean) as string[]);
   if (ours.size === 0) return [];
 
-  const ownedIds = await ownedAssetIds(owner);
+  // A caller that already resolved the wallet's holdings (e.g. injectOwned via the cached
+  // heldSkillMints) passes them in so this adds zero RPC on top of that read.
+  const ownedIds = heldIds ?? (await ownedAssetIds(owner));
   if (ownedIds.size === 0) return [];
 
   // Fast path: a held mint that the catalog (collection members per the indexer)

@@ -21,6 +21,7 @@ import { readSkillText, readSkillMintMetadata } from "../../nft/token2022.js";
 import { heldSkillCreators } from "../../notes/holdings.js";
 import { claudeSkillsDir } from "../../core/paths.js";
 import { classifySkills, readSkillManifest } from "../registry.js";
+import { readDisposed } from "../equipState.js";
 import { resolveRpcUrl } from "../../core/rpc.js";
 import { init as initChain } from "../../core/chain.js";
 import type { AgentProfile, Reputation, SkillCard, SkillDetail, VerifiedRepo } from "../../chat/marketMessages.js";
@@ -299,7 +300,7 @@ export async function marketplaceEnv(wallet: Wallet) {
     // unequip_skill MCP tool. Local + sticky (soulbound: the NFT stays owned, no refund).
     async disposeSkill(skillId: string) {
       try {
-        const slug = await skills.dispose(skillId);
+        const slug = await skills.dispose(skillId, wallet.address);
         return { ok: true, slug: slug ?? undefined };
       } catch (e) {
         return { ok: false, error: e instanceof Error ? e.message : String(e) };
@@ -310,20 +311,21 @@ export async function marketplaceEnv(wallet: Wallet) {
     // re-buying). Clears the disposed mark and re-installs the SKILL.md.
     async reEquipSkill(skillId: string) {
       try {
-        const slug = await skills.reEquip(skillId);
+        const slug = await skills.reEquip(skillId, wallet.address);
         return { ok: true, slug: slug ?? undefined };
       } catch (e) {
         return { ok: false, error: e instanceof Error ? e.message : String(e) };
       }
     },
 
-    // slug -> mint for the wallet's DISPOSED (un-pinned) skills, from the manifest. The UI
-    // shows these greyed in the equipped panel and offers a free Re-equip (not a paid re-Buy
-    // that would mint another copy). Parallel to ownedSkillMints, but for the disposed set.
+    // slug -> mint for the wallet's DISPOSED (un-pinned) skills — the wallet-scoped,
+    // cloud-synced equip state joined with the manifest's slug mapping. The UI shows these
+    // greyed in the equipped panel and offers a free Re-equip (not a paid re-Buy that would
+    // mint another copy). Parallel to ownedSkillMints, but for the disposed set.
     async disposedSkillMints(): Promise<Record<string, string>> {
       try {
+        const disposed = await readDisposed(wallet.address);
         const m = await readSkillManifest();
-        const disposed = new Set(m.disposed);
         const out: Record<string, string> = {};
         for (const slug of Object.keys(m.nft)) {
           if (disposed.has(m.nft[slug].mint)) out[slug] = m.nft[slug].mint;

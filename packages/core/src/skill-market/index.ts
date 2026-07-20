@@ -379,7 +379,7 @@ export async function handleToolCall(
     // No verify guard here: un-equip only removes local files + records the choice — it
     // touches nothing on-chain (the soulbound token stays owned), so there's nothing to gate.
     try {
-      const slug = await new SkillSync(conn).dispose(skillId);
+      const slug = await new SkillSync(conn).dispose(skillId, await signerAddress(signer));
       const what = slug ? `"${slug}" (${skillId})` : skillId;
       return { content: [{ type: "text", text: `Un-equipped skill ${what} locally — it won't re-install next session. You still own the NFT on-chain (soulbound, no refund), and if you published it, it stays listed on the marketplace. Re-equip it anytime if you change your mind.` }] };
     } catch (err: any) {
