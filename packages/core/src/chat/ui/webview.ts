@@ -1062,20 +1062,22 @@ export function chatHtml(): string {
                background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
                border: 1px solid var(--an-line); border-radius: var(--an-radius);
                box-shadow: 0 8px 28px rgba(0,0,0,0.4); }
-  /* effort chip: same chip+popover language as the model chip. Neutral-tinted (un-tinted)
-     so it's visible but doesn't compete with the mode chip's engine accent. */
-  #effortWrap { position: relative; display: inline-flex; }
-  #effortBtn { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
-               background: var(--an-bg-1); color: var(--vscode-foreground); font-weight: 600;
-               border: 1px solid var(--an-line); border-radius: 999px; padding: 3px 10px;
-               font-size: 0.92em; font-family: inherit; }
-  #effortBtn:hover { border-color: var(--eng); }
-  #effortBtn .mglyph { opacity: 0.5; font-size: 0.82em; font-weight: 700; }
-  #effortBtn .mcaret { opacity: 0.5; font-size: 0.8em; }
-  #effortMenu { position: fixed; z-index: 60; min-width: 176px; padding: 5px;
-                background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
-                border: 1px solid var(--an-line); border-radius: var(--an-radius);
-                box-shadow: 0 8px 28px rgba(0,0,0,0.4); }
+  /* effort lives inside the mode popover rather than as its own chip: it modifies how the
+     engine runs, same as the mode does, so it belongs to that menu. Chips (not rows) keep
+     six levels compact under the mode list instead of doubling the popover's height. */
+  .mdiv { height: 1px; background: var(--an-line); margin: 5px 7px; }
+  .mSection { font-size: 0.7em; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+              opacity: 0.5; padding: 4px 9px 6px; }
+  .effChips { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 9px 7px; }
+  .effChip { padding: 3px 10px; border-radius: 999px; cursor: pointer; font-family: inherit;
+             font-size: 0.82em; font-weight: 600; opacity: 0.75;
+             background: var(--an-bg-1); color: var(--vscode-foreground);
+             border: 1px solid var(--an-line); }
+  .effChip:hover { opacity: 1; border-color: var(--eng); }
+  .effChip.sel { background: var(--engSoft); border-color: var(--eng); color: var(--eng); opacity: 1; }
+  /* the "· high" tail on the mode chip — only rendered when effort is off its default,
+     so the chip stays short until there's actually something to report */
+  #modeEffortTag { opacity: 0.65; font-weight: 500; }
   /* usage context meter: small text chip near the composer chips */
   #ctxMeter { font-size: 0.82em; opacity: 0.55; display: inline-flex; align-items: center; }
   /* slash command dropdown menu */
@@ -1471,7 +1473,6 @@ export function chatHtml(): string {
   #skillModalBody .skDoc-body pre code { border:0; padding:0; background:none; }
 
   /* ── make-skill: topbar/header/panel entry buttons + publish form ── */
-  #makeSkillBtn { color: var(--an-green); }
   .mktMake, .skMake { margin-left: auto; background: var(--an-green-dim); color: var(--an-green);
                       border: 1px solid var(--an-green-line); border-radius: var(--an-radius);
                       padding: 3px 10px; font-size: 0.8em; cursor: pointer; white-space: nowrap; }
@@ -1648,7 +1649,6 @@ export function chatHtml(): string {
     </button>
     <button id="marketsBtn" title="Skill marketplace">Markets</button>
     <button id="agentsBtn" title="Agent directory">Agents</button>
-    <button id="makeSkillBtn" title="Publish a new skill">＋ Make skill</button>
     <div class="spacer"></div>
     <button id="histBtn" title="Recent chats">↻ History <span class="caret">▾</span></button>
     <button id="newTabBtn" title="Open another chat in a new tab">+</button>
@@ -1788,16 +1788,10 @@ export function chatHtml(): string {
               <div id="modelMenu" style="display:none"></div>
             </span>
             <span id="modeWrap">
-              <button id="modeBtn" title="Permission mode: how tools run before asking you">
-                <span id="modeLabel">mode</span><span class="mcaret">▾</span>
+              <button id="modeBtn" title="How tools run before asking you, and how deeply the model thinks">
+                <span id="modeLabel">mode</span><span id="modeEffortTag"></span><span class="mcaret">▾</span>
               </button>
               <div id="modeMenu" style="display:none"></div>
-            </span>
-            <span id="effortWrap">
-              <button id="effortBtn" title="Reasoning effort: how deeply the model thinks before replying">
-                <span class="mglyph"><svg class="anic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 19v-4M12 19v-9M19 19V6"/></svg></span><span id="effortLabel">effort</span><span class="mcaret">▾</span>
-              </button>
-              <div id="effortMenu" style="display:none"></div>
             </span>
             <span id="ctxMeter" style="display:none"></span>
             <button id="send" title="Send" aria-label="Send"><svg class="ic-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg><svg class="ic-stop" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="1.5"/></svg><span class="lbl">Send</span></button>
@@ -2111,9 +2105,7 @@ export function chatHtml(): string {
   const modeBtn = document.getElementById('modeBtn');
   const modeMenu = document.getElementById('modeMenu');
   const modeLabel = document.getElementById('modeLabel');
-  const effortBtn = document.getElementById('effortBtn');
-  const effortMenu = document.getElementById('effortMenu');
-  const effortLabel = document.getElementById('effortLabel');
+  const modeEffortTag = document.getElementById('modeEffortTag');
   const ctxMeter = document.getElementById('ctxMeter');
   const approvalDock = document.getElementById('approvalDock');
   const slashMenu = document.getElementById('slashMenu');
@@ -2393,6 +2385,11 @@ export function chatHtml(): string {
     const cur = currentMode();
     const curOpt = opts.find(o => o.value === cur) || opts[0];
     modeLabel.textContent = curOpt ? curOpt.label : 'mode';
+    // the chip carries effort as a tail, but only when it's off default — nothing to
+    // report otherwise, and a bare "Auto edit" stays readable in a narrow panel
+    const curEff = currentEffort();
+    const curEffOpt = EFFORTS.find(o => o.value === curEff);
+    modeEffortTag.textContent = curEff === 'default' || !curEffOpt ? '' : '· ' + curEffOpt.label;
     modeMenu.innerHTML = '';
     for (const m of opts) {
       const row = document.createElement('div');
@@ -2412,6 +2409,27 @@ export function chatHtml(): string {
       });
       modeMenu.appendChild(row);
     }
+    // effort, below the modes in the same popover: both answer "how does this engine run",
+    // so they share a menu. Chips instead of rows keep six levels from doubling its height.
+    const div = document.createElement('div'); div.className = 'mdiv';
+    const head = document.createElement('div'); head.className = 'mSection';
+    head.textContent = 'Effort · reasoning depth';
+    const chips = document.createElement('div'); chips.className = 'effChips';
+    for (const e of EFFORTS) {
+      const chip = document.createElement('button');
+      chip.className = 'effChip' + (e.value === curEff ? ' sel' : '');
+      chip.textContent = e.label;
+      if (e.title) chip.title = e.title;   // the row description survives as a tooltip
+      chip.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        effortByCli[cli] = e.value;
+        modeMenu.style.display = 'none';
+        fillModes();
+        vscode.postMessage({ type: 'effort', effort: e.value === 'default' ? undefined : e.value });
+      });
+      chips.appendChild(chip);
+    }
+    modeMenu.appendChild(div); modeMenu.appendChild(head); modeMenu.appendChild(chips);
   }
   // open the popover anchored above the chip (composer sits at the bottom of the
   // panel, so it opens upward); position:fixed keeps it out of #inputWrap's clip.
@@ -2422,36 +2440,6 @@ export function chatHtml(): string {
     modeMenu.style.bottom = (window.innerHeight - r.top + 6) + 'px';
   }
   function currentEffort() { return effortByCli[cli] || 'default'; }
-  function fillEfforts() {
-    const cur = currentEffort();
-    const curOpt = EFFORTS.find(o => o.value === cur) || EFFORTS[0];
-    effortLabel.textContent = curOpt ? curOpt.label : 'effort';
-    while (effortMenu.firstChild) effortMenu.removeChild(effortMenu.firstChild);
-    for (const e of EFFORTS) {
-      const row = document.createElement('div');
-      row.className = 'modeOpt' + (e.value === cur ? ' sel' : '');
-      const txt = document.createElement('div'); txt.className = 'mtext';
-      const lab = document.createElement('div'); lab.className = 'mlabel'; lab.textContent = e.label;
-      txt.appendChild(lab);
-      if (e.title) { const d = document.createElement('div'); d.className = 'mdesc'; d.textContent = e.title; txt.appendChild(d); }
-      const chk = document.createElement('span'); chk.className = 'mcheck'; chk.textContent = '✓';
-      row.appendChild(txt); row.appendChild(chk);
-      row.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        effortByCli[cli] = e.value;
-        effortMenu.style.display = 'none';
-        fillEfforts();
-        vscode.postMessage({ type: 'effort', effort: e.value === 'default' ? undefined : e.value });
-      });
-      effortMenu.appendChild(row);
-    }
-  }
-  function openEffortMenu() {
-    const r = effortBtn.getBoundingClientRect();
-    effortMenu.style.display = 'block';
-    effortMenu.style.left = r.left + 'px';
-    effortMenu.style.bottom = (window.innerHeight - r.top + 6) + 'px';
-  }
   function setTab(next) {
     if (next !== 'claude' && next !== 'codex') return;
     cli = next;
@@ -2461,7 +2449,6 @@ export function chatHtml(): string {
     input.placeholder = 'Message ' + cli + '... (Enter to send)';
     fillModels();
     fillModes();
-    fillEfforts();
   }
   function selectTab(next) {
     if (next === cli) return;
@@ -2485,28 +2472,20 @@ export function chatHtml(): string {
   modelBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     if (modelMenu.style.display === 'block') { modelMenu.style.display = 'none'; return; }
-    modeMenu.style.display = 'none'; effortMenu.style.display = 'none'; closeMenus();
+    modeMenu.style.display = 'none'; closeMenus();
     openModelMenu();
   });
   modelMenu.addEventListener('click', (e) => e.stopPropagation());
   modeBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     if (modeMenu.style.display === 'block') { modeMenu.style.display = 'none'; return; }
-    modelMenu.style.display = 'none'; effortMenu.style.display = 'none'; closeMenus();
+    modelMenu.style.display = 'none'; closeMenus();
     openModeMenu();
   });
   modeMenu.addEventListener('click', (e) => e.stopPropagation());
-  effortBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (effortMenu.style.display === 'block') { effortMenu.style.display = 'none'; return; }
-    modelMenu.style.display = 'none'; modeMenu.style.display = 'none'; closeMenus();
-    openEffortMenu();
-  });
-  effortMenu.addEventListener('click', (e) => e.stopPropagation());
-  document.addEventListener('click', () => { modeMenu.style.display = 'none'; modelMenu.style.display = 'none'; effortMenu.style.display = 'none'; });
+  document.addEventListener('click', () => { modeMenu.style.display = 'none'; modelMenu.style.display = 'none'; });
   fillModels();
   fillModes();
-  fillEfforts();
 
   // ---- relative time ("3개월", "1일", "방금") ----
   function rel(ts) {
@@ -3392,7 +3371,7 @@ export function chatHtml(): string {
           if (arg) { modeByCli[cli] = arg; fillModes(); vscode.postMessage({ type: 'mode', mode: arg }); }
           input.value = ''; return;
         case 'effort':
-          if (arg) { effortByCli[cli] = arg; fillEfforts(); vscode.postMessage({ type: 'effort', effort: arg === 'default' ? undefined : arg }); }
+          if (arg) { effortByCli[cli] = arg; fillModes(); vscode.postMessage({ type: 'effort', effort: arg === 'default' ? undefined : arg }); }
           input.value = ''; return;
         case 'help': {
           const helpText = slashCommandsForCli()
@@ -3539,7 +3518,6 @@ export function chatHtml(): string {
     for (const k in panels) panels[k].style.display = (k === name) ? 'flex' : 'none';
     document.getElementById('marketsBtn').classList.toggle('on', name === 'market');
     document.getElementById('agentsBtn').classList.toggle('on', name === 'agents');
-    document.getElementById('makeSkillBtn').classList.toggle('on', name === 'publish');
     if (name === 'wallet') vscode.postMessage({ type: 'wallet' }); // refresh address
     if (name === 'market') openMarket();
     if (name === 'agents') openAgents();
@@ -3550,8 +3528,8 @@ export function chatHtml(): string {
   document.getElementById('backToChatP').addEventListener('click', () => showView('chat'));
   document.getElementById('marketsBtn').addEventListener('click', () => { closeMenus(); showView('market'); });
   document.getElementById('agentsBtn').addEventListener('click', () => { closeMenus(); showView('agents'); });
-  // make-skill: three entry points (topbar, market header, skills panel) → publish view
-  document.getElementById('makeSkillBtn').addEventListener('click', () => { closeMenus(); openPublish('skill'); });
+  // make-skill: two entry points (market header, skills panel) → publish view. Not in the
+  // top bar: publishing is a market action, and it sits where you're already looking at skills.
   // the market button follows the active tab: on the Workflows tab it opens the workflow builder
   document.getElementById('mktMakeSkillBtn').addEventListener('click', () => openPublish(currentKind === 'workflow' ? 'workflow' : 'skill'));
   document.getElementById('panelMakeSkillBtn').addEventListener('click', () => {
