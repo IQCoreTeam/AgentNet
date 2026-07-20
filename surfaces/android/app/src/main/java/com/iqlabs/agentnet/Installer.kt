@@ -137,12 +137,13 @@ class Installer(private val ctx: Context) {
         File(ctx.filesDir, SERVER_MARKER).writeText(crc)
     }
 
-    // Open the Ubuntu rootfs tar for extraction. It ships in a Play Asset Delivery pack
-    // ("rootfs", install-time): on a Play install it is served through the ordinary
-    // AssetManager, and on a sideload / bundletool-universal APK the install-time pack is fused
-    // back into the APK — so the SAME ctx.assets.open finds it either way (Google Play AND
-    // non-Google direct install, incl. China). Some OEM builds only expose install-time pack
-    // assets through a fresh package context, so we retry that way before giving up.
+    // Open the Ubuntu rootfs tar for extraction. Two shipping shapes resolve to the SAME
+    // ctx.assets.open call: a Play install serves it from the install-time Asset Delivery
+    // pack (":rootfs") through the ordinary AssetManager, and the sideload APK carries it
+    // directly in base assets (android-apk.yml stages it there, because assembleDebug does
+    // NOT fuse asset packs into an APK — only a bundletool universal APK does). Some OEM
+    // builds only expose install-time pack assets through a fresh package context, so we
+    // retry that way before giving up.
     //
     // This is also the single seam for a future thin/download build: a channel that ships WITHOUT
     // a bundled rootfs (low-bandwidth / non-Google CDN) would, on the getOrElse branch, fall back

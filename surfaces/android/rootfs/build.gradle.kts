@@ -10,9 +10,14 @@
 // calling ctx.assets.open("rootfs-<abi>.tar") and nothing in the extraction path changes.
 //
 // Size math: per-pack limit is 1.5GB and the cumulative base+install-time limit is 4GB; our
-// ~500MB compressed tar fits with wide margin. (APK builds — the sideload debug APK and
-// bundletool universal APK — fuse install-time packs back into the single APK, so sideload
-// still ships the rootfs and keeps working.)
+// ~500MB compressed tar fits with wide margin.
+//
+// ⚠️ APK builds do NOT get this pack: assembleDebug/assembleRelease ignore asset-pack
+// modules (only a bundletool universal APK built FROM the AAB fuses install-time packs).
+// The sideload pipeline (android-apk.yml) therefore stages rootfs-<abi>.tar into
+// app/src/main/assets instead — only the Play AAB pipeline (android-release.yml) stages
+// into this module. Getting that wrong ships a 9MB APK that dies on first run with
+// "Setup failed: rootfs-arm64.tar".
 plugins {
     id("com.android.asset-pack")
 }

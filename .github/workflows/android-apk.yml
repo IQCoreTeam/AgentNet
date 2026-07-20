@@ -119,10 +119,13 @@ jobs:
           mkdir -p surfaces/android/app/src/main/assets surfaces/android/rootfs/src/main/assets
           rm -rf surfaces/android/app/src/main/jniLibs
           cp -R ci-assets/jniLibs surfaces/android/app/src/main/jniLibs
-          # rootfs -> Play Asset Delivery pack module (:rootfs), NOT base assets (500MB Play cap).
-          # For this debug-APK build the install-time pack is fused back into the APK, so the
-          # sideload APK still ships the rootfs.
-          cp ci-assets/assets/rootfs-*.tar surfaces/android/rootfs/src/main/assets/
+          # rootfs -> BASE assets for this sideload APK. assembleDebug does NOT fuse Play
+          # Asset Delivery packs into the APK (only bundletool's universal APK does), so
+          # staging into the :rootfs pack module shipped a 9MB APK with no rootfs and every
+          # fresh GitHub install died with "Setup failed: rootfs-arm64.tar". The 500MB cap
+          # that motivated the pack split is a Play AAB limit and does not apply here; the
+          # Play pipeline (android-release.yml) is the one that stages into :rootfs.
+          cp ci-assets/assets/rootfs-*.tar surfaces/android/app/src/main/assets/
           # Repack the server bundle FRESH from this run's dist (don't reuse the artifact's
           # stale agentnet-server.tar) so the APK carries the current UI.
           STAGE="$(mktemp -d)/server-bundle"

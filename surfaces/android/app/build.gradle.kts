@@ -21,10 +21,12 @@ android {
     namespace = "com.iqlabs.agentnet"
     compileSdk = 35
 
-    // The heavy Ubuntu rootfs tar ships in a Play Asset Delivery pack (install-time), NOT in
-    // base/assets — base/assets/rootfs-*.tar exceeded Play's 500MB per-module download cap.
-    // install-time delivery keeps it one seamless install and reachable via the normal
-    // AssetManager, so Installer.kt's ctx.assets.open("rootfs-<abi>.tar") is unchanged.
+    // PLAY AAB ONLY: the heavy Ubuntu rootfs tar ships in this Play Asset Delivery pack
+    // (install-time) because base/assets/rootfs-*.tar exceeded Play's 500MB per-module
+    // download cap. install-time delivery stays reachable via the normal AssetManager, so
+    // Installer.kt's ctx.assets.open("rootfs-<abi>.tar") is unchanged. APK builds ignore
+    // asset packs entirely — the sideload pipeline stages the tar into app/src/main/assets
+    // instead (see rootfs/build.gradle.kts + android-apk.yml).
     assetPacks += listOf(":rootfs")
 
     defaultConfig {
