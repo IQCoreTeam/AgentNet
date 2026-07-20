@@ -437,20 +437,28 @@ export async function marketplaceEnv(wallet: Wallet) {
       }
     },
 
-    // The skills shown in the "Equipped skills" grid = the wallet's installed skills that
-    // are real items (bought NFTs or hand-added local skills), NOT the app's bundled tools
-    // (skill-shopping / make-skill — those live in the small built-in list, not the grid).
+    // The skills shown in the "Equipped skills" grid = ONLY the wallet's bought NFT skills.
+    //
+    // A card is an on-chain identity, so it is granted by ownership, never by a folder:
+    // bundled tools (skill-shopping / make-skill) live in the small built-in list, and a
+    // local skill the user wrote or dropped in themselves stays out of the grid entirely.
+    // It still loads and runs — the runtime scans the dir — it just isn't the wallet's
+    // property to display, so the panel is the wallet's inventory and nothing else. This
+    // is also what clears pre-mainnet leftovers: an old mint with no manifest record is
+    // local by definition, so it drops out of the grid without touching the folder.
     //
     // Source = the local skills dir, classified by the origin manifest (skills.json). We do
     // NOT intersect the indexer catalog: a bought skill's per-buyer mint isn't a catalog
     // member, so that intersection is always empty (and it cost a DAS+indexer round-trip).
-    // Installed = equipped here, which is exactly what the panel means. Network-free, no 429.
+    // Chain truth is enforced upstream instead: the owned-sync reconcile moves any nft-origin
+    // folder the wallet doesn't hold out of the dir, so a forged manifest entry is gone
+    // before the panel reads it. Network-free here, no 429.
     async ownedNftSkills() {
       try {
         const entries = await readdir(claudeSkillsDir(), { withFileTypes: true });
         const slugs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
         const classified = await classifySkills(slugs);
-        return classified.filter((c) => c.origin !== "bundled").map((c) => c.slug);
+        return classified.filter((c) => c.origin === "nft").map((c) => c.slug);
       } catch {
         return [];
       }
