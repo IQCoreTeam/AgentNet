@@ -380,6 +380,18 @@ export function chatHtml(): string {
   .copyBtn:hover { opacity: 1; color: var(--an-green); border-color: var(--an-green-line); }
   .copyBtn svg { width: 13px; height: 13px; }
   .copyBtn.done { color: var(--an-green); opacity: 1; }
+
+  /* per-code-block copy button: anchored to the wrapper, so it stays put while wide
+     code scrolls under it. Revealed by hovering that block alone. */
+  .preWrap { position: relative; }
+  .preCopy { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; padding: 0;
+             display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+             background: var(--an-bg-2); border: 1px solid var(--an-line-soft); border-radius: 6px;
+             color: var(--vscode-foreground); opacity: 0; transition: opacity 0.12s, color 0.12s; }
+  .preWrap:hover .preCopy { opacity: 0.75; }
+  .preCopy:hover { opacity: 1; color: var(--an-green); border-color: var(--an-green-line); }
+  .preCopy svg { width: 13px; height: 13px; }
+  .preCopy.done { color: var(--an-green); opacity: 1; }
   .node.assistant .msg { }
   .node.thinking .msg { opacity: 0.5; font-style: italic; font-size: 0.9em; }
   .tool { font-family: var(--vscode-editor-font-family); font-size: 0.9em; }
@@ -1989,12 +2001,48 @@ export function chatHtml(): string {
   // ---- markdown rendering (marked + dompurify), with a plain-text fallback ----
   const MD_OK = !!(window.marked && window.DOMPurify);
   if (MD_OK) window.marked.setOptions({ breaks: true, gfm: true });
+  // SVG copy/check glyphs + clipboard write, shared by the per-message copy button
+  // (addCopy) and the per-code-block ones (addPreCopyButtons).
+  const COPY_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>';
+  const CHECK_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.5 3.5L13 5"/></svg>';
+  // Copy text, flashing btn into a check while it lands. execCommand is the fallback
+  // for webviews where the async clipboard API is unavailable.
+  function copyText(text, btn) {
+    const done = () => { btn.classList.add('done'); btn.innerHTML = CHECK_ICON;
+      setTimeout(() => { btn.classList.remove('done'); btn.innerHTML = COPY_ICON; }, 1200); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, () => {});
+    else { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
+      ta.select(); try { document.execCommand('copy'); done(); } catch (e2) {} document.body.removeChild(ta); }
+  }
+  // Give every fenced code block its own copy button, revealed on hovering that block.
+  // The pre gets wrapped because it scrolls horizontally: anchoring the button to the
+  // wrapper keeps it pinned at the top-right instead of sliding away with wide code.
+  function addPreCopyButtons(root) {
+    const pres = root.querySelectorAll('pre');
+    for (let i = 0; i < pres.length; i++) {
+      const pre = pres[i];
+      if (!pre.parentNode || (pre.parentNode.classList && pre.parentNode.classList.contains('preWrap'))) continue;
+      const wrap = document.createElement('div');
+      wrap.className = 'preWrap';
+      pre.parentNode.insertBefore(wrap, pre);
+      wrap.appendChild(pre);
+      const btn = document.createElement('button');
+      btn.className = 'preCopy'; btn.title = 'Copy code'; btn.innerHTML = COPY_ICON;
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const code = pre.querySelector('code'); // the fence body, without the button
+        copyText((code || pre).textContent || '', btn);
+      });
+      wrap.appendChild(btn);
+    }
+  }
+
   // Render md text into el's innerHTML (sanitized). Falls back to textContent if the
   // libs didn't load. We keep the raw md on el.dataset.md so copy yields the source.
   function renderMd(el, text) {
     el.dataset.md = text;
     if (!MD_OK) { el.textContent = text; return; }
-    try { el.innerHTML = window.DOMPurify.sanitize(window.marked.parse(text)); }
+    try { el.innerHTML = window.DOMPurify.sanitize(window.marked.parse(text)); addPreCopyButtons(el); }
     catch (e) { el.textContent = text; }
   }
 
@@ -2580,20 +2628,13 @@ export function chatHtml(): string {
     return el;
   }
 
-  // SVG copy/check glyphs + the button that copies an element's text on click.
-  const COPY_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>';
-  const CHECK_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.5 3.5L13 5"/></svg>';
+  // The hover button that copies a whole message's markdown source.
   function addCopy(node, textEl) {
     const btn = document.createElement('button');
     btn.className = 'copyBtn'; btn.title = 'Copy'; btn.innerHTML = COPY_ICON;
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const text = textEl.dataset.md || textEl.textContent || ''; // copy raw md source
-      const done = () => { btn.classList.add('done'); btn.innerHTML = CHECK_ICON;
-        setTimeout(() => { btn.classList.remove('done'); btn.innerHTML = COPY_ICON; }, 1200); };
-      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, () => {});
-      else { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
-        ta.select(); try { document.execCommand('copy'); done(); } catch (e2) {} document.body.removeChild(ta); }
+      copyText(textEl.dataset.md || textEl.textContent || '', btn); // raw md source
     });
     node.appendChild(btn);
   }
