@@ -382,6 +382,11 @@ export function chatHtml(): string {
   .preCopy:hover { opacity: 1; color: var(--an-green); border-color: var(--an-green-line); }
   .preCopy svg { width: 13px; height: 13px; }
   .preCopy.done { color: var(--an-green); opacity: 1; }
+  /* inline code IS its own copy button: a floating control would displace or cover the
+     words around it, so the span tints on hover and flashes green once the copy lands. */
+  .msg code.inlineCopy { cursor: pointer; transition: color 0.12s, border-color 0.12s, background 0.12s; }
+  .msg code.inlineCopy:hover { color: var(--an-green); border-color: var(--an-green-line); }
+  .msg code.inlineCopy.done { color: var(--an-green); border-color: var(--an-green-line); background: var(--an-bg-2); }
   .node.assistant .msg { }
   .node.thinking .msg { opacity: 0.5; font-style: italic; font-size: 0.9em; }
   .tool { font-family: var(--vscode-editor-font-family); font-size: 0.9em; }
@@ -1985,14 +1990,13 @@ export function chatHtml(): string {
   // ---- markdown rendering (marked + dompurify), with a plain-text fallback ----
   const MD_OK = !!(window.marked && window.DOMPurify);
   if (MD_OK) window.marked.setOptions({ breaks: true, gfm: true });
-  // SVG copy/check glyphs + clipboard write, used by the per-code-block copy buttons.
+  // SVG copy/check glyphs + clipboard write, used by the code copy affordances.
   const COPY_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>';
   const CHECK_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.5 3.5L13 5"/></svg>';
-  // Copy text, flashing btn into a check while it lands. execCommand is the fallback
-  // for webviews where the async clipboard API is unavailable.
-  function copyText(text, btn) {
-    const done = () => { btn.classList.add('done'); btn.innerHTML = CHECK_ICON;
-      setTimeout(() => { btn.classList.remove('done'); btn.innerHTML = COPY_ICON; }, 1200); };
+  // Copy text, then call done() so the caller can show it landed (a block button swaps
+  // its glyph, an inline span flashes). execCommand is the fallback for webviews where
+  // the async clipboard API is unavailable.
+  function copyText(text, done) {
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, () => {});
     else { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
       ta.select(); try { document.execCommand('copy'); done(); } catch (e2) {} document.body.removeChild(ta); }
@@ -2014,9 +2018,37 @@ export function chatHtml(): string {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const code = pre.querySelector('code'); // the fence body, without the button
-        copyText((code || pre).textContent || '', btn);
+        copyText((code || pre).textContent || '', () => {
+          btn.classList.add('done'); btn.innerHTML = CHECK_ICON;
+          setTimeout(() => { btn.classList.remove('done'); btn.innerHTML = COPY_ICON; }, 1200);
+        });
       });
       wrap.appendChild(btn);
+    }
+  }
+
+  // Inline code spans (a URL, a command, a path) are copyable too, but they sit in the
+  // middle of a sentence: a floating button would either shove the surrounding words
+  // aside or cover them, so the span itself is the button. Hover tints it, clicking
+  // copies, and it flashes green in place, which costs no layout. Fenced blocks keep
+  // their own button, and code inside a link is skipped so the click still navigates.
+  function addInlineCopy(root) {
+    const codes = root.querySelectorAll('code');
+    for (let i = 0; i < codes.length; i++) {
+      const code = codes[i];
+      if (code.closest('pre') || code.closest('a') || code.classList.contains('inlineCopy')) continue;
+      code.classList.add('inlineCopy');
+      code.title = 'Click to copy';
+      code.addEventListener('click', () => {
+        // Dragging out part of a URL ends in a click here too; copying the whole span
+        // then would clobber the selection the user just made, so leave it alone.
+        const sel = window.getSelection();
+        if (sel && !sel.isCollapsed) return;
+        copyText(code.textContent || '', () => {
+          code.classList.add('done');
+          setTimeout(() => code.classList.remove('done'), 1200);
+        });
+      });
     }
   }
 
@@ -2025,7 +2057,7 @@ export function chatHtml(): string {
   function renderMd(el, text) {
     el.dataset.md = text;
     if (!MD_OK) { el.textContent = text; return; }
-    try { el.innerHTML = window.DOMPurify.sanitize(window.marked.parse(text)); addPreCopyButtons(el); }
+    try { el.innerHTML = window.DOMPurify.sanitize(window.marked.parse(text)); addPreCopyButtons(el); addInlineCopy(el); }
     catch (e) { el.textContent = text; }
   }
 
