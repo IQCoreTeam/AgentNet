@@ -628,27 +628,24 @@ export function chatHtml(): string {
   #skillsBtn .wand { display: inline-flex; width: 14px; height: 14px; }
   .wand { display: inline-flex; width: 13px; height: 13px; vertical-align: -2px; }
 
-  /* equipped-skills panel (above the composer) */
+  /* equipped-skills panel (above the composer). container-type lets the footer switch
+     between a stacked (narrow dock) and single-row (wide panel) layout by panel width. */
   #skillsPanel { margin: 8px 12px 0; border: 1px solid var(--an-line); border-radius: var(--an-radius);
-                 background: var(--vscode-editorWidget-background, var(--an-bg-2)); padding: 10px 12px; }
+                 background: var(--vscode-editorWidget-background, var(--an-bg-2)); padding: 10px 12px;
+                 container-type: inline-size; }
   #skillsPanel .skHead { display: flex; align-items: center; gap: 7px; font-size: 0.78em;
                          font-weight: 600; opacity: 0.85; margin-bottom: 9px; }
   #skillsPanel .skHead .wand { width: 14px; height: 14px; color: var(--an-green); }
   #skillsPanel .skMuted { margin-left: auto; font-weight: 400; opacity: 0.5; font-size: 0.92em; }
-  /* filter toggle: hide the built-in (non-collectible) default skills, keep only owned NFTs */
-  #skillsPanel .skFilter { display: inline-flex; align-items: center; gap: 4px; font-weight: 400;
-                           opacity: 0.62; cursor: pointer; user-select: none; white-space: nowrap; }
-  #skillsPanel .skFilter:hover { opacity: 0.95; }
-  #skillsPanel .skFilter input { margin: 0; accent-color: var(--an-green); cursor: pointer; }
   #skillsClose { margin-left: 8px; width: 20px; height: 20px; padding: 0; line-height: 18px; text-align: center;
                  font-size: 15px; border-radius: 5px; background: transparent; color: var(--vscode-foreground);
                  opacity: 0.55; border: 1px solid transparent; cursor: pointer; flex: 0 0 auto; }
   #skillsClose:hover { opacity: 1; background: var(--an-bg-1); border-color: var(--an-line); }
   /* owned-skill grid scrolls once it outgrows ~3 rows instead of pushing the chat up */
   /* responsive: 3 cols in a narrow dock, more as the panel widens (auto-fill packs
-     as many ~96px cards as fit). max-height keeps it to ~3 rows then scrolls. */
-  #skillGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px;
-               max-height: 340px; overflow-y: auto; }
+     as many ~80px cards as fit). max-height keeps it to ~3 rows then scrolls. */
+  #skillGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 7px;
+               max-height: 300px; overflow-y: auto; padding-right: 2px; }
   /* a skill slot: an item card. empty = a quiet dashed "coming soon" placeholder. */
   .skSlot { aspect-ratio: 1; border-radius: var(--an-radius-sm); display: flex; align-items: center;
             justify-content: center; }
@@ -683,42 +680,50 @@ export function chatHtml(): string {
   #skillsBtn.casting { color: var(--an-green); }
   .skNote { margin-top: 10px; font-size: 0.76em; opacity: 0.5; line-height: 1.5; }
 
-  /* passive skill-shopping toggle row (issue #21) */
-  #shopToggleRow { display: flex; align-items: center; gap: 7px; margin-top: 10px;
-                   padding-top: 9px; border-top: 1px solid var(--an-line); font-size: 0.82em; }
-  #shopToggleLabel { font-weight: 600; }
-  .shopToggleHint { opacity: 0.5; font-size: 0.92em; flex: 1; min-width: 0;
-                    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #shopToggle { position: relative; width: 32px; height: 18px; flex: none; border-radius: 999px;
-                background: var(--an-bg-2); border: 1px solid var(--an-line); cursor: pointer; padding: 0;
+  /* panel footer: publish + shop actions, and the passive skill-shopping toggle (issue #21).
+     The in-panel marketplace search was removed — the SHOP button hands off to the full
+     Markets view (which already does search/buy) instead of duplicating it in a small box. */
+  .skDivider { height: 1px; background: var(--an-line); margin: 10px 0; }
+  #skillsFooter { display: flex; flex-direction: column; gap: 9px; }
+  .skActions { display: flex; gap: 6px; }
+  /* angled-corner terminal buttons, coral for shop / green for publish (matches the SD-card
+     collectible palette, which is literal by design rather than theme-driven). */
+  .skBtn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+           height: 26px; padding: 0 12px; font-size: 0.78em; font-weight: 700; letter-spacing: 0.8px;
+           font-family: var(--an-mono, ui-monospace, SFMono-Regular, Menlo, monospace); cursor: pointer;
+           background: transparent; clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%); }
+  .skBtn.skBtn-pub { border: 1px solid var(--an-green-line); color: var(--an-green); background: var(--an-green-dim); }
+  .skBtn.skBtn-pub:hover { background: var(--an-green-soft); }
+  .skBtn.skBtn-shop { border: 1px solid #6b3a2a; color: #f6764f; background: rgba(241,90,57,0.06); }
+  .skBtn.skBtn-shop:hover { background: rgba(241,90,57,0.13); }
+  .skShopForMe { display: flex; align-items: center; gap: 8px; }
+  /* terminal-style ">SHOP_FOR_ME [?]" label with a hover tooltip carrying the explanation */
+  .sfm-label { position: relative; font-size: 0.66em; font-weight: 700; letter-spacing: 1px;
+               color: var(--vscode-descriptionForeground, #9a9ca6); opacity: 0.7; cursor: help; white-space: nowrap; }
+  .sfm-label .sfm-q { opacity: 0.55; }
+  .sfm-label .sfm-tip { position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 20; width: 168px;
+                        padding: 6px 8px; background: var(--an-bg, #101114); border: 1px solid var(--an-line);
+                        color: var(--vscode-descriptionForeground, #9a9ca6); font-size: 1.05em; font-weight: 400;
+                        letter-spacing: 0.3px; line-height: 1.5; opacity: 0; pointer-events: none;
+                        transition: opacity 0.12s ease; box-shadow: 0 8px 20px rgba(0,0,0,0.5); }
+  .sfm-label:hover .sfm-tip { opacity: 1; }
+  /* retro scanline switch — rectangular, keeps the .on / .knob contract the JS toggles */
+  #shopToggle { position: relative; width: 32px; height: 16px; flex: none; margin-left: auto; padding: 0;
+                border: 1px solid var(--an-line); background: var(--an-bg-2); cursor: pointer; overflow: hidden;
                 transition: background 0.15s, border-color 0.15s; }
-  #shopToggle .knob { position: absolute; top: 1px; left: 1px; width: 14px; height: 14px;
-                      border-radius: 50%; background: var(--an-fg, currentColor); opacity: 0.6;
-                      transition: left 0.15s, opacity 0.15s; }
-  #shopToggle.on { background: var(--an-green-dim); border-color: var(--an-green-line); }
-  #shopToggle.on .knob { left: 15px; background: var(--an-green); opacity: 1; }
-
-  /* marketplace shop inside the skills panel */
-  #skillShop { margin-top: 10px; }
-  #skillShop .shopRow { display: flex; gap: 6px; }
-  #skillSearch { flex: 1; min-width: 0; background: var(--an-bg); border: 1px solid var(--an-line);
-                 border-radius: var(--an-radius); color: inherit; padding: 5px 9px; font-size: 0.82em; outline: none; }
-  #skillSearch:focus { border-color: var(--an-green-line); }
-  #skillSearchBtn { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
-                    border-radius: var(--an-radius); padding: 5px 11px; font-size: 0.82em; cursor: pointer; }
-  #skillResults { margin-top: 8px; display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px;
-                  max-height: 300px; overflow-y: auto; }
-  #skillResults .shopEmpty { grid-column: 1 / -1; }
-  .shopItem { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--an-line);
-              border-radius: var(--an-radius); font-size: 0.82em; }
-  .shopItem .si-main { min-width: 0; flex: 1; }
-  .shopItem .si-name { font-weight: 600; }
-  .shopItem .si-desc { opacity: 0.6; font-size: 0.92em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .shopItem .si-sup { opacity: 0.5; font-size: 0.92em; white-space: nowrap; }
-  .shopItem .si-buy { background: var(--an-green-dim); border: 1px solid var(--an-green-line); color: var(--an-green);
-                      border-radius: var(--an-radius); padding: 4px 10px; cursor: pointer; white-space: nowrap; }
-  .shopItem .si-buy[disabled] { opacity: 0.5; cursor: default; }
-  #skillResults .shopEmpty { opacity: 0.5; font-size: 0.8em; padding: 4px 2px; }
+  #shopToggle::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+                       background: repeating-linear-gradient(0deg, rgba(0,0,0,0.28) 0 1px, transparent 1px 3px); }
+  #shopToggle .knob { position: absolute; top: 2px; left: 3px; width: 12px; height: 10px;
+                      background: var(--an-fg, currentColor); opacity: 0.5; transition: left 0.18s cubic-bezier(0.05,0.7,0.1,1); }
+  #shopToggle.on { border-color: var(--an-green-line); background: var(--an-green-dim); }
+  #shopToggle.on .knob { left: 17px; background: var(--an-green); opacity: 0.9; }
+  /* wide panel: publish/shop shrink to fit, footer becomes one row with the toggle pushed right */
+  @container (min-width: 360px) {
+    #skillsFooter { flex-direction: row; align-items: center; gap: 10px; }
+    .skActions .skBtn { flex: none; padding: 0 16px; }
+    .skShopForMe { margin-left: auto; }
+    #shopToggle { margin-left: 0; }
+  }
 
   /* ── skill "SD-card" collectible (ported from surfaces/webview). One component drawn
      everywhere skills are listed so the whole app reads as one collection. Graphite plastic
@@ -1478,11 +1483,10 @@ export function chatHtml(): string {
   #skillModalBody .skDoc-body pre code { border:0; padding:0; background:none; }
 
   /* ── make-skill: topbar/header/panel entry buttons + publish form ── */
-  .mktMake, .skMake { margin-left: auto; background: var(--an-green-dim); color: var(--an-green);
-                      border: 1px solid var(--an-green-line); border-radius: var(--an-radius);
-                      padding: 3px 10px; font-size: 0.8em; cursor: pointer; white-space: nowrap; }
-  .skMake { margin-left: 0; padding: 2px 8px; font-size: 0.74em; }
-  .mktMake:hover, .skMake:hover { background: var(--an-green-line); }
+  .mktMake { margin-left: auto; background: var(--an-green-dim); color: var(--an-green);
+             border: 1px solid var(--an-green-line); border-radius: var(--an-radius);
+             padding: 3px 10px; font-size: 0.8em; cursor: pointer; white-space: nowrap; }
+  .mktMake:hover { background: var(--an-green-line); }
   .pubForm { display: flex; flex-direction: column; }
   .pubLabel { font-size: 0.8em; font-weight: 600; margin: 12px 0 4px; color: var(--vscode-foreground); }
   .pubLabel .req { color: #8b5cf6; margin-left: 2px; }
@@ -1727,15 +1731,14 @@ export function chatHtml(): string {
       <div id="approvalDock"></div>
       <!-- equipped-skills panel (toggled by #skillsBtn) — the agent's "magic items".
            Real now: a header + empty grey slots that say drops aren't live yet. -->
+      <!-- inventory-only panel: shows just the skills THIS wallet owns (on-chain is the
+           source of truth). Buying moved to the full Markets view; the SHOP button below
+           opens it instead of duplicating a search box here. -->
       <div id="skillsPanel" style="display:none">
         <div class="skHead">
           <span class="wand">${WAND_SVG}</span>
-          <span>Equipped skills</span>
+          <span>Skills</span>
           <span class="skMuted" id="skillStatus">none active</span>
-          <label class="skFilter" title="Hide the built-in default skills, show only owned on-chain skills">
-            <input type="checkbox" id="skHideDefault" /> Hide default
-          </label>
-          <button id="panelMakeSkillBtn" class="skMake" title="Publish a new skill">＋ Make skill</button>
           <button id="skillsClose" title="Close">×</button>
         </div>
         <div id="skillGrid">
@@ -1744,21 +1747,18 @@ export function chatHtml(): string {
           <div class="skSlot empty"></div>
           <div class="skSlot empty"></div>
         </div>
-        <!-- marketplace: search the on-chain catalog, buy a soulbound skill, and it's
-             installed into the runtime's skills dir (discovered next session). -->
-        <!-- passive skill-shopping toggle (issue #21): ON = the agent shops for a
-             missing capability (verify → confirm → buy); OFF = owned-only, never buys. -->
-        <div id="shopToggleRow">
-          <label id="shopToggleLabel" for="shopToggle">Shop for me</label>
-          <span class="shopToggleHint">agent buys skills it needs (with your OK)</span>
-          <button id="shopToggle" role="switch" aria-checked="true" class="on" title="Toggle passive skill-shopping"><span class="knob"></span></button>
-        </div>
-        <div id="skillShop">
-          <div class="shopRow">
-            <input id="skillSearch" type="text" placeholder="Search skills to buy…" />
-            <button id="skillSearchBtn">Search</button>
+        <div class="skDivider"></div>
+        <div id="skillsFooter">
+          <div class="skActions">
+            <button id="panelMakeSkillBtn" class="skBtn skBtn-pub" title="Publish a new skill">+ PUBLISH</button>
+            <button id="panelShopBtn" class="skBtn skBtn-shop" title="Browse the marketplace">SHOP ›</button>
           </div>
-          <div id="skillResults"></div>
+          <!-- passive skill-shopping toggle (issue #21): ON = the agent shops for a missing
+               capability (verify → confirm → buy); OFF = owned-only, never buys. -->
+          <div class="skShopForMe">
+            <span class="sfm-label">›SHOP_FOR_ME <span class="sfm-q">[?]</span><span class="sfm-tip">agent buys skills it needs, with your OK</span></span>
+            <button id="shopToggle" role="switch" aria-checked="true" class="on" title="Toggle passive skill-shopping"><span class="knob"></span></button>
+          </div>
         </div>
       </div>
       <!-- activity marquee: a thin status bar that flashes what the agent is doing
@@ -3568,6 +3568,12 @@ export function chatHtml(): string {
     document.getElementById('skillsPanel').style.display = 'none'; // close the panel popover
     openPublish('skill');
   });
+  // panel SHOP button → the full Markets view (search/buy live there now). The panel is
+  // inventory-only, so it hands off rather than duplicating a search box.
+  document.getElementById('panelShopBtn').addEventListener('click', () => {
+    document.getElementById('skillsPanel').style.display = 'none';
+    showView('market');
+  });
 
   // ---- make-skill: publish form (issue: author + publish a skill from the UI) ----
   const pubImage = document.getElementById('pubImage');
@@ -4505,14 +4511,14 @@ export function chatHtml(): string {
     const status = document.getElementById('skillStatus');
     const n = names.length;
     const disposedSlugs = Object.keys(disposedMints);
-    // "default" skills are the built-in bundled ones — no on-chain mint. The Hide-default
-    // filter drops them from the grid so only owned collectibles show. Counts/badge stay full.
-    const shown = hideDefaultSkills ? names.filter((nm) => !!skillMints[nm]) : names;
-    const hidden = n - shown.length;
+    // On-chain is the source of truth: the panel shows only owned NFT skills (those with a
+    // mint), never the built-in bundled defaults. This is unconditional now — the old
+    // "Hide default" toggle was removed since ownership, not a filter, defines the inventory.
+    const shown = names.filter((nm) => !!skillMints[nm]);
     // NOTE: do NOT light up "casting" here — owning a skill is not the same as using it.
     // The glow (panel/button/slot) is driven only by flashSkill when a skill actually fires.
-    status.textContent = n
-      ? (n === 1 ? '1 skill' : n + ' skills') + (hidden ? ' \\u00b7 ' + hidden + ' hidden' : '')
+    status.textContent = shown.length
+      ? (shown.length === 1 ? '1 skill' : shown.length + ' skills')
       : 'none yet';
     grid.innerHTML = '';
     for (const name of shown) {
@@ -4548,46 +4554,12 @@ export function chatHtml(): string {
   let disposedMints = {}; // slug -> mint for un-pinned skills (greyed in the panel)
   let disposedMintSet = new Set(); // the mints above, for isDisposed() detail checks
   // small view prefs persist via the VSCode webview state; the browser fallback has no
-  // state API, so these are guarded no-ops there (filter just resets to off on reload).
+  // state API, so these are guarded no-ops there (the pref just resets to default on reload).
   function uiGet(k) { try { const s = vscode.getState && vscode.getState(); return s ? s[k] : undefined; } catch (e) { return undefined; } }
   function uiSet(k, v) { try { if (!vscode.setState) return; const s = (vscode.getState && vscode.getState()) || {}; s[k] = v; vscode.setState(s); } catch (e) {} }
-  let hideDefaultSkills = !!uiGet('hideDefaultSkills');
-  const hideDefaultCb = document.getElementById('skHideDefault');
-  if (hideDefaultCb) {
-    hideDefaultCb.checked = hideDefaultSkills;
-    hideDefaultCb.addEventListener('change', () => {
-      hideDefaultSkills = hideDefaultCb.checked;
-      uiSet('hideDefaultSkills', hideDefaultSkills);
-      setSkills(ownedSkills); // re-render with the full owned list; skillMints is already set
-    });
-  }
   setSkills([]); // idle: grey coming-soon slots
-
-  // ---- marketplace: search → buy → install (host does the chain work) ----
-  const skillSearch = document.getElementById('skillSearch');
-  const skillResults = document.getElementById('skillResults');
-  function runSkillSearch() {
-    const q = skillSearch.value.trim();
-    skillResults.innerHTML = '<div class="shopEmpty">Searching…</div>';
-    vscode.postMessage({ type: 'searchSkills', query: q });
-  }
-  document.getElementById('skillSearchBtn').addEventListener('click', runSkillSearch);
-  skillSearch.addEventListener('keydown', (e) => {
-    if (e.isComposing || e.keyCode === 229) return;
-    if (e.key === 'Enter') { e.preventDefault(); runSkillSearch(); }
-  });
-  function renderSkillResults(results) {
-    results = results || [];
-    skillResults.innerHTML = '';
-    if (!results.length) { skillResults.innerHTML = '<div class="shopEmpty">No skills found.</div>'; return; }
-    for (const r of results) {
-      // The inline panel shop shares the collectible language; the card opens the market
-      // detail (where Buy lives), same as an owned slot.
-      const owned = ownedSkills.indexOf(r.name) >= 0;
-      skillResults.appendChild(skillSdCard(r, { owned: owned, dim: owned,
-        onOpen: (c) => { showView('market'); openDetail(c.id); } }));
-    }
-  }
+  // The panel is inventory-only: searching/buying happens in the full Markets view, reached
+  // via the SHOP button. (The old in-panel search box + result grid were removed.)
   vscode.postMessage({ type: 'ownedSkills' }); // hydrate the panel on load
 
   // ---- passive skill-shopping toggle (issue #21) ----
@@ -5332,14 +5304,12 @@ export function chatHtml(): string {
     else if (m.type === 'skillShopping') setShopToggle(m.on);
     else if (m.type === 'searchResults') {
       lastMarketResults = m.results || [];
-      renderSkillResults(m.results);           // the small skills-panel shop
-      renderMarketResults(m.results);          // the full Markets view
+      renderMarketResults(m.results);          // the full Markets view (search lives here now)
     }
     else if (m.type === 'searchError') {
-      // don't hang on "Searching…" — show the real reason in both views
+      // don't hang on "Searching…" — show the real reason in the Markets view
       const msg = 'Search failed: ' + escapeHtml(m.message || 'unknown');
       mktResults.innerHTML = '<div class="mktEmpty">' + msg + '</div>';
-      skillResults.innerHTML = '<div class="shopEmpty">' + msg + '</div>';
       // the profile view shares no element with these — clear its loading state too so
       // a failed getAgentProfile doesn't leave the profile stuck on "Loading…".
       if (currentProfileWallet) {
@@ -5365,10 +5335,9 @@ export function chatHtml(): string {
       disposedMints = m.disposedMints || {};         // slug->mint, greyed in the panel
       disposedMintSet = new Set(Object.values(disposedMints)); // mints, for isDisposed()
       workflowMintSet = new Set(m.workflowMints || []); // owned workflows, kept out of the picker
-      setSkills(m.names || [], m.mints || {});  // updates ownedSkills used by both renders
-      // flip Buy → Owned everywhere the item can appear: list cards, small panel, open detail
+      setSkills(m.names || [], m.mints || {});  // refreshes the inventory panel + ownedSkills
+      // flip Buy → Owned everywhere the item can appear: market list cards, open detail
       if (panels.market.style.display !== 'none') renderMarketResults(lastMarketResults);
-      renderSkillResults(lastMarketResults);   // small skills-panel shop badges
       refreshDetailOwned();                    // detail view (if open) — clears its "Buying…"
       refreshModalOwned();                     // skill popup (if open) — flip Buy → Owned
     }
@@ -5386,7 +5355,6 @@ export function chatHtml(): string {
         if (detailBuyBtn) { detailBuyBtn.disabled = false; detailBuyBtn.textContent = 'Buy'; }
         if (skillModalBuyBtn) { skillModalBuyBtn.disabled = false; skillModalBuyBtn.textContent = 'Buy'; }
         renderMarketResults(lastMarketResults); // restore any card stuck on "Buying…"
-        renderSkillResults(lastMarketResults);
       }
     }
     // devnet faucet result for the "Get devnet SOL" banner button (PR #92 fund flow)
