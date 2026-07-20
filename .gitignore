@@ -14,6 +14,9 @@ HANDOFF.md
 # downloaded APK artifacts (CI / release builds)
 apk/
 
+# packaged VSCode extension artifacts (rebuilt from dist/ on every release)
+*.vsix
+
 # internal, local-only design docs (strategy kept out of the public repo)
 plans/raise-targetsdk-exec.md
 plans/modern-rollout-testing.md

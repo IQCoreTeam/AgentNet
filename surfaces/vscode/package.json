@@ -1,13 +1,38 @@
 {
   "name": "agentnet-vscode",
   "displayName": "AgentNet",
-  "description": "Wallet-synced claude/codex sessions in VSCode",
-  "version": "0.0.1",
+  "description": "Chat with Claude Code and Codex in VS Code, with portable sessions and a built-in marketplace of agent skills.",
+  "version": "0.1.0",
+  "publisher": "iqlabs",
+  "license": "Apache-2.0",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#0d0d10",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/IQCoreTeam/AgentNet.git",
+    "directory": "surfaces/vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/IQCoreTeam/AgentNet/issues"
+  },
+  "homepage": "https://github.com/IQCoreTeam/AgentNet",
   "engines": {
     "vscode": "^1.90.0"
   },
   "categories": [
+    "AI",
+    "Chat",
     "Other"
+  ],
+  "keywords": [
+    "claude",
+    "codex",
+    "agent",
+    "skills",
+    "chat"
   ],
   "main": "./dist/extension.js",
   "activationEvents": [

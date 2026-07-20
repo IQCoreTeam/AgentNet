@@ -1,0 +1,14 @@
+# Ship only what the extension host actually loads: the two bundles in dist/, the
+# media/ assets (iq-logo.svg is the chat panel tab icon), and the marketplace page.
+# Everything below is build-time only. Note dist/mcp-stdio.js MUST stay: Codex spawns
+# it as a child process for the read-only marketplace tools.
+
+src/**
+node_modules/**
+.vscode/**
+tsconfig.json
+tsup.config.ts
+pnpm-lock.yaml
+**/*.ts
+**/*.map
+**/*.spec.*
