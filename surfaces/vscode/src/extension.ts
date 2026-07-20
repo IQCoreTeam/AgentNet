@@ -89,6 +89,13 @@ export function activate(context: vscode.ExtensionContext) {
       if (runtime) openChat(context, vscode.ViewColumn.Beside);
       else boot(context);
     }),
+    // Activity-bar view. It holds no tree data on purpose: an empty tree makes VSCode
+    // render the `viewsWelcome` block from package.json, which is what draws the
+    // Open Chat / New Chat buttons. The chat itself stays a full editor panel.
+    vscode.window.registerTreeDataProvider("agentnet.home", {
+      getChildren: () => [],
+      getTreeItem: (item: vscode.TreeItem) => item,
+    }),
   );
   boot(context);
 }

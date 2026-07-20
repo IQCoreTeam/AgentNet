@@ -42,13 +42,59 @@
     "commands": [
       {
         "command": "agentnet.openChat",
-        "title": "AgentNet: Open Chat"
+        "title": "Open Chat",
+        "category": "AgentNet",
+        "icon": {
+          "light": "media/title-icon-light.svg",
+          "dark": "media/title-icon-dark.svg"
+        }
       },
       {
         "command": "agentnet.newChat",
-        "title": "AgentNet: New Chat (new tab)"
+        "title": "New Chat (new tab)",
+        "category": "AgentNet",
+        "icon": "$(add)"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "agentnet",
+          "title": "AgentNet",
+          "icon": "media/activity-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "agentnet": [
+        {
+          "id": "agentnet.home",
+          "name": "Chat",
+          "type": "tree"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "agentnet.home",
+        "contents": "Chat with Claude Code and Codex, with portable sessions and a marketplace of agent skills.\n[Open Chat](command:agentnet.openChat)\n[New Chat](command:agentnet.newChat)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "agentnet.openChat",
+          "group": "navigation@100"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "agentnet.newChat",
+          "when": "view == agentnet.home",
+          "group": "navigation@1"
+        }
+      ]
+    }
   },
   "scripts": {
     "build": "tsup",
