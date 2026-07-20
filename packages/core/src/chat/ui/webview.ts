@@ -371,16 +371,6 @@ export function chatHtml(): string {
   .msg strong { font-weight: 700; }
   .msg img { max-width: 100%; border-radius: var(--an-radius-sm); }
 
-  /* per-message copy button: appears on hover at the node's top-right (Claude-style) */
-  .copyBtn { position: absolute; top: 2px; right: 4px; width: 24px; height: 24px; padding: 0;
-             display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
-             background: var(--an-bg-2); border: 1px solid var(--an-line-soft); border-radius: 6px;
-             color: var(--vscode-foreground); opacity: 0; transition: opacity 0.12s, color 0.12s; }
-  .node:hover .copyBtn { opacity: 0.7; }
-  .copyBtn:hover { opacity: 1; color: var(--an-green); border-color: var(--an-green-line); }
-  .copyBtn svg { width: 13px; height: 13px; }
-  .copyBtn.done { color: var(--an-green); opacity: 1; }
-
   /* per-code-block copy button: anchored to the wrapper, so it stays put while wide
      code scrolls under it. Revealed by hovering that block alone. */
   .preWrap { position: relative; }
@@ -2001,8 +1991,7 @@ export function chatHtml(): string {
   // ---- markdown rendering (marked + dompurify), with a plain-text fallback ----
   const MD_OK = !!(window.marked && window.DOMPurify);
   if (MD_OK) window.marked.setOptions({ breaks: true, gfm: true });
-  // SVG copy/check glyphs + clipboard write, shared by the per-message copy button
-  // (addCopy) and the per-code-block ones (addPreCopyButtons).
+  // SVG copy/check glyphs + clipboard write, used by the per-code-block copy buttons.
   const COPY_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>';
   const CHECK_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.5 3.5L13 5"/></svg>';
   // Copy text, flashing btn into a check while it lands. execCommand is the fallback
@@ -2620,23 +2609,9 @@ export function chatHtml(): string {
     const el = document.createElement('div');
     el.className = 'msg ' + role;
     node.appendChild(el);
-    // a hover copy button — copies THIS message's text (el is the live target, so it
-    // reflects the final streamed text at click time)
-    if (role === 'assistant' || role === 'thinking') addCopy(node, el);
     appendNode(node, prepend ? 'head' : 'tail');
     el._row = node; // node element, so callers can attach a footer / clamp toggle
     return el;
-  }
-
-  // The hover button that copies a whole message's markdown source.
-  function addCopy(node, textEl) {
-    const btn = document.createElement('button');
-    btn.className = 'copyBtn'; btn.title = 'Copy'; btn.innerHTML = COPY_ICON;
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      copyText(textEl.dataset.md || textEl.textContent || '', btn); // raw md source
-    });
-    node.appendChild(btn);
   }
 
   // Clamp a long body element behind a fade with a "show more / less" toggle.
@@ -5280,7 +5255,6 @@ export function chatHtml(): string {
       const el = document.createElement('div'); el.className = 'msg ' + m.role;
       if (m.role === 'assistant') renderMd(el, m.text); else { el.textContent = m.text; el.dataset.md = m.text; }
       n.appendChild(el);
-      if (m.role === 'assistant' || m.role === 'thinking') addCopy(n, el);
       if (m.role === 'assistant') addFooter(n, m.durationMs, m.model);
     }
     // Insert above the current content, then restore the viewport SYNCHRONOUSLY (before the
