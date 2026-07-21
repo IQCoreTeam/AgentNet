@@ -190,7 +190,9 @@ export type ServerMessage =
   // cloud: health of the union behind `list` — "reauth"/"transient" mean the cloud tier
   // failed and the list is silently local-only (label it; other devices' sessions are
   // not gone, sync is down). "none" = no cloud configured.
-  | { type: "sessions"; list: SessionMeta[]; activeId?: string; cloud?: "ok" | "reauth" | "transient" | "none" }
+  // running: sessionIds whose agent turn is in flight right now (server reads its `busy`
+  // set at each turn edge). Lets the list mark a per-session RUNNING state; absent = none.
+  | { type: "sessions"; list: SessionMeta[]; activeId?: string; running?: string[]; cloud?: "ok" | "reauth" | "transient" | "none" }
   | { type: "modelOptions"; cli: Cli; options: import("@iqlabs-official/agent-sdk").ChatModelOption[] }
   | { type: "loading" }
   | { type: "platform"; cli: Cli }

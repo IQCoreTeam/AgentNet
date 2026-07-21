@@ -413,16 +413,25 @@ export function createChatSession(
     // approval-blocked) session alive on switch-away; an idle one is stopped instead.
     const h = s.handle!;
     busy.add(h);
+    // Turn just started: re-push so surfaces flip this session to RUNNING now (the
+    // matching clear already happens in wire()'s onTurnEnd). Fire-and-forget so the
+    // send isn't delayed by the session-list read.
+    void pushSessions();
     return h;
   }
 
   async function pushSessions() {
     const list = await rt.listSessions();
     const activeId = slot().handle?.sessionId ?? slot().pendingId;
+    // Sessions with a turn in flight, keyed by sessionId, so every surface can paint a
+    // per-session RUNNING marker. Read straight off `busy` (the source of truth): it
+    // mutates only at turn start/end and this push fires at both edges, so it stays live
+    // with no polling. Dedupe (a cross-cli session could appear once per slot).
+    const running = [...new Set([...busy].map((h) => h.sessionId).filter(Boolean))];
     // cloud reflects THIS list's union (read after listSessions): "reauth"/"transient"
     // mean the cloud tier failed and `list` is silently local-only — the UI labels it
     // so missing remote sessions read as "sync is down", not "they don't exist".
-    transport.send({ type: "sessions", list, activeId, cloud: rt.cloudState?.() ?? "none" });
+    transport.send({ type: "sessions", list, activeId, running, cloud: rt.cloudState?.() ?? "none" });
   }
 
   async function pushStorage() {

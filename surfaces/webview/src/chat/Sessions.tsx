@@ -303,6 +303,7 @@ export function Sessions({
                 ) : null}
                 {state.sessions.map((s) => {
                   const active = s.sessionId === state.activeSessionId;
+                  const running = state.sessionsRunning.includes(s.sessionId);
                   return (
                     <button
                       key={s.sessionId}
@@ -318,9 +319,14 @@ export function Sessions({
                       className={`flex w-full items-center px-2.5 py-3.5 text-left active:opacity-80 ${active ? "an-bracket" : ""}`}
                       style={active ? ({ "--tk": "#7a7a7d", "--bk": "transparent", "--ts": "8px" } as CSSProperties) : undefined}
                     >
-                      <span className="an-term-mono min-w-0 flex-1 truncate text-[15px] font-bold" style={{ color: active ? "#f2f2f2" : "#d8d8d8" }}>
+                      <span className="an-term-mono min-w-0 flex-1 truncate text-[15px] font-bold" style={{ color: running ? "#d9fff6" : active ? "#f2f2f2" : "#d8d8d8" }}>
                         {s.title || "(untitled)"}
                       </span>
+                      {running && (
+                        <span className="an-term-mono an-run ml-2 flex-none text-[11px] font-bold" style={{ color: "#5fe6cf", letterSpacing: "0.5px" }}>
+                          RUN
+                        </span>
+                      )}
                     </button>
                   );
                 })}

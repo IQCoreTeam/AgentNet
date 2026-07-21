@@ -1901,6 +1901,22 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
   animation: an-typing 1.3s ease-in-out infinite;
 }
 
+/* Per-session RUNNING marker in the chat list: a terminal ASCII spinner (| / - \)
+   cycled purely in CSS (no JS timer), so it costs nothing when no session is running. */
+@keyframes an-run-glyph {
+  0%, 100% { content: "|"; }
+  25%      { content: "/"; }
+  50%      { content: "-"; }
+  75%      { content: "\\"; }
+}
+.an-run::before {
+  content: "|";
+  display: inline-block;
+  width: 0.75em;
+  text-align: center;
+  animation: an-run-glyph 0.52s steps(1, end) infinite;
+}
+
 /* ---- COMPLETE overlay: green LED dot-matrix plaque (design "OVERLAY // COMPLETE").
    Shared by Buy/Publish celebrations; mirrors the VS Code webview plaque. Literal design
    green (#46e06a) so the LED reads the same regardless of theme. Doto = dot-matrix face

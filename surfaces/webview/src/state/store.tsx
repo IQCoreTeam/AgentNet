@@ -104,6 +104,9 @@ export interface State {
   // as "sync down", not "gone". "none" = no cloud configured.
   sessionsCloud: "ok" | "reauth" | "transient" | "none";
   activeSessionId?: string;
+  // sessionIds whose agent turn is in flight (server pushes this in every `sessions`
+  // frame off its `busy` set). Drives the per-row RUNNING marker; transient, not persisted.
+  sessionsRunning: string[];
   approvals: ApprovalRequest[];
   storage: { info: unknown; options: unknown; googleCredsConfigured?: boolean } | null;
   googleCredsError: string | null;
@@ -156,6 +159,7 @@ const initialState: State = {
   sessions: [],
   sessionsSynced: false,
   sessionsCloud: "none",
+  sessionsRunning: [],
   approvals: [],
   storage: null,
   googleCredsError: null,
@@ -399,6 +403,7 @@ function reducer(state: State, ev: Action): State {
         sessions: ev.list,
         sessionsSynced: true,
         sessionsCloud: ev.cloud ?? "none",
+        sessionsRunning: ev.running ?? [],
         activeSessionId: state.activeSessionId ?? ev.activeId,
       };
     case "loading":
