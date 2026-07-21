@@ -169,10 +169,13 @@ export function chatHtml(): string {
 
   /* ── top-bar buttons (wallet pill, history, new tab) ─────────────────────── */
   #tabs .spacer { flex: 1; }
-  #tabs button { display: inline-flex; align-items: center; gap: 6px; background: transparent;
-                 color: var(--vscode-foreground); border: 1px solid var(--an-line);
-                 border-radius: 999px; padding: 4px 11px; font-size: 0.8em; cursor: pointer;
-                 opacity: 0.8; transition: all 0.12s; }
+  /* One fixed height for EVERY top-bar button (wallet pill, Markets, Agents, history,
+     new-tab) so they line up. border-box makes height the total; vertical centering does
+     the rest, so per-button padding only sets width. */
+  #tabs button { box-sizing: border-box; height: 26px; display: inline-flex; align-items: center;
+                 gap: 6px; background: transparent; color: var(--vscode-foreground);
+                 border: 1px solid var(--an-line); border-radius: 999px; padding: 0 11px;
+                 font-size: 0.8em; cursor: pointer; opacity: 0.8; transition: all 0.12s; }
   #tabs button:hover { opacity: 1; border-color: var(--an-green-line); background: var(--an-bg-1); }
   #tabs .caret { opacity: 0.5; font-size: 0.8em; }
   #walletPill #wAvatar { width: 18px; height: 18px; border-radius: 50%; overflow: hidden;
@@ -180,9 +183,8 @@ export function chatHtml(): string {
   #walletPill #wAvatar svg { display: block; width: 100%; height: 100%; }
   /* right-side utility buttons are icon-only, circular (History clock, new-tab +).
      Glyphs fill ~60% of the circle — smaller reads as a dot, not an icon. */
-  #histBtn, #newTabBtn { width: 30px; height: 30px; padding: 0; justify-content: center; }
-  #newTabBtn { font-weight: 400; font-size: 18px; line-height: 1; }
-  #tabs button svg { width: 17px; height: 17px; display: block; }
+  #histBtn, #newTabBtn { width: 26px; height: 26px; padding: 0; justify-content: center; }
+  #tabs button svg { width: 13px; height: 13px; display: block; flex: none; }
 
   /* ── dropdowns (history / wallet), anchored under the top bar ─────────────── */
   /* SOLID background (an opaque widget bg, not the translucent --an-bg-2) so the
@@ -1672,8 +1674,8 @@ export function chatHtml(): string {
     <button id="marketsBtn" title="Skill marketplace">Markets</button>
     <button id="agentsBtn" title="Agent directory">Agents</button>
     <div class="spacer"></div>
-    <button id="histBtn" title="Recent chats" aria-label="Recent chats"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.6"></circle><path d="M8 5v3l2.2 1.3"></path></svg></button>
-    <button id="newTabBtn" title="Open another chat in a new tab">+</button>
+    <button id="histBtn" title="Recent chats" aria-label="Recent chats"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.8"></circle><path d="M8 4.8v3.2l2.3 1.4"></path></svg></button>
+    <button id="newTabBtn" title="Open another chat in a new tab"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3.2v9.6M3.2 8h9.6"></path></svg></button>
   </div>
 
   <!-- History dropdown (session list), anchored under the History button -->
@@ -4489,7 +4491,6 @@ export function chatHtml(): string {
     const priceSol = (card.price && card.price !== '0' && card.price !== 0)
       ? (Number(card.price) / 1e9).toFixed(2) : null;
     const cat = String(card.category || (isWorkflow ? 'workflow' : 'skill')).toUpperCase().slice(0, 8);
-    const ty = isWorkflow ? '/ FLOW' : '/ SKILL';
     const state = opts.disposed ? 'OFF' : opts.owned ? 'OWNED' : 'GET';
     const nm = card.name || card.id || '';
     const el = document.createElement('button');
@@ -4503,12 +4504,11 @@ export function chatHtml(): string {
       '<div class="an-sd-label">' +
         '<svg class="an-sd-art" viewBox="0 0 120 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true">' + skillSigilSvg(nm) + '</svg>' +
         '<span class="an-sd-bar" aria-hidden="true"></span>' +
-        '<div class="an-sd-mark"><span class="cat"></span> <span class="ty"></span></div>' +
+        '<div class="an-sd-mark"><span class="cat"></span></div>' +
         '<div class="an-sd-name"></div>' +
         '<div class="an-sd-chip"><span class="an-sd-big"></span><span class="an-sd-meta"></span></div>' +
       '</div>';
     el.querySelector('.an-sd-mark .cat').textContent = cat;
-    el.querySelector('.an-sd-mark .ty').textContent = ty;
     el.querySelector('.an-sd-name').textContent = nm;
     const big = el.querySelector('.an-sd-big');
     if (card.supply != null) big.textContent = String(card.supply);
