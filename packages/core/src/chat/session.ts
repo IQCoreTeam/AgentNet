@@ -141,7 +141,7 @@ async function ownedNames(env: ChatEnv): Promise<string[]> {
 
 // Full "ownedSkills" message: names for the panel + slug->mint so a bought skill's
 // card can reuse the market's on-chain getSkillDetail(mint) instead of a local file.
-async function ownedSkillsMsg(env: ChatEnv): Promise<{ type: "ownedSkills"; names: string[]; mints?: Record<string, string>; disposedMints?: Record<string, string>; workflowMints?: string[] }> {
+async function ownedSkillsMsg(env: ChatEnv): Promise<{ type: "ownedSkills"; names: string[]; mints?: Record<string, string>; disposedMints?: Record<string, string>; workflowMints?: string[]; meta?: Record<string, { category?: string; stars?: number; type?: string }> }> {
   const names = await ownedNames(env);
   const mints = env.ownedSkillMints ? await env.ownedSkillMints().catch(() => ({}) as Record<string, string>) : {};
   const disposedMints = env.disposedSkillMints ? await env.disposedSkillMints().catch(() => ({}) as Record<string, string>) : {};
@@ -154,7 +154,21 @@ async function ownedSkillsMsg(env: ChatEnv): Promise<{ type: "ownedSkills"; name
   const workflowMints = allMints.length
     ? await import("../core/skillSource.js").then((m) => m.workflowMintsAmong(allMints)).catch(() => [] as string[])
     : [];
-  return { type: "ownedSkills", names, mints, disposedMints, workflowMints };
+  // Per-skill display meta for the panel's SD cards (category mark, star grade). Read from
+  // the cached catalog only — best-effort: with no cache the card falls back to the generic
+  // SKILL mark, it never blocks or fetches.
+  const meta: Record<string, { category?: string; stars?: number; type?: string }> = {};
+  try {
+    const catalog = await import("../core/skillSource.js").then((m) => m.cachedCatalog());
+    if (catalog) {
+      for (const s of catalog) {
+        if (names.includes(s.name) || s.name in disposedMints) {
+          meta[s.name] = { category: s.category || undefined, stars: s.stars, type: s.type };
+        }
+      }
+    }
+  } catch { /* generic mark */ }
+  return { type: "ownedSkills", names, mints, disposedMints, workflowMints, meta };
 }
 
 async function exists(path: string): Promise<boolean> {

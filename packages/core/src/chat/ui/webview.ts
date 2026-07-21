@@ -53,7 +53,7 @@ export function chatHtml(): string {
      texture still reads as an LED sign. -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Doto:wght@700;900&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Doto:wght@700;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
 <style>
   /* ── AgentNet tone system ──────────────────────────────────────────────
      One green accent threaded through the whole UI (the codex badge green,
@@ -178,10 +178,11 @@ export function chatHtml(): string {
   #walletPill #wAvatar { width: 18px; height: 18px; border-radius: 50%; overflow: hidden;
                          background: var(--an-bg-2); flex: none; }
   #walletPill #wAvatar svg { display: block; width: 100%; height: 100%; }
-  /* right-side utility buttons are icon-only, circular (History clock, new-tab +) */
+  /* right-side utility buttons are icon-only, circular (History clock, new-tab +).
+     Glyphs fill ~60% of the circle — smaller reads as a dot, not an icon. */
   #histBtn, #newTabBtn { width: 30px; height: 30px; padding: 0; justify-content: center; }
-  #newTabBtn { font-weight: 700; font-size: 1.05em; line-height: 1; }
-  #tabs button svg { width: 15px; height: 15px; display: block; }
+  #newTabBtn { font-weight: 400; font-size: 18px; line-height: 1; }
+  #tabs button svg { width: 17px; height: 17px; display: block; }
 
   /* ── dropdowns (history / wallet), anchored under the top bar ─────────────── */
   /* SOLID background (an opaque widget bg, not the translucent --an-bg-2) so the
@@ -636,11 +637,14 @@ export function chatHtml(): string {
   #skillsPanel { margin: 8px 12px 0; border: 1px solid var(--an-line); border-radius: var(--an-radius);
                  background: var(--vscode-editorWidget-background, var(--an-bg-2)); padding: 10px 12px;
                  container-type: inline-size; }
-  #skillsPanel .skHead { display: flex; align-items: center; gap: 7px; font-size: 0.78em;
-                         font-weight: 600; opacity: 0.85; margin-bottom: 9px; }
-  #skillsPanel .skHead .wand { width: 14px; height: 14px; color: var(--an-green); }
-  #skillsPanel .skMuted { margin-left: auto; font-weight: 400; opacity: 0.5; font-size: 0.92em; }
-  #skillsClose { margin-left: 8px; width: 20px; height: 20px; padding: 0; line-height: 18px; text-align: center;
+  #skillsPanel .skHead { display: flex; align-items: center; gap: 8px; font-size: 0.78em;
+                         font-weight: 600; opacity: 0.85; margin-bottom: 9px;
+                         font-family: var(--an-mono, ui-monospace, SFMono-Regular, Menlo, monospace); }
+  #skillsPanel .skTitle { font-weight: 700; letter-spacing: 1.4px; }
+  /* count chip next to the title (the 2a header); × is what gets pushed right */
+  #skillsPanel .skMuted { font-weight: 400; opacity: 0.6; font-size: 0.9em;
+                          border: 1px solid var(--an-line); padding: 1px 5px; border-radius: 2px; }
+  #skillsClose { margin-left: auto; width: 20px; height: 20px; padding: 0; line-height: 18px; text-align: center;
                  font-size: 15px; border-radius: 5px; background: transparent; color: var(--vscode-foreground);
                  opacity: 0.55; border: 1px solid transparent; cursor: pointer; flex: 0 0 auto; }
   #skillsClose:hover { opacity: 1; background: var(--an-bg-1); border-color: var(--an-line); }
@@ -691,10 +695,13 @@ export function chatHtml(): string {
   .skActions { display: flex; gap: 6px; }
   /* angled-corner terminal buttons, coral for shop / green for publish (matches the SD-card
      collectible palette, which is literal by design rather than theme-driven). */
+  /* border-radius 0 beats the global button radius; the notch clip only reads on square
+     corners (a rounded border inside the polygon is what made these look like pills). */
   .skBtn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
            height: 26px; padding: 0 12px; font-size: 0.78em; font-weight: 700; letter-spacing: 0.8px;
            font-family: var(--an-mono, ui-monospace, SFMono-Regular, Menlo, monospace); cursor: pointer;
-           background: transparent; clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%); }
+           background: transparent; border-radius: 0;
+           clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%); }
   .skBtn.skBtn-pub { border: 1px solid var(--an-green-line); color: var(--an-green); background: var(--an-green-dim); }
   .skBtn.skBtn-pub:hover { background: var(--an-green-soft); }
   .skBtn.skBtn-shop { border: 1px solid #6b3a2a; color: #f6764f; background: rgba(241,90,57,0.06); }
@@ -713,6 +720,7 @@ export function chatHtml(): string {
   /* retro scanline switch — rectangular, keeps the .on / .knob contract the JS toggles */
   #shopToggle { position: relative; width: 32px; height: 16px; flex: none; margin-left: auto; padding: 0;
                 border: 1px solid var(--an-line); background: var(--an-bg-2); cursor: pointer; overflow: hidden;
+                border-radius: 0; /* rectangular retro switch — undo the global button radius */
                 transition: background 0.15s, border-color 0.15s; }
   #shopToggle::after { content: ''; position: absolute; inset: 0; pointer-events: none;
                        background: repeating-linear-gradient(0deg, rgba(0,0,0,0.28) 0 1px, transparent 1px 3px); }
@@ -746,8 +754,8 @@ export function chatHtml(): string {
   .an-sd::before { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
                    z-index: 2; background: radial-gradient(135% 90% at 26% -6%, rgba(255,255,255,0.06), rgba(255,255,255,0) 52%); }
   .an-sd::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
-                  z-index: 3; opacity: 0.62; mix-blend-mode: overlay; background-size: 64px 64px;
-                  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='1.7' intercept='-0.35'/%3E%3CfeFuncG type='linear' slope='1.7' intercept='-0.35'/%3E%3CfeFuncB type='linear' slope='1.7' intercept='-0.35'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E"); }
+                  z-index: 3; opacity: 0.45; mix-blend-mode: overlay; background-size: 64px 64px;
+                  background-image: url("data:image/png;base64,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"); }
   .an-sd.is-workflow { background: linear-gradient(166deg, #d7fffaeb 0%, #c7fdeceb 56%, #8dc3baeb 100%); }
   .an-sd:active { transform: scale(0.97); }
   .an-sd.is-disposed { opacity: 0.5; filter: grayscale(1); }
@@ -770,15 +778,17 @@ export function chatHtml(): string {
                 letter-spacing: 0.6px; white-space: nowrap; text-align: right; }
   .an-sd-mark .cat { color: #c7c8d0; }
   .an-sd-mark .ty { color: #9a9ca6; }
-  .an-sd-name { position: absolute; left: 7px; right: 8px; bottom: 38px; z-index: 4;
-                font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif; font-size: 14.5px; font-weight: 700;
+  .an-sd-name { position: absolute; left: 7px; right: 8px; bottom: 34px; z-index: 4;
+                font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif; font-size: 11.5px; font-weight: 700;
                 letter-spacing: -0.2px; color: #ffffff; line-height: 1.1; word-break: break-word;
                 text-shadow: 0 1px 4px rgba(0,0,0,0.85), 0 0 2px rgba(0,0,0,0.7);
-                display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+                display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .an-sd-chip { position: absolute; left: 6px; bottom: 6px; right: 14px; z-index: 4; display: flex;
                 align-items: center; gap: 4px; background: var(--chip); padding: 3px 7px; border-radius: 2px;
                 box-shadow: inset 0 -1px 0 rgba(0,0,0,0.16); }
   .an-sd-big { font-size: 14px; font-weight: 700; color: #2a0f06; line-height: 1; }
+  /* no supply figure (inventory panel): a quiet dark bar stands in, per the 2a chip */
+  .an-sd-big.bar { width: 10px; height: 3px; background: #2a0f06; flex: none; }
   .an-sd-meta { font-size: 6px; line-height: 1.3; color: #3a160a; font-weight: 700; letter-spacing: 0.2px; }
   /* 2a star grade: right column under the mark, gold text framed by two corner brackets
      (top-left + bottom-right ticks, not a full box). Hidden at 0 stars. */
@@ -1739,9 +1749,8 @@ export function chatHtml(): string {
            opens it instead of duplicating a search box here. -->
       <div id="skillsPanel" style="display:none">
         <div class="skHead">
-          <span class="wand">${WAND_SVG}</span>
-          <span>Skills</span>
-          <span class="skMuted" id="skillStatus">none active</span>
+          <span class="skTitle">SKILLS</span>
+          <span class="skMuted" id="skillStatus">0</span>
           <button id="skillsClose" title="Close">×</button>
         </div>
         <div id="skillGrid">
@@ -4485,7 +4494,9 @@ export function chatHtml(): string {
     el.querySelector('.an-sd-mark .cat').textContent = cat;
     el.querySelector('.an-sd-mark .ty').textContent = ty;
     el.querySelector('.an-sd-name').textContent = nm;
-    el.querySelector('.an-sd-big').textContent = (card.supply != null) ? String(card.supply) : '\\u2014';
+    const big = el.querySelector('.an-sd-big');
+    if (card.supply != null) big.textContent = String(card.supply);
+    else big.classList.add('bar'); // inventory card: no supply figure, show the 2a dark bar
     const meta = el.querySelector('.an-sd-meta');
     meta.textContent = priceSol ? (priceSol + '\\u25ce') : 'FREE';
     meta.appendChild(document.createElement('br'));
@@ -4505,8 +4516,11 @@ export function chatHtml(): string {
     return el;
   }
 
-  function setSkills(names, mints) {
+  function setSkills(names, mints, meta) {
     names = names || [];
+    // name -> { category, stars, type } from the host's cached catalog; a miss just
+    // leaves the generic SKILL mark on the card.
+    const sm = meta || {};
     // routing map includes disposed skills too, so clicking a greyed slot still opens its
     // detail (where Re-equip lives) and ownsMint() still treats it as owned (it is, on-chain).
     if (mints) skillMints = Object.assign({}, mints, disposedMints);
@@ -4520,21 +4534,24 @@ export function chatHtml(): string {
     const shown = names.filter((nm) => !!skillMints[nm]);
     // NOTE: do NOT light up "casting" here — owning a skill is not the same as using it.
     // The glow (panel/button/slot) is driven only by flashSkill when a skill actually fires.
-    status.textContent = shown.length
-      ? (shown.length === 1 ? '1 skill' : shown.length + ' skills')
-      : 'none yet';
+    // header count chip (the 2a header shows a number, not a sentence)
+    status.textContent = String(shown.length + disposedSlugs.length);
     grid.innerHTML = '';
     for (const name of shown) {
       // Bought NFT skills have a mint -> open the market detail view (on-chain source, and it
       // carries the comment box — the popup modal doesn't). Bundled skills (no mint) fall back
       // to the local SKILL.md doc. Avoids the name!=slug 404 on disk.
       const open = () => { const mt = skillMints[name]; if (mt) { showView('market'); openDetail(mt); } else openSkillDoc(name); };
-      grid.appendChild(skillSdCard({ name: name }, { owned: true, onOpen: open }));
+      const info = sm[name] || {};
+      grid.appendChild(skillSdCard({ name: name, category: info.category, type: info.type, stars: info.stars },
+        { owned: true, onOpen: open }));
     }
     // un-pinned skills: shown greyed + desaturated, still listed (not gone). Click opens the
     // detail view, which shows a Re-equip button for an owned-but-disposed skill.
     for (const name of disposedSlugs) {
-      const c = skillSdCard({ name: name }, { owned: true, disposed: true,
+      const info = sm[name] || {};
+      const c = skillSdCard({ name: name, category: info.category, type: info.type, stars: info.stars },
+        { owned: true, disposed: true,
         onOpen: () => { showView('market'); openDetail(disposedMints[name]); } });
       c.title = name + ' \\u2014 un-pinned (click to re-equip)';
       grid.appendChild(c);
@@ -5338,7 +5355,7 @@ export function chatHtml(): string {
       disposedMints = m.disposedMints || {};         // slug->mint, greyed in the panel
       disposedMintSet = new Set(Object.values(disposedMints)); // mints, for isDisposed()
       workflowMintSet = new Set(m.workflowMints || []); // owned workflows, kept out of the picker
-      setSkills(m.names || [], m.mints || {});  // refreshes the inventory panel + ownedSkills
+      setSkills(m.names || [], m.mints || {}, m.meta || {});  // refreshes the inventory panel + ownedSkills
       // flip Buy → Owned everywhere the item can appear: market list cards, open detail
       if (panels.market.style.display !== 'none') renderMarketResults(lastMarketResults);
       refreshDetailOwned();                    // detail view (if open) — clears its "Buying…"
