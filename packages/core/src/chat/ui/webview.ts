@@ -178,7 +178,10 @@ export function chatHtml(): string {
   #walletPill #wAvatar { width: 18px; height: 18px; border-radius: 50%; overflow: hidden;
                          background: var(--an-bg-2); flex: none; }
   #walletPill #wAvatar svg { display: block; width: 100%; height: 100%; }
-  #newTabBtn { padding: 4px 10px; font-weight: 700; }
+  /* right-side utility buttons are icon-only, circular (History clock, new-tab +) */
+  #histBtn, #newTabBtn { width: 30px; height: 30px; padding: 0; justify-content: center; }
+  #newTabBtn { font-weight: 700; font-size: 1.05em; line-height: 1; }
+  #tabs button svg { width: 15px; height: 15px; display: block; }
 
   /* ── dropdowns (history / wallet), anchored under the top bar ─────────────── */
   /* SOLID background (an opaque widget bg, not the translucent --an-bg-2) so the
@@ -1659,7 +1662,7 @@ export function chatHtml(): string {
     <button id="marketsBtn" title="Skill marketplace">Markets</button>
     <button id="agentsBtn" title="Agent directory">Agents</button>
     <div class="spacer"></div>
-    <button id="histBtn" title="Recent chats">↻ History <span class="caret">▾</span></button>
+    <button id="histBtn" title="Recent chats" aria-label="Recent chats"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.6"></circle><path d="M8 5v3l2.2 1.3"></path></svg></button>
     <button id="newTabBtn" title="Open another chat in a new tab">+</button>
   </div>
 
