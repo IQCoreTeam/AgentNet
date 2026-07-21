@@ -189,6 +189,7 @@ export type { SlashCommandSpec, SlashEngine } from "./chat/slashCommands.js";
 // or a WebSocket in the browser/Android). Surfaces serve these strings as-is.
 export { chatHtml } from "./chat/ui/webview.js";
 export { onboardingHtml } from "./chat/ui/onboarding.js";
+export { sidebarHtml } from "./chat/ui/sidebar.js";
 
 // The marked + dompurify browser builds as one text blob (see mdLibs.generated.ts).
 // The HTML webview inlines this into a <script>; the React web surface evaluates it

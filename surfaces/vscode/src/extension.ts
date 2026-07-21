@@ -39,6 +39,7 @@ import {
   TransportApprovalChannel,
   withTimeout,
   chatHtml,
+  sidebarHtml,
   onboardingHtml,
   listCodexModelOptions,
   listClaudeModelOptions,
@@ -89,12 +90,18 @@ export function activate(context: vscode.ExtensionContext) {
       if (runtime) openChat(context, vscode.ViewColumn.Beside);
       else boot(context);
     }),
-    // Activity-bar view. It holds no tree data on purpose: an empty tree makes VSCode
-    // render the `viewsWelcome` block from package.json, which is what draws the
-    // Open Chat / New Chat buttons. The chat itself stays a full editor panel.
-    vscode.window.registerTreeDataProvider("agentnet.home", {
-      getChildren: () => [],
-      getTreeItem: (item: vscode.TreeItem) => item,
+    // Activity-bar view: the session-list home (a WebviewView rendered by sidebarHtml).
+    // It lists chats with a live per-session RUNNING marker and routes clicks into the
+    // chat editor panels. The chat itself stays a full editor panel.
+    vscode.window.registerWebviewViewProvider("agentnet.home", {
+      resolveWebviewView(view) {
+        sidebarView = view;
+        view.webview.options = { enableScripts: true };
+        view.webview.html = sidebarHtml();
+        view.webview.onDidReceiveMessage((m) => void handleSidebarMessage(context, m));
+        view.onDidChangeVisibility(() => { if (view.visible) void refreshSidebar(); });
+        view.onDidDispose(() => { if (sidebarView === view) sidebarView = undefined; });
+      },
     }),
   );
   boot(context);
@@ -112,6 +119,7 @@ async function boot(context: vscode.ExtensionContext) {
   } else {
     openOnboarding(context);
   }
+  void refreshSidebar(); // reflect wallet/session state (or the onboard CTA) in the sidebar
 }
 
 function openExternal(url: string) {
@@ -289,7 +297,100 @@ function closeAllChatPanels() {
   for (const p of [...chatPanels]) p.dispose();
 }
 
-async function openChat(context: vscode.ExtensionContext, column = vscode.ViewColumn.One) {
+// ── Activity-bar sidebar (session-list home) ──────────────────────────────────
+// One WebviewView, separate from the chat panels. It mirrors the session list (forwarded
+// from whichever chat panel is active, carrying the live `running` set off the core's busy
+// set) and routes clicks back into a chat panel. It runs no engine of its own.
+let sidebarView: vscode.WebviewView | undefined;
+// Each open chat panel's core message-injector, so the sidebar can drive an existing panel
+// (switch session / delete) without round-tripping through that panel's webview.
+const panelInject = new Map<vscode.WebviewPanel, (m: any) => void>();
+// Freshest {type:'sessions'} frame a chat panel forwarded (carries live activeId + running).
+// Reused on a sidebar refresh so re-focusing it mid-turn doesn't blank the RUNNING marker.
+let lastSessionsFrame: any = null;
+
+function shortAddr(a?: string | null): string | null {
+  if (!a) return null;
+  return a.length > 10 ? a.slice(0, 4) + "..." + a.slice(-4) : a;
+}
+
+function pickChatPanel(): vscode.WebviewPanel | undefined {
+  let last: vscode.WebviewPanel | undefined;
+  for (const p of chatPanels) last = p; // most-recently opened
+  return last;
+}
+
+// Reveal (or open) a chat showing `sessionId`: focus the panel already holding it, else
+// switch the active panel to it, else open a fresh panel that resumes it once ready.
+function revealSession(context: vscode.ExtensionContext, sessionId: string) {
+  const holder = openSessions.get(sessionId);
+  if (holder) { holder.reveal(); return; }
+  const target = pickChatPanel();
+  if (target) { target.reveal(); panelInject.get(target)?.({ type: "open", sessionId }); return; }
+  void openChat(context, vscode.ViewColumn.One, sessionId);
+}
+
+function revealAnyChat(context: vscode.ExtensionContext) {
+  const target = pickChatPanel();
+  if (target) target.reveal();
+  else if (runtime) void openChat(context);
+  else void boot(context);
+}
+
+// Delete a session from wherever it lives: route through a panel's core (so it tears down
+// live handles + repaints + re-pushes the list) when one is open; else delete directly.
+async function deleteSessionFromSidebar(sessionId: string) {
+  const holder = openSessions.get(sessionId) ?? pickChatPanel();
+  const inject = holder && panelInject.get(holder);
+  if (inject) { inject({ type: "delete", sessionId }); return; }
+  if (runtime) { await runtime.deleteSession(sessionId); await refreshSidebar(); }
+}
+
+// Push wallet + storage + session list to the sidebar. Fired on the webview's `ready`, on
+// visibility regain, and after wallet connect/disconnect. Live running/active updates while
+// a chat is open arrive via the forwarded {type:'sessions'} frames instead of here.
+async function refreshSidebar() {
+  const v = sidebarView;
+  if (!v) return;
+  if (!runtime || !wallet) {
+    v.webview.postMessage({ type: "onboard", value: true });
+    v.webview.postMessage({ type: "wallet", address: null });
+    return;
+  }
+  v.webview.postMessage({ type: "onboard", value: false });
+  v.webview.postMessage({ type: "wallet", address: shortAddr(wallet.address) });
+  try {
+    const connected = await isCloudConnected();
+    const kind = connected ? await currentStorageKind() : null;
+    const label = STORAGE_OPTIONS.find((o) => o.kind === kind)?.label ?? (kind ? String(kind) : "LOCAL");
+    v.webview.postMessage({ type: "storage", connected, label });
+  } catch { /* leave the chip at its last state */ }
+  // While a chat panel is open its forwarded frame is the live truth (activeId + running);
+  // reuse it so re-focusing the sidebar mid-turn keeps the RUNNING marker. Only with no panel
+  // open do we read the list fresh (nothing can be running then).
+  if (chatPanels.size > 0 && lastSessionsFrame) {
+    v.webview.postMessage(lastSessionsFrame);
+  } else {
+    try {
+      const list = await runtime.listSessions();
+      v.webview.postMessage({ type: "sessions", list, running: [], cloud: runtime.cloudState?.() ?? "none" });
+    } catch { /* keep the last list */ }
+  }
+}
+
+async function handleSidebarMessage(context: vscode.ExtensionContext, m: any) {
+  switch (m?.type) {
+    case "ready": await refreshSidebar(); break;
+    // New session = a fresh chat in its own tab (never hijacks an open conversation).
+    case "new": if (runtime) void vscode.commands.executeCommand("agentnet.newChat"); else void boot(context); break;
+    case "open": if (runtime && typeof m.sessionId === "string") revealSession(context, m.sessionId); else void boot(context); break;
+    case "delete": if (typeof m.sessionId === "string") await deleteSessionFromSidebar(m.sessionId); break;
+    // Wallet menu + storage switching both live in the chat surface for now.
+    case "wallet": case "drive": revealAnyChat(context); break;
+  }
+}
+
+async function openChat(context: vscode.ExtensionContext, column = vscode.ViewColumn.One, initialOpenId?: string) {
   const panel = vscode.window.createWebviewPanel(
     "agentnetChat",
     "AgentNet Chat",
@@ -308,6 +409,10 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
   // recvHandlers mirrors every onRecv subscriber so inject() can feed a message straight into
   // them — used by the desktop-popup layer to answer an approval as if the webview had.
   const recvHandlers: ((m: any) => void)[] = [];
+  // Deferred session to resume once this panel's core is live: injected after the first
+  // {type:'sessions'} frame (which only lands post-`ready`), so opening a specific session
+  // in a brand-new panel doesn't race the core's default open().
+  let pendingOpenId = initialOpenId;
   // Tap the session list as it flows to the webview so the desktop popup can name the session a
   // request belongs to (sessionId -> title). Kept fresh on every "sessions" push.
   const sessionTitles = new Map<string, string>();
@@ -316,6 +421,10 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
       const m = msg as any;
       if (m && m.type === "sessions" && Array.isArray(m.list)) {
         for (const s of m.list) if (s && s.sessionId) sessionTitles.set(s.sessionId, String(s.title || ""));
+        // Mirror the live list (with its `running`/`activeId`) to the sidebar home + cache it.
+        lastSessionsFrame = m;
+        sidebarView?.webview.postMessage(m);
+        if (pendingOpenId) { const id = pendingOpenId; pendingOpenId = undefined; for (const h of recvHandlers) h({ type: "open", sessionId: id }); }
       }
       return panel.webview.postMessage(msg);
     },
@@ -326,6 +435,9 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
     inject: (m: any) => { for (const h of recvHandlers) h(m); },
   };
   attachAuthHandlers(transport);
+  // Expose this panel's core injector so the sidebar can drive it; drop it on dispose.
+  panelInject.set(panel, transport.inject);
+  panel.onDidDispose(() => panelInject.delete(panel));
 
   // This panel's OWN approval channel — tool approvals from sessions started here
   // dock in THIS panel (it shares this panel's transport). Drained on dispose so a
@@ -491,8 +603,10 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
       await context.globalState.update("onboarded", false);
       wallet = null;
       runtime = null;
+      lastSessionsFrame = null; // stale once the wallet/runtime is gone
       closeAllChatPanels();
       openOnboarding(context);
+      void refreshSidebar(); // wallet gone → sidebar shows the onboard CTA
     },
   });
 
