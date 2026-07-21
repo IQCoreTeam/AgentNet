@@ -2157,12 +2157,19 @@ export function chatHtml(): string {
 
   let streaming = null;     // bubble currently being streamed into
   let streamRaf = 0;        // rAF handle: coalesces live-markdown renders to one paint/frame
-  // Reuse renderMd so the assistant's reply renders AS MARKDOWN while it streams, instead of
-  // raw source that only formats once the turn completes. Throttled via rAF so a fast token
-  // stream stays smooth (thinking text stays plain).
+  let streamTimer = 0;      // trailing timer that defers the next render to the cadence boundary
+  let lastStreamRender = 0; // when the live bubble was last re-rendered
+  // Live rendering re-parses the WHOLE accumulated message (renderMd = marked + DOMPurify +
+  // full innerHTML swap), so its cost grows with the reply and at rAF cadence it saturated
+  // the window's renderer process — webviews share it, so typing lagged across all of
+  // VS Code while a long reply streamed. Render on a coarse time cadence instead: deltas
+  // keep accumulating in dataset.acc, the bubble repaints every STREAM_MD_MS, and the
+  // partial:false path still does the exact final render — same end state, ~5% of the work.
+  const STREAM_MD_MS = 300;
   function flushStreamRender() {
     streamRaf = 0;
     if (!streaming) return;
+    lastStreamRender = Date.now();
     const raw = streaming.dataset.acc || '';
     if (streaming.dataset.role === 'assistant') renderMd(streaming, raw);
     else { streaming.textContent = raw; streaming.dataset.md = raw; }
@@ -2172,7 +2179,16 @@ export function chatHtml(): string {
     if (typingEl) tailBody().appendChild(typingEl);
     stickToBottom();
   }
-  function scheduleStreamRender() { if (!streamRaf) streamRaf = requestAnimationFrame(flushStreamRender); }
+  function scheduleStreamRender() {
+    if (streamRaf || streamTimer) return; // a render is already booked
+    const wait = STREAM_MD_MS - (Date.now() - lastStreamRender);
+    if (wait <= 0) streamRaf = requestAnimationFrame(flushStreamRender);
+    else streamTimer = setTimeout(() => { streamTimer = 0; if (!streamRaf) streamRaf = requestAnimationFrame(flushStreamRender); }, wait);
+  }
+  function cancelStreamRender() {
+    if (streamRaf) { cancelAnimationFrame(streamRaf); streamRaf = 0; }
+    if (streamTimer) { clearTimeout(streamTimer); streamTimer = 0; }
+  }
   let allSessions = [];     // last sessions payload from extension
   let cloudListState = 'none'; // cloud health of that payload's union (ok/reauth/transient/none)
   let activeId = null;
@@ -3139,7 +3155,7 @@ export function chatHtml(): string {
         const prev = streaming.dataset.acc || '';
         const raw = msg.text.startsWith(prev) ? msg.text : prev + msg.text;
         streaming.classList.remove('cursor');
-        if (streamRaf) { cancelAnimationFrame(streamRaf); streamRaf = 0; } // drop any pending live render
+        cancelStreamRender(); // drop any pending live render (rAF or trailing timer)
         asMd(streaming, raw);
         streaming = null;
       } else {
