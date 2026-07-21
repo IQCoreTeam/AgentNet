@@ -5,6 +5,7 @@
 
 import * as vscode from "vscode";
 import * as path from "node:path";
+import { exec } from "node:child_process";
 import { homedir } from "node:os";
 import type { AgentRuntime, Wallet } from "@iqlabs-official/agent-sdk/runtime/contract";
 import {
@@ -104,6 +105,34 @@ export function activate(context: vscode.ExtensionContext) {
       },
     }),
   );
+  // Dev-only reload loop: a status-bar button in the Extension Development Host that
+  // rebuilds the dist (tsup inlines core, so core edits need it too) and reloads the
+  // window. Never appears in the installed/marketplace extension.
+  if (context.extensionMode === vscode.ExtensionMode.Development) {
+    context.subscriptions.push(vscode.commands.registerCommand("agentnet.devReload", async () => {
+      try {
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Window, title: "AgentNet: rebuilding dist..." },
+          () => new Promise<void>((resolve, reject) => {
+            // GUI-launched hosts miss the shell PATH, so add the usual pnpm homes.
+            exec("pnpm build:vscode", {
+              cwd: path.resolve(context.extensionPath, "..", ".."),
+              env: { ...process.env, PATH: `${process.env.PATH ?? ""}:/opt/homebrew/bin:/usr/local/bin` },
+            }, (err, _out, stderr) => (err ? reject(new Error(stderr || err.message)) : resolve()));
+          }),
+        );
+        await vscode.commands.executeCommand("workbench.action.reloadWindow");
+      } catch (e) {
+        void vscode.window.showErrorMessage(`AgentNet dev build failed: ${e instanceof Error ? e.message : e}`);
+      }
+    }));
+    const reload = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 10_000);
+    reload.text = "$(refresh) AgentNet Reload";
+    reload.tooltip = "Rebuild the AgentNet dist and reload this window";
+    reload.command = "agentnet.devReload";
+    reload.show();
+    context.subscriptions.push(reload);
+  }
   boot(context);
 }
 
