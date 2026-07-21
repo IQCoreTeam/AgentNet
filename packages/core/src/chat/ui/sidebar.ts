@@ -59,7 +59,10 @@ export function sidebarHtml(): string {
                   color: #d8d8d8; font-family: inherit; font-size: 10px; letter-spacing: 0.3px; padding: 0; }
   .search input::placeholder { color: #56585f; }
   .list { flex: 1; display: flex; flex-direction: column; padding: 2px 7px 12px; overflow-y: auto; }
-  .srow { position: relative; display: flex; align-items: center; gap: 8px; height: 33px;
+  /* flex:none everywhere — rows/header are flex children of a column layout, and without it
+     a long session list SHRINKS every row to its text height instead of scrolling. */
+  .whead, .wline, .newbtn, .search, .warn, .cta, .empty { flex: none; }
+  .srow { position: relative; display: flex; align-items: center; gap: 8px; height: 33px; flex: none;
           padding: 0 8px 0 12px; cursor: pointer; border: 1px solid transparent; border-radius: 3px; }
   .srow:hover { background: #17181d; }
   .srow.on { background: #191a20; }

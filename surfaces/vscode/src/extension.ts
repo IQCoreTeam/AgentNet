@@ -360,9 +360,13 @@ async function refreshSidebar() {
   v.webview.postMessage({ type: "onboard", value: false });
   v.webview.postMessage({ type: "wallet", address: shortAddr(wallet.address) });
   try {
-    const connected = await isCloudConnected();
-    const kind = connected ? await currentStorageKind() : null;
-    const label = STORAGE_OPTIONS.find((o) => o.kind === kind)?.label ?? (kind ? String(kind) : "LOCAL");
+    // Prefer the connected account (the Google email) as the chip label — "who it syncs
+    // to" beats "which brand of drive". Falls back to the provider name, then the kind.
+    const info = await getStorageInfo();
+    const connected = !!info?.connected;
+    const label = connected
+      ? info?.account ?? STORAGE_OPTIONS.find((o) => o.kind === info?.kind)?.label ?? String(info?.kind)
+      : "CONNECT";
     v.webview.postMessage({ type: "storage", connected, label });
   } catch { /* leave the chip at its last state */ }
   // While a chat panel is open its forwarded frame is the live truth (activeId + running);
