@@ -385,8 +385,10 @@ async function handleSidebarMessage(context: vscode.ExtensionContext, m: any) {
     case "new": if (runtime) void vscode.commands.executeCommand("agentnet.newChat"); else void boot(context); break;
     case "open": if (runtime && typeof m.sessionId === "string") revealSession(context, m.sessionId); else void boot(context); break;
     case "delete": if (typeof m.sessionId === "string") await deleteSessionFromSidebar(m.sessionId); break;
-    // Wallet menu + storage switching both live in the chat surface for now.
-    case "wallet": case "drive": revealAnyChat(context); break;
+    // Wallet menu still opens in the chat surface; the Drive chip now connects/switches
+    // storage right here (same native picker + reconnect the chat header uses).
+    case "wallet": revealAnyChat(context); break;
+    case "drive": if (runtime) { if (await pickAndConnectCloud()) await refreshSidebar(); } else void boot(context); break;
   }
 }
 
@@ -550,20 +552,9 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
     // passive skill-shopping toggle (issue #21): persisted in config.json by the SDK.
     getSkillShopping: () => getSkillShopping(),
     setSkillShopping: (on) => setSkillShopping(on),
-    // header "connect" link → native quick-pick of cloud backends, then connect
-    pickCloud: async () => {
-      const cfg = await pickCloud();
-      if (!cfg) return; // user dismissed
-      try {
-        await switchStorage(wallet!, cfg, openExternal);
-        runtime = await connect(wallet!, cloudStatusCb);
-      } catch (e) {
-        // surface the failure instead of silently doing nothing (e.g. missing creds)
-        vscode.window.showErrorMessage(
-          "Cloud connect failed: " + (e instanceof Error ? e.message : String(e)),
-        );
-      }
-    },
+    // header "connect" link → native quick-pick of cloud backends, then connect. Shares the
+    // sidebar Drive chip's path (pickAndConnectCloud) so both connect through one flow.
+    pickCloud: async () => { await pickAndConnectCloud(); },
     // connect / change the cloud mirror (local stays on regardless)
     connectCloud: async (c) => {
       await switchStorage(wallet!, { kind: c.kind, location: c.location, authHeader: c.authHeader } as StorageConfig, openExternal);
@@ -651,6 +642,22 @@ async function pickCloud(): Promise<StorageConfig | undefined> {
     return { kind: "custom", location, authHeader: authHeader || undefined };
   }
   return { kind: choice.k };
+}
+
+// Native cloud picker -> switch storage -> reconnect the runtime. Shared by the chat header's
+// "connect" action and the sidebar Drive chip so both connect through exactly one path.
+async function pickAndConnectCloud(): Promise<boolean> {
+  if (!wallet) return false;
+  const cfg = await pickCloud();
+  if (!cfg) return false; // user dismissed the picker
+  try {
+    await switchStorage(wallet, cfg, openExternal);
+    runtime = await connect(wallet, cloudStatusCb);
+    return true;
+  } catch (e) {
+    vscode.window.showErrorMessage("Cloud connect failed: " + (e instanceof Error ? e.message : String(e)));
+    return false;
+  }
 }
 
 function getCwd(): string {
