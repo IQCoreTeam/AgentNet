@@ -355,6 +355,9 @@ export function chatHtml(): string {
   .node.assistant .msg { white-space: normal; }
   .msg > :first-child { margin-top: 0; }
   .msg > :last-child { margin-bottom: 0; }
+  /* streaming block wrappers (renderMdStreaming): keep the same edge-margin trims */
+  .msg > .mdChunk:first-child > :first-child { margin-top: 0; }
+  .msg > .mdChunk:last-child > :last-child { margin-bottom: 0; }
   .msg p { margin: 0 0 8px; }
   .msg h1, .msg h2, .msg h3, .msg h4 { margin: 14px 0 6px; line-height: 1.3; font-weight: 700; }
   .msg h1 { font-size: 1.3em; } .msg h2 { font-size: 1.18em; } .msg h3 { font-size: 1.06em; } .msg h4 { font-size: 1em; }
@@ -2083,9 +2086,56 @@ export function chatHtml(): string {
   // libs didn't load. We keep the raw md on el.dataset.md so copy yields the source.
   function renderMd(el, text) {
     el.dataset.md = text;
+    // whole-subtree replace below: any incremental stream state now points at dead nodes
+    el._mdDone = null; el._mdTail = null; el._mdTailRaw = null;
     if (!MD_OK) { el.textContent = text; return; }
     try { el.innerHTML = window.DOMPurify.sanitize(window.marked.parse(text)); addPreCopyButtons(el); addInlineCopy(el); }
     catch (e) { el.textContent = text; }
+  }
+
+  // Live-stream variant of renderMd. Markdown arrives append-only, so every block
+  // except the growing tail is already final: freeze finished blocks into .mdChunk
+  // children once, and re-parse/sanitize ONLY the tail block on each flush. That turns
+  // the per-flush cost from O(whole reply) into O(last block) — the full innerHTML
+  // swap was the long task that saturated the shared webview renderer and lagged
+  // typing while a long reply streamed. The lexer still scans the full text each flush
+  // (no DOM work, cheap). If a later chunk legitimately rewrites an already-frozen
+  // block (e.g. two streamed list chunks merging into one loose list), the raw-prefix
+  // comparison catches it and we rebuild from scratch — one old-style full render.
+  // The partial:false path still renders the finished text via renderMd's whole-document
+  // parse, so the final DOM is identical to the pre-incremental behavior (including
+  // cross-block reference links, which per-block parsing can't resolve mid-stream).
+  function renderMdStreaming(el, text) {
+    el.dataset.md = text;
+    if (!MD_OK) { el.textContent = text; return; }
+    try {
+      const tokens = window.marked.lexer(text);
+      const stable = Math.max(0, tokens.length - 1); // the last token may still grow
+      let done = el._mdDone;
+      let ok = !!done && done.length <= stable;
+      for (let i = 0; ok && i < done.length; i++) if (tokens[i].raw !== done[i]) ok = false;
+      if (!ok) { el.innerHTML = ''; el._mdDone = done = []; el._mdTail = null; el._mdTailRaw = null; }
+      if (!el._mdTail) {
+        el._mdTail = document.createElement('div');
+        el._mdTail.className = 'mdChunk';
+        el._mdTailRaw = null;
+        el.appendChild(el._mdTail);
+      }
+      for (let i = done.length; i < stable; i++) {
+        const div = document.createElement('div');
+        div.className = 'mdChunk';
+        div.innerHTML = window.DOMPurify.sanitize(window.marked.parse(tokens[i].raw));
+        addPreCopyButtons(div); addInlineCopy(div);
+        el.insertBefore(div, el._mdTail);
+        done.push(tokens[i].raw);
+      }
+      const tailRaw = stable < tokens.length ? tokens[stable].raw : '';
+      if (tailRaw !== el._mdTailRaw) {
+        el._mdTail.innerHTML = window.DOMPurify.sanitize(window.marked.parse(tailRaw));
+        addPreCopyButtons(el._mdTail); addInlineCopy(el._mdTail);
+        el._mdTailRaw = tailRaw;
+      }
+    } catch (e) { el.textContent = text; el._mdDone = null; el._mdTail = null; el._mdTailRaw = null; }
   }
 
   const log = document.getElementById('log');
@@ -2174,19 +2224,20 @@ export function chatHtml(): string {
   let streamRaf = 0;        // rAF handle: coalesces live-markdown renders to one paint/frame
   let streamTimer = 0;      // trailing timer that defers the next render to the cadence boundary
   let lastStreamRender = 0; // when the live bubble was last re-rendered
-  // Live rendering re-parses the WHOLE accumulated message (renderMd = marked + DOMPurify +
-  // full innerHTML swap), so its cost grows with the reply and at rAF cadence it saturated
-  // the window's renderer process — webviews share it, so typing lagged across all of
-  // VS Code while a long reply streamed. Render on a coarse time cadence instead: deltas
-  // keep accumulating in dataset.acc, the bubble repaints every STREAM_MD_MS, and the
-  // partial:false path still does the exact final render — same end state, ~5% of the work.
+  // Live rendering used to re-parse the WHOLE accumulated message every repaint
+  // (marked + DOMPurify + full innerHTML swap), so its cost grew with the reply and
+  // typing lagged across all of VS Code while a long reply streamed — webviews share
+  // the window's renderer process. Two defenses now: repaints happen on a coarse time
+  // cadence (deltas keep accumulating in dataset.acc between flushes), and each repaint
+  // is incremental (renderMdStreaming) so it costs O(growing tail block), not O(reply).
+  // The partial:false path still does the exact final full render — same end state.
   const STREAM_MD_MS = 300;
   function flushStreamRender() {
     streamRaf = 0;
     if (!streaming) return;
     lastStreamRender = Date.now();
     const raw = streaming.dataset.acc || '';
-    if (streaming.dataset.role === 'assistant') renderMd(streaming, raw);
+    if (streaming.dataset.role === 'assistant') renderMdStreaming(streaming, raw);
     else { streaming.textContent = raw; streaming.dataset.md = raw; }
     // Follow the tail + keep the typing indicator pinned to the bottom HERE, coalesced to
     // this frame. Doing it per streamed snapshot forced a synchronous layout (scrollHeight
@@ -3547,9 +3598,18 @@ export function chatHtml(): string {
   // Grow the textarea with its content; CSS max-height (~2.5x) then scrolls inside.
   // Reset to auto first so it shrinks when text is deleted; pasting a long message
   // grows to the cap and scrolls rather than pushing the chat off-screen.
+  // Coalesced to one measure per frame: the auto+scrollHeight pair forces a synchronous
+  // relayout, and doing that per keystroke lands exactly when a streaming flush has just
+  // dirtied the transcript layout — each key then re-laid-out the whole document, which
+  // is what made typing stutter while a reply streamed.
+  let growRaf = 0;
   function autoGrowInput() {
-    input.style.height = 'auto';
-    input.style.height = Math.min(input.scrollHeight, 220) + 'px';
+    if (growRaf) return;
+    growRaf = requestAnimationFrame(() => {
+      growRaf = 0;
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 220) + 'px';
+    });
   }
   input.addEventListener('input', () => {
     autoGrowInput();
