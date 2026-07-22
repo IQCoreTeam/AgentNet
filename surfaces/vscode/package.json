@@ -2,7 +2,7 @@
   "name": "agentnet-vscode",
   "displayName": "AgentNet",
   "description": "Chat with Claude Code and Codex in VS Code, with portable sessions and a built-in marketplace of agent skills.",
-  "version": "0.1.0",
+  "version": "0.1.3",
   "publisher": "iqlabs",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
