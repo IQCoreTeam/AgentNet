@@ -1,15 +1,25 @@
-# Running AgentNet in VS Code
+# AgentNet in VS Code
 
-How to run the AgentNet **VS Code extension** — the agent inside your editor. No prior
-extension-development experience needed.
+The AgentNet **VS Code extension** — the agent inside your editor.
 
-> Pre-release (devnet). Once released, install it straight from the VS Code Marketplace.
+## Install (Marketplace)
+
+Install **[AgentNet from the VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=IQLabs.agentnet-vscode)**:
+search "AgentNet" in the Extensions view (`Cmd/Ctrl+Shift+X`), or run:
+
+```bash
+code --install-extension IQLabs.agentnet-vscode
+```
+
+Then install at least one agent CLI (Step 1 below), open the Command Palette and run
+**"AgentNet: Open Chat"** (Step 4). Steps 2 and 3 are only for developers running the
+extension from source.
 
 - [How this differs from the phone app](#how-this-differs-from-the-phone-app)
 - [What you need](#what-you-need)
 - [Step 1 — Install the agent CLIs](#step-1--install-the-agent-clis)
-- [Step 2 — Get the code & build](#step-2--get-the-code--build)
-- [Step 3 — Launch the extension (F5)](#step-3--launch-the-extension-f5)
+- [Step 2 — (from source) Get the code & build](#step-2--from-source-get-the-code--build)
+- [Step 3 — (from source) Launch the extension (F5)](#step-3--from-source-launch-the-extension-f5)
 - [Step 4 — Open the chat](#step-4--open-the-chat)
 - [Troubleshooting](#troubleshooting)
 
@@ -28,11 +38,9 @@ So the order matters: **install and sign into the CLIs first**, then run the ext
 ## What you need
 
 - **VS Code** — https://code.visualstudio.com
-- **Node.js 20+** and **pnpm** (the repo is a pnpm workspace).
-  - Install Node: https://nodejs.org (LTS).
-  - Install pnpm: `npm install -g pnpm`
+- **Node.js 20+** — https://nodejs.org (LTS), needed for the agent CLIs.
 - **claude** and/or **codex** CLI installed and logged in (see Step 1).
-- The repo cloned to your computer.
+- Running from source instead? Also **pnpm** (`npm install -g pnpm`) and the repo cloned.
 
 ---
 
@@ -62,7 +70,9 @@ global bin is on your `PATH`.
 
 ---
 
-## Step 2 — Get the code & build
+## Step 2 — (from source) Get the code & build
+
+> Marketplace users skip this and Step 3 — go straight to [Step 4](#step-4--open-the-chat).
 
 From the repo root:
 
@@ -77,7 +87,7 @@ pnpm build:vscode         # build the extension (outputs surfaces/vscode/dist)
 
 ---
 
-## Step 3 — Launch the extension (F5)
+## Step 3 — (from source) Launch the extension (F5)
 
 The extension runs in a second VS Code window ("Extension Development Host").
 
@@ -94,7 +104,7 @@ The extension runs in a second VS Code window ("Extension Development Host").
 
 ## Step 4 — Open the chat
 
-In the new (Extension Development Host) window:
+In VS Code (Marketplace install) or the Extension Development Host window (source install):
 
 1. Open the Command Palette: **Cmd+Shift+P** (Mac) / **Ctrl+Shift+P** (Windows).
 2. Run **"AgentNet: Open Chat"** (or **"AgentNet: New Chat (new tab)"** for a fresh tab).

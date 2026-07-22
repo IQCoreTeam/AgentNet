@@ -1,18 +1,26 @@
-# AgentNet CLI — Dev Running Guide
+# AgentNet CLI
 
-For new devs testing the CLI surface (`surfaces/cli`).
+The terminal surface. Installs from npm:
 
-> Pre-release (devnet). Once released, this becomes a plain `npm install`.
+```bash
+npm install -g @iqlabs-official/agentnet-cli
+
+agentnet            # launch the TUI
+agentnet doctor     # check claude/codex install + login (non-interactive)
+```
+
+Requires Node.js 20+ and at least one engine (`claude` or `codex`) installed and logged
+in — see Prerequisites below. Developers running from source: jump to
+[Running from source](#running-from-source-contributors).
 
 ---
 
 ## Prerequisites
 
-### 1. Node / pnpm
+### 1. Node
 
 ```bash
 node -v   # need v20+
-pnpm -v   # need v9+
 ```
 
 ### 2. Install `claude` CLI and log in
@@ -57,38 +65,16 @@ solana-keygen new --outfile ~/.config/solana/id.json
 
 > The keypair is **local only** — no tokens, no blockchain tx required for the CLI.
 > It's only used to derive an encryption key for your session logs.
+> If the default path doesn't exist, the CLI generates one there on first launch
+> (it never overwrites an existing file).
 
 ---
 
-## Setup
-
-Clone + install from the repo root:
+## First launch
 
 ```bash
-cd /path/to/AgentNet
-pnpm install
+agentnet
 ```
-
-Build core first (CLI depends on it):
-
-```bash
-pnpm build:core
-```
-
----
-
-## Running (dev mode — no build needed)
-
-```bash
-# From repo root:
-pnpm dev:cli
-
-# Or from surfaces/cli directly:
-cd surfaces/cli
-pnpm dev
-```
-
-This runs `tsx src/index.tsx` — hot-reloads on save (via tsx watch).
 
 You'll see:
 1. Animated IQ banner
@@ -98,19 +84,22 @@ You'll see:
 
 ---
 
-## Running (built binary)
+## Running from source (contributors)
+
+Needs pnpm v9+ (the repo is a pnpm workspace). Clone, then from the repo root:
 
 ```bash
-# Build once:
+pnpm install
+
+# Dev mode (tsx, hot-reloads on save):
+pnpm dev:cli
+
+# Or build + run the bundled binary:
 pnpm build:cli
-
-# Run:
 node surfaces/cli/dist/cli.js
-
-# Or install globally to get `agentnet` command:
-npm install -g ./surfaces/cli
-agentnet
 ```
+
+The build inlines the workspace core from source — no separate core build step needed.
 
 ---
 
@@ -242,7 +231,7 @@ When it gets high (>80%), use `/compact` to summarize.
 → Usually a usage limit on your OpenAI account (not a code bug). Check `codex doctor` or your OpenAI billing.
 
 **"Dynamic require of buffer not supported"**
-→ Build issue. Run `pnpm install` then `pnpm build:core && pnpm build:cli`.
+→ Build issue (source builds only). Run `pnpm install` then `pnpm build:cli`.
 
 **Animations look broken in some terminals**
 → Run with `--calm` flag. Or set `NO_COLOR=1` in env.
@@ -259,25 +248,15 @@ When it gets high (>80%), use `/compact` to summarize.
 npm install -g @anthropic-ai/claude-code
 claude login
 
-# 2. setup
-cd AgentNet && pnpm install && pnpm build:core
+# 2. install
+npm install -g @iqlabs-official/agentnet-cli
 
 # 3. run
-pnpm dev:cli
+agentnet
 
 # 4. test
 # Type a message → watch claude respond with tool cards
 # Type /new → new session
 # Type !ls → bash passthrough
 # Press Esc mid-turn → interrupt
-```
-
----
-
-## Branch
-
-All CLI work is on `feat/agentnet-cli`. Base branch: `agentnet` (from `main`).
-
-```bash
-git checkout feat/agentnet-cli
 ```

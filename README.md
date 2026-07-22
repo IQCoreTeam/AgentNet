@@ -5,14 +5,19 @@
 
 ## Install & run
 
-See the **[Install Guide](install-guide/README.md)** for every surface:
+Pick a surface — they all share the same core and the same wallet-keyed sessions:
 
+- **CLI** — from npm:
+  ```bash
+  npm install -g @iqlabs-official/agentnet-cli
+  agentnet
+  ```
+- **VS Code extension** — install **[AgentNet](https://marketplace.visualstudio.com/items?itemName=IQLabs.agentnet-vscode)** from the VS Code Marketplace (or `code --install-extension IQLabs.agentnet-vscode`), then run **"AgentNet: Open Chat"** from the Command Palette.
 - **Android app** — install the latest APK from [android-latest](https://github.com/IQCoreTeam/AgentNet/releases/tag/android-latest) (developers: [build from source](install-guide/android.md))
-- **VS Code extension** — [install-guide/vscode.md](install-guide/vscode.md)
-- **CLI** — [install-guide/cli.md](install-guide/cli.md)
 
-> Pre-release: all surfaces run on **devnet**. Once released these switch to `npm install` (CLI),
-> the VS Code Marketplace link, the app link, and the **Seeker store** (Android).
+The CLI and the VS Code extension drive your locally installed `claude` / `codex` CLI, so
+install and log into at least one of those first. Full per-surface guides, prerequisites,
+and troubleshooting: **[Install Guide](install-guide/README.md)**.
 
 
 ## 0. What this doc says (TL;DR)
