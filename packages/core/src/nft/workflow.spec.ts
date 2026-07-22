@@ -11,6 +11,7 @@ vi.mock("../core/chain.js", () => ({
   signerAddress: vi.fn().mockImplementation((signer) =>
     Promise.resolve(signer.publicKey?.toBase58() || "11111111111111111111111111111111"),
   ),
+  itemMetadataUri: vi.fn((mint: string, sig: string) => `https://gateway.test/skill/${mint}/${sig}`),
 }));
 
 vi.mock("../core/seed.js", () => ({

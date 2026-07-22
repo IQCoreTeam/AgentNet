@@ -22,7 +22,7 @@ import {
   DIRECT_METADATA_MAX_BYTES,
 } from "@iqlabs-official/solana-sdk/constants";
 import { getUserInventoryPda, PROGRAM_ID as CODE_IN_PROGRAM_ID } from "@iqlabs-official/solana-sdk/contract";
-import { codeIn, signerAddress, ensureDbRoot, dbRootExists } from "../core/chain.js";
+import { codeIn, signerAddress, ensureDbRoot, dbRootExists, itemMetadataUri } from "../core/chain.js";
 import { getSkillsCollectionMint } from "../core/seed.js";
 import { createSkillMint } from "./token2022.js";
 import { checkFormat, FormatError } from "./checkFormat.js";
@@ -245,7 +245,9 @@ export async function publishSkill(
   await createSkillMint(conn, tx, {
     name: input.name,
     symbol: input.name.substring(0, 8).toUpperCase(),
-    uri: skillTxid, // points at the JSON above (traits live there, not on the mint)
+    // Gateway presentation URL (marketplaces resolve it for JSON+image); its
+    // last segment is the code-in txid, which on-chain readers extract.
+    uri: itemMetadataUri(skillMint.toBase58(), skillTxid),
     collectionMint,
     mintKeypair: skillMintKp,
     minterAuthority: mintAuthority, // gate PDA holds the mint authority

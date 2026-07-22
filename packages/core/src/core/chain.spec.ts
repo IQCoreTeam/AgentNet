@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Connection, PublicKey, Keypair } from "@solana/web3.js";
-import { init, ensureDbRoot, createTable, writeRow, codeIn, signerAddress, tableExists, readCodeIn, readRows } from "./chain.js";
+import { init, ensureDbRoot, createTable, writeRow, codeIn, signerAddress, tableExists, readCodeIn, readRows, inscriptionSigOf, itemMetadataUri } from "./chain.js";
 import { readCodeIn as sdkReadCodeIn, readTableRows as sdkReadTableRows } from "@iqlabs-official/solana-sdk/reader";
 
 // Mock the solana-sdk modules
@@ -159,6 +159,37 @@ describe("core/chain", () => {
       expect(firstUrl).toContain("/rows?limit=5");
       expect(secondUrl).toContain("before=cur1"); // cursor threaded into page 2
       vi.unstubAllGlobals();
+    });
+  });
+
+  describe("inscriptionSigOf / itemMetadataUri", () => {
+    const SIG = "4K3z7cWH8QAxd74tK4ErtNv8ZL1k97yrAsm7SQJg4zPRya7DnbsxtmZwEgza4H34Z6QX9ewjqpmospXe3KQahruh";
+    const MINT = "Es18ADJ4ZpKDojLtvNJEBGCaXpqxsmw2kG8ihS6TJC7U";
+
+    it("passes a legacy bare signature through", () => {
+      expect(inscriptionSigOf(SIG)).toBe(SIG);
+    });
+
+    it("extracts the sig from a gateway skill URL (last segment)", () => {
+      expect(inscriptionSigOf(`https://gateway.iqlabs.dev/skill/${MINT}/${SIG}`)).toBe(SIG);
+    });
+
+    it("tolerates .png suffix, trailing slash and query", () => {
+      expect(inscriptionSigOf(`https://gateway.iqlabs.dev/skill/${MINT}/${SIG}.png`)).toBe(SIG);
+      expect(inscriptionSigOf(`https://gateway.iqlabs.dev/skill/${MINT}/${SIG}/`)).toBe(SIG);
+      expect(inscriptionSigOf(`https://gateway.iqlabs.dev/skill/${MINT}/${SIG}?v=1`)).toBe(SIG);
+    });
+
+    it("rejects things that carry no signature", () => {
+      expect(inscriptionSigOf("txid123")).toBeNull(); // too short
+      expect(inscriptionSigOf(`https://gateway.iqlabs.dev/skill/${MINT}`)).toBeNull(); // mint tail, not a sig
+      expect(inscriptionSigOf("")).toBeNull();
+    });
+
+    it("itemMetadataUri builds a URL whose tail round-trips through inscriptionSigOf", () => {
+      const uri = itemMetadataUri(MINT, SIG);
+      expect(uri.endsWith(`/skill/${MINT}/${SIG}`)).toBe(true);
+      expect(inscriptionSigOf(uri)).toBe(SIG);
     });
   });
 });

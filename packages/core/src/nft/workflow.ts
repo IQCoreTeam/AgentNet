@@ -12,7 +12,7 @@ import {
 } from "@solana/spl-token";
 import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
 
-import { codeIn, signerAddress, ensureDbRoot } from "../core/chain.js";
+import { codeIn, signerAddress, ensureDbRoot, itemMetadataUri } from "../core/chain.js";
 import { getWorkflowsCollectionMint } from "../core/seed.js";
 import { trackSignatures, estimatePublishSigns, type PublishProgress } from "./skill.js";
 import { createSkillMint } from "./token2022.js";
@@ -105,7 +105,9 @@ export async function publishWorkflow(
   await createSkillMint(conn, tx, {
     name: input.name,
     symbol: input.name.substring(0, 8).toUpperCase(),
-    uri: workflowTxid, // points at the JSON above (traits live there, not on the mint)
+    // Gateway presentation URL (marketplaces resolve it for JSON+image); its
+    // last segment is the code-in txid, which on-chain readers extract.
+    uri: itemMetadataUri(workflowMint.toBase58(), workflowTxid),
     collectionMint,
     mintKeypair: workflowMintKp,
     minterAuthority: mintAuthority, // gate PDA holds the mint authority

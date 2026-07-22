@@ -323,6 +323,31 @@ export async function codeIn(
   );
 }
 
+// A mint uri carries the inscription signature in one of two shapes: legacy
+// uris are the bare tx signature; current uris are the gateway presentation
+// URL "{gateway}/skill/{mint}/{sig}" (marketplace-readable JSON+image) whose
+// LAST path segment is the signature (the same tail convention iq-wide-web
+// uses for SOL records). Every on-chain read extracts the sig and resolves
+// content through readCodeIn, so the app never depends on the HTTP route.
+const SIG_SHAPE = /^[1-9A-HJ-NP-Za-km-z]{80,90}$/;
+
+export function inscriptionSigOf(uri: string): string | null {
+  if (SIG_SHAPE.test(uri)) return uri;
+  if (/^https?:\/\//.test(uri)) {
+    const tail = uri.split(/[?#]/, 1)[0].replace(/\/+$/, "").split("/").pop() ?? "";
+    const sig = tail.replace(/\.(png|json)$/, "");
+    if (SIG_SHAPE.test(sig)) return sig;
+  }
+  return null;
+}
+
+/** The uri written onto a new item mint: the gateway route that serves
+ *  standard NFT JSON (+ card image) for external viewers. Network-matched via
+ *  gatewayUrl(); both identifiers are known before the mint tx is signed. */
+export function itemMetadataUri(mint: string, sig: string): string {
+  return `${gatewayUrl()}/skill/${mint}/${sig}`;
+}
+
 // Read a code-in inscription by its tx signature. Tries the gateway's cached
 // `/data/{sig}` first (network-matched via getGatewayUrl — the mainnet gateway
 // can't resolve a devnet tx, so the URL must follow the network); on any failure

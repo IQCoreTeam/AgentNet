@@ -31,7 +31,7 @@ import {
   type TokenMetadata,
 } from "@solana/spl-token-metadata";
 import { type SignerInput, type WalletSigner } from "@iqlabs-official/solana-sdk/utils";
-import { signerAddress, readCodeIn } from "../core/chain.js";
+import { signerAddress, readCodeIn, inscriptionSigOf } from "../core/chain.js";
 import { resolveMinter, tryMinterPubkey } from "./minter.js";
 
 import { TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
@@ -290,9 +290,11 @@ export async function readSkillMintMetadata(
 
   const base: SkillMintMetadata = { name: md.name, symbol: md.symbol, uri: md.uri };
   if (!md.uri) return base;
+  const sig = inscriptionSigOf(md.uri);
+  if (!sig) return base; // uri carries no inscription signature we recognise
 
   try {
-    const { data } = await readCodeIn(md.uri);
+    const { data } = await readCodeIn(sig);
     if (!data) return base;
     const json = JSON.parse(data) as SkillJson;
     const { category, hashtags } = traitsFromAttributes(json.attributes);
