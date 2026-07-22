@@ -16,7 +16,7 @@ export function Header({
   cli,
   model,
   cwd,
-  version = "0.0.1",
+  version = "0.1.0",
 }: {
   cli: "claude" | "codex";
   model?: string;

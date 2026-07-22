@@ -10,7 +10,17 @@ the core runs the agent and encrypts every session, the CLI just renders.
    ╚═╝  ╚══▀▀═╝
 ```
 
-## Run
+## Install
+
+```bash
+npm install -g @iqlabs-official/agentnet-cli
+agentnet            # launch the TUI
+agentnet doctor     # check claude/codex install + login status
+```
+
+Requires Node.js 20+ and at least one engine installed (`claude` or `codex`).
+
+## Run from source
 
 ```bash
 pnpm --filter agentnet-cli dev        # dev (tsx, from source)

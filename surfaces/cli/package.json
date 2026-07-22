@@ -1,17 +1,44 @@
 {
-  "name": "agentnet-cli",
-  "version": "0.0.1",
-  "description": "AgentNet — a playful, wallet-synced terminal for claude/codex",
+  "name": "@iqlabs-official/agentnet-cli",
+  "version": "0.1.0",
+  "description": "AgentNet: a playful, wallet-synced terminal for claude/codex",
+  "license": "Apache-2.0",
   "type": "module",
   "bin": {
     "agentnet": "./dist/cli.js"
   },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/IQCoreTeam/AgentNet.git",
+    "directory": "surfaces/cli"
+  },
+  "homepage": "https://github.com/IQCoreTeam/AgentNet#readme",
+  "keywords": [
+    "agentnet",
+    "cli",
+    "claude",
+    "codex",
+    "ai-agent",
+    "solana",
+    "terminal"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "tsx src/index.tsx",
     "build": "tsup",
-    "watch": "tsup --watch"
+    "watch": "tsup --watch",
+    "prepublishOnly": "tsup"
   },
   "devDependencies": {
+    "@iqlabs-official/agent-sdk": "workspace:*",
     "@types/node": "^20.0.0",
     "@types/react": "^18.3.0",
     "tsup": "^8.0.0",
@@ -19,15 +46,12 @@
     "typescript": "^5.6.0"
   },
   "dependencies": {
-    "@iqlabs-official/agent-sdk": "workspace:*",
     "@anthropic-ai/claude-agent-sdk": "^0.3.170",
-    "@openai/codex-sdk": "^0.139.0",
     "@inkjs/ui": "^2.0.0",
     "cli-highlight": "^2.1.11",
     "commander": "^12.1.0",
     "ink": "^5.1.0",
     "ink-big-text": "^2.0.0",
-    "ink-gradient": "^3.0.0",
     "open": "^10.1.0",
     "react": "^18.3.1"
   }

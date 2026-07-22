@@ -63,7 +63,7 @@ function launch(options: AppOptions, calmFlag?: boolean) {
 program
   .name("agentnet")
   .description("AgentNet: a playful, wallet-synced terminal for claude/codex")
-  .version("0.0.1")
+  .version("0.1.0")
   .option("--calm", "disable animations (also honors NO_COLOR / non-TTY)")
   .option("--cli <engine>", "start on claude or codex (default: last used)")
   .option("--cwd <path>", "working directory for the agent")

@@ -9,10 +9,13 @@ export default defineConfig({
   format: ["esm"],
   outDir: "dist",
   target: "node20",
+  // stale chunks from previous builds must never ship (files:["dist"] publishes everything).
+  clean: true,
   // core is a workspace package — inline it into the bundle.
   noExternal: [/@iqlabs-official\/agent-sdk/],
-  // the engine SDKs spawn the user's installed CLI + resolve paths at runtime → keep external.
-  external: ["@anthropic-ai/claude-agent-sdk", "@openai/codex-sdk"],
+  // the claude SDK spawns the user's installed CLI + resolves paths at runtime → keep external.
+  // (codex is driven via `codex app-server --stdio` directly, no SDK dep.)
+  external: ["@anthropic-ai/claude-agent-sdk"],
   // The inlined core pulls in CJS deps (bs58 → safe-buffer) that call require("buffer")
   // at load time. esbuild's ESM output ships a `__require` shim that THROWS unless a real
   // `require` exists in scope — so we define one via createRequire. (Also the shebang.)
