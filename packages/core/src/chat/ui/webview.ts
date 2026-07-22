@@ -388,6 +388,19 @@ export function chatHtml(): string {
   .preCopy:hover { opacity: 1; color: var(--an-green); border-color: var(--an-green-line); }
   .preCopy svg { width: 13px; height: 13px; }
   .preCopy.done { color: var(--an-green); opacity: 1; }
+  /* whole-message copy: pinned top-right of an assistant reply, shown on that row's
+     hover. Copies the raw markdown source, so pasting elsewhere keeps the formatting.
+     pointer-events gates the hidden state so the invisible button never eats clicks
+     or text selection at the bubble's corner. */
+  .msgCopy { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; padding: 0;
+             display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+             background: var(--an-bg-2); border: 1px solid var(--an-line-soft); border-radius: 6px;
+             color: var(--vscode-foreground); opacity: 0; pointer-events: none;
+             transition: opacity 0.12s, color 0.12s; z-index: 2; }
+  .node.assistant:hover > .msgCopy { opacity: 0.75; pointer-events: auto; }
+  .node.assistant > .msgCopy:hover { opacity: 1; color: var(--an-green); border-color: var(--an-green-line); }
+  .node.assistant > .msgCopy.done { opacity: 1; pointer-events: auto; color: var(--an-green); }
+  .msgCopy svg { width: 13px; height: 13px; }
   /* inline code IS its own copy button: a floating control would displace or cover the
      words around it, so the span tints on hover and flashes green once the copy lands. */
   .msg code.inlineCopy { cursor: pointer; transition: color 0.12s, border-color 0.12s, background 0.12s; }
@@ -2686,6 +2699,22 @@ export function chatHtml(): string {
   }
 
   // The footer under an assistant reply: elapsed time + model name (when known).
+  // Whole-message copy button on an assistant reply, mirroring the per-code-block
+  // affordance. Lives on the ROW (not inside .msg) because streaming re-renders swap
+  // .msg's innerHTML — a button inside it would be destroyed on every repaint.
+  function addMsgCopy(row, el) {
+    if (!row || row.querySelector(':scope > .msgCopy')) return;
+    const btn = document.createElement('button');
+    btn.className = 'msgCopy'; btn.title = 'Copy message'; btn.innerHTML = COPY_ICON;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      copyText(el.dataset.md || el.textContent || '', () => {
+        btn.classList.add('done'); btn.innerHTML = CHECK_ICON;
+        setTimeout(() => { btn.classList.remove('done'); btn.innerHTML = COPY_ICON; }, 1200);
+      });
+    });
+    row.appendChild(btn);
+  }
   function addFooter(row, durationMs, model) {
     if (durationMs == null && !model) return;
     const f = document.createElement('div'); f.className = 'footer';
@@ -3159,11 +3188,12 @@ export function chatHtml(): string {
         streaming.classList.remove('cursor');
         cancelStreamRender(); // drop any pending live render (rAF or trailing timer)
         asMd(streaming, raw);
+        if (msg.role === 'assistant') addMsgCopy(streaming._row, streaming);
         streaming = null;
       } else {
         const el = bubble(msg.role, false, badge);
         asMd(el, msg.text);
-        if (msg.role === 'assistant') addFooter(el._row, msg.durationMs, msg.model); // time + model
+        if (msg.role === 'assistant') { addFooter(el._row, msg.durationMs, msg.model); addMsgCopy(el._row, el); } // time + model + copy
       }
     }
     if (typingEl) tailBody().appendChild(typingEl); // keep the indicator at the thread's tail
@@ -5273,7 +5303,7 @@ export function chatHtml(): string {
       const el = document.createElement('div'); el.className = 'msg ' + m.role;
       if (m.role === 'assistant') renderMd(el, m.text); else { el.textContent = m.text; el.dataset.md = m.text; }
       n.appendChild(el);
-      if (m.role === 'assistant') addFooter(n, m.durationMs, m.model);
+      if (m.role === 'assistant') { addFooter(n, m.durationMs, m.model); addMsgCopy(n, el); }
     }
     // Insert above the current content, then restore the viewport SYNCHRONOUSLY (before the
     // browser paints) so the user's position never visibly jumps. Disable smooth-scroll for
