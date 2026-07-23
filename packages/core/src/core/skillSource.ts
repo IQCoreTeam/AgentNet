@@ -129,6 +129,7 @@ export const dasSource: SkillSource = {
           requiredSkills,
           price: "0",
           supply: 0, // hydrated by getMintSupply (live counter, not in the scan)
+          image: item.content?.links?.image ?? null, // Helius-crawled from our metadata json
           uriTxid: item.content?.json_uri || "",
           createdAt: 0,
         });
@@ -428,6 +429,7 @@ interface IndexerItem {
   price: string | null; // lamports (decimal string) from the on-chain ItemConfig PDA
   attributes: { trait_type: string; value: string }[];
   stars?: number; // summed GitHub stars per skill (issue #89); absent on an older indexer
+  image?: string | null; // rendered card PNG url (browser render layer); absent on an older indexer
 }
 
 /**
@@ -464,6 +466,7 @@ export function indexerSource(baseUrl: string): SkillSource {
           price: it.price ?? undefined, // on-chain price (lamports); absent if unpriced
           supply: it.supply, // live — already hydrated by the indexer
           stars: it.stars ?? 0, // summed GitHub stars (issue #89), 0 on an older indexer
+          image: it.image ?? null, // rendered card PNG (browser render layer)
           uriTxid: "",
           createdAt: 0,
         };

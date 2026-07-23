@@ -37,7 +37,7 @@ function toCard(s: Skill): SkillCard {
   return {
     id: s.id, type: s.type, name: s.name, description: s.description,
     category: s.category, hashtags: s.hashtags, supply: s.supply, stars: s.stars,
-    price: s.price, creator: s.creator, requiredSkills: s.requiredSkills,
+    image: s.image, price: s.price, creator: s.creator, requiredSkills: s.requiredSkills,
   };
 }
 

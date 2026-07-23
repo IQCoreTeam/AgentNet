@@ -31,6 +31,7 @@ export interface Skill {
   price?: string; // lamports as decimal string (bigint isn't JSON-serializable)
   supply: number; // mint supply = popularity
   stars?: number; // summed GitHub stars of repos that use this skill (issue #89, indexer-hydrated)
+  image?: string | null; // rendered card PNG url (indexer-hydrated); null -> UI draws sigil art
   uriTxid: string; // codeIn txid holding the skill text
   createdAt: number;
 }

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { SkillCard } from "../transport/protocol";
 import { skillSigilSvg } from "./skillSigil";
+import { mediaUrl } from "./mediaUrl";
 
 interface Props {
   card: SkillCard;
@@ -20,7 +21,8 @@ interface Props {
 export function SkillSdCard({ card, owned, disposed, firing, dim, onOpen }: Props) {
   const isWorkflow = card.type === "workflow";
   const priceSol = card.price && card.price !== "0" ? (Number(card.price) / 1e9).toFixed(2) : null;
-  const sigil = useMemo(() => skillSigilSvg(card.name, card.category), [card.name, card.category]);
+  const img = mediaUrl(card.image);
+  const sigil = useMemo(() => (img ? "" : skillSigilSvg(card.name, card.category)), [img, card.name, card.category]);
   const cat = (card.category || (isWorkflow ? "workflow" : "skill")).toUpperCase().slice(0, 8);
   const ty = isWorkflow ? "/ FLOW" : "/ SKILL";
   const state = disposed ? "OFF" : owned ? "OWNED" : "GET";
@@ -28,12 +30,17 @@ export function SkillSdCard({ card, owned, disposed, firing, dim, onOpen }: Prop
   return (
     <button
       onClick={() => onOpen(card)}
-      className={`an-sd ${isWorkflow ? "is-workflow" : ""} ${disposed ? "is-disposed" : ""} ${dim ? "is-owned-dim" : ""} ${firing ? "is-firing" : ""}`}
+      className={`an-sd ${img ? "has-img" : ""} ${isWorkflow ? "is-workflow" : ""} ${disposed ? "is-disposed" : ""} ${dim ? "is-owned-dim" : ""} ${firing ? "is-firing" : ""}`}
     >
       <span className="an-sd-tab" />
       <div className="an-sd-label">
-        <svg className="an-sd-art" viewBox="0 0 120 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true" dangerouslySetInnerHTML={{ __html: sigil }} />
-        {/* 2a layout: barcode alone top-left; mark + star share the right axis */}
+        {/* 4c face: the minted card PNG when the item has one; the sigil otherwise */}
+        {img ? (
+          <img className="an-sd-img" src={img} alt="" loading="lazy" referrerPolicy="no-referrer" />
+        ) : (
+          <svg className="an-sd-art" viewBox="0 0 120 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true" dangerouslySetInnerHTML={{ __html: sigil }} />
+        )}
+        {/* 2a layout: barcode alone top-left; mark + star share the right axis (sigil face only) */}
         <span className="an-sd-bar" aria-hidden="true" />
         <div className="an-sd-mark"><span className="cat">{cat}</span> <span className="ty">{ty}</span></div>
         {/* the hero: the name big over the sigil, shadowed for legibility */}

@@ -110,6 +110,18 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
               ))}
               {card.supply != null && <span className="text-zinc-600">↑{card.supply} holders</span>}
               {card.stars ? <span className="text-amber-400">★{card.stars}</span> : null}
+              {/* inventory only: a small jump to the item's public marketplace page */}
+              {owned && card.id && (
+                <a
+                  href={`https://magiceden.io/item-details/${card.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="border border-zinc-700 text-zinc-400 px-1.5 py-0.5 rounded active:opacity-80"
+                >
+                  MAGIC EDEN
+                </a>
+              )}
             </div>
           </div>
         </div>

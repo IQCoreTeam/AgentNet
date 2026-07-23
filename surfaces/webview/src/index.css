@@ -42,6 +42,7 @@
   --an-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --an-font-mono: "Space Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --an-font-display: "Saira Condensed", "Space Grotesk", ui-sans-serif, sans-serif;
+  --an-font-tech: "Chakra Petch", "Space Grotesk", ui-sans-serif, sans-serif; /* card-name face (SD Card Star Fix turn 5c) */
   --an-font-code: ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* motion easings — design-system §8.2 (generates ease-* utilities) */
@@ -703,10 +704,10 @@ body {
   right: 8px;
   bottom: 38px;
   z-index: 4;
-  font-family: var(--an-font-display);
-  font-size: 14.5px;
+  font-family: var(--an-font-tech);
+  font-size: 14px;
   font-weight: 700;
-  letter-spacing: -0.2px;
+  letter-spacing: 0;
   color: #ffffff;
   line-height: 1.1;
   word-break: break-word;
@@ -716,6 +717,47 @@ body {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* Minted-card face (SD Card Star Fix 4c + turn 5 Chakra Petch): when the item carries a
+   rendered card PNG the label shows it centered instead of the sigil; the barcode and
+   [CAT / SKILL] mark drop, and the star grade becomes a quiet white box top-left. */
+@font-face {
+  font-family: "Chakra Petch";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./assets/fonts/chakra-petch-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Chakra Petch";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./assets/fonts/chakra-petch-700.woff2") format("woff2");
+}
+.an-sd-img {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 84%;
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  z-index: 1;
+}
+.an-sd.has-img .an-sd-bar,
+.an-sd.has-img .an-sd-mark { display: none; }
+.an-sd.has-img .an-sd-grade {
+  top: 5px;
+  left: 5px;
+  right: auto;
+  padding: 2px 5px;
+  font-size: 10px;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 1px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+.an-sd.has-img .an-sd-grade::before,
+.an-sd.has-img .an-sd-grade::after { display: none; }
 /* the data chip: copies big, price + state stacked small */
 .an-sd-chip {
   position: absolute;
