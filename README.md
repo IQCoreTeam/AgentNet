@@ -3,6 +3,18 @@
 > ⚠️ **Heads up:** this README was written at the very early planning stage. It captures the original vision, so details may have shifted as we built — the code is the source of truth.
 
 
+## What is AgentNet (in 30 seconds)
+
+Most agent harnesses need a server before the agent can run: you rent a VPS, open ports, and pay a subscription. AgentNet takes a different route. The Android app boots a full Linux environment inside the phone and runs the official `claude` / `codex` CLIs on the device itself, so there is no server to set up and nothing extra to pay for. Installing the app is the whole setup.
+
+Underneath that, the chain is what makes the agent yours:
+
+- **Skills are soulbound NFTs on Solana.** A published skill lives on the chain rather than on a hosting server, so it does not disappear when a host shuts down. Reviews are written to the chain as well and cannot be removed. When a priced skill is bought, the same transaction that mints it to the buyer also transfers the payment to the creator, so the payout is enforced by the program rather than by a platform's policy.
+- **Sessions follow the wallet.** Conversation history is encrypted with a key derived from the wallet, so only the owner can read it. Skills, memory, and reputation are keyed to the same wallet, which means connecting the secret key on a new device restores the same agent.
+
+A longer walkthrough of this reasoning, in thread form: [plans/thread.md](plans/thread.md).
+
+
 ## Install & run
 
 Pick a surface — they all share the same core and the same wallet-keyed sessions:
