@@ -1,47 +1,43 @@
-# AgentNet launch thread (X/Twitter)
+# AgentNet, the deep approach (X/Twitter thread)
 
-> Each block below is one tweet. A mermaid diagram directly under a tweet is the
-> image to capture and attach to that tweet. Diagrams are drawn simple and
-> high-contrast so they read well as screenshots.
+> Each block below is one tweet, translated directly from the original draft.
+> A mermaid diagram under a block is the image to capture and attach to that tweet.
 
 ---
 
 ## Tweet 1
 
-Your AI and your data are your assets.
+First, AgentNet started as a system that makes SKILL.md and various command
+files buyable and sellable as soulbound NFTs,
 
-AgentNet started as a system that lets you buy and sell SKILL.md and command
-files as soulbound NFTs, and it encrypts your sessions with your own wallet so
-one agent continues across every device you own.
-
-Here is the whole picture.
+and it is a system built so that you can continue your sessions across multiple
+devices, using encryption with your own wallet.
 
 ---
 
 ## Tweet 2
 
-When we show AgentNet to people, we lead with the outermost layer: a genuinely
-good mobile app.
+When we do marketing, we show the outermost part: good mobile applications.
 
-We know "blockchain" makes people flinch. So the first thing you meet is simply
-the best UI a mobile AI coding app can have. Nothing else.
+We know people feel resistance to doing anything with blockchain,
+
+so we simply show a UI as good as the best of the mobile AI coding apps.
 
 ---
 
 ## Tweet 3
 
-Every other harness asks you to set up a server first. Rent a VPS, open ports,
-pay a subscription.
+And while other harnesses require subscriptions and setup, like configuring a
+server, we just set up Linux on mobile for free and connected everything.
 
-We put a full Linux inside your phone, for free, and wired everything to it.
-
-No setup. No fees. Download the app and you have a working harness.
+So we are pushing forward with this: no setup, no payment, just download and you
+can use a harness.
 
 ```mermaid
 flowchart LR
     subgraph Others["Other harnesses"]
         direction TB
-        V["Rent a VPS"] --> S["Long setup, open ports"] --> P["Monthly subscription"] --> H1["Harness ready"]
+        V["Rent a server"] --> S["Setup"] --> P["Subscription"] --> H1["Harness ready"]
     end
     subgraph AN["AgentNet"]
         direction TB
@@ -56,31 +52,28 @@ flowchart LR
 
 ## Tweet 4
 
-The real claude and codex CLIs run on the phone itself. Not a stripped rebuild,
-not a remote desktop into your PC. The official binaries, running locally.
-
-Once you are in and it just works, we can explain why the blockchain part
-actually helps.
+With that in place, let us explain why selling skills as NFTs on the blockchain
+actually helps our system.
 
 ---
 
 ## Tweet 5
 
-Look at how SKILL.md files are shared today.
+Today, SKILL.md files are shared through websites, and you collect them one by
+one as someone advertises a link.
 
-Scattered websites. Someone advertises a link, you collect skills one by one.
-There is no canonical platform. And even where a sharing platform exists, the
-problems are all the same.
+There is no representative sharing platform, and even where a sharing platform
+exists, the problems are as follows.
 
 ---
 
 ## Tweet 6
 
-Every skill hub today is a website reading from someone's database on someone's
-server.
+Downloading and using skills from each sharing platform's site looks like the
+picture below.
 
-Your skill knowledge survives only while that server stays on. The day the host
-stops paying or shuts it down, the knowledge is gone.
+In the end, someone has to keep their own server on and keep sharing the files
+for our skill knowledge to survive.
 
 ```mermaid
 flowchart TB
@@ -99,11 +92,11 @@ flowchart TB
 
 ## Tweet 7
 
-Now put the same skills on-chain.
+But if we do this on the blockchain, our skills accumulate in a place called
+"skill" inside the Solana chain.
 
-On AgentNet, skills accumulate in one shared place on Solana. The reviews for
-every skill live on Solana too. Nobody can edit them, nobody can delete them,
-and nobody can switch them off.
+And the reviews for each skill also live on Solana, and they cannot be tampered
+with.
 
 ```mermaid
 flowchart TB
@@ -121,31 +114,34 @@ flowchart TB
 
 ## Tweet 8
 
-You can attach your GitHub repos to a skill to build its recognition.
+From there, we can connect GitHub and more to raise a skill's recognition.
 
-And if a skill is badly written, its reviews cannot be scrubbed. Everything is
-written transparently on the chain. Every skill you buy is bound to your wallet,
-so as long as you hold the wallet, your collection cannot be taken from you.
+And if a skill is written strangely, people's reviews cannot be deleted.
+Everything is written and accumulated transparently on the blockchain. And all
+those skills are connected to the buyer's wallet, so as long as you have your
+wallet, you cannot lose the skills you collected.
 
 ---
 
 ## Tweet 9
 
-Selling skills is where the difference really shows.
+Selling skills is the same. Here the advantages show even more.
 
-Today there is barely a market for skills at all. Where one exists, you upload
-your work to someone else's server. It can vanish any day, and how you get paid
-is whatever the platform decides. You take their terms.
+In reality there is practically no market for selling skills at all,
+
+and even where one exists, you upload and share your skill on someone else's
+database and server. It can disappear at any time, and you cannot guarantee how
+the money reaches the seller when a skill sells. You do it the way they decide.
 
 ---
 
 ## Tweet 10
 
-On AgentNet, the payout is a smart contract.
+But here, I just upload my skill, and when it sells, the money going to the
+skill author is registered on the blockchain as a smart contract.
 
-You publish a skill. When someone buys it, the same on-chain transaction that
-mints the skill to their wallet sends the money to yours. Immutable knowledge,
-in a market that needs no administrator.
+So all knowledge is immutable, and you can collect your skills in a place that
+does not even need an administrator.
 
 ```mermaid
 flowchart LR
@@ -161,21 +157,21 @@ flowchart LR
 
 ## Tweet 11
 
-Then there is the part nobody else does: sessions.
+An even bigger advantage: session sharing.
 
-Your conversation history must never sit on some random server. That is why
-other tools make you keep a computer running at home and remote into it from
-your phone just to continue your work.
+We must never upload our conversation history to any internet. So, for
+security, every other service manages this by having the user keep a computer
+on at all times and remote-access it, coding from the phone that way.
 
 ---
 
 ## Tweet 12
 
-On AgentNet, your sessions travel with your skills.
+But in AgentNet, your conversation history follows along with your skills.
 
-Everything is encrypted with your wallet. The wallet is the agent. Skills,
-memory, conversations: with just your secret key, your whole agent comes back
-anywhere in the world.
+Encrypted with the user's wallet, the wallet becomes the agent, and the skills
+and conversations that agent holds are all recovered anywhere on the internet
+with just the wallet's secret key.
 
 ```mermaid
 flowchart TB
@@ -198,11 +194,11 @@ flowchart TB
 
 ## Tweet 13
 
-Your agent's work climbs the agent rankings, ranked by the GitHub stars on the
-repos it ships.
+And the work your agent has been doing climbs the agent rankings, based on
+GitHub stars. When your agent is on the rankings, people can come buy your
+agent's skills or browse your repos.
 
-People find your agent on the leaderboard, browse its repos, and buy its
-skills. Follows, like a social network, come next.
+Later, we can implement a follow feature, like a social network.
 
 ---
 
@@ -210,17 +206,18 @@ skills. Follows, like a social network, come next.
 
 Your AI and your data are your assets.
 
-I have been running IQLabs since 2024 with a single obsession: use the
-blockchain ledger for something beyond tokens.
+I have been running IQLabs since 2024, focused on just one thing:
 
-We are not letting go of the web3 vision.
+use the blockchain ledger for purposes beyond tokens.
+
+I will not let go of the web3 vision.
 
 ---
 
 ## Tweet 15
 
-Use AgentNet and stack decentralized knowledge on the chain. Grow your agent,
-and turn your knowledge into an asset.
+While using AgentNet, stack decentralized knowledge on the blockchain. And as
+you grow your agent, turn your knowledge into your asset.
 
-AgentNet's revenue is used exactly as highlighted at the top of the IQLabs
-Twitter. Come to IQ and build web3 with us.
+AgentNet's revenue is used in the way highlighted at the top of the IQLabs
+Twitter. Come to IQ and build web3 together with us.
