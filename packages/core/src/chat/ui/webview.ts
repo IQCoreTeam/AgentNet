@@ -4600,7 +4600,7 @@ export function chatHtml(): string {
     el.title = nm; el.setAttribute('data-skill', card.name || '');
     // sigil is our own deterministic SVG (name only seeds numbers) -> safe to inject as markup;
     // all human-readable fields go through textContent below so a skill name can't inject HTML.
-    var imgUrl = (card.image && /^https?:\/\//.test(String(card.image))) ? String(card.image) : null;
+    var imgUrl = (card.image && /^https?:\\/\\//.test(String(card.image))) ? String(card.image) : null;
     if (imgUrl) el.className += ' has-img';
     // 4c face: the minted card PNG when the item has one; our sigil otherwise. src is set via
     // the property (never string-concatenated) so a hostile url can't break out of the markup.
