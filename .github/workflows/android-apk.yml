@@ -150,6 +150,12 @@ jobs:
       # device), so there is no separate legacy target to build.
       - name: Build signed debug APK
         working-directory: surfaces/android
+        env:
+          # Keep the rolling sideload APK installable over previous team builds. Without this,
+          # debug builds fall back to versionCode 1 and Android refuses to update any tester
+          # who already has a newer local or Play-signed build installed.
+          ANDROID_VERSION_CODE: ${{ github.run_number }}
+          ANDROID_VERSION_NAME: ${{ github.run_number }}
         run: ./gradlew --no-daemon assembleDebug
 
       # SHA-1 is a public fingerprint (not the key), safe to log — proves the team key signed it.
