@@ -165,6 +165,9 @@ export function SkillMarket({
   const [pubResult, setPubResult] = useState<string | null>(null);
   const [pubProgress, setPubProgress] = useState<PublishProgress | null>(null);
 
+  // owned collection stage
+  const [ownedIdx, setOwnedIdx] = useState(0);
+
   // agents stage
   const [agents, setAgents] = useState<Reputation[]>([]);
   const [agentIdx, setAgentIdx] = useState(0);
@@ -629,6 +632,14 @@ export function SkillMarket({
       return;
     }
 
+    // ── owned collection ───────────────────────────────────────────────────
+    if (stage === "owned") {
+      const cur = ownedCollection[Math.min(ownedIdx, ownedCollection.length - 1)];
+      if (key.escape) { setStage("list"); return; }
+      if (key.return && cur) void openDetail(cur.id);
+      return;
+    }
+
     // ── list ───────────────────────────────────────────────────────────────
     if (key.escape) return onClose();
     if (typing) {
@@ -868,6 +879,57 @@ export function SkillMarket({
         flash={flash}
         busy={busy}
       />
+    );
+  }
+
+  // ── owned collection ───────────────────────────────────────────────────────
+  if (stage === "owned") {
+    const ownedClamped = Math.min(ownedIdx, Math.max(0, ownedCollection.length - 1));
+    return (
+      <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
+        <Text bold color={colors.iqMagenta}>❖ my skills</Text>
+        {ownedCollection.length === 0 ? (
+          <Box marginTop={1}><Text dimColor>no skills owned yet · buy one in the market (esc)</Text></Box>
+        ) : (
+          <Box marginTop={1}>
+            <ChipCarousel
+              items={ownedCollection}
+              index={ownedClamped}
+              onIndex={setOwnedIdx}
+              chipWidth={SKILL_CHIP_W}
+              renderChip={(s, focused) => {
+                // tier is best-effort: stars live on the market card, not the owned entry
+                const stars = results.find((r) => r.id === s.id)?.stars ?? 0;
+                const { cur } = tierInfo(stars);
+                const off = disposedNames.has(s.name);
+                return (
+                  <Box
+                    flexDirection="column"
+                    width={SKILL_CHIP_W}
+                    paddingX={1}
+                    borderStyle="round"
+                    borderColor={focused ? colors.iqCyan : colors.dim}
+                  >
+                    <Text dimColor>[ {(off ? "off" : "owned").toUpperCase()} / SKILL ]</Text>
+                    <Text color={focused ? colors.iqCyan : undefined} bold={focused}>
+                      {s.name.slice(0, SKILL_CHIP_W - 4)}
+                    </Text>
+                    <Box>
+                      {stars ? <Text color={colors.warn}>★{stars} </Text> : null}
+                      {cur ? <Text color={colors.warn}>[{cur.name}]</Text> : <Text dimColor>{stars ? "" : "no grade yet"}</Text>}
+                    </Box>
+                  </Box>
+                );
+              }}
+            />
+          </Box>
+        )}
+        {loading ? <Box marginTop={1}><Text dimColor>opening…</Text></Box> : null}
+        {flash ? <Box marginTop={1}><Text color={colors.ok}>{glyph.sparkle} {flash}</Text></Box> : null}
+        <Box marginTop={1}>
+          <Text dimColor>←/→ rotate · ↵ open detail · esc market</Text>
+        </Box>
+      </Box>
     );
   }
 
