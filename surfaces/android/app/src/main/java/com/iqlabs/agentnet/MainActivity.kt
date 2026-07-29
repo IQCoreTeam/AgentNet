@@ -452,7 +452,12 @@ class MainActivity : AppCompatActivity() {
 
     // Drop the approval notification — called when the WebView reports the user is now
     // viewing the chat it belongs to, or the approval was answered. Same id onResume cancels.
+    // Only honored while the app is actually visible: the WebView's "viewing it" signal is a
+    // session-id comparison with no foreground awareness, so a backgrounded approval for the
+    // active session used to be posted and cancelled in the same tick — the alert never
+    // survived. Backgrounded clears are dropped; onResume cancels the id on real return.
     fun clearApprovalNotice() {
+        if (!inForeground) return
         getSystemService(NotificationManager::class.java)?.cancel(APPROVAL_NOTIF_ID)
     }
 

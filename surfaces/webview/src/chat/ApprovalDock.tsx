@@ -99,8 +99,12 @@ function EditGlyph() {
   );
 }
 
-// AskUserQuestion: render each question with selectable options and, when allowed, a
-// free-text field. "Send" is enabled once every question has an answer.
+// AskUserQuestion: one question per page, stepped. A multi-question ask (up to 4 questions,
+// each with several option cards) used to render as one tall stack: the card overflowed the
+// dock on a phone and the later questions' options sat under the Send button, untappable.
+// Now the card shows a single question at a time with Back / Next, and "Send" (last step)
+// submits every answer at once. The question body scrolls internally so the footer buttons
+// are always on screen no matter how many options one question carries.
 function QuestionCard({
   req,
   onAnswer,
@@ -111,6 +115,7 @@ function QuestionCard({
   const questions = req.questions ?? [];
   const [selections, setSelections] = useState<Record<number, string[]>>({});
   const [customInput, setCustomInput] = useState<Record<number, string>>({});
+  const [step, setStep] = useState(0);
 
   function toggle(qi: number, label: string, multi: boolean) {
     setCustomInput((prev) => {
@@ -133,10 +138,12 @@ function QuestionCard({
     setSelections((prev) => ({ ...prev, [qi]: [] }));
   }
 
-  const allAnswered = questions.every((_, qi) => {
+  const answered = (qi: number) => {
     const typed = customInput[qi]?.trim();
     return !!typed || (selections[qi]?.length ?? 0) > 0;
-  });
+  };
+  const allAnswered = questions.every((_, qi) => answered(qi));
+  const lastStep = step >= questions.length - 1;
 
   function submit() {
     const questionResponses = questions.map((q, qi) => {
@@ -151,73 +158,97 @@ function QuestionCard({
     onAnswer(questionResponses);
   }
 
+  const q = questions[step];
+  if (!q) return null;
   return (
-    <div className="an-appr text-sm">
-      {questions.map((q, qi) => (
-        <div
-          key={qi}
-          className="px-3.5 py-3"
-          style={{ borderTop: qi === 0 ? undefined : "1px solid color-mix(in srgb, var(--brk) 22%, transparent)" }}
-        >
-          {q.header && <div className="an-appr-chip mb-2.5">{q.header}</div>}
-          <div className="mb-2.5 font-bold" style={{ color: "var(--an-fg)" }}>{q.question}</div>
-          {q.options.length > 0 && (
-            <div className="flex flex-col gap-2">
-              {q.options.map((opt) => {
-                const chosen = (selections[qi] ?? []).includes(opt.label);
-                const multi = q.multiSelect === true;
-                return (
-                  <button
-                    key={opt.label}
-                    onClick={() => toggle(qi, opt.label, multi)}
-                    className={`an-appr-opt ${chosen ? "is-on" : ""}`}
-                    aria-pressed={chosen}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      {multi && (
-                        <span className={`an-appr-check ${chosen ? "is-on" : ""}`} aria-hidden="true" />
-                      )}
-                      <span className="font-bold" style={{ color: "var(--an-fg)" }}>{opt.label}</span>
-                    </div>
-                    {opt.description && (
-                      <div className="mt-1 text-xs leading-snug" style={{ color: "var(--an-fg-dim)" }}>{opt.description}</div>
+    <div
+      className="an-appr flex min-h-0 flex-col text-sm"
+      style={{ maxHeight: "calc(var(--vvh, 100dvh) * 0.58)" }}
+    >
+      {/* scrollable question body — the footer buttons below never leave the screen */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-3.5 py-3">
+        {(q.header || questions.length > 1) && (
+          <div className="mb-2.5 flex items-center justify-between">
+            {q.header ? <div className="an-appr-chip">{q.header}</div> : <span />}
+            {questions.length > 1 && (
+              <span className="an-appr-count" style={{ color: "var(--an-fg-dim)" }}>
+                {step + 1} / {questions.length}
+              </span>
+            )}
+          </div>
+        )}
+        <div className="mb-2.5 font-bold" style={{ color: "var(--an-fg)" }}>{q.question}</div>
+        {q.options.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {q.options.map((opt) => {
+              const chosen = (selections[step] ?? []).includes(opt.label);
+              const multi = q.multiSelect === true;
+              return (
+                <button
+                  key={opt.label}
+                  onClick={() => toggle(step, opt.label, multi)}
+                  className={`an-appr-opt ${chosen ? "is-on" : ""}`}
+                  aria-pressed={chosen}
+                >
+                  <div className="flex items-center gap-2.5">
+                    {multi && (
+                      <span className={`an-appr-check ${chosen ? "is-on" : ""}`} aria-hidden="true" />
                     )}
-                  </button>
-                );
-              })}
+                    <span className="font-bold" style={{ color: "var(--an-fg)" }}>{opt.label}</span>
+                  </div>
+                  {opt.description && (
+                    <div className="mt-1 text-xs leading-snug" style={{ color: "var(--an-fg-dim)" }}>{opt.description}</div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {q.allowCustomInput && (
+          <div className="mt-2.5 flex flex-col gap-1.5">
+            <div className="text-xs" style={{ color: "var(--an-fg-dim)" }}>
+              {q.options.length > 0 ? "Or type your own answer" : "Type your answer"}
             </div>
-          )}
-          {q.allowCustomInput && (
-            <div className="mt-2.5 flex flex-col gap-1.5">
-              <div className="text-xs" style={{ color: "var(--an-fg-dim)" }}>
-                {q.options.length > 0 ? "Or type your own answer" : "Type your answer"}
-              </div>
-              {q.secret ? (
-                <input
-                  type="password"
-                  value={customInput[qi] ?? ""}
-                  onChange={(e) => setTypedAnswer(qi, e.target.value)}
-                  placeholder="Type your answer…"
-                  className="an-appr-field"
-                  style={{ letterSpacing: "2px" }}
-                />
-              ) : (
-                <textarea
-                  rows={3}
-                  value={customInput[qi] ?? ""}
-                  onChange={(e) => setTypedAnswer(qi, e.target.value)}
-                  placeholder="Type your answer…"
-                  className="an-appr-field resize-y"
-                />
-              )}
-            </div>
-          )}
-        </div>
-      ))}
-      <div className="sticky bottom-0 px-3.5 py-3" style={{ background: "var(--brk-bg)" }}>
-        <button disabled={!allAnswered} onClick={submit} className="an-appr-send">
-          Send
-        </button>
+            {q.secret ? (
+              <input
+                type="password"
+                value={customInput[step] ?? ""}
+                onChange={(e) => setTypedAnswer(step, e.target.value)}
+                placeholder="Type your answer…"
+                className="an-appr-field"
+                style={{ letterSpacing: "2px" }}
+              />
+            ) : (
+              <textarea
+                rows={3}
+                value={customInput[step] ?? ""}
+                onChange={(e) => setTypedAnswer(step, e.target.value)}
+                placeholder="Type your answer…"
+                className="an-appr-field resize-y"
+              />
+            )}
+          </div>
+        )}
+      </div>
+      <div className="an-appr-div flex gap-2 px-3.5 py-3" style={{ background: "var(--brk-bg)" }}>
+        {step > 0 && (
+          <button
+            onClick={() => setStep(step - 1)}
+            className="an-appr-btn"
+            style={{ flex: "0 0 auto", borderColor: "color-mix(in srgb, var(--an-fg) 25%, transparent)", color: "var(--an-fg-dim)" }}
+          >
+            Back
+          </button>
+        )}
+        {lastStep ? (
+          <button disabled={!allAnswered} onClick={submit} className="an-appr-send" style={{ flex: 1, minWidth: 0 }}>
+            Send
+          </button>
+        ) : (
+          <button disabled={!answered(step)} onClick={() => setStep(step + 1)} className="an-appr-send" style={{ flex: 1, minWidth: 0 }}>
+            Next
+          </button>
+        )}
       </div>
     </div>
   );

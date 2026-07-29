@@ -12,11 +12,11 @@ import type { ApprovalChannel, ApprovalRequest, ApprovalDecision } from "../runt
 import type { ChatTransport } from "./session.js";
 
 export class TransportApprovalChannel implements ApprovalChannel {
-  private pending = new Map<string, (d: ApprovalDecision) => void>();
+  private pending = new Map<string, { req: ApprovalRequest; resolve: (d: ApprovalDecision) => void }>();
 
   // The transport is shared with the chat dispatcher (same pipe). We subscribe for
-  // OUR message type only and ignore the rest — onRecv fan-out is fine because the
-  // dispatcher's switch has no "approvalDecision" case (this channel owns it).
+  // OUR message types only and ignore the rest — onRecv fan-out is fine because the
+  // dispatcher's switch has no case for them (this channel owns them).
   constructor(private transport: ChatTransport) {
     transport.onRecv((m) => {
       if (m?.type === "approvalDecision" && typeof m.id === "string" && m.outcome) {
@@ -27,12 +27,19 @@ export class TransportApprovalChannel implements ApprovalChannel {
           questionResponses: m.questionResponses,
         });
       }
+      // UI re-sync (session switch / view reload): replay everything still parked here as
+      // one authoritative snapshot. request() sends each approval exactly once, so a view
+      // that missed the live event (or dropped it on a repaint) has no other way to learn
+      // the engine is still blocked waiting on it.
+      if (m?.type === "resendApprovals") {
+        this.transport.send({ type: "approvalsSnapshot", reqs: [...this.pending.values()].map((p) => p.req) });
+      }
     });
   }
 
   async request(req: ApprovalRequest): Promise<ApprovalDecision> {
     return new Promise<ApprovalDecision>((resolve) => {
-      this.pending.set(req.id, resolve);
+      this.pending.set(req.id, { req, resolve });
       this.transport.send({ type: "approval", req });
     });
   }
@@ -41,13 +48,13 @@ export class TransportApprovalChannel implements ApprovalChannel {
     const r = this.pending.get(id);
     if (!r) return;
     this.pending.delete(id);
-    r(decision);
+    r.resolve(decision);
   }
 
   // Auto-deny anything still pending — used when the UI goes away (closed panel /
   // dropped socket): a request no one can answer must fail safe, not hang the engine.
   drain(reason = "UI closed") {
-    for (const [, r] of this.pending) r({ outcome: "deny", reason });
+    for (const [, p] of this.pending) p.resolve({ outcome: "deny", reason });
     this.pending.clear();
   }
 }

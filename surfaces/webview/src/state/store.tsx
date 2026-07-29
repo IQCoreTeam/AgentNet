@@ -362,11 +362,14 @@ function reducer(state: State, ev: Action): State {
     case "compacted":
       return { ...state, isCompacting: false, contextTokens: undefined, toast: "Context compacted — conversation history summarised to free space." };
     case "clear":
-      // repaint() sends `clear` on every session open. Keep the approvals that belong to the
-      // session now being opened — otherwise tapping a notification to answer a backgrounded
-      // session's question would wipe that very question (the engine is still awaiting it).
-      // activeSessionId is already the opened session here (set optimistically on open).
-      return { ...state, log: [], approvals: state.approvals.filter((a) => isApprovalForView(a, state.activeSessionId)), typing: false, loading: false, contextTokens: undefined, contextWindow: undefined, firingSkills: [] };
+      // repaint() sends `clear` on every session open. Approvals are NOT log state — they are
+      // parked engine questions, possibly for OTHER sessions (their engines are still blocked
+      // awaiting an answer). The old per-view filter here permanently dropped a backgrounded
+      // session's pending question the moment you switched away (nothing ever re-emits on its
+      // own), so returning to that chat showed nothing and the turn hung. Keep them all: the
+      // dock already filters per-view for display, and the approvalsSnapshot requested on
+      // every open reconciles the list with the server (dropping ones resolved elsewhere).
+      return { ...state, log: [], typing: false, loading: false, contextTokens: undefined, contextWindow: undefined, firingSkills: [] };
     case "message":
       return { ...state, log: appendMessage(state.log, ev.msg) };
     case "turnEnd":
@@ -442,7 +445,14 @@ function reducer(state: State, ev: Action): State {
     case "wallet":
       return { ...state, walletAddress: ev.address };
     case "approval":
-      return { ...state, approvals: [ev.req, ...state.approvals] };
+      // Dedupe by id: the channel can replay a parked approval (snapshot) around the same
+      // time as its live event — the same card must never stack twice.
+      return { ...state, approvals: [ev.req, ...state.approvals.filter((a) => a.id !== ev.req.id)] };
+    case "approvalsSnapshot":
+      // Authoritative replay of everything still parked server-side (requested on each open).
+      // Replacing wholesale restores a switched-away session's pending question AND drops
+      // entries already resolved elsewhere (e.g. from a notification action).
+      return { ...state, approvals: ev.reqs };
     case "notice":
       return { ...state, toast: ev.text };
     case "status": {
@@ -870,6 +880,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         raw({ type: "__loadingAgentProfile" });
       }
       void transportRef.current?.post(msg);
+      // After a switch, ask the approval channel to replay anything still parked — this is
+      // what restores a pending question when the user returns to its session (approvals
+      // only ever stream once otherwise). Ordering is safe: `clear` no longer touches
+      // approvals and the snapshot replaces the list wholesale.
+      if (msg.type === "open") void transportRef.current?.post({ type: "resendApprovals" });
     };
     return {
       send,

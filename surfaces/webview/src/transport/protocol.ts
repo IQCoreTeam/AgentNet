@@ -109,6 +109,9 @@ export type ClientMessage =
   | { type: "getSkillShopping" }
   | { type: "setSkillShopping"; on: boolean }
   | { type: "approvalDecision"; id: string; outcome: ApprovalOutcome; reason?: string; updatedInput?: Record<string, unknown>; questionResponses?: ApprovalQuestionResponse[] }
+  // ask the approval channel to replay everything still parked (sent after each open, so a
+  // pending question survives switching away from its session and back)
+  | { type: "resendApprovals" }
   // setup/auth:
   // `restored` marks the silent Keystore-restore path; the server ignores it when it
   // would override the persisted wallet mode (see localhost attachWalletConnection).
@@ -201,6 +204,8 @@ export type ServerMessage =
   | { type: "wallet"; address: string | null }
   | { type: "skillShopping"; on: boolean }
   | { type: "approval"; req: ApprovalRequest }
+  // authoritative replay of every approval still parked server-side (answers "resendApprovals")
+  | { type: "approvalsSnapshot"; reqs: ApprovalRequest[] }
   // setup/auth:
   | { type: "init"; defaultPath: string | null; cloudKind: string | null; hasWallet?: boolean }
   | { type: "walletConnected"; address: string | null; storageOptions: unknown; storageConfigured?: boolean }
