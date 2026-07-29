@@ -187,6 +187,8 @@ export function Chat({
   const [replyText, setReplyText] = useState("");
   const [showSessions, setShowSessions] = useState(false);
   const [showMarket, setShowMarket] = useState(false);
+  // which market screen /market, /agents and /skills land on
+  const [marketStage, setMarketStage] = useState<"list" | "agents" | "owned">("list");
   const [showModels, setShowModels] = useState(false);
   const [showEfforts, setShowEfforts] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
@@ -478,12 +480,13 @@ export function Chat({
     setPanelFocused(false);
   }
 
-  function openMarket() {
+  function openMarket(stage: "list" | "agents" | "owned" = "list") {
     setPanelFocused(false);
     if (!market) {
       setNotice("skill market still loading, try again in a moment");
       return;
     }
+    setMarketStage(stage);
     setShowMarket(true);
   }
 
@@ -634,6 +637,15 @@ export function Chat({
       case "ls":
         void chat.refreshSessions();
         setShowSessions(true);
+        return;
+      case "market":
+        openMarket();
+        return;
+      case "agents":
+        openMarket("agents");
+        return;
+      case "skills":
+        openMarket("owned");
         return;
       case "resume": {
         const hit = chat.sessions.find((s) => s.sessionId.startsWith(arg));
@@ -977,6 +989,8 @@ export function Chat({
         api={market}
         walletAddr={address}
         ownedNames={installed}
+        initialStage={marketStage}
+        owned={skills ?? []}
         onBought={() => {
           // a buy installs the skill — refresh the badge source + the welcome panel list.
           void market.ownedSkills().then(setInstalled).catch(() => {});

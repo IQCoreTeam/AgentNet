@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { Box, Text, useInput } from "ink";
+import { Box, Text, useInput, useStdout } from "ink";
 import type { SkillCard, SkillDetail } from "@iqlabs-official/agent-sdk";
 import type { Reputation, AgentProfile } from "@iqlabs-official/agent-sdk";
 import { maskedHeliusKey, hasDasRpc, saveHeliusKey, getNetwork } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../theme.js";
+import type { OwnedSkill } from "../components/WelcomePanel.js";
 import { tierInfo } from "./market/tiers.js";
 import { AgentProfileView, type ProfileSub } from "./market/AgentProfileView.js";
 import { SkillDetailView, type DetailSub } from "./market/SkillDetailView.js";
@@ -41,7 +42,8 @@ type Stage =
   | "agents"
   | "agentProfile"
   | "helius"
-  | "blogCompose";
+  | "blogCompose"
+  | "owned";
 
 // Publish form fields in order — tab/arrow cycles through them.
 type PublishField = "kind" | "name" | "desc" | "text" | "category" | "hashtags" | "price" | "image";
@@ -68,14 +70,18 @@ export function SkillMarket({
   ownedNames,
   onBought,
   onClose,
+  initialStage,
+  owned: ownedCollection = [],
 }: {
   api: MarketApi;
   walletAddr: string;
   ownedNames: string[];
   onBought: () => void;
   onClose: () => void;
+  initialStage?: "list" | "agents" | "owned";
+  owned?: OwnedSkill[];
 }) {
-  const [stage, setStage] = useState<Stage>("list");
+  const [stage, setStage] = useState<Stage>(initialStage ?? "list");
   const [kind, setKind] = useState<"skill" | "workflow">("skill");
   const [marketSort, setMarketSort] = useState<"supply" | "stars">("supply"); // GH #89 ranking
   const [query, setQuery] = useState("");
@@ -137,6 +143,7 @@ export function SkillMarket({
   const [heliusFlash, setHeliusFlash] = useState<string | null>(null);
 
   const owned = new Set(ownedNames);
+  const agentRows = useStdout().stdout?.rows ?? 24;
   const clamped = Math.min(idx, Math.max(0, results.length - 1));
   const visibleResults = results.filter((c) => !hideOwned || !owned.has(c.name));
   const selected = results[clamped];
@@ -169,6 +176,8 @@ export function SkillMarket({
     void api.solBalance().then(setBalance).catch(() => setBalance(null));
     void refreshRpcStatus();
     void api.disposedSkillMints?.().then((m) => setDisposedNames(new Set(Object.keys(m)))).catch(() => {});
+    // /agents lands straight on the directory; owned needs no fetch (data via prop)
+    if (initialStage === "agents") void loadAgents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -653,6 +662,9 @@ export function SkillMarket({
   if (stage === "agents") {
     const short = (w: string) => `${w.slice(0, 6)}…${w.slice(-4)}`;
     const filtered = agents.filter((a) => !agentQuery.trim() || a.wallet.toLowerCase().includes(agentQuery.toLowerCase()));
+    // window to terminal height so every agent stays reachable (was hard-capped at 12)
+    const vis = Math.max(3, Math.min(filtered.length, agentRows - 8));
+    const aStart = Math.max(0, Math.min(agentIdx - Math.floor(vis / 2), Math.max(0, filtered.length - vis)));
     return (
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
         <Text bold color={colors.iqMagenta}>❖ agent directory</Text>
@@ -670,18 +682,23 @@ export function SkillMarket({
           ) : filtered.length === 0 ? (
             <Text dimColor>no agents found</Text>
           ) : (
-            filtered.slice(0, 12).map((a, i) => {
-              const on = !agentTyping && i === agentIdx;
-              const { cur } = tierInfo(a.stars ?? 0);
-              return (
-                <Box key={a.wallet}>
-                  <Text color={on ? colors.iqCyan : undefined}>{on ? "› " : "  "}</Text>
-                  <Box width={14}><Text dimColor>{short(a.wallet)}</Text></Box>
-                  <Text dimColor>  ×{a.totalSupply} supply · {a.skillsPublished} skills</Text>
-                  {cur ? <Text color={colors.warn}> [{cur.name}]</Text> : null}
-                </Box>
-              );
-            })
+            <>
+              {aStart > 0 ? <Text dimColor>… {aStart} more above</Text> : null}
+              {filtered.slice(aStart, aStart + vis).map((a, wi) => {
+                const i = aStart + wi;
+                const on = !agentTyping && i === agentIdx;
+                const { cur } = tierInfo(a.stars ?? 0);
+                return (
+                  <Box key={a.wallet}>
+                    <Text color={on ? colors.iqCyan : undefined}>{on ? "› " : "  "}</Text>
+                    <Box width={14}><Text dimColor>{short(a.wallet)}</Text></Box>
+                    <Text dimColor>  ×{a.totalSupply} supply · {a.skillsPublished} skills</Text>
+                    {cur ? <Text color={colors.warn}> [{cur.name}]</Text> : null}
+                  </Box>
+                );
+              })}
+              {aStart + vis < filtered.length ? <Text dimColor>… {filtered.length - aStart - vis} more below</Text> : null}
+            </>
           )}
         </Box>
         <Box marginTop={1}>

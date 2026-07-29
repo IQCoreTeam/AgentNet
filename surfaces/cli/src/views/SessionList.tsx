@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Box, Text, useInput } from "ink";
+import { Box, Text, useInput, useStdout } from "ink";
 import type { SessionMeta } from "@iqlabs-official/agent-sdk/runtime/contract";
 import { colors, glyph, copy } from "../theme.js";
 
@@ -28,6 +28,11 @@ export function SessionList({
 }) {
   const [idx, setIdx] = useState(0);
   const clamped = Math.min(idx, Math.max(0, sessions.length - 1));
+  // window the list to the terminal height so a big session pile never overflows the
+  // frame (overflow breaks scrolling AND leaves a stale frame ink can't erase).
+  const rows = useStdout().stdout?.rows ?? 24;
+  const VIS = Math.max(3, Math.min(sessions.length, rows - 6));
+  const start = Math.max(0, Math.min(clamped - Math.floor(VIS / 2), Math.max(0, sessions.length - VIS)));
 
   useInput((input, key) => {
     if (key.escape) return onClose();
@@ -46,22 +51,27 @@ export function SessionList({
       {sessions.length === 0 ? (
         <Text dimColor>{copy.emptySessions}</Text>
       ) : (
-        sessions.map((s, i) => {
-          const on = i === clamped;
-          const g = s.cli === "codex" ? glyph.codex : glyph.claude;
-          const tint = s.cli === "codex" ? colors.codex : colors.claude;
-          return (
-            <Box key={s.sessionId}>
-              <Text color={on ? colors.iqCyan : undefined}>{on ? "› " : "  "}</Text>
-              <Text color={tint}>{g} </Text>
-              <Text color={on ? colors.iqCyan : undefined}>
-                {(s.title || "untitled").slice(0, 44).padEnd(44)}
-              </Text>
-              <Text dimColor> {ago(s.ts)}</Text>
-              {s.sessionId === activeId ? <Text color={colors.ok}> ●</Text> : null}
-            </Box>
-          );
-        })
+        <>
+          {start > 0 ? <Text dimColor>… {start} more above</Text> : null}
+          {sessions.slice(start, start + VIS).map((s, wi) => {
+            const i = start + wi;
+            const on = i === clamped;
+            const g = s.cli === "codex" ? glyph.codex : glyph.claude;
+            const tint = s.cli === "codex" ? colors.codex : colors.claude;
+            return (
+              <Box key={s.sessionId}>
+                <Text color={on ? colors.iqCyan : undefined}>{on ? "› " : "  "}</Text>
+                <Text color={tint}>{g} </Text>
+                <Text color={on ? colors.iqCyan : undefined}>
+                  {(s.title || "untitled").slice(0, 44).padEnd(44)}
+                </Text>
+                <Text dimColor> {ago(s.ts)}</Text>
+                {s.sessionId === activeId ? <Text color={colors.ok}> ●</Text> : null}
+              </Box>
+            );
+          })}
+          {start + VIS < sessions.length ? <Text dimColor>… {sessions.length - start - VIS} more below</Text> : null}
+        </>
       )}
       <Box marginTop={1}>
         <Text dimColor>↑/↓ move · ↵ resume · d delete · esc back</Text>
