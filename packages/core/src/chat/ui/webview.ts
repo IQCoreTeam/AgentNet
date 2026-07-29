@@ -3448,9 +3448,9 @@ export function chatHtml(): string {
       input.value = '';
       return;
     }
-    // /mockskill <name>  → demo the skill marquee (green glowing "Casting <name>")
+    // /mockskill <name> -> demo the nft skill marquee
     if (text === '/mockskill' || text.startsWith('/mockskill ')) {
-      flashSkill(text.slice('/mockskill'.length).trim() || 'cleancode');
+      flashSkill(text.slice('/mockskill'.length).trim() || 'cleancode', 'mock');
       input.value = '';
       return;
     }
@@ -4598,6 +4598,7 @@ export function chatHtml(): string {
     el.className = 'an-sd' + (isWorkflow ? ' is-workflow' : '') + (opts.disposed ? ' is-disposed' : '')
       + (opts.dim ? ' is-owned-dim' : '') + (opts.firing ? ' is-firing' : '');
     el.title = nm; el.setAttribute('data-skill', card.name || '');
+    if (card.id) el.setAttribute('data-mint', card.id);
     // sigil is our own deterministic SVG (name only seeds numbers) -> safe to inject as markup;
     // all human-readable fields go through textContent below so a skill name can't inject HTML.
     var imgUrl = (card.image && /^https?:\\/\\//.test(String(card.image))) ? String(card.image) : null;
@@ -4667,17 +4668,17 @@ export function chatHtml(): string {
       // to the local SKILL.md doc. Avoids the name!=slug 404 on disk.
       const open = () => { const mt = skillMints[name]; if (mt) { showView('market'); openDetail(mt); } else openSkillDoc(name); };
       const info = sm[name] || {};
-      grid.appendChild(skillSdCard({ name: name, category: info.category, type: info.type, stars: info.stars },
+      grid.appendChild(skillSdCard({ id: skillMints[name], name: name, category: info.category, type: info.type, stars: info.stars },
         { owned: true, onOpen: open }));
     }
     // un-pinned skills: shown greyed + desaturated, still listed (not gone). Click opens the
     // detail view, which shows a Re-equip button for an owned-but-disposed skill.
     for (const name of disposedSlugs) {
       const info = sm[name] || {};
-      const c = skillSdCard({ name: name, category: info.category, type: info.type, stars: info.stars },
+      const c = skillSdCard({ id: disposedMints[name], name: name, category: info.category, type: info.type, stars: info.stars },
         { owned: true, disposed: true,
         onOpen: () => { showView('market'); openDetail(disposedMints[name]); } });
-      c.title = name + ' \\u2014 un-pinned (click to re-equip)';
+      c.title = name + ' - un-pinned (click to re-equip)';
       grid.appendChild(c);
     }
     const fill = Math.max(0, 3 - shown.length - disposedSlugs.length);
@@ -5242,10 +5243,8 @@ export function chatHtml(): string {
   const VERBS = { skill: ['Casting', 'Channeling', 'Wielding', 'Invoking'] };
   let pick = 0; // rotate so the verb feels alive
   let actTimer = null;
-  // SKILL-ONLY marquee: only an equipped skill firing lights this up (a green, glowing
-  // "Casting <skill>"). Plain tool work (read/bash/edit) is NOT shown here — it already
-  // appears as cards in the chat timeline, so duplicating it would just be noise.
-  function flashSkill(name) {
+  // nft-only marquee: local plaintext skills do not shine here.
+  function flashSkill(name, mint) {
     const v = VERBS.skill[(pick++) % VERBS.skill.length];
     activityText.innerHTML = '<span class="verb">' + v + '</span> '
       + (name ? '<span class="obj">' + escapeHtml(name) + '</span>' : '');
@@ -5257,12 +5256,11 @@ export function chatHtml(): string {
       activityBar.classList.add('out');
       setTimeout(() => { activityBar.style.display = 'none'; activityBar.classList.remove('out'); }, 250);
     }, dwell);
-    lightSkillSlot(name, dwell); // glow the matching equipped slot + header while it fires
+    lightSkillSlot(name, mint, dwell);
   }
-  // Glow only while a skill is actually firing: the matching slot (.firing) plus the
-  // header/button accent, then clear after the same dwell as the marquee.
+  // glow only while an nft skill is actually firing.
   let firingTimer = null;
-  function lightSkillSlot(name, dwell) {
+  function lightSkillSlot(name, mint, dwell) {
     const grid = document.getElementById('skillGrid');
     const panel = document.getElementById('skillsPanel');
     const btn = document.getElementById('skillsBtn');
@@ -5271,8 +5269,10 @@ export function chatHtml(): string {
       panel.classList.remove('casting'); btn.classList.remove('casting');
     };
     clear();
-    grid.querySelectorAll('.an-sd').forEach((s) => { if (s.getAttribute('data-skill') === name) s.classList.add('is-firing'); });
-    panel.classList.add('casting'); btn.classList.add('casting'); // header/button cue even if the name has no slot
+    grid.querySelectorAll('.an-sd').forEach((s) => {
+      if ((mint && s.getAttribute('data-mint') === mint) || s.getAttribute('data-skill') === name) s.classList.add('is-firing');
+    });
+    panel.classList.add('casting'); btn.classList.add('casting');
     clearTimeout(firingTimer);
     firingTimer = setTimeout(clear, Math.max(dwell || 0, 1400));
   }
@@ -5443,7 +5443,7 @@ export function chatHtml(): string {
         ctxMeter.style.display = 'inline-flex';
       }
     }
-    else if (m.type === 'skillActive') flashSkill(m.name); // a real skill fired (was /mockskill)
+    else if (m.type === 'skillActive' && m.origin === 'nft' && m.mint) flashSkill(m.name, m.mint);
     else if (m.type === 'rpcStatus') renderRpcStatus(m.status);
     else if (m.type === 'skillShopping') setShopToggle(m.on);
     else if (m.type === 'searchResults') {

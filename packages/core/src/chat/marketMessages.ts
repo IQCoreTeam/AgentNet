@@ -152,7 +152,7 @@ export type MarketEvent =
   // GitHub verified-work registration results (issue #93 parity)
   | { type: "githubStatus"; hasToken: boolean; masked?: string }
   | { type: "workRepoRegistered"; ok: boolean; count?: number; repo?: string; error?: string }
-  | { type: "skillActive"; name: string } // a skill fired -> "Casting <name>" cue
+  | { type: "skillActive"; name: string; origin: "nft"; mint: string } // nft skill fired -> casting cue
   | { type: "rpcStatus"; status: RpcStatus } // DAS-ready? which source? (issue #23)
   // issue #34: comment write result + refreshed comment list
   | { type: "postNoteResult"; skillId: string; ok: boolean; error?: string }

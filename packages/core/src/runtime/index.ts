@@ -16,17 +16,32 @@ import { setSkillShoppingActive } from "../skill-market/passive.js";
 import { setMakeSkillActive } from "../skill-market/makeSkill.js";
 import { newVerifyGuard, agentNetAllowedTools, AGENTNET_MCP_SERVER } from "../skill-market/index.js";
 import { createAgentSdkMcpServer } from "../skill-market/sdk.js";
+import { readSkillManifest, skillOrigin, type SkillManifest } from "../skill-market/registry.js";
+import { slugifyName } from "../skill-market/ingest/convert.js";
 import { resolveRpcUrl, hasDasRpc, loadGithubToken } from "../core/rpc.js";
 import { getCodexApiKey } from "../account/codexAuth.js";
 import type { ApprovalChannel } from "./approval/channel.js";
 import type {
   AgentRuntime,
   ChatMessage,
+  SkillActivation,
   SessionHandle,
   SessionMeta,
   StorageAdapter,
   Wallet,
 } from "./contract.js";
+
+function nftSkillActivation(name: string, manifest: SkillManifest): SkillActivation | null {
+  const raw = name.trim();
+  if (!raw) return null;
+  const candidates = [...new Set([raw, slugifyName(raw)].filter(Boolean))];
+  for (const slug of candidates) {
+    if (skillOrigin(slug, manifest) !== "nft") continue;
+    const mint = manifest.nft[slug]?.mint;
+    if (mint) return { name: slug, origin: "nft", mint };
+  }
+  return null;
+}
 
 
 // Skill-shopping wiring (plans/skill-shopping.md), built fresh per session from the
@@ -166,7 +181,7 @@ export function createRuntime(
       let title = "";
       const msgCbs: Array<(m: ChatMessage) => void> = [];
       const turnCbs: Array<() => void> = [];
-      const skillCbs: Array<(name: string) => void> = []; // "Casting <skill>" marquee
+      const skillCbs: Array<(skill: SkillActivation) => void> = [];
       const usageCbs: Array<(n: number, window?: number) => void> = [];
       const compactCbs: Array<() => void> = [];
       const pending: ChatMessage[] = []; // messages awaiting a known sessionId
@@ -202,9 +217,14 @@ export function createRuntime(
         void flush();
       });
       cli.onMessage((m: ChatMessage) => emit(m));
-      // A skill firing is a transient UI cue, not a transcript entry — fan it out to
-      // listeners without persisting it (issue #17).
-      cli.onSkill((name: string) => { for (const cb of skillCbs) cb(name); });
+      // only nft skills get the casting cue; read fresh so same-session buys light up.
+      cli.onSkill((name: string) => {
+        void readSkillManifest().then((manifest) => {
+          const activation = nftSkillActivation(name, manifest);
+          if (!activation) return;
+          for (const cb of skillCbs) cb(activation);
+        });
+      });
       cli.onUsage((n: number, window?: number) => { for (const cb of usageCbs) cb(n, window); });
       cli.onCompact(() => { for (const cb of compactCbs) cb(); });
       cli.onTurnEnd(() => {

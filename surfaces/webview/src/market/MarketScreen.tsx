@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { useStore } from "../state/store";
+import { skillCardFiring, useStore } from "../state/store";
 import { SkillSdCard } from "./SkillSdCard";
 import { SkillDetailView } from "./SkillDetailView";
 import { PublishForm } from "./PublishForm";
@@ -372,7 +372,7 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
                   card={card}
                   owned
                   disposed={Object.values(state.marketDisposed).includes(card.id)}
-                  firing={state.firingSkills.some((f) => f.name === card.name)}
+                  firing={skillCardFiring(state.firingSkills, card)}
                   onOpen={handleOpenCard}
                 />
               ))}
@@ -403,7 +403,7 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
                       owned={isOwned}
                       dim={isOwned}
                       disposed={Object.values(state.marketDisposed).includes(card.id)}
-                      firing={state.firingSkills.some((f) => f.name === card.name)}
+                      firing={skillCardFiring(state.firingSkills, card)}
                       onOpen={handleOpenCard}
                     />
                   );

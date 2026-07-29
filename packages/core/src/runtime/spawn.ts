@@ -65,9 +65,7 @@ export interface Engine {
   onSessionId(cb: (id: string) => void): void;
   onTurnEnd(cb: () => void): void;
   onError(cb: (text: string) => void): void;
-  // a skill (an installed SKILL.md) just fired — name is the skill the model invoked.
-  // Transient signal for the "Casting <skill>" activity marquee (issue #17); NOT a
-  // transcript message (it isn't persisted).
+  // raw installed-skill candidate. Runtime filters this to nft origin before UI.
   onSkill(cb: (name: string) => void): void;
   // real context occupancy per turn. contextWindow is the model's window size when the
   // engine reports it (codex modelContextWindow), else a sensible default — so the UI can
@@ -405,10 +403,9 @@ function claudeEngine(opts: SpawnOpts): Engine {
     let streamBuf = "";
     try {
       for await (const m of q) {
-        // A skill firing surfaces as a `Skill` tool_use in the assistant stream. Detect it
-        // HERE (not only in canUseTool, which is bypassed when the tool is auto-allowed under
-        // acceptEdits/bypassPermissions) so the "Casting <skill>" cue fires whenever the agent
-        // actually uses a skill. Deduped by the tool_use id.
+        // A Claude skill call surfaces as a `Skill` tool_use. Detect it here (not only
+        // in canUseTool, which auto-allowed modes can bypass) and let runtime decide
+        // whether the slug is nft-owned. Deduped by the tool_use id.
         const am = m as any;
         if (am?.type === "assistant" && Array.isArray(am.message?.content)) {
           for (const b of am.message.content) {
@@ -633,8 +630,8 @@ function codexEngine(opts: SpawnOpts): Engine {
       } else if ((it.type === "commandExecution" || it.type === "command_execution") && it.command) {
         const aggregatedOutput = it.aggregatedOutput !== undefined ? it.aggregatedOutput : it.aggregated_output;
         const exitCode = it.exitCode !== undefined ? it.exitCode : it.exit_code;
-        // codex has no per-tool hook, so a command touching our skills dir is the signal
-        // that an installed skill is firing → the "Casting <skill>" cue (issue #17).
+        // codex has no per-tool hook, so a command touching our skills dir is a raw
+        // skill candidate. Runtime filters it to nft-owned before UI.
         const skillName = skillFromPath(it.command);
         if (skillName) cb.emitSkill(skillName);
         cb.emitMsg({
@@ -995,8 +992,7 @@ function codexEngine(opts: SpawnOpts): Engine {
     onSessionId: (c) => cb.sid.push(c),
     onTurnEnd: (c) => cb.turn.push(c),
     onError: (c) => cb.err.push(c),
-    // codex has no per-tool hook, so the skill signal comes from the output stream:
-    // mapCodexEvent flags any command/path that references our skills dir (convert/codex).
+    // codex has no per-tool hook, so the raw skill candidate comes from the stream.
     onSkill: (c) => cb.skill.push(c),
     onUsage: (c) => cb.use.push(c),
     onCompact: (c) => cb.comp.push(c),

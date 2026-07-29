@@ -110,6 +110,13 @@ export interface ToolAction {
   diff?: string; // unified-ish diff for edits ("-old" / "+new" lines)
 }
 
+// A marketplace-owned skill firing. Local/plain SKILL.md files do not get this cue.
+export interface SkillActivation {
+  name: string;
+  origin: "nft";
+  mint: string;
+}
+
 // ── a running session (the handle the UI drives) ────────
 export interface SessionHandle {
   readonly sessionId: string; // from the CLI's system/init
@@ -118,7 +125,7 @@ export interface SessionHandle {
   runSlashCommand?(command: string, arg?: string): void; // native CLI slash command, not a chat turn
   onMessage(cb: (msg: ChatMessage) => void): void; // CLI output (UI renders)
   onTurnEnd(cb: () => void): void; // turn finished (runtime auto-saves here)
-  onSkill(cb: (name: string) => void): void; // a skill fired → UI "Casting <skill>" cue
+  onSkill(cb: (skill: SkillActivation) => void): void; // nft skill fired -> UI casting cue
   // real context-window occupancy (tokens) reported by the engine each turn, plus the
   // model's window size (contextWindow) when known — so the UI can render a percentage
   // meter, not just a raw count. Optional for the UI to use; surfaces may ignore it.

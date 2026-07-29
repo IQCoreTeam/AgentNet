@@ -85,6 +85,8 @@ export const thinkingLabels = [
 // Own braille spinner frames (replaces ink-spinner) — animated via useFrameLoop.
 export const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
+export const castingFrames = ["✦ ·   · ✧", "· ✧ ·   ✦", "  ✦ · ✧  ", "·   ✦ · ✧"];
+
 // One-line celebration bursts (kept to a single line — delight, not noise).
 export const confetti = "·  ✦  ˖  ✧  ·  ⋆  ·";
 
@@ -107,6 +109,8 @@ export const copy = {
     "claude and codex sessions share one encrypted log; switch engines mid-thought.",
     "your wallet signature derives the key that encrypts every message you send.",
   ],
+  castingVerbs: ["casting", "channeling", "wielding", "invoking"],
+  castingLabel: "nft skill",
 } as const;
 
 export const pick = <T>(arr: readonly T[]): T => arr[Math.floor(Math.random() * arr.length)];

@@ -12,10 +12,8 @@ import { codexFileChangeMessage } from "./toolFormatting.js";
 
 const OUTPUT_CAP = 4000;
 
-// codex has no per-tool hook (unlike claude's canUseTool), so we detect a skill firing
-// from the event itself: any command/path that references our skills dir means an
-// installed skill is being used. We own that dir, so matching its path is reliable —
-// extract the <slug> right after it. Returns the skill slug, or undefined.
+// codex has no per-tool hook, so this extracts a raw installed-skill candidate from
+// commands that touch our skills dir. Runtime checks whether that slug is nft-owned.
 export function skillFromPath(text: string | undefined): string | undefined {
   if (!text) return undefined;
   const root = codexSkillsDir();
@@ -74,7 +72,7 @@ export function mapCodexEvent(ev: unknown): ParseResult {
         ts: Date.now(),
         tool: { name: "Bash", command: it.command, output: (it.aggregated_output ?? "").slice(0, OUTPUT_CAP), exitCode: it.exit_code },
       });
-      // a command touching our skills dir = an installed skill firing → "Casting" cue
+      // runtime filters this raw candidate to nft-owned before any surface sees it.
       out.skill = skillFromPath(it.command) ?? out.skill;
     } else if (it.type === "todo_list" && Array.isArray(it.items)) {
       // normalize codex todos {text,completed} → the neutral TodoWrite shape so the same

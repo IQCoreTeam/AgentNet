@@ -284,9 +284,10 @@ export function createChatSession(
   // per-message — correct even for a cross-CLI session.
   function wire(forCli: "claude" | "codex", h: SessionHandle) {
     h.onMessage((msg) => { if (isVisibleHandle(forCli, h)) transport.send({ type: "message", msg }); });
-    // a skill firing → the green "Casting <skill>" marquee (issue #17). Transient, not
-    // persisted; only painted for the active tab.
-    h.onSkill((name) => { if (isVisibleHandle(forCli, h)) sendMarket({ type: "skillActive", name }); });
+    // nft skill firing cue; local plaintext skills are filtered in runtime/index.
+    h.onSkill((skill) => {
+      if (isVisibleHandle(forCli, h)) sendMarket({ type: "skillActive", name: skill.name, origin: skill.origin, mint: skill.mint });
+    });
     // token usage: forward to the active surface so it can render a context meter. The
     // window (when the engine reports it) lets the UI show a percentage, not a bare count.
     // Only the visible handle updates the slot's last-seen usage — a parked/background

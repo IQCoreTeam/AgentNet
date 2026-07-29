@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { parseGithubLink, safeExternalUrl } from "@iqlabs-official/agent-sdk/links/github.js";
-import { useStore } from "../state/store";
+import { skillCardFiring, useStore } from "../state/store";
 import type { AgentProfile, SkillCard } from "../transport/protocol";
 import { SkillIcon } from "../icons";
 
@@ -744,7 +744,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                         key={card.id}
                         card={card}
                         owned={state.marketOwned?.includes(card.name)}
-                        firing={state.firingSkills?.some((f) => f.name === card.name)}
+                        firing={skillCardFiring(state.firingSkills, card)}
                         onOpen={onOpenSkill}
                       />
                     ))}

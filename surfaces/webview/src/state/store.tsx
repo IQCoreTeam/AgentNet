@@ -33,6 +33,17 @@ import type {
 // leaf subpath (not the barrel) so the browser bundle doesn't drag in the Node-only SDK.
 import { CHAT_MODEL_OPTIONS, type ChatModelOption } from "@iqlabs-official/agent-sdk/chat/modelOptions";
 
+export type FiringSkill = { name: string; kind: "skill" | "workflow"; origin: "nft"; mint: string };
+
+function slugifyName(s: string): string {
+  return (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
+}
+
+export function skillCardFiring(firing: readonly FiringSkill[] | undefined, card: SkillCard): boolean {
+  const slug = slugifyName(card.name);
+  return !!firing?.some((f) => f.mint === card.id || f.name === card.name || f.name === slug);
+}
+
 // A rendered log entry. We keep messages as-is and stream into the last assistant/
 // thinking bubble when `partial` is set, matching the HTML webview's bubble model.
 export type EngineStatus = "ok" | "no-login" | "missing";
@@ -75,9 +86,8 @@ export interface State {
   // Kind of the in-flight/just-finished publish — outlives publishProgress so the success
   // celebration can tint to match (skill = violet, workflow = amber). Cleared with the result.
   publishKind: "skill" | "workflow" | null;
-  // Skills/workflows currently casting (god-mode glow). A list, not one, so a workflow and
-  // the skills it chains can stack; each is tinted by kind (workflow = amber, skill = violet).
-  firingSkills: { name: string; kind: "skill" | "workflow" }[];
+  // nft skills/workflows currently casting. Plain local skills never enter this list.
+  firingSkills: FiringSkill[];
   walletAddress: string | null;
   cli: Cli;
   googleLoginUrl: string | null;
@@ -559,16 +569,11 @@ function reducer(state: State, ev: Action): State {
     case "rpcStatus":
       return { ...state, rpcStatus: ev.status };
     case "skillActive": {
-      // The cast name is the SKILL.md slug; a workflow we own (its card carries `type`)
-      // slugifies to the same — so match owned cards to tint workflow casts amber, skills
-      // violet. Default skill (violet) when unknown (bundled skills, not-yet-loaded cards).
-      const slugify = (s: string) =>
-        (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
-      const card = state.marketOwnedCards.find((c) => c.name === ev.name || slugify(c.name) === ev.name);
+      if (ev.origin !== "nft" || !ev.mint) return state;
+      const card = state.marketOwnedCards.find((c) => c.id === ev.mint || c.name === ev.name || slugifyName(c.name) === ev.name);
       const kind: "skill" | "workflow" = card?.type === "workflow" ? "workflow" : "skill";
-      // Stack distinct casts (workflow + the skills it chains); cap so the strip stays short.
-      const rest = state.firingSkills.filter((f) => f.name !== ev.name);
-      return { ...state, firingSkills: [...rest, { name: ev.name, kind }].slice(-5) };
+      const rest = state.firingSkills.filter((f) => f.mint !== ev.mint);
+      return { ...state, firingSkills: [...rest, { name: ev.name, kind, origin: ev.origin, mint: ev.mint }].slice(-5) };
     }
     case "publishResult": {
       // A mid-sequence signing failure can land while the publish form is hidden (the

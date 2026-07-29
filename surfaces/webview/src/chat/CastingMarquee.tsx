@@ -1,11 +1,7 @@
 import { SkillIcon } from "../icons";
+import type { FiringSkill } from "../state/store";
 
-// In-chat casting strip — ported from the vscode webview's flashSkill(): a breathing glow
-// bar that names each firing skill/workflow with a verb that ROTATES across firings
-// (Casting / Channeling / Wielding / Invoking). One row per active cast, so a workflow and
-// the skills it chains stack together; each row is tinted by kind (workflow = amber/gold,
-// skill = violet). ChatScreen clears the list on turn end.
-type Firing = { name: string; kind: "skill" | "workflow" };
+// nft-only casting strip. Local plaintext skills stay quiet.
 
 const VERBS = ["Casting", "Channeling", "Wielding", "Invoking"];
 // Stable verb per skill name so a row keeps its verb while others join/leave. Module-level
@@ -21,7 +17,7 @@ function verbFor(name: string): string {
   return v;
 }
 
-export function CastingMarquee({ skills }: { skills: Firing[] }) {
+export function CastingMarquee({ skills }: { skills: FiringSkill[] }) {
   if (!skills.length) return null;
   return (
     <div className="flex flex-col gap-1.5 px-3 pt-2">

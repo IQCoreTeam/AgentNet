@@ -233,7 +233,7 @@ export type ServerMessage =
   | { type: "ownedSkills"; names: string[]; mints?: Record<string, string>; disposedMints?: Record<string, string>; cards?: import("@iqlabs-official/agent-sdk").SkillCard[]; workflowMints?: string[] }
   | { type: "balance"; lamports: number | null }
   | { type: "airdropResult"; ok: boolean; lamports?: number; error?: string }
-  | { type: "skillActive"; name: string }
+  | { type: "skillActive"; name: string; origin: "nft"; mint: string }
   | { type: "rpcStatus"; status: import("@iqlabs-official/agent-sdk").RpcStatus }
   | { type: "postNoteResult"; skillId: string; ok: boolean; error?: string }
   | { type: "notes"; skillId: string; notes: unknown[] }

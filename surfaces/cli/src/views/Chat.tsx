@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Box, Text, Static, useApp, useInput } from "ink";
-import type { AgentRuntime, Wallet, ChatMessage } from "@iqlabs-official/agent-sdk/runtime/contract";
+import type { AgentRuntime, Wallet, ChatMessage, SkillActivation } from "@iqlabs-official/agent-sdk/runtime/contract";
 import type { CliReport, StorageConfig } from "@iqlabs-official/agent-sdk";
 import type { CloudStatus } from "@iqlabs-official/agent-sdk/account/storage/mirror";
 import type { ApprovalRequest } from "@iqlabs-official/agent-sdk/runtime/approval/channel";
@@ -42,7 +42,7 @@ import { ModelPicker } from "./ModelPicker.js";
 import { EffortPicker } from "./EffortPicker.js";
 import type { EffortLevel } from "../prefs.js";
 import { type Mood } from "../components/Iggy.js";
-import { thinkingLabels, colors, copy, pick } from "../theme.js";
+import { thinkingLabels, castingFrames, colors, copy, glyph, pick } from "../theme.js";
 
 // IQ-flavored rotating label while a turn runs.
 function ThinkingLine() {
@@ -50,6 +50,22 @@ function ThinkingLine() {
   return (
     <Box paddingLeft={2} marginTop={1}>
       <Text color={colors.iqViolet}>{thinkingLabels[i]}</Text>
+    </Box>
+  );
+}
+
+function CastingLine({ skill }: { skill: SkillActivation }) {
+  const i = useFrameLoop(castingFrames.length, 8);
+  const verb = copy.castingVerbs[i % copy.castingVerbs.length];
+  const tint = i % 2 === 0 ? colors.iqViolet : colors.iqMagenta;
+  return (
+    <Box paddingLeft={2} marginTop={1}>
+      <Box borderStyle="round" borderColor={tint} paddingX={1}>
+        <Text color={colors.iqMagenta}>{castingFrames[i]} </Text>
+        <Text color={colors.iqViolet}>{glyph.sparkle} {verb} {copy.castingLabel} </Text>
+        <Text color={colors.iqCyan}>{skill.name}</Text>
+        <Text color={colors.iqMagenta}> {castingFrames[(i + 2) % castingFrames.length]}</Text>
+      </Box>
     </Box>
   );
 }
@@ -1086,11 +1102,7 @@ export function Chat({
 
       {chat.busy && !pendingApproval ? <ThinkingLine /> : null}
 
-      {chat.firingSkill ? (
-        <Box paddingLeft={2} marginTop={1}>
-          <Text color={colors.ok}>{`Casting <${chat.firingSkill}>`}</Text>
-        </Box>
-      ) : null}
+      {chat.firingSkill ? <CastingLine skill={chat.firingSkill} /> : null}
 
       {pendingApproval ? (
         <ApprovalCard

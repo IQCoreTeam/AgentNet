@@ -5,6 +5,7 @@ import type {
   SessionHandle,
   ChatMessage,
   SessionMeta,
+  SkillActivation,
 } from "@iqlabs-official/agent-sdk/runtime/contract";
 import type { ApprovalChannel } from "@iqlabs-official/agent-sdk/runtime/approval/channel";
 import { readPrefs, savePrefs, type EffortLevel } from "../prefs.js";
@@ -36,7 +37,7 @@ export function useChat(
   const [hasMore, setHasMore] = useState(false);
   const [cursor, setCursor] = useState<number | null>(null);
   const [epoch, setEpoch] = useState(0);
-  const [firingSkill, setFiringSkill] = useState<string | null>(null);
+  const [firingSkill, setFiringSkill] = useState<SkillActivation | null>(null);
 
   useEffect(() => {
     if (firingSkill) {
@@ -111,7 +112,7 @@ export function useChat(
       );
       h.onUsage((n, win) => { setContextTokens(n); if (win !== undefined) setContextWindow(win); });
       h.onCompact(() => setContextTokens(undefined));
-      h.onSkill((name) => setFiringSkill(name));
+      h.onSkill((skill) => setFiringSkill(skill));
       h.onTurnEnd(() => {
         // a fresh session reveals its canonical id now — adopt it so resume/switch work.
         const id = pendingRef.current || h.sessionId;
