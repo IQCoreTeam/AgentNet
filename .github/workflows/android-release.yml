@@ -2,12 +2,16 @@
 #
 # This is DELIBERATELY separate from android-apk.yml:
 #   - android-apk.yml  -> debug-signed APK, auto-built on every main push, for sideload sharing.
-#   - android-release.yml (this) -> release-signed AAB, MANUAL only, for uploading to Play.
+#   - android-release.yml (this) -> release-signed AAB for uploading to Play.
 # Play requires an AAB (not APK), a recent targetSdk, and a real release key — none of which the
 # debug pipeline produces. The app targets SDK 35 (our standard) so it clears Play's minimum-target
 # bar. The AAB is uploaded ONLY as a workflow artifact — never to
-# the public android-latest release (an AAB is not directly installable, and Play uploads are a
-# deliberate human step, not an automatic push).
+# the public android-latest release (an AAB is not directly installable, and UPLOADING to Play
+# stays a deliberate human step, not an automatic push).
+# Auto-built on the same main pushes as the APK so a Play-ready AAB artifact is always waiting —
+# grab the newest agentnet-aab-arm64 artifact when it's time to upload. Safe to auto-run: push
+# builds only fire on this repo's main (never fork PRs), so the signing secrets stay unexposed,
+# and versionCode defaults to the monotonically increasing run number.
 #
 # Required repo secrets (the UPLOAD key — Google re-signs with the Play-managed app key on top):
 #   ANDROID_RELEASE_KEYSTORE_B64    base64 of the upload keystore (`base64 -i upload.jks`)
@@ -39,6 +43,21 @@ on:
         description: "android-assets run id to reuse (blank = latest successful)"
         required: false
         default: ""
+  # Keep a fresh AAB artifact ready for Play: rebuild on the same app/server/UI paths that
+  # trigger android-apk.yml (the AAB bundles the identical dists + rootfs).
+  push:
+    branches: [main]
+    paths:
+      - "surfaces/android/**"
+      - "surfaces/localhost/**"
+      - "surfaces/webview/**"
+      - "packages/**"
+      - ".github/workflows/android-release.yml"
+
+# One build per ref: a newer push to main cancels an in-progress build so only the latest wins.
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
