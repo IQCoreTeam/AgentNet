@@ -5,6 +5,7 @@ import type { Reputation, AgentProfile } from "@iqlabs-official/agent-sdk";
 import { maskedHeliusKey, hasDasRpc, saveHeliusKey, getNetwork } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../theme.js";
 import type { OwnedSkill } from "../components/WelcomePanel.js";
+import { ChipCarousel } from "../components/ChipCarousel.js";
 import { tierInfo } from "./market/tiers.js";
 import { AgentProfileView, type ProfileSub } from "./market/AgentProfileView.js";
 import { SkillDetailView, type DetailSub } from "./market/SkillDetailView.js";
@@ -62,6 +63,50 @@ function sol(lamports: number | null): string {
 function clampScroll(offset: number, total: number, height: number): number {
   const max = Math.max(0, total - height);
   return Math.max(0, Math.min(max, offset));
+}
+
+const SKILL_CHIP_W = 26;
+
+// a skill as a compact "SD-card" chip - mark, name, grade, supply, price, state. The CLI
+// cousin of surfaces/webview SkillSdCard, reimplemented in ink boxes (that one is DOM).
+function SkillChip({
+  card,
+  focused,
+  isOwned,
+  firing,
+}: {
+  card: SkillCard;
+  focused: boolean;
+  isOwned: boolean;
+  firing: boolean;
+}) {
+  const isWorkflow = card.type === "workflow";
+  const cat = (card.category || (isWorkflow ? "workflow" : "skill")).toUpperCase().slice(0, 8);
+  const price = card.price && card.price !== "0" ? sol(Number(card.price)) : "FREE";
+  const { cur } = tierInfo(card.stars ?? 0);
+  return (
+    <Box
+      flexDirection="column"
+      width={SKILL_CHIP_W}
+      paddingX={1}
+      borderStyle="round"
+      borderColor={focused ? colors.iqCyan : isWorkflow ? colors.warn : colors.dim}
+    >
+      <Text dimColor>[ {cat} {isWorkflow ? "/ FLOW" : "/ SKILL"} ]</Text>
+      <Text color={focused ? colors.iqCyan : undefined} bold={focused}>
+        {card.name.slice(0, SKILL_CHIP_W - 4)}
+      </Text>
+      <Box>
+        <Text dimColor>×{card.supply ?? 0}</Text>
+        {card.stars ? <Text color={colors.warn}> ★{card.stars}</Text> : null}
+        {cur ? <Text color={colors.warn}> [{cur.name}]</Text> : null}
+      </Box>
+      <Box>
+        <Text color={colors.iqViolet}>{price}</Text>
+        <Text color={isOwned ? colors.ok : colors.dim}> {isOwned ? `OWNED${firing ? ` ${glyph.sparkle}` : ""}` : "GET"}</Text>
+      </Box>
+    </Box>
+  );
 }
 
 export function SkillMarket({
@@ -143,10 +188,11 @@ export function SkillMarket({
   const [heliusFlash, setHeliusFlash] = useState<string | null>(null);
 
   const owned = new Set(ownedNames);
-  const agentRows = useStdout().stdout?.rows ?? 24;
-  const clamped = Math.min(idx, Math.max(0, results.length - 1));
+  const agentRows = useStdout().stdout?.rows || 24; // || not ??: detached pty reports 0
   const visibleResults = results.filter((c) => !hideOwned || !owned.has(c.name));
-  const selected = results[clamped];
+  // index over the FILTERED list - what's on screen is what enter/buy act on
+  const clamped = Math.min(idx, Math.max(0, visibleResults.length - 1));
+  const selected = visibleResults[clamped];
 
   async function search(q: string, k: "skill" | "workflow", sort: "supply" | "stars" = marketSort) {
     setLoading(true);
@@ -606,8 +652,7 @@ export function SkillMarket({
       const next = kind === "skill" ? "workflow" : "skill";
       setKind(next); void search(query, next); return;
     }
-    if (key.upArrow) { if (clamped === 0) return setTyping(true); return setIdx((i) => Math.max(0, i - 1)); }
-    if (key.downArrow) return setIdx((i) => Math.min(visibleResults.length - 1, i + 1));
+    if (key.upArrow) return setTyping(true); // ←/→ rotate the carousel; ↑ back to search
     if (key.return && selected) return void openDetail(selected.id);
     if (input === "b" && selected && !owned.has(selected.name)) { setDetail(null); setStage("confirm"); }
   });
@@ -854,7 +899,7 @@ export function SkillMarket({
         <Text dimColor>   [s] sort </Text>
         <Text color={marketSort === "stars" ? colors.warn : colors.dim}>{marketSort === "stars" ? "★ stars" : "popular"}</Text>
       </Box>
-      {/* results */}
+      {/* results - sd-card chip carousel, ←/→ rotates */}
       <Box flexDirection="column" marginTop={1}>
         {loading ? (
           <Text dimColor>searching…</Text>
@@ -863,24 +908,20 @@ export function SkillMarket({
         ) : visibleResults.length === 0 ? (
           <Text dimColor>no {kind === "skill" ? "skills" : "workflows"} found</Text>
         ) : (
-          visibleResults.slice(0, 12).map((c, i) => {
-            const on = !typing && i === clamped;
-            const isOwned = owned.has(c.name);
-            return (
-              <Box key={c.id}>
-                <Text color={on ? colors.iqCyan : undefined}>{on ? "› " : "  "}</Text>
-                <Box width={26}>
-                  <Text color={on ? colors.iqCyan : undefined} bold={on}>
-                    {c.name.slice(0, 24)}
-                  </Text>
-                </Box>
-                <Text dimColor>×{c.supply ?? 0} </Text>
-                {c.stars ? <Text color={colors.warn}>★{c.stars} </Text> : null}
-                {isOwned ? <Text color={colors.ok}>owned{firingIds.has(c.id) ? " ✦" : ""} </Text> : null}
-                <Text dimColor>{(c.description ?? "").slice(0, 40)}</Text>
-              </Box>
-            );
-          })
+          <ChipCarousel
+            items={visibleResults}
+            index={clamped}
+            onIndex={setIdx}
+            chipWidth={SKILL_CHIP_W}
+            renderChip={(c, focused) => (
+              <SkillChip
+                card={c}
+                focused={!typing && focused}
+                isOwned={owned.has(c.name)}
+                firing={firingIds.has(c.id)}
+              />
+            )}
+          />
         )}
       </Box>
       {flash ? (
@@ -890,7 +931,7 @@ export function SkillMarket({
         <Text dimColor>
           {typing
             ? "type to search · ↵ run · [tab] skills/workflows · ↓ results · esc close"
-            : "↑/↓ move · ↵ open · [b] buy · [tab] switch · [/] search · [a] agents · [p] publish · [r] rpc · [h] hide owned · [s] sort · esc close"}
+            : "←/→ rotate · ↵ open · [b] buy · [tab] switch · [/] search · [a] agents · [p] publish · [r] rpc · [h] hide owned · [s] sort · esc close"}
         </Text>
       </Box>
     </Box>
