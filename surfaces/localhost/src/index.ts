@@ -968,7 +968,7 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
     // the subprocess spins up once, not on every picker open.
     modelOptions: async (cli) =>
       cli === "codex"
-        ? await (codexModelOptionsPromise ??= listCodexModelOptions().catch(() => null))
+        ? await (codexModelOptionsPromise ??= listCodexModelOptions().then((r) => r.options).catch(() => null))
         : await (claudeModelOptionsPromise ??= listClaudeModelOptions(process.cwd()).catch(() => null)),
     walletAddress: () => walletAddress,
     storageInfo: async () => ({ info: await getStorageInfo(), options: STORAGE_OPTIONS, googleCredsConfigured: await hasGoogleCreds() }),

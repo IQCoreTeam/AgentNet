@@ -17,7 +17,8 @@ const cache = new Map<EngineKey, Promise<ChatModelOption[]>>();
 export function loadModelOptions(cli: EngineKey): Promise<ChatModelOption[]> {
   let cached = cache.get(cli);
   if (!cached) {
-    const probe = cli === "codex" ? listCodexModelOptions() : listClaudeModelOptions(process.cwd());
+    const probe =
+      cli === "codex" ? listCodexModelOptions().then((r) => r.options) : listClaudeModelOptions(process.cwd());
     cached = probe.then((live) => (live?.length ? live : MODELS[cli])).catch(() => MODELS[cli]);
     cache.set(cli, cached);
   }

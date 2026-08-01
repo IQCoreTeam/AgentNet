@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { Box, Text } from "ink";
 import { Select, TextInput } from "@inkjs/ui";
+import { spawn } from "node:child_process";
 import open from "open";
-import { STORAGE_OPTIONS, type StorageConfig, type StorageKind, startCodexLogin, markCodexConnected, saveCodexApiKey, startGoogleLogin, type GoogleLogin, saveHeliusKey, HELIUS_QUICKSTART_URL } from "@iqlabs-official/agent-sdk";
+import { STORAGE_OPTIONS, type StorageConfig, type StorageKind, startCodexLogin, markCodexConnected, saveCodexApiKey, startGoogleLogin, type GoogleLogin, saveHeliusKey, HELIUS_QUICKSTART_URL, detectCli, ENGINE_INSTALL_COMMAND } from "@iqlabs-official/agent-sdk";
 import type { CliReport, CliStatus } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../theme.js";
 import { Iggy } from "../components/Iggy.js";
@@ -22,7 +23,7 @@ function statusBadge(s: CliStatus) {
   return <Text color={colors.err}>{glyph.fail} not installed</Text>;
 }
 
-type OnboardStep = "engine" | "codexAuthChoice" | "codexLogin" | "codexApiKey" | "storage" | "location" | "gdriveLogin" | "rpc";
+type OnboardStep = "engine" | "install" | "codexAuthChoice" | "codexLogin" | "codexApiKey" | "storage" | "location" | "gdriveLogin" | "rpc";
 
 export function Onboarding({
   report,
@@ -35,6 +36,9 @@ export function Onboarding({
 }) {
   const [step, setStep] = useState<OnboardStep>("engine");
   const [engine, setEngine] = useState<"claude" | "codex">("claude");
+  // Live copy of the CLI report: the install step re-runs detectCli after installing an
+  // engine, so the badges and routing reflect the new state without restarting the app.
+  const [rep, setRep] = useState<CliReport>(report);
   const [kind, setKind] = useState<StorageKind | null>(null);
   const [location, setLocation] = useState("");
   // storage choice resolved but not yet applied — held while the final RPC step runs.
@@ -69,13 +73,57 @@ export function Onboarding({
   const [googleSession, setGoogleSession] = useState<GoogleLogin | null>(null);
   const [busy, setBusy] = useState(false);
 
-  function chooseEngine(e: "claude" | "codex") {
+  // Route an engine pick from a given report (the live one, or the fresh one detectCli
+  // returns right after an install): missing -> install step, codex without login ->
+  // auth choice, otherwise -> storage.
+  function routeEngine(e: "claude" | "codex", r: CliReport) {
     setEngine(e);
-    if (e === "codex" && report.codex === "no-login") {
+    if (r[e] === "missing") {
+      setStep("install");
+    } else if (e === "codex" && r.codex === "no-login") {
       setStep("codexAuthChoice");
     } else {
       setStep("storage");
     }
+  }
+
+  // install step state: run `npm install -g <engine>` inline with explicit consent,
+  // streaming the tail of its output so the wait is visible, then re-detect.
+  const [installing, setInstalling] = useState(false);
+  const [installLog, setInstallLog] = useState<string[]>([]);
+  const [installErr, setInstallErr] = useState<string | null>(null);
+
+  function runInstall() {
+    setInstalling(true);
+    setInstallErr(null);
+    setInstallLog([]);
+    const child = spawn(ENGINE_INSTALL_COMMAND[engine], { shell: true, stdio: ["ignore", "pipe", "pipe"] });
+    const append = (d: Buffer) => {
+      const lines = d.toString().split("\n").map((s) => s.trim()).filter(Boolean);
+      if (lines.length) setInstallLog((prev) => [...prev, ...lines].slice(-4));
+    };
+    child.stdout.on("data", append);
+    child.stderr.on("data", append);
+    child.on("error", (e) => {
+      setInstalling(false);
+      setInstallErr(e.message);
+    });
+    child.on("exit", (code) => {
+      void (async () => {
+        const fresh = await detectCli();
+        setRep(fresh);
+        setInstalling(false);
+        if (fresh[engine] === "missing") {
+          setInstallErr(
+            code === 0
+              ? "install finished but the engine is still not detected; open a new terminal and check, or install manually"
+              : `install failed (exit ${code}); run the command above manually to see the full output`,
+          );
+        } else {
+          routeEngine(engine, fresh);
+        }
+      })();
+    });
   }
 
   // drive `codex login --device-auth` when the codexLogin step becomes active.
@@ -171,8 +219,8 @@ export function Onboarding({
       <Text dimColor>wallet {address.slice(0, 6)}…{address.slice(-4)}</Text>
 
       <Box flexDirection="column">
-        <Box><Text>claude </Text>{statusBadge(report.claude)}</Box>
-        <Box><Text>codex&nbsp; </Text>{statusBadge(report.codex)}</Box>
+        <Box><Text>claude </Text>{statusBadge(rep.claude)}</Box>
+        <Box><Text>codex&nbsp; </Text>{statusBadge(rep.codex)}</Box>
       </Box>
 
       {step === "engine" && (
@@ -183,8 +231,31 @@ export function Onboarding({
               { label: "Claude", value: "claude" },
               { label: "Codex", value: "codex" },
             ]}
-            onChange={(v) => chooseEngine(v as "claude" | "codex")}
+            onChange={(v) => routeEngine(v as "claude" | "codex", rep)}
           />
+        </Box>
+      )}
+
+      {step === "install" && (
+        <Box flexDirection="column">
+          <Text color={colors.iqCyan}>{engine} is not installed. install it now?</Text>
+          <Text dimColor>runs: {ENGINE_INSTALL_COMMAND[engine]}</Text>
+          {!installing && (
+            <Select
+              options={[
+                { label: "Yes, run the install here", value: "yes" },
+                { label: "No, back to engine pick", value: "no" },
+              ]}
+              onChange={(v) => (v === "yes" ? runInstall() : setStep("engine"))}
+            />
+          )}
+          {installing && (
+            <Box flexDirection="column">
+              {installLog.map((line, i) => <Text key={i} dimColor>{line}</Text>)}
+              <Text color={colors.warn}>installing… this can take a minute</Text>
+            </Box>
+          )}
+          {installErr && <Text color={colors.err}>{installErr}</Text>}
         </Box>
       )}
 

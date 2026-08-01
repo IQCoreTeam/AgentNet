@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { OnboardingShell, OnboardingButton } from "./OnboardingShell";
 import { LoginUrlBlock } from "./LoginUrlBlock";
+import { EngineMissingNotice } from "./EngineMissingNotice";
 import { useStore } from "../state/store";
 
 export function ConnectClaude() {
@@ -32,6 +33,7 @@ export function ConnectClaude() {
       title="Connect Claude"
       subtitle="Sign in with your Claude subscription to run agents on your plan."
     >
+      <EngineMissingNotice cli="claude" />
       {!claudeLoginUrl ? (
         <>
           <OnboardingButton disabled={busy} onClick={start}>

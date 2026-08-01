@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { OnboardingShell, OnboardingButton } from "./OnboardingShell";
 import { LoginUrlBlock } from "./LoginUrlBlock";
+import { EngineMissingNotice } from "./EngineMissingNotice";
 import { useStore } from "../state/store";
 
 export function ConnectCodex() {
@@ -39,6 +40,7 @@ export function ConnectCodex() {
       onClose={close}
       closeLabel="Close Codex connection"
     >
+      <EngineMissingNotice cli="codex" />
       <div className="flex gap-2 rounded-xl bg-zinc-950 p-1 ring-1 ring-zinc-850">
         <button
           onClick={() => {

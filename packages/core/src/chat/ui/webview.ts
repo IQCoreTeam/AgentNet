@@ -17,6 +17,7 @@ import { IQ_LOGO_SVG } from "./iqlogo.js";
 import { MD_LIBS } from "./mdLibs.generated.js";
 import { CHAT_MODEL_OPTIONS } from "../modelOptions.js";
 import { CHAT_SLASH_COMMANDS } from "../slashCommands.js";
+import { ENGINE_INSTALL_COMMAND, CODEX_UPDATE_COMMAND } from "../../runtime/engineInstall.js";
 
 // marked (md → html) + dompurify (XSS sanitize) inlined into the webview <script>.
 // The webview is an isolated browser context, so we ship the libraries' browser
@@ -41,6 +42,7 @@ const PAPERCLIP_SVG = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor
 const LAYERS_SVG = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.8l5.8 3L8 7.8 2.2 4.8 8 1.8z"/><path d="M2.2 8L8 11l5.8-3"/><path d="M2.2 11.2L8 14.2l5.8-3"/></svg>';
 const MODEL_OPTIONS_JSON = JSON.stringify(CHAT_MODEL_OPTIONS);
 const SLASH_COMMANDS_JSON = JSON.stringify(CHAT_SLASH_COMMANDS);
+const INSTALL_COMMANDS_JSON = JSON.stringify(ENGINE_INSTALL_COMMAND);
 
 export function chatHtml(): string {
   return /* html */ `<!DOCTYPE html>
@@ -2160,6 +2162,45 @@ export function chatHtml(): string {
     notice.textContent = text;
     log.appendChild(notice); syncWatermark(); stickToBottom();
   }
+  // A notice with action buttons (install/update an engine). Same visual weight as
+  // renderNotice; each action is [label, onClick(btn)].
+  function renderActionNotice(text, actions) {
+    const notice = document.createElement('div');
+    notice.style.cssText = 'padding:4px 12px;font-size:0.82em;white-space:pre-wrap';
+    const body = document.createElement('div');
+    body.style.opacity = '0.65';
+    body.textContent = text;
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:6px;margin-top:6px';
+    for (const a of actions) {
+      const btn = document.createElement('button');
+      btn.textContent = a[0];
+      btn.style.cssText = 'padding:3px 10px;font-size:1em';
+      btn.addEventListener('click', () => a[1](btn));
+      row.appendChild(btn);
+    }
+    notice.appendChild(body); notice.appendChild(row);
+    log.appendChild(notice); syncWatermark(); stickToBottom();
+  }
+  function copyAction(command) {
+    return ['Copy command', (btn) => {
+      if (navigator.clipboard) navigator.clipboard.writeText(command).catch(() => {});
+      btn.textContent = 'Copied';
+    }];
+  }
+  // Missing engine: show how to get it instead of a dead-end "not installed" line.
+  // "Install in terminal" runs the command visibly host-side (user watches it run).
+  function renderEngineMissing(which) {
+    const name = which === 'claude' ? 'Claude' : 'Codex';
+    const command = INSTALL_CMDS[which];
+    renderActionNotice(
+      name + ' is not installed. Install it, then sign in with /login.\\n$ ' + command,
+      [
+        ['Install in terminal', () => vscode.postMessage({ type: 'installEngine', cli: which })],
+        copyAction(command),
+      ]
+    );
+  }
   function renderStatus(status) {
     const ctx = typeof status.contextTokens === 'number'
       ? (status.contextTokens >= 1000 ? Math.round(status.contextTokens / 1000) + 'k' : String(status.contextTokens))
@@ -2421,6 +2462,10 @@ export function chatHtml(): string {
   // also used by the CLI picker so surfaces don't drift (the old webview list had stale
   // Codex entries that no longer matched the CLI).
   const MODELS = ${MODEL_OPTIONS_JSON};
+  // Per-engine install command, shown when an engine is missing so the notice is
+  // actionable (run in a visible terminal / copy) instead of a dead end.
+  const INSTALL_CMDS = ${INSTALL_COMMANDS_JSON};
+  const CODEX_UPDATE_CMD = ${JSON.stringify(CODEX_UPDATE_COMMAND)};
   const modelValue = (opt) => (opt && opt.value) ? opt.value : 'default';
   // Permission/approval mode per engine. claude → SDK permissionMode; codex → a
   // sandbox+approval preset (mapped host-side in spawn). Like MODELS this is just a
@@ -2592,7 +2637,7 @@ export function chatHtml(): string {
     setTab(next);
     const status = cliReport && cliReport[next];
     if (status === 'missing') {
-      renderNotice((next === 'claude' ? 'Claude' : 'Codex') + ' is not installed.');
+      renderEngineMissing(next);
       return;
     }
     if (status === 'no-login') {
@@ -3548,7 +3593,7 @@ export function chatHtml(): string {
     }
     const activeStatus = cliReport && cliReport[cli];
     if (activeStatus === 'missing') {
-      renderNotice((cli === 'claude' ? 'Claude' : 'Codex') + ' is not installed.');
+      renderEngineMissing(cli);
       return;
     }
     if (activeStatus === 'no-login') {
@@ -5632,7 +5677,18 @@ export function chatHtml(): string {
       cliReport = { claude: m.claude, codex: m.codex };
       const status = cliReport[cli];
       if (status === 'no-login') renderNotice((cli === 'claude' ? 'Claude' : 'Codex') + ' is not signed in. Type /login to connect it.');
-      else if (status === 'missing') renderNotice((cli === 'claude' ? 'Claude' : 'Codex') + ' is not installed.');
+      else if (status === 'missing') renderEngineMissing(cli);
+    }
+    else if (m.type === 'engineUpdate' && m.cli === 'codex') {
+      // Host-side codex probe saw the stale-models-cache signal: the installed codex is
+      // too old to read the server's model list, so new models exist but stay hidden.
+      renderActionNotice(
+        'Codex is out of date, so new models are hidden from the picker.\\n$ ' + CODEX_UPDATE_CMD + '\\nAfter it finishes, reload this window to refresh the model list.',
+        [
+          ['Update in terminal', () => vscode.postMessage({ type: 'installEngine', cli: 'codex', update: true })],
+          copyAction(CODEX_UPDATE_CMD),
+        ]
+      );
     }
     else if (m.type === 'claudeLoginUrl') {
       renderNotice('Claude sign-in opened. If the browser did not open, visit:\\n' + m.url + '\\nAfter approving, paste the returned code with /login <code>.');

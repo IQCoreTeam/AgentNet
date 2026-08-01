@@ -6,6 +6,19 @@ import type { ModelListResponse } from "./codex_bindings/v2/ModelListResponse.js
 import { getCodexApiKey } from "../account/codexAuth.js";
 import { resolveExecutable } from "./resolveExecutable.js";
 
+export interface CodexModelsResult {
+  options: ChatModelOption[];
+  // True when the codex binary logged that it could not parse its own models cache
+  // (a newer server wrote fields the installed version does not know). The binary then
+  // silently falls back to its built-in list, so newer models exist but stay hidden
+  // until the user updates codex. Surfaces show an update notice on this flag.
+  staleModelsCache: boolean;
+}
+
+export function hasStaleModelsCacheSignal(stderrLines: string[]): boolean {
+  return stderrLines.some((line) => line.includes("failed to load models cache"));
+}
+
 function modelToOption(model: Model): ChatModelOption {
   const display = model.displayName?.trim() || model.model;
   const desc = model.description?.trim();
@@ -18,7 +31,7 @@ function modelToOption(model: Model): ChatModelOption {
   };
 }
 
-export async function listCodexModelOptions(): Promise<ChatModelOption[]> {
+export async function listCodexModelOptions(): Promise<CodexModelsResult> {
   const codexPath = resolveExecutable("codex") || "codex";
   const apiKey = await getCodexApiKey().catch(() => null);
   const childEnv = { ...process.env };
@@ -110,7 +123,7 @@ export async function listCodexModelOptions(): Promise<ChatModelOption[]> {
     // default selection, shown by its real name (no opaque "default" pseudo-entry).
     const def = all.find((m) => m.isDefault);
     const ordered = def ? [def, ...all.filter((m) => m !== def)] : all;
-    return ordered.map(modelToOption);
+    return { options: ordered.map(modelToOption), staleModelsCache: hasStaleModelsCacheSignal(stderr) };
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
     failPending(new Error("Codex model-list request aborted"));

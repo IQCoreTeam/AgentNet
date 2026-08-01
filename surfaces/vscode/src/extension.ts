@@ -20,6 +20,8 @@ import {
   STORAGE_OPTIONS,
   createChatSession,
   detectCli,
+  ENGINE_INSTALL_COMMAND,
+  CODEX_UPDATE_COMMAND,
   startClaudeLogin,
   markClaudeConnected,
   startCodexLogin,
@@ -169,6 +171,28 @@ async function pushCliStatus(transport: WebviewTransport) {
   transport.send({ type: "cliStatus", claude: cli.claude, codex: cli.codex });
 }
 
+// After an install was launched from the notice button, re-check until the engine stops
+// reporting "missing" (bounded: ~5 min), then push the fresh status so the webview moves
+// on to the sign-in guidance by itself. One watcher per engine; a second click reuses it.
+const installWatch = new Set<"claude" | "codex">();
+function watchEngineInstall(transport: WebviewTransport, engine: "claude" | "codex") {
+  if (installWatch.has(engine)) return;
+  installWatch.add(engine);
+  let tries = 20;
+  const timer = setInterval(async () => {
+    try {
+      const report = await detectCli();
+      if (report[engine] !== "missing" || --tries <= 0) {
+        clearInterval(timer);
+        installWatch.delete(engine);
+        if (report[engine] !== "missing") await pushCliStatus(transport);
+      }
+    } catch {
+      // detectCli never rejects in practice; keep polling until tries run out
+    }
+  }, 15_000);
+}
+
 function attachAuthHandlers(transport: WebviewTransport) {
   transport.onRecv(async (m: any) => {
     switch (m?.type) {
@@ -235,6 +259,19 @@ function attachAuthHandlers(transport: WebviewTransport) {
         codexLogin?.cancel();
         codexLogin = null;
         return;
+      case "installEngine": {
+        // Run the install/update VISIBLY in the integrated terminal, never in the
+        // background: the user consented via the notice button, sees the exact command,
+        // and can watch or abort it. After an install, poll detectCli until the engine
+        // shows up so the webview flips from "missing" without a manual reload.
+        const engine = m.cli === "codex" ? "codex" : "claude";
+        const command = m.update ? CODEX_UPDATE_COMMAND : ENGINE_INSTALL_COMMAND[engine];
+        const term = vscode.window.createTerminal(`AgentNet: ${m.update ? "update" : "install"} ${engine}`);
+        term.show();
+        term.sendText(command, true);
+        if (!m.update) watchEngineInstall(transport, engine);
+        return;
+      }
       case "logoutEngine": {
         const engine = m.cli === "codex" ? "codex" : "claude";
         try {
@@ -509,12 +546,17 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
   const marketPromise = marketplaceEnv(wallet!);
   const codexModelOptionsPromise = listCodexModelOptions().catch(() => null);
   const claudeModelOptionsPromise = listClaudeModelOptions(getCwd()).catch(() => null);
+  // Engine health, outdated leg: the codex probe flags a stale models cache (binary too
+  // old to parse it, so newer models exist but stay hidden). Tell the panel once.
+  void codexModelOptionsPromise.then((r) => {
+    if (r?.staleModelsCache) transport.send({ type: "engineUpdate", cli: "codex" });
+  });
   const chat = createChatSession(runtime!, transport, {
     cwd: getCwd,
     approval,
     claimSession,
     modelOptions: async (cli) =>
-      cli === "codex" ? await codexModelOptionsPromise : await claudeModelOptionsPromise,
+      cli === "codex" ? (await codexModelOptionsPromise)?.options ?? null : await claudeModelOptionsPromise,
     searchSkills: async (query, kind) => (await marketPromise).searchSkills(query, kind),
     getSkillDetail: async (mint) => (await marketPromise).getSkillDetail(mint),
     // local SKILL.md body for the equipped-skill popup (mint-less skills); without this
