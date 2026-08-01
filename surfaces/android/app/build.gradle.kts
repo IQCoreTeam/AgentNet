@@ -48,12 +48,11 @@ android {
         val ciBuild = providers.environmentVariable("ANDROID_VERSION_CODE").orNull?.takeIf { it.isNotBlank() }
         versionCode = (ciBuild ?: localProperties.getProperty("versionCode"))?.toInt() ?: 1
         // The marketing version lives HERE (single source); the release workflow can still
-        // override it via ANDROID_VERSION_NAME. Rolling CI builds append their run number so
-        // testers can report exactly which build they have ("0.1.1 (build 117)"), instead of
-        // the old behavior of showing the bare run number as the whole version.
-        val baseVersion = localProperties.getProperty("versionName", "0.1.1")
+        // override it via ANDROID_VERSION_NAME. One sequence for every channel: the name is
+        // the bare marketing version (store UIs already show the versionCode in parens, so
+        // baking the build number into the name would just display it twice).
         versionName = providers.environmentVariable("ANDROID_VERSION_NAME").orNull?.takeIf { it.isNotBlank() }
-            ?: if (ciBuild != null) "$baseVersion (build $ciBuild)" else baseVersion
+            ?: localProperties.getProperty("versionName", "0.1.1")
         buildConfigField(
             "String",
             "GOOGLE_OAUTH_CLIENT_ID",
