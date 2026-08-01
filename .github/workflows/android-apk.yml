@@ -154,8 +154,9 @@ jobs:
           # Keep the rolling sideload APK installable over previous team builds. Without this,
           # debug builds fall back to versionCode 1 and Android refuses to update any tester
           # who already has a newer local or Play-signed build installed.
+          # versionName is composed in build.gradle.kts ("0.1.1 (build N)"); only the
+          # strictly increasing code is CI's job.
           ANDROID_VERSION_CODE: ${{ github.run_number }}
-          ANDROID_VERSION_NAME: ${{ github.run_number }}
         run: ./gradlew --no-daemon assembleDebug
 
       # SHA-1 is a public fingerprint (not the key), safe to log — proves the team key signed it.

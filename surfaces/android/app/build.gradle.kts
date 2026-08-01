@@ -42,10 +42,18 @@ android {
         targetSdk = 35
         // Play requires a strictly increasing versionCode for every upload to a track. CI passes
         // the next number via ANDROID_VERSION_CODE; local/debug builds fall back to 1 unchanged.
-        versionCode = (providers.environmentVariable("ANDROID_VERSION_CODE").orNull
-            ?: localProperties.getProperty("versionCode"))?.toInt() ?: 1
-        versionName = providers.environmentVariable("ANDROID_VERSION_NAME").orNull
-            ?: localProperties.getProperty("versionName", "0.1.0")
+        // Workflows pass optional inputs straight through as env vars, so a blank input
+        // arrives as an empty string, not an unset var; treat blank as absent or the
+        // release workflow's "blank = keep gradle default" promise silently breaks.
+        val ciBuild = providers.environmentVariable("ANDROID_VERSION_CODE").orNull?.takeIf { it.isNotBlank() }
+        versionCode = (ciBuild ?: localProperties.getProperty("versionCode"))?.toInt() ?: 1
+        // The marketing version lives HERE (single source); the release workflow can still
+        // override it via ANDROID_VERSION_NAME. Rolling CI builds append their run number so
+        // testers can report exactly which build they have ("0.1.1 (build 117)"), instead of
+        // the old behavior of showing the bare run number as the whole version.
+        val baseVersion = localProperties.getProperty("versionName", "0.1.1")
+        versionName = providers.environmentVariable("ANDROID_VERSION_NAME").orNull?.takeIf { it.isNotBlank() }
+            ?: if (ciBuild != null) "$baseVersion (build $ciBuild)" else baseVersion
         buildConfigField(
             "String",
             "GOOGLE_OAUTH_CLIENT_ID",
