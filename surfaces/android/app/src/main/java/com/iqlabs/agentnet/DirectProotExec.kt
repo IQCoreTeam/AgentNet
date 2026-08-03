@@ -7,9 +7,10 @@ import java.io.File
 // The stock proot strategy: enter the Ubuntu guest by exec'ing our bundled proot directly
 // out of nativeLibDir. proot (not the agent) is what makes glibc binaries work here: it
 // ptrace-remaps the guest's "/lib, /usr, /etc" onto the rootfs in app storage, so
-// node/claude/codex see a normal Linux. This launch execs the guest's own binaries from app
-// storage, so it depends on the targetSdk<=28 W^X exemption — the modern flavor will need
-// a linker-routing strategy (exec via the system linker) instead.
+// node/claude/codex see a normal Linux. Guest binaries in app storage are NOT direct-execve'd:
+// proot maps them via its own loader (PROOT_LOADER) mmap, which survives the modern-targetSdk
+// SELinux W^X policy — verified on hardware at targetSdk 35 (issue #111), so the once-planned
+// linker-routing strategy was never needed. Re-verify on hardware at each targetSdk bump.
 //
 // Mechanics (ProcessBuilder + host-side proot env) adapted from AnyClaw
 // (friuns2/openclaw-android-assistant, MIT). The OpenClaw/Codex-specific install steps are

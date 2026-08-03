@@ -145,9 +145,9 @@ jobs:
           KS_B64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_B64 }}
         run: printf '%s' "$KS_B64" | base64 -d > surfaces/android/agentnet-debug.keystore
 
-      # Single variant now: the app targets SDK 35 (our standard). proot loads the guest binaries
-      # via its own loader mmap, which survives the targetSdk 35 SELinux W^X policy (verified on
-      # device), so there is no separate legacy target to build.
+      # Single variant: the app targets SDK 36 (Play requirement). proot loads the guest binaries
+      # via its own loader mmap, which survives the modern-targetSdk SELinux W^X policy (verified
+      # on device at 35, re-verified at 36), so there is no separate legacy target to build.
       - name: Build signed debug APK
         working-directory: surfaces/android
         env:

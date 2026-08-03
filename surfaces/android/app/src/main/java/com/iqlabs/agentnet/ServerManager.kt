@@ -17,7 +17,8 @@ import java.net.URL
 // ServerManager owns WHAT runs (the node server command + its guest environment) and the
 // process lifecycle (log draining, readiness poll, stop). HOW the guest is entered — the
 // proot invocation, loader, seccomp policy, pointer-tag-safe libs — lives behind GuestExec
-// (DirectProotExec today; a linker-routing strategy for modern targetSdk later).
+// (DirectProotExec, the only strategy: proot's loader mmap survives modern-targetSdk W^X,
+// so the once-planned linker-routing alternative was never needed).
 class ServerManager(private val ctx: Context) {
     companion object {
         private const val TAG = "AgentNet/Server"
@@ -79,8 +80,8 @@ class ServerManager(private val ctx: Context) {
         val layout = Paths.layout(ctx)
         // `node` resolves from the guest PATH; the bundle is at /root/agentnet-server.
         val cmd = "exec node /root/agentnet-server/index.js"
-        // One guest-launch seam. DirectProotExec is the only strategy today; a modern-targetSdk
-        // strategy will add its selection here.
+        // One guest-launch seam. DirectProotExec is the only strategy; if a device policy ever
+        // breaks the proot loader-mmap path, an alternative would add its selection here.
         val proc = DirectProotExec(layout).launch(buildGuestEnv(), cmd)
         process = proc
 

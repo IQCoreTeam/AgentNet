@@ -19,7 +19,7 @@ val googleOAuthClientId =
 
 android {
     namespace = "com.iqlabs.agentnet"
-    compileSdk = 35
+    compileSdk = 36
 
     // PLAY AAB ONLY: the heavy Ubuntu rootfs tar ships in this Play Asset Delivery pack
     // (install-time) because base/assets/rootfs-*.tar exceeded Play's 500MB per-module
@@ -32,14 +32,19 @@ android {
     defaultConfig {
         applicationId = "com.iqlabs.agentnet"
         minSdk = 24
-        // targetSdk 35 is our standard. We never direct-execve guest binaries; proot loads them via
-        // its own loader mmap, which survives the targetSdk 35 SELinux W^X policy. Verified on device
-        // (Seeker / Android 16 + pointer tagging, a worst-case target): node, codex and claude all
-        // ran with no exec/mmap denials, so no linker-exec routing is needed. This is the same
-        // approach Play-Store Termux uses to run a proot-distro glibc userland at target 29+. minSdk
-        // stays 24 so older phones still install; appId + signing are unchanged, so shipping this is
-        // an in-place upgrade over the older targetSdk-28 build and never wipes the user's rootfs.
-        targetSdk = 35
+        // targetSdk 36 is our standard (Play rejects uploads below Android 16 / API 36; see issue
+        // #130). We never direct-execve guest binaries; proot loads them via its own loader mmap,
+        // which survives the modern-targetSdk SELinux W^X policy. Verified on device at 35
+        // (Seeker / Android 16 + pointer tagging, a worst-case target — issue #111): node, codex
+        // and claude all ran with no exec/mmap denials, so no linker-exec routing is needed. This
+        // is the same approach Play-Store Termux uses to run a proot-distro glibc userland at
+        // target 29+. Each bump must re-verify on hardware: server boot with no avc denials AND
+        // the silent-death suite (scripts/guest-regression.sh) — the 28->35 history
+        // (#112/#116/#117) showed a newer untrusted_app domain breaks SIDE syscalls (hardlink,
+        // /proc reads) silently, not the exec path. minSdk stays 24 so older phones still
+        // install; appId + signing are unchanged, so shipping this is an in-place upgrade and
+        // never wipes the user's rootfs.
+        targetSdk = 36
         // Play requires a strictly increasing versionCode for every upload to a track. CI passes
         // the next number via ANDROID_VERSION_CODE; local/debug builds fall back to 1 unchanged.
         // Workflows pass optional inputs straight through as env vars, so a blank input

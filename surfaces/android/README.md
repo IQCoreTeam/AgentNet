@@ -24,7 +24,7 @@ the per-syscall overhead small — fine for the network-bound agent-chat workloa
 surfaces/android/
   settings.gradle.kts, build.gradle.kts, gradle.properties
   app/
-    build.gradle.kts          targetSdk 35; guest runs under proot (its loader mmap
+    build.gradle.kts          targetSdk 36; guest runs under proot (its loader mmap
                               survives the W^X policy, verified on device)
     src/main/
       AndroidManifest.xml

@@ -58,6 +58,14 @@
             android:launchMode="singleTop"
             android:screenOrientation="portrait"
             android:configChanges="orientation|screenSize|keyboardHidden">
+            <!-- targetSdk 36 ignores screenOrientation on large screens (sw >= 600dp): tablets/
+                 foldables would rotate + resize a UI that is portrait-only today. This property
+                 keeps the portrait lock honored there — a TEMPORARY compat opt-out that Android
+                 documents as ignored once we target API 37, so the real fix is the responsive
+                 shared UI tracked in issue #128. Phones (< sw600dp) are unaffected either way. -->
+            <property
+                android:name="android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY"
+                android:value="true" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

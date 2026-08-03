@@ -212,10 +212,10 @@ repo root, or Android Studio won't recognize it.
    Gradle + dependencies — **let it finish** (a few minutes, needs internet). Wait for
    "Gradle sync finished."
 
-The package id is `com.iqlabs.agentnet`. The build pins `targetSdk = 28` on purpose (the
-legacy W^X exemption that lets the app execute node and the proot guest's binaries from
-app storage — see the [pointer-tagging note](#troubleshooting)). `minSdk = 24`,
-`compileSdk = 35`.
+The package id is `com.iqlabs.agentnet`. The build targets `targetSdk = 36` (a Google Play
+requirement). The guest's binaries in app storage still run because proot maps them via its
+own loader mmap, which survives the modern SELinux W^X policy (verified on device — see the
+[pointer-tagging note](#troubleshooting)). `minSdk = 24`, `compileSdk = 36`.
 
 ### Optional — configure Google Drive OAuth for testing
 
@@ -383,8 +383,8 @@ A couple of things you'll meet the first time you use the agent in the backgroun
   - Verified: the *identical* address reads fine untagged but returns `EIO` with a `0xb4`
     top byte. Older phones (Snapdragon / Android 9) never tagged → they worked.
   - **Not the fix:** `android:allowNativeHeapPointerTagging="false"` (tried — only affects
-    the app's own process; the fork+exec'd proot re-enables tagging, and targetSdk=28 may
-    ignore it anyway; targetSdk is pinned at 28 for the W^X execve exemption).
+    the app's own process; the fork+exec'd proot is a separate bionic process that
+    re-enables tagging, so the attribute is a no-op here).
   - **The fix (shipped):** we bundle the **Termux proot** built with the `process_vm`
     accelerator (`process_vm_readv`/`writev`), which **strips the top-byte tag** and so never
     hits the tagged-`PEEKDATA` path. `build-assets.sh` fetches it (plus `libtalloc.so.2` +

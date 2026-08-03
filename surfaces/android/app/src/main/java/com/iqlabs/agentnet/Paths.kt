@@ -28,8 +28,9 @@ object Paths {
         // nativeLibraryDir at install. That's the one app-owned dir that stays executable
         // regardless of targetSdk, and ELF under lib/ is what Play Protect expects — so
         // shipping proot here (not as loose ELF in assets/) avoids the "executable ELF in
-        // assets" Play Protect REJECT. (The rootfs's OWN binaries still run via proot from
-        // app storage, so targetSdk=28 is still required — this move doesn't change that.)
+        // assets" Play Protect REJECT. (The rootfs's OWN binaries still run from app storage,
+        // but proot maps them via its own loader mmap, which survives modern targetSdk —
+        // see the targetSdk note in build.gradle.kts.)
         val nativeLib = ctx.applicationInfo.nativeLibraryDir
         return Layout(
             filesDir = files,

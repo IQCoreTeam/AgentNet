@@ -152,7 +152,7 @@ jobs:
           KS_B64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_B64 }}
         run: printf '%s' "$KS_B64" | base64 -d > surfaces/android/agentnet-upload.keystore
 
-      - name: Build signed release AAB (targetSdk 35)
+      - name: Build signed release AAB
         working-directory: surfaces/android
         env:
           ANDROID_RELEASE_KEYSTORE: agentnet-upload.keystore
