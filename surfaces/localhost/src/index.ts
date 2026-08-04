@@ -45,6 +45,8 @@ import {
   saveCodexApiKey,
   logoutClaude,
   logoutCodex,
+  getEngineVersions,
+  updateEngine,
   type AgentRuntime,
   type CloudStatus,
   type ClaudeLogin,
@@ -495,6 +497,9 @@ async function pushCliStatus(c: Client) {
   c.send({ type: "cliStatus", claude: cli.claude, codex: cli.codex });
 }
 
+// Engines with an npm update in flight — a second tap must not start a parallel install.
+const enginesUpdating = new Set<"claude" | "codex">();
+
 function attachAuthHandlers(c: Client) {
   c.recvs.push(async (m: any) => {
     switch (m?.type) {
@@ -571,6 +576,31 @@ function attachAuthHandlers(c: Client) {
         } catch (e) {
           c.send({ type: "toast", text: `Sign-out failed: ${(e as Error).message}` });
         }
+        return;
+      }
+      case "getEngineVersions":
+        c.send({ type: "engineVersions", ...(await getEngineVersions()) });
+        return;
+      case "updateEngine": {
+        // Trusted update path: run the official npm command host-side on the user's tap.
+        // No browser, no link — see engineVersions.ts for why. One update at a time per
+        // engine; the UI disables its button on "running".
+        const engine = m.cli === "codex" ? "codex" : "claude";
+        if (enginesUpdating.has(engine)) return;
+        enginesUpdating.add(engine);
+        c.send({ type: "engineUpdateStatus", cli: engine, status: "running" });
+        try {
+          await updateEngine(engine);
+          c.send({ type: "engineUpdateStatus", cli: engine, status: "done" });
+          c.send({ type: "toast", text: `${engine === "codex" ? "Codex" : "Claude"} updated.` });
+        } catch (e) {
+          c.send({ type: "engineUpdateStatus", cli: engine, status: "error", error: (e as Error).message });
+          c.send({ type: "toast", text: `Update failed: ${(e as Error).message}` });
+        } finally {
+          enginesUpdating.delete(engine);
+        }
+        c.send({ type: "engineVersions", ...(await getEngineVersions()) });
+        await pushCliStatus(c);
         return;
       }
       case "setGoogleCredentials":

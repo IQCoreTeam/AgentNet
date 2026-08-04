@@ -22,6 +22,7 @@ import type {
   ChatMessage,
   Cli,
   ClientMessage,
+  EngineVersionInfo,
   ImageInput,
   ServerMessage,
   SessionMeta,
@@ -92,6 +93,10 @@ export interface State {
   // per-engine install/login status from the post-wallet `cliStatus` event, kept so the
   // engine picker can show a live badge next to each choice (null until it arrives).
   cliReport: { claude: EngineStatus; codex: EngineStatus } | null;
+  // Fetched once per session, on first open of AI Connections (server re-pushes after an
+  // update). Never polled — see the getEngineVersions send site.
+  engineVersions: { claude: EngineVersionInfo; codex: EngineVersionInfo } | null;
+  engineUpdating: Partial<Record<Cli, boolean>>;
   // claude subscription login during onboarding.
   claudeLoginUrl: string | null;
   claudeLoginError: string | null;
@@ -155,6 +160,8 @@ const initialState: State = {
   walletAddress: null,
   cli: "claude",
   cliReport: null,
+  engineVersions: null,
+  engineUpdating: {},
   claudeLoginUrl: null,
   googleLoginUrl: null,
   googleLoginError: null,
@@ -337,6 +344,10 @@ function reducer(state: State, ev: Action): State {
       // Authentication is progressive too. Stay in chat until a send or explicit engine
       // switch asks selectEngine() to route to the matching login surface.
       return { ...state, cliReport: { claude: ev.claude, codex: ev.codex } };
+    case "engineVersions":
+      return { ...state, engineVersions: { claude: ev.claude, codex: ev.codex } };
+    case "engineUpdateStatus":
+      return { ...state, engineUpdating: { ...state.engineUpdating, [ev.cli]: ev.status === "running" } };
     case "googleLoginUrl":
       return { ...state, googleLoginUrl: ev.url, googleLoginError: null };
     case "googleLoginStatus":

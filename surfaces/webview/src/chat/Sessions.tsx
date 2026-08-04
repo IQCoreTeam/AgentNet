@@ -24,6 +24,7 @@ import { openExternalUrl } from "../platform/openExternalUrl";
 import { useAutoOpenExternalUrl } from "../platform/useAutoOpenExternalUrl";
 import { HeliusKeyForm } from "../settings/HeliusKeyForm";
 import { ConnectGithub } from "../onboarding/ConnectGithub";
+import { isVersionOlder } from "@iqlabs-official/agent-sdk/runtime/engineInstall";
 import {
   hasAgentService,
   backgroundExecEnabled,
@@ -138,7 +139,7 @@ export function Sessions({
   const { requestUnlock } = useUnlock();
   const { storage, cloudSync, googleLoginUrl, googleLoginError } = state;
   const online = useOnline();
-  // Which engines hold live credentials — drives the Logout AI menu (row subtitle + sub-screen).
+  // Which engines hold live credentials — drives the AI Connections menu (row subtitle + sub-screen).
   const connectedEngines = (["claude", "codex"] as const).filter((c) => state.cliReport?.[c] === "ok");
 
   const rootMode: SettingsMode = settingsRoot ? "configure" : "list";
@@ -150,6 +151,14 @@ export function Sessions({
   const [busy, setBusy] = useState(false);
   const [bgExec, setBgExec] = useState(backgroundExecEnabled());
   const [screenOffExec, setScreenOffExec] = useState(screenOffExecEnabled());
+
+  // Engine versions are fetched ON DEMAND only: once per app session, the first time AI
+  // Connections opens (the server re-pushes fresh numbers after an update). No polling,
+  // no boot-time check — this is the only send site.
+  useEffect(() => {
+    if (settingsMode === "engines" && !state.engineVersions) send({ type: "getEngineVersions" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsMode]);
   const [showManualCode, setShowManualCode] = useState(false);
 
   // Long-press a chat row to reveal a delete menu (replaces the always-on per-row x).
@@ -529,6 +538,9 @@ export function Sessions({
               {(["claude", "codex"] as const).map((c) => {
                 const connected = state.cliReport?.[c] === "ok";
                 const accent = c === "claude" ? "var(--claude)" : "var(--an-green)";
+                const version = state.engineVersions?.[c];
+                const updating = !!state.engineUpdating[c];
+                const outdated = !!(version?.installed && version.latest && isVersionOlder(version.installed, version.latest));
                 return (
                   <div key={c} className="flex items-center gap-3.5 rounded-2xl px-2.5 py-3">
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center" style={{ color: connected ? accent : "var(--an-fg-dim)" }}>
@@ -538,8 +550,24 @@ export function Sessions({
                       <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-fg)" }}>{c}</span>
                       <span className="block text-[0.72rem] leading-tight" style={{ color: connected ? accent : "var(--an-fg-mute)" }}>
                         {connected ? "Connected" : "Not signed in"}
+                        {version?.installed ? ` · v${version.installed}` : ""}
                       </span>
+                      {outdated && (
+                        <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-amber, #e90)" }}>
+                          {updating ? "Updating, this can take a minute" : `v${version?.latest} available`}
+                        </span>
+                      )}
                     </span>
+                    {outdated && (
+                      <button
+                        disabled={updating}
+                        onClick={() => send({ type: "updateEngine", cli: c })}
+                        className="an-term-mono shrink-0 text-[11px] font-bold uppercase tracking-wide transition active:opacity-70 disabled:cursor-not-allowed disabled:opacity-40"
+                        style={{ color: "var(--an-amber, #e90)", border: "1px solid color-mix(in srgb, var(--an-amber, #e90) 45%, var(--an-line))", padding: "8px 12px" }}
+                      >
+                        {updating ? "Updating" : "Update"}
+                      </button>
+                    )}
                     {connected ? (
                       <button
                         onClick={() => send({ type: "logoutEngine", cli: c })}
@@ -561,7 +589,7 @@ export function Sessions({
                 );
               })}
               <p className="px-2.5 pt-1 text-[0.68rem] leading-snug" style={{ color: "var(--an-fg-mute)" }}>
-                Connect opens that engine's sign-in. Signing out removes its credentials from this device; chat locks until an engine is connected again.
+                Connect opens that engine's sign-in. Signing out removes its credentials from this device; chat locks until an engine is connected again. Updates install straight from the official npm registry.
               </p>
             </div>
           </div>

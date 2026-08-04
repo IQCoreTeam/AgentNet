@@ -103,7 +103,8 @@ export type { SkillOrigin, ClassifiedSkill, SkillManifest, NftSkillRecord } from
 
 export { createRuntime } from "./runtime/index.js";
 export { detectCli } from "./runtime/detect.js";
-export { ENGINE_INSTALL_COMMAND, CODEX_UPDATE_COMMAND } from "./runtime/engineInstall.js";
+export { ENGINE_INSTALL_COMMAND, ENGINE_UPDATE_COMMAND, CODEX_UPDATE_COMMAND } from "./runtime/engineInstall.js";
+export { getEngineVersions, updateEngine, isVersionOlder, type EngineVersionInfo } from "./runtime/engineVersions.js";
 export type { CliStatus, CliReport } from "./runtime/detect.js";
 export { listCodexModelOptions } from "./runtime/codexModels.js";
 export type { CodexModelsResult } from "./runtime/codexModels.js";
