@@ -117,7 +117,7 @@ function StorageOption({ active, title, subtitle, onClick }: { active: boolean; 
   );
 }
 
-type SettingsMode = "list" | "configure" | "connect" | "gdrive" | "custom" | "helius" | "github";
+type SettingsMode = "list" | "configure" | "connect" | "gdrive" | "custom" | "helius" | "github" | "engines";
 
 export function Sessions({
   onClose,
@@ -138,6 +138,8 @@ export function Sessions({
   const { requestUnlock } = useUnlock();
   const { storage, cloudSync, googleLoginUrl, googleLoginError } = state;
   const online = useOnline();
+  // Which engines hold live credentials — drives the Logout AI menu (row subtitle + sub-screen).
+  const connectedEngines = (["claude", "codex"] as const).filter((c) => state.cliReport?.[c] === "ok");
 
   const rootMode: SettingsMode = settingsRoot ? "configure" : "list";
   const [settingsMode, setSettingsMode] = useState<SettingsMode>(initialMode ?? rootMode);
@@ -401,6 +403,12 @@ export function Sessions({
                 onClick={() => { send({ type: "getGithubStatus" }); setSettingsMode("github"); }}
                 icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 16.5c-3 .9-3-1.5-4.2-1.8M15 19v-3.1c0-.8-.3-1.4-.8-1.8 2.6-.3 5.3-1.3 5.3-5.7 0-1.3-.4-2.3-1.2-3.2.1-.3.5-1.6-.1-3.1 0 0-1-.3-3.3 1.2a11.5 11.5 0 0 0-6 0C6.6 1.8 5.6 2.1 5.6 2.1c-.6 1.5-.2 2.8-.1 3.1-.8.9-1.2 2-1.2 3.2 0 4.4 2.7 5.4 5.3 5.7-.4.4-.7.9-.8 1.6V19" /></svg>}
               />
+              <MenuRow
+                label="Logout AI"
+                subtitle={connectedEngines.length ? `${connectedEngines.join(" + ")} connected` : "Not signed in"}
+                onClick={() => setSettingsMode("engines")}
+                icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M11 3v7" /><path d="M6.2 6.2a7 7 0 1 0 9.6 0" /></svg>}
+              />
               {/* Android shell only: keep the agent running (and notify on approvals)
                   while the app is backgrounded — but ONLY while a task is active. Off =
                   idle process is reclaimed. Turning OFF mid-turn is foreground-only: the
@@ -512,6 +520,40 @@ export function Sessions({
             <SettingsSubHeader title="GitHub" onBack={() => setSettingsMode("configure")} />
             <div className="flex-1 overflow-y-auto flex flex-col gap-4">
               <ConnectGithub onDone={() => setSettingsMode(rootMode)} />
+            </div>
+          </div>
+        ) : settingsMode === "engines" ? (
+          <div className="flex flex-col h-full">
+            <SettingsSubHeader title="Logout AI" onBack={() => setSettingsMode("configure")} />
+            <div className="flex-1 space-y-0.5 overflow-y-auto">
+              {(["claude", "codex"] as const).map((c) => {
+                const connected = state.cliReport?.[c] === "ok";
+                const accent = c === "claude" ? "var(--claude)" : "var(--an-green)";
+                return (
+                  <div key={c} className="flex items-center gap-3.5 rounded-2xl px-2.5 py-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center" style={{ color: connected ? accent : "var(--an-fg-dim)" }}>
+                      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="14" height="14" rx="3" /><path d="M8.5 11h5M11 8.5v5" /></svg>
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-fg)" }}>{c}</span>
+                      <span className="block text-[0.72rem] leading-tight" style={{ color: connected ? accent : "var(--an-fg-mute)" }}>
+                        {connected ? "Connected" : "Not signed in"}
+                      </span>
+                    </span>
+                    <button
+                      disabled={!connected}
+                      onClick={() => send({ type: "logoutEngine", cli: c })}
+                      className="an-term-mono shrink-0 text-[11px] font-bold uppercase tracking-wide transition active:opacity-70 disabled:cursor-not-allowed disabled:opacity-40"
+                      style={{ color: "var(--an-red, #e55)", border: "1px solid var(--an-line)", padding: "8px 12px" }}
+                    >
+                      Log out
+                    </button>
+                  </div>
+                );
+              })}
+              <p className="px-2.5 pt-1 text-[0.68rem] leading-snug" style={{ color: "var(--an-fg-mute)" }}>
+                Signing out removes that engine's credentials from this device. Chat locks until you connect an engine again.
+              </p>
             </div>
           </div>
         ) : settingsMode === "connect" ? (
