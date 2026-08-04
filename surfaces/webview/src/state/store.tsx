@@ -270,8 +270,9 @@ type LocalAction =
   | { type: "__removeApproval"; id: string }
   | { type: "__clearToast" }
   | { type: "__selectEngine"; cli: Cli }
+  | { type: "__switchEngine"; cli: Cli }
+  | { type: "__dismissAuth" }
   | { type: "__finishStorage" }
-  | { type: "__showEngineSelect" }
   | { type: "__savePlan"; text: string }
   | { type: "__openMarket"; initialView?: "browse" | "agents" | "owned" }
   | { type: "__closeMarket" }
@@ -315,6 +316,21 @@ function reducer(state: State, ev: Action): State {
       if (status === "ok") return { ...state, cli: ev.cli, phase: "chat" };
       return { ...state, cli: ev.cli, phase: ev.cli === "claude" ? "claudeAuth" : "codexAuth" };
     }
+    case "__switchEngine":
+      // Chip/panel switch: change the active engine only. A not-signed-in engine shows as a
+      // locked composer in chat; it must NOT yank the user onto the login screen.
+      return { ...state, cli: ev.cli };
+    case "__dismissAuth":
+      // Back out of a login screen without signing in — chat stays usable (locked composer).
+      return {
+        ...state,
+        phase: "chat",
+        claudeLoginUrl: null,
+        claudeLoginError: null,
+        codexLoginUrl: null,
+        codexLoginCode: null,
+        codexLoginError: null,
+      };
     case "init":
       // The host always provides chat. Without a real wallet this is a persistent,
       // device-local guest runtime; wallet setup is progressive and never blocks entry.
@@ -327,16 +343,6 @@ function reducer(state: State, ev: Action): State {
       return { ...state, cliReport: { claude: ev.claude, codex: ev.codex } };
     case "__finishStorage":
       return { ...state, phase: "engineSelect" };
-    case "__showEngineSelect":
-      return {
-        ...state,
-        phase: "engineSelect",
-        claudeLoginUrl: null,
-        claudeLoginError: null,
-        codexLoginUrl: null,
-        codexLoginCode: null,
-        codexLoginError: null,
-      };
     case "googleLoginUrl":
       return { ...state, googleLoginUrl: ev.url, googleLoginError: null };
     case "googleLoginStatus":
@@ -659,8 +665,9 @@ interface Store {
   resolveApproval: (id: string) => void;
   clearToast: () => void;
   selectEngine: (cli: Cli) => void;
+  switchEngine: (cli: Cli) => void;
+  dismissAuth: () => void;
   finishStorage: () => void;
-  showEngineSelect: () => void;
   savePlan: (text: string) => void;
   openMarket: () => void;
   openMarketAgents: () => void;
@@ -842,6 +849,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         void transportRef.current?.post({ type: "platform", cli });
       }
     };
+    // Engine chip/panel tap: switch which engine is active WITHOUT routing to its login
+    // screen. Chat's locked composer is the one place that asks to sign in (via selectEngine).
+    const switchEngine = (cli: Cli) => {
+      const st = stateRef.current;
+      raw({ type: "__switchEngine", cli });
+      if (!st.cliReport) {
+        void transportRef.current?.post({ type: "getCliStatus" });
+        return;
+      }
+      if (st.cliReport[cli] === "ok" && st.phase === "chat") {
+        void transportRef.current?.post({ type: "platform", cli });
+      }
+    };
     const send = (msg: ClientMessage) => {
       const st = stateRef.current;
       if (msg.type === "platform") {
@@ -899,8 +919,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       clearToast: () => raw({ type: "__clearToast" }),
       // Activate the chosen engine; routing (login gate / chat) is decided in the reducer.
       selectEngine,
+      switchEngine,
+      dismissAuth: () => raw({ type: "__dismissAuth" }),
       finishStorage: () => raw({ type: "__finishStorage" }),
-      showEngineSelect: () => raw({ type: "__showEngineSelect" }),
       savePlan: (text) => raw({ type: "__savePlan", text }),
       openMarket: () => raw({ type: "__openMarket" }),
       openMarketAgents: () => raw({ type: "__openMarket", initialView: "agents" }),

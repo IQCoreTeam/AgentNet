@@ -12,7 +12,7 @@ import { EngineMissingNotice } from "./EngineMissingNotice";
 import { useStore } from "../state/store";
 
 export function ConnectClaude() {
-  const { state, send } = useStore();
+  const { state, send, dismissAuth } = useStore();
   const { claudeLoginUrl, claudeLoginError } = state;
   const [busy, setBusy] = useState(false);
   const [code, setCode] = useState("");
@@ -32,6 +32,8 @@ export function ConnectClaude() {
     <OnboardingShell
       title="Connect Claude"
       subtitle="Sign in with your Claude subscription to run agents on your plan."
+      onClose={dismissAuth}
+      closeLabel="Back to chat"
     >
       <EngineMissingNotice cli="claude" />
       {!claudeLoginUrl ? (

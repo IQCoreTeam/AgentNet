@@ -41,11 +41,11 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "AgentNet/Main"
         private const val URL = "http://127.0.0.1:${Paths.PORT}/"
-        // dApp identity shown in the wallet's approval sheet. Placeholder host for now —
-        // swap to the real product URL once it exists (the wallet may display/verify it).
+        // dApp identity shown in the wallet's approval sheet. Must be a live domain we
+        // control: wallets display it and may fetch the icon to verify who is asking.
         private const val IDENTITY_NAME = "AgentNet"
-        private const val IDENTITY_URI = "https://agentnet.iqlabs.com"
-        private const val IDENTITY_ICON = "favicon.ico" // relative to IDENTITY_URI
+        private const val IDENTITY_URI = "https://iqlabs.dev"
+        private const val IDENTITY_ICON = "img/coinlogo.webp" // relative to IDENTITY_URI
         private const val APPROVAL_CHANNEL = "agentnet_approval_locked_v2"
         private const val COMPLETION_CHANNEL = "agentnet_completion_locked_v1"
         private const val APPROVAL_NOTIF_ID = 2

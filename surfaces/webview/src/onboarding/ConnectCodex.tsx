@@ -8,7 +8,7 @@ import { EngineMissingNotice } from "./EngineMissingNotice";
 import { useStore } from "../state/store";
 
 export function ConnectCodex() {
-  const { state, send, showEngineSelect } = useStore();
+  const { state, send, dismissAuth } = useStore();
   const { codexLoginUrl, codexLoginCode, codexLoginError } = state;
   const [busy, setBusy] = useState(false);
 
@@ -30,7 +30,7 @@ export function ConnectCodex() {
   function close() {
     setBusy(false);
     send({ type: "cancelCodexLogin" });
-    showEngineSelect();
+    dismissAuth();
   }
 
   return (

@@ -119,7 +119,7 @@ function ChipGroup({ label, value, options, onPick, accent = "green" }: {
 
 // Input + engine tabs + model/effort pickers. FROZEN while an approval is pending.
 export function Composer() {
-  const { state, send, selectEngine, queueCount, markCompacting } = useStore();
+  const { state, send, selectEngine, switchEngine, queueCount, markCompacting } = useStore();
   const [text, setText] = useState("");
   const [effort, setEffort] = useState("default");
   const [model, setModel] = useState("default");
@@ -173,6 +173,15 @@ export function Composer() {
   // Freeze only for an approval in THIS chat — a backgrounded session's pending approval
   // pings a notification instead, it must not lock the composer of the chat you're in.
   const frozen = state.approvals.some((a) => isApprovalForView(a, state.activeSessionId));
+  // Engine gate, shown in place instead of hijacking the screen: while the ACTIVE engine
+  // isn't signed in, the input row is replaced by Connect buttons (one per missing engine,
+  // so a fresh user picks their engine right here). Tapping one opens that engine's login;
+  // everything else in the app stays reachable. No report yet (boot) counts as unlocked
+  // so the composer doesn't flash locked for signed-in users.
+  const engineLocked = !!state.cliReport && state.cliReport[state.cli] !== "ok";
+  const needsConnect = state.cliReport
+    ? (["claude", "codex"] as Cli[]).filter((c) => state.cliReport?.[c] !== "ok")
+    : [];
 
   const [slashIdx, setSlashIdx] = useState(0);
   const [suppressSlash, setSuppressSlash] = useState(false);
@@ -343,7 +352,7 @@ export function Composer() {
           setText(""); return;
         }
         case "engine":
-          if (arg === "claude" || arg === "codex") selectEngine(arg);
+          if (arg === "claude" || arg === "codex") switchEngine(arg);
           setText(""); return;
         case "model":
           if (arg) send({ type: "model", model: arg });
@@ -435,7 +444,7 @@ export function Composer() {
             return (
               <button
                 key={c}
-                onClick={() => selectEngine(c)}
+                onClick={() => switchEngine(c)}
                 style={on ? { background: accent, color: "var(--an-bg-0)" } : undefined}
               >
                 {c}
@@ -526,6 +535,29 @@ export function Composer() {
         </pre>
       )}
 
+      {engineLocked ? (
+        <div ref={inputBoxRef} className="an-composer-input relative flex items-center gap-2 px-2 py-2" style={{ minHeight: "56px" }}>
+          {needsConnect.map((c) => {
+            const accent = c === "claude" ? "var(--claude)" : "var(--an-green)";
+            return (
+              <button
+                key={c}
+                type="button"
+                onClick={() => selectEngine(c)}
+                className="an-term-mono flex-1 text-[12px] font-bold uppercase tracking-wide transition active:opacity-80"
+                style={{
+                  color: accent,
+                  border: `1px solid color-mix(in srgb, ${accent} 45%, var(--an-line))`,
+                  background: "var(--an-bg-1)",
+                  padding: "12px 8px",
+                }}
+              >
+                Connect {c}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
       <div
         ref={inputBoxRef}
         className={`an-composer-input relative flex items-center gap-1.5 px-2 ${frozen ? "opacity-60" : ""}`}
@@ -690,6 +722,7 @@ export function Composer() {
           )}
         </button>
       </div>
+      )}
     </div>
   );
 }

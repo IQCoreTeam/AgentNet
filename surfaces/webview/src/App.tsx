@@ -15,13 +15,15 @@ import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { syncAgentService, notifyApproval, clearApprovalNotice, ensureBackgroundConsent, notifyTurnComplete } from "./platform/agentService";
 import { haptics } from "./haptics";
 
-// Phase router. First run only needs the engine (Claude/Codex) login — wallet, cloud storage
-// and Market RPC are all progressive now and live behind the unlock tutorial (UnlockProvider),
-// never blocking entry. `init` drops a fresh user straight into a device-local guest chat.
+// Phase router. Entry is NEVER blocked: `init` drops a fresh user straight into a
+// device-local guest chat. Everything is progressive from there — wallet, cloud storage
+// and Market RPC live behind the unlock tutorial (UnlockProvider), and the engine
+// (Claude/Codex) login is asked for by the locked composer only, so a user (or a store
+// reviewer) with no engine account can still browse every tab and connect a wallet.
 //   connecting   → opening SSE stream / sent `ready`, waiting for init|sessions
 //   engineSelect → pick which engine to activate (claude or codex)
-//   claudeAuth   → claude chosen, not logged in → connect the Claude subscription
-//   codexAuth    → codex chosen, not logged in → device-auth (open URL, enter code)
+//   claudeAuth   → connect the Claude subscription; dismissable back to chat
+//   codexAuth    → device-auth (open URL, enter code); dismissable back to chat
 //   chat         → runtime ready → the tab shell
 export function App() {
   const { state, getClientId, send, closeMarket, clearCelebrate } = useStore();
