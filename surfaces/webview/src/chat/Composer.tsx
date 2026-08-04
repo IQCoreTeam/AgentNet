@@ -174,14 +174,12 @@ export function Composer() {
   // pings a notification instead, it must not lock the composer of the chat you're in.
   const frozen = state.approvals.some((a) => isApprovalForView(a, state.activeSessionId));
   // Engine gate, shown in place instead of hijacking the screen: while the ACTIVE engine
-  // isn't signed in, the input row is replaced by Connect buttons (one per missing engine,
-  // so a fresh user picks their engine right here). Tapping one opens that engine's login;
-  // everything else in the app stays reachable. No report yet (boot) counts as unlocked
-  // so the composer doesn't flash locked for signed-in users.
+  // isn't signed in, the input row is replaced by that engine's single Connect button
+  // (the chips above switch engines, so the button always mirrors the selected chip).
+  // Tapping it opens the login screen; everything else in the app stays reachable. No
+  // report yet (boot) counts as unlocked so the composer doesn't flash locked for
+  // signed-in users.
   const engineLocked = !!state.cliReport && state.cliReport[state.cli] !== "ok";
-  const needsConnect = state.cliReport
-    ? (["claude", "codex"] as Cli[]).filter((c) => state.cliReport?.[c] !== "ok")
-    : [];
 
   const [slashIdx, setSlashIdx] = useState(0);
   const [suppressSlash, setSuppressSlash] = useState(false);
@@ -537,25 +535,19 @@ export function Composer() {
 
       {engineLocked ? (
         <div ref={inputBoxRef} className="an-composer-input relative flex items-center gap-2 px-2 py-2" style={{ minHeight: "56px" }}>
-          {needsConnect.map((c) => {
-            const accent = c === "claude" ? "var(--claude)" : "var(--an-green)";
-            return (
-              <button
-                key={c}
-                type="button"
-                onClick={() => selectEngine(c)}
-                className="an-term-mono flex-1 text-[12px] font-bold uppercase tracking-wide transition active:opacity-80"
-                style={{
-                  color: accent,
-                  border: `1px solid color-mix(in srgb, ${accent} 45%, var(--an-line))`,
-                  background: "var(--an-bg-1)",
-                  padding: "12px 8px",
-                }}
-              >
-                Connect {c}
-              </button>
-            );
-          })}
+          <button
+            type="button"
+            onClick={() => selectEngine(state.cli)}
+            className="an-term-mono flex-1 text-[12px] font-bold uppercase tracking-wide transition active:opacity-80"
+            style={{
+              color: engineAccent,
+              border: `1px solid color-mix(in srgb, ${engineAccent} 45%, var(--an-line))`,
+              background: "var(--an-bg-1)",
+              padding: "12px 8px",
+            }}
+          >
+            Connect {state.cli}
+          </button>
         </div>
       ) : (
       <div
