@@ -52,9 +52,6 @@ export interface State {
   phase:
     | "connecting"
     | "restoring" // Android cold boot: attempting a silent Keystore reconnect (shows Splash, not the signup screen)
-    | "onboarding"
-    | "storageSelect"
-    | "engineSelect"
     | "claudeAuth"
     | "codexAuth"
     | "chat";
@@ -272,7 +269,6 @@ type LocalAction =
   | { type: "__selectEngine"; cli: Cli }
   | { type: "__switchEngine"; cli: Cli }
   | { type: "__dismissAuth" }
-  | { type: "__finishStorage" }
   | { type: "__savePlan"; text: string }
   | { type: "__openMarket"; initialView?: "browse" | "agents" | "owned" }
   | { type: "__closeMarket" }
@@ -309,7 +305,7 @@ function reducer(state: State, ev: Action): State {
       return { ...state, toast: ev.text };
     case "__selectEngine": {
       // No "not installed" / "checking sign-in" alerts: just route. Report not in yet ->
-      // wait (PickEngine re-fires when it arrives). ok -> chat; otherwise (no-login or
+      // wait (the action requests getCliStatus). ok -> chat; otherwise (no-login or
       // missing) -> the engine's own auth screen handles sign-in / install.
       if (!state.cliReport) return state;
       const status = state.cliReport[ev.cli];
@@ -341,14 +337,12 @@ function reducer(state: State, ev: Action): State {
       // Authentication is progressive too. Stay in chat until a send or explicit engine
       // switch asks selectEngine() to route to the matching login surface.
       return { ...state, cliReport: { claude: ev.claude, codex: ev.codex } };
-    case "__finishStorage":
-      return { ...state, phase: "engineSelect" };
     case "googleLoginUrl":
       return { ...state, googleLoginUrl: ev.url, googleLoginError: null };
     case "googleLoginStatus":
-      // Drive is connected progressively now — from the unlock tutorial's Cloud_Backup step
-      // while the user is already in chat. Do NOT move the phase (the old storageSelect step
-      // that advanced to engineSelect here is gone); staying put keeps the overlay/chat mounted.
+      // Drive is connected progressively — from the unlock tutorial's Cloud_Backup step
+      // while the user is already in chat. Do NOT move the phase: staying put keeps the
+      // overlay/chat mounted.
       return ev.status === "done"
         ? { ...state, googleLoginUrl: null, googleLoginError: null }
         : { ...state, googleLoginUrl: null, googleLoginError: ev.error ?? "Login failed." };
@@ -667,7 +661,6 @@ interface Store {
   selectEngine: (cli: Cli) => void;
   switchEngine: (cli: Cli) => void;
   dismissAuth: () => void;
-  finishStorage: () => void;
   savePlan: (text: string) => void;
   openMarket: () => void;
   openMarketAgents: () => void;
@@ -921,7 +914,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       selectEngine,
       switchEngine,
       dismissAuth: () => raw({ type: "__dismissAuth" }),
-      finishStorage: () => raw({ type: "__finishStorage" }),
       savePlan: (text) => raw({ type: "__savePlan", text }),
       openMarket: () => raw({ type: "__openMarket" }),
       openMarketAgents: () => raw({ type: "__openMarket", initialView: "agents" }),

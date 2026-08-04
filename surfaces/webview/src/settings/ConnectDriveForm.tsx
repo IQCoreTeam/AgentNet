@@ -3,11 +3,10 @@ import { useStore } from "../state/store";
 import { openExternalUrl } from "../platform/openExternalUrl";
 import { useAutoOpenExternalUrl } from "../platform/useAutoOpenExternalUrl";
 
-// Compact Google Drive connect for the unlock tutorial's Cloud_Backup step. It mirrors the
-// gdrive sub-flow of ConnectStorage (start OAuth, auto-open the URL, manual-code fallback,
-// dev client-id entry) but trimmed to a single call-to-action plus a skip. Both a successful
-// connect and a skip call onDone — the tutorial only needs to advance to the next step either
-// way. It never calls finishStorage (that drives the onboarding phase, irrelevant in chat).
+// Compact Google Drive connect for the unlock tutorial's Cloud_Backup step: start OAuth,
+// auto-open the URL, manual-code fallback, dev client-id entry — trimmed to a single
+// call-to-action plus a skip. Both a successful connect and a skip call onDone — the
+// tutorial only needs to advance to the next step either way.
 export function ConnectDriveForm({ onDone, skipLabel = "Skip for now" }: { onDone?: () => void; skipLabel?: string }) {
   const { state, send } = useStore();
   const { googleLoginUrl, googleLoginError, googleCredsError, storage } = state;

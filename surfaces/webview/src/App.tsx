@@ -1,6 +1,5 @@
 import { useStore } from "./state/store";
 import { Splash } from "./onboarding/Splash";
-import { PickEngine } from "./onboarding/PickEngine";
 import { ConnectClaude } from "./onboarding/ConnectClaude";
 import { ConnectCodex } from "./onboarding/ConnectCodex";
 import { ChatScreen } from "./chat/ChatScreen";
@@ -21,7 +20,6 @@ import { haptics } from "./haptics";
 // (Claude/Codex) login is asked for by the locked composer only, so a user (or a store
 // reviewer) with no engine account can still browse every tab and connect a wallet.
 //   connecting   → opening SSE stream / sent `ready`, waiting for init|sessions
-//   engineSelect → pick which engine to activate (claude or codex)
 //   claudeAuth   → connect the Claude subscription; dismissable back to chat
 //   codexAuth    → device-auth (open URL, enter code); dismissable back to chat
 //   chat         → runtime ready → the tab shell
@@ -136,7 +134,6 @@ export function App() {
     <>
       <div className="app-viewport">
         {(state.phase === "connecting" || state.phase === "restoring") && <Splash />}
-        {state.phase === "engineSelect" && <PickEngine />}
         {state.phase === "claudeAuth" && <ConnectClaude />}
         {state.phase === "codexAuth" && <ConnectCodex />}
         {state.phase === "chat" && <TabShell />}
