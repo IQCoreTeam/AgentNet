@@ -57,7 +57,7 @@ android {
         // the bare marketing version (store UIs already show the versionCode in parens, so
         // baking the build number into the name would just display it twice).
         versionName = providers.environmentVariable("ANDROID_VERSION_NAME").orNull?.takeIf { it.isNotBlank() }
-            ?: localProperties.getProperty("versionName", "0.1.3")
+            ?: localProperties.getProperty("versionName", "0.1.4")
         buildConfigField(
             "String",
             "GOOGLE_OAUTH_CLIENT_ID",
