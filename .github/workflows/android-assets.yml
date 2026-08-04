@@ -102,8 +102,12 @@ jobs:
       # (their `cp ci-assets/assets/rootfs-*.tar` finds nothing). Keep the artifact's flat
       # assets/+jniLibs layout both consumer workflows already expect.
       - name: Restore flat artifact layout (rootfs next to server bundle)
+        # sudo: the docker build step above runs as root, so the staged dirs/files are
+        # root-owned and the runner user cannot write next to them. chown afterwards so
+        # upload-artifact (runner user) reads everything without surprises.
         run: |
-          cp surfaces/android/rootfs/src/main/assets/rootfs-*.tar surfaces/android/app/src/main/assets/
+          sudo cp surfaces/android/rootfs/src/main/assets/rootfs-*.tar surfaces/android/app/src/main/assets/
+          sudo chown -R "$(id -u):$(id -g)" surfaces/android/app/src/main/assets surfaces/android/app/src/main/jniLibs
           ls -lh surfaces/android/app/src/main/assets/
 
       # Upload BOTH the assets (rootfs + server bundle tars) and jniLibs (proot + loader +
