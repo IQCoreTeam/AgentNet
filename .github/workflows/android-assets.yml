@@ -96,6 +96,16 @@ jobs:
               bash surfaces/android/scripts/build-assets.sh
             '
 
+      # build-assets.sh stages the rootfs tar into the :rootfs Play pack module (the AAB
+      # split), which sits OUTSIDE the upload paths below — without this copy the artifact
+      # silently ships without the rootfs and every downstream apk/release build breaks
+      # (their `cp ci-assets/assets/rootfs-*.tar` finds nothing). Keep the artifact's flat
+      # assets/+jniLibs layout both consumer workflows already expect.
+      - name: Restore flat artifact layout (rootfs next to server bundle)
+        run: |
+          cp surfaces/android/rootfs/src/main/assets/rootfs-*.tar surfaces/android/app/src/main/assets/
+          ls -lh surfaces/android/app/src/main/assets/
+
       # Upload BOTH the assets (rootfs + server bundle tars) and jniLibs (proot + loader +
       # libs, shipped as lib*.so so Play Protect doesn't reject loose ELF in assets). The
       # artifact's common root is .../main/, so the zip contains assets/ and jniLibs/ at top
