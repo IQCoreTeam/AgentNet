@@ -144,9 +144,14 @@ export function WelcomePanel({
       paddingY={1}
       marginBottom={1}
     >
-      {/* IQ wordmark (left) — grid font, our green. */}
+      {/* IQ wordmark (left) — grid font, our green. On a narrow terminal the big glyphs
+          would wrap into a squished mess, so fall back to a plain mark. */}
       <Box flexDirection="column" marginRight={3} justifyContent="center">
-        <BigText text="IQ" font="grid" colors={[colors.ok]} space={false} />
+        {(process.stdout.columns || 80) >= 72 ? (
+          <BigText text="IQ" font="grid" colors={[colors.ok]} space={false} />
+        ) : (
+          <Text bold color={colors.ok}>IQ</Text>
+        )}
         <Text dimColor>the agent layer</Text>
       </Box>
 

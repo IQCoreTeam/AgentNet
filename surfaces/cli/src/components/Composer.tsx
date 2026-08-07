@@ -4,6 +4,8 @@ import { colors } from "../theme.js";
 import { SLASH_COMMANDS } from "../commands.js";
 import { indexFiles, filterFiles } from "../fileIndex.js";
 import { readImageFromClipboard, readImageFile, type ImageInput } from "../clipboardImage.js";
+import { pinCursor, unpinCursor, displayWidth } from "../cursorPin.js";
+import { useDelight } from "./DelightProvider.js";
 
 // The input box — far past a single line. Supports:
 //   • multi-line editing (←/→ within the buffer, paste with newlines, \ + ↵ = newline)
@@ -23,6 +25,7 @@ export function Composer({
 }) {
   const [value, setValue] = useState("");
   const [cursor, setCursor] = useState(0);
+  const { noteTyping } = useDelight();
   const [attached, setAttached] = useState<ImageInput[]>([]);
   const [files, setFiles] = useState<string[]>([]);
   const [menuIdx, setMenuIdx] = useState(0);
@@ -129,6 +132,7 @@ export function Composer({
 
   useInput(
     (input, key) => {
+      noteTyping(); // pause animations for a beat — repaints flicker IME composition
       if (menu && (key.upArrow || key.downArrow)) {
         setMenuIdx((i) => {
           const n = menu.items.length;
@@ -234,6 +238,25 @@ export function Composer({
   const tail = value.slice(cursor + 1);
   const empty = value.length === 0;
 
+  // Park the REAL terminal cursor on the caret after every frame, so IME composition
+  // (Hangul/CJK preedit) renders inline instead of below the UI. Only when the geometry
+  // is knowable: single-line, unwrapped buffer. Row math mirrors what renders below the
+  // input line — the ㄴ corner line and the menu block here, plus the footer
+  // (blank margin + row) in Chat.
+  useEffect(() => {
+    const cols = process.stdout.columns || 80;
+    // caret column: root paddingX(1) + "❯ "(2) + head, 1-based.
+    const col = 4 + displayWidth(head);
+    if (disabled || value.includes("\n") || 4 + displayWidth(value) >= cols) {
+      unpinCursor();
+      return;
+    }
+    const menuLines = menu ? menu.items.length + 2 : 0; // marginTop + items + hint row
+    const footerLines = 2; // Chat renders the footer (marginTop + row) below us
+    pinCursor(menuLines + footerLines + 2, col); // +2: ㄴ corner line + ink's resting line
+  });
+  useEffect(() => () => unpinCursor(), []);
+
   return (
     <Box flexDirection="column">
       {attached.length > 0 && (
@@ -244,6 +267,12 @@ export function Composer({
           <Text dimColor>(↵ sends · ⌫ removes last)</Text>
         </Box>
       )}
+      {/* the input section: full-width line framed by corner focus marks — a ㄱ at the
+          top-right, a ㄴ at the bottom-left — instead of a closed box. Corners tint
+          cyan while the composer has focus, dim when something else owns the keys. */}
+      <Text color={disabled ? colors.dim : colors.iqCyan}>
+        {" ".repeat(Math.max(0, (process.stdout.columns || 80) - 5)) + "──┐"}
+      </Text>
       <Box>
         <Text color={colors.iqCyan}>❯ </Text>
         {empty && !attached.length ? (
@@ -256,6 +285,7 @@ export function Composer({
           </Text>
         )}
       </Box>
+      <Text color={disabled ? colors.dim : colors.iqCyan}>{"└──"}</Text>
 
       {menu ? (
         <Box flexDirection="column" marginLeft={2} marginTop={1}>

@@ -8,6 +8,7 @@ import { DelightProvider } from "./components/DelightProvider.js";
 import { App, type AppOptions } from "./app.js";
 import { detectCli } from "./bootstrap.js";
 import { readPrefsSync, savePrefs } from "./prefs.js";
+import { checkCliUpdate, installedCliVersion, CLI_UPDATE_COMMAND } from "./selfUpdate.js";
 
 // Diagnostics from the core/engine layer (codex app-server tracing, the claudeModels probe,
 // bigint's native-binding fallback notice, etc.) are all plain console.error/warn calls —
@@ -93,9 +94,19 @@ program
   .command("doctor")
   .description("check claude/codex install + login status")
   .action(async () => {
-    const r = await detectCli();
+    const [r, installed, update] = await Promise.all([
+      detectCli(),
+      installedCliVersion(),
+      checkCliUpdate(),
+    ]);
     console.log(`claude: ${r.claude}`);
     console.log(`codex:  ${r.codex}`);
+    const self = update
+      ? `v${update.installed} · v${update.latest} available · ${CLI_UPDATE_COMMAND}`
+      : installed
+        ? `v${installed}`
+        : "version unknown";
+    console.log(`agentnet: ${self}`);
   });
 
 program.parse();

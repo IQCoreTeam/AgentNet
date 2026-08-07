@@ -42,17 +42,61 @@ import { ModelPicker } from "./ModelPicker.js";
 import { EffortPicker } from "./EffortPicker.js";
 import type { EffortLevel } from "../prefs.js";
 import { type Mood } from "../components/Iggy.js";
+import { useDelight } from "../components/DelightProvider.js";
+import { checkCliUpdate, CLI_UPDATE_COMMAND } from "../selfUpdate.js";
 import { thinkingLabels, castingFrames, colors, copy, glyph, pick } from "../theme.js";
 
-// IQ-flavored rotating label while a turn runs.
-function ThinkingLine() {
+// IQ-flavored rotating label while a turn runs — with the running clock and the escape
+// hatch, Claude-style, so a long turn reads as alive instead of stuck.
+function ThinkingLine({ elapsed }: { elapsed?: number }) {
   const i = useFrameLoop(thinkingLabels.length, 1.2);
   return (
     <Box paddingLeft={2} marginTop={1}>
       <Text color={colors.iqViolet}>{thinkingLabels[i]}</Text>
+      {elapsed !== undefined ? <Text dimColor> {Math.round(elapsed)}s · esc interrupt</Text> : null}
     </Box>
   );
 }
+
+// Merge the ephemeral local separators (model-switch lines) into the transcript by
+// timestamp. <Static> is append-only by INDEX — gluing localLog after the messages array
+// shifts the separators to a new index every time a message lands, and Static re-prints
+// them each time (the stacking "summary: ─── model ───" bug). A chronological merge keeps
+// the combined list append-only.
+function interleaveByTs(msgs: ChatMessage[], local: ChatMessage[]): ChatMessage[] {
+  if (!local.length) return msgs;
+  const out: ChatMessage[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < msgs.length && j < local.length) {
+    const mt = msgs[i].ts;
+    const lt = local[j].ts;
+    if (mt !== undefined && lt !== undefined && lt < mt) out.push(local[j++]);
+    else out.push(msgs[i++]);
+  }
+  return out.concat(msgs.slice(i), local.slice(j));
+}
+
+// While streaming, the live message renders in the DYNAMIC frame; if that frame outgrows
+// the terminal, ink can't erase the lines that scrolled off-screen and every repaint
+// stacks a stale copy into scrollback. Clamp the live text to a tail that fits — the full
+// text still lands in <Static> (real scrollback) once the turn settles.
+function clampLiveTail(msg: ChatMessage, rows: number, cols: number): ChatMessage {
+  const budget = Math.max(6, rows - 14); // leave room for status/composer/footer chrome
+  const lines = msg.text.split("\n");
+  let used = 0;
+  let start = lines.length;
+  while (start > 0 && used < budget) {
+    start--;
+    used += Math.max(1, Math.ceil((lines[start].length || 1) / Math.max(20, cols - 4)));
+  }
+  if (start <= 0) return msg;
+  return { ...msg, text: "…\n" + lines.slice(start).join("\n") };
+}
+
+// The transcript tail re-renders on every keystroke/animation tick now that it lives
+// inside the dynamic frame — memo so markdown/highlighting only re-computes per message.
+const MemoMessage = React.memo(Message);
 
 function CastingLine({ skill }: { skill: SkillActivation }) {
   const i = useFrameLoop(castingFrames.length, 8);
@@ -89,6 +133,7 @@ export function Chat({
   onRebuildRuntime: () => Promise<AgentRuntime>;
 }) {
   const { exit } = useApp();
+  const { noteTyping } = useDelight();
   const cwd = options.cwd ?? process.cwd();
   const chat = useChat(runtime, {
     cli: options.cli ?? "claude",
@@ -100,6 +145,37 @@ export function Chat({
   });
   const [notice, setNotice] = useState("");
   const [localLog, setLocalLog] = useState<ChatMessage[]>([]);
+  // live terminal height - the frame is sized to it so the bottom chrome (status +
+  // composer section + footer) is structurally pinned to the bottom edge.
+  const [rows, setRows] = useState(process.stdout.rows || 24);
+
+  // terminal resize: ink redraws the dynamic frame, but everything already printed (the
+  // <Static> scrollback, the welcome logo) re-wraps into garbage — squished logos, half
+  // frames. Wipe the screen and replay the transcript fresh at the new size.
+  useEffect(() => {
+    const onResize = () => {
+      setRows(process.stdout.rows || 24);
+      process.stdout.write("\u001b[2J\u001b[3J\u001b[H");
+      chat.redraw();
+    };
+    process.stdout.on("resize", onResize);
+    return () => {
+      process.stdout.off("resize", onResize);
+    };
+  }, [chat.redraw]);
+
+  // local separators belong to the session they were typed in.
+  useEffect(() => {
+    setLocalLog([]);
+  }, [chat.pendingId]);
+
+  // codex-style self-update notice: one background registry check per launch; a newer
+  // published CLI surfaces as a banner with the exact official command.
+  useEffect(() => {
+    void checkCliUpdate().then((u) => {
+      if (u) setNotice(`update available: v${u.installed} → v${u.latest} · ${CLI_UPDATE_COMMAND}`);
+    });
+  }, []);
   // Welcome-panel data, fetched once on mount: cloud/storage (local-only → null), the
   // masked Helius key ("••••AB12" or null = default RPC), and the wallet's owned skills.
   const [cloud, setCloud] = useState<{ kind: string; account?: string } | null>(null);
@@ -346,6 +422,7 @@ export function Chat({
   useInput(
     (input, key) => {
       if (!pendingApproval || !approval) return;
+      noteTyping(); // free-text entry — freeze animations so IME composition stays stable
       if (key.escape) return setReplyMode(null); // back to buttons
       if (key.return) {
         const text = replyText.trim();
@@ -1059,9 +1136,20 @@ export function Chat({
   const lastMsg = chat.messages[chat.messages.length - 1];
   const streaming = chat.busy && lastMsg?.role === "assistant";
   const baseCommitted = streaming ? chat.messages.slice(0, -1) : chat.messages;
-  // Append local system messages (model-switch separators etc.) after committed chat history.
-  const committed = localLog.length ? [...baseCommitted, ...localLog] : baseCommitted;
-  const liveMsg = streaming ? lastMsg : null;
+  // Weave local system messages (model-switch separators etc.) into the committed history.
+  const committed = interleaveByTs(baseCommitted, localLog);
+  const liveMsg = streaming
+    ? clampLiveTail(lastMsg, rows, process.stdout.columns || 80)
+    : null;
+
+  // Claude-style sectioned layout: the frame OWNS the whole terminal. The transcript tail
+  // stays on screen inside the content section (bottom-aligned, clipped at the top);
+  // messages older than the tail are archived to <Static> — real scrollback above the
+  // frame. The cut only ever moves forward, so Static stays append-only.
+  const TAIL = 8;
+  const cut = Math.max(0, committed.length - TAIL);
+  const archived = committed.slice(0, cut);
+  const tail = committed.slice(cut);
 
   // the welcome control panel shows on an empty, idle session. Focus stays on the composer
   // by default; Ctrl+S moves focus INTO the panel (panelActive), which then owns
@@ -1070,40 +1158,56 @@ export function Chat({
   const panelActive = showPanel && panelFocused;
 
   return (
-    <Box flexDirection="column" paddingX={1}>
-      {/* startup welcome panel — shown only on empty session so it doesn't re-appear.
-          Logo-left / editable settings-right: wallet, cloud, engine + github. The composer
-          keeps focus until Ctrl+S; then tab/enter control the panel, Esc returns to chat. */}
-      {showPanel ? (
-        <WelcomePanel
-          walletAddr={address}
-          cloud={cloud}
-          engine={chat.cli}
-          heliusMasked={heliusMasked}
-          skills={skills}
-          passive={passive}
-          dasReady={dasReady}
-          active={panelActive}
-          onEdit={editPanelField}
-          onSetHelius={setHelius}
-          onOpenMarket={openMarket}
-          onExit={() => setPanelFocused(false)}
-        />
-      ) : null}
-      {showPanel ? <Text dimColor>{copy.emptySessions}</Text> : null}
-
-      <Static key={chat.epoch} items={committed.map((m, i) => ({ m, i }))}>
+    <Box flexDirection="column" paddingX={1} height={rows - 1}>
+      <Static key={chat.epoch} items={archived.map((m, i) => ({ m, i }))}>
         {({ m, i }) => <Message key={`${m.ts}-${i}`} msg={m} />}
       </Static>
 
-      {chat.hasMore ? <Text dimColor>… older history above · /more to load</Text> : null}
+      {/* content section — fills everything above the bottom chrome; newest content hugs
+          the composer and older lines clip off the top (they live in scrollback). */}
+      <Box flexDirection="column" flexGrow={1} justifyContent="flex-end" overflow="hidden">
+        {/* startup welcome panel — shown only on empty session so it doesn't re-appear.
+            Logo-left / editable settings-right: wallet, cloud, engine + github. The composer
+            keeps focus until Ctrl+S; then tab/enter control the panel, Esc returns to chat. */}
+        {showPanel ? (
+          <WelcomePanel
+            walletAddr={address}
+            cloud={cloud}
+            engine={chat.cli}
+            heliusMasked={heliusMasked}
+            skills={skills}
+            passive={passive}
+            dasReady={dasReady}
+            active={panelActive}
+            onEdit={editPanelField}
+            onSetHelius={setHelius}
+            onOpenMarket={openMarket}
+            onExit={() => setPanelFocused(false)}
+          />
+        ) : null}
+        {showPanel ? <Text dimColor>{copy.emptySessions}</Text> : null}
 
-      {liveMsg ? <Message msg={liveMsg} live /> : null}
+        {chat.hasMore && tail.length < TAIL ? <Text dimColor>… older history above · /more to load</Text> : null}
 
-      {chat.busy && !pendingApproval ? <ThinkingLine /> : null}
+        {tail.map((m, i) => (
+          <MemoMessage key={`${m.ts}-${cut + i}`} msg={m} />
+        ))}
 
-      {chat.firingSkill ? <CastingLine skill={chat.firingSkill} /> : null}
+        {liveMsg ? <Message msg={liveMsg} live /> : null}
 
+        {chat.busy && !pendingApproval ? <ThinkingLine elapsed={chat.elapsed} /> : null}
+
+        {chat.firingSkill ? <CastingLine skill={chat.firingSkill} /> : null}
+
+        <Celebrate kind={celebrate} />
+        {idle && !chat.busy ? <Text dimColor>{copy.idleNudge}</Text> : null}
+        {notice ? <NoticeBanner text={notice} /> : null}
+      </Box>
+
+      <StatusLine mood={mood} cli={chat.cli} model={chat.model} effort={chat.effort} cwd={cwd} elapsed={chat.busy ? chat.elapsed : undefined} sync={cloud && cloud.kind !== "local" ? (cloudStatus ? { ok: cloudStatus.ok, error: cloudStatus.ok ? undefined : cloudStatus.error, reason: cloudStatus.ok ? undefined : cloudStatus.reason } : { ok: true }) : null} ctx={usedFrac} ctxTokens={usedTokens !== undefined ? Math.round(usedTokens) : undefined} ctxWindow={usedFrac !== undefined ? WINDOW : undefined} ctxApprox={!ctxReal} />
+
+      {/* the bottom slot: the composer — which, Claude-style, TURNS INTO the approval
+          prompt while a tool asks permission, so the interaction stays in one place */}
       {pendingApproval ? (
         <ApprovalCard
           req={pendingApproval}
@@ -1112,15 +1216,7 @@ export function Chat({
           diffExpanded={diffExpanded}
           activeDiffFileIdx={activeDiffFileIdx}
         />
-      ) : null}
-
-      <Celebrate kind={celebrate} />
-      {idle && !chat.busy ? <Text dimColor>{copy.idleNudge}</Text> : null}
-
-      <StatusLine mood={mood} cli={chat.cli} model={chat.model} effort={chat.effort} cwd={cwd} elapsed={chat.busy ? chat.elapsed : undefined} sync={cloud && cloud.kind !== "local" ? (cloudStatus ? { ok: cloudStatus.ok, error: cloudStatus.ok ? undefined : cloudStatus.error, reason: cloudStatus.ok ? undefined : cloudStatus.reason } : { ok: true }) : null} ctx={usedFrac} ctxTokens={usedTokens !== undefined ? Math.round(usedTokens) : undefined} ctxWindow={usedFrac !== undefined ? WINDOW : undefined} ctxApprox={!ctxReal} />
-
-      {/* hide the composer while an approval is pending — keys answer the card instead */}
-      {!pendingApproval ? (
+      ) : (
         <Box marginTop={1}>
           <Composer
             cwd={cwd}
@@ -1129,8 +1225,7 @@ export function Chat({
             history={chat.messages.filter((m) => m.role === "user").map((m) => m.text)}
           />
         </Box>
-      ) : null}
-      {notice ? <NoticeBanner text={notice} /> : null}
+      )}
       <Footer cli={chat.cli} model={chat.model} busy={chat.busy} />
     </Box>
   );

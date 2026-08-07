@@ -305,6 +305,9 @@ export function useChat(
   // cleanup on unmount
   useEffect(() => () => dropHandle(), [dropHandle]);
 
+  // force a full <Static> repaint (e.g. after a terminal resize wiped the screen).
+  const redraw = useCallback(() => setEpoch((e) => e + 1), []);
+
   return {
     messages,
     sessions,
@@ -331,5 +334,6 @@ export function useChat(
     deleteSession,
     refreshSessions,
     firingSkill,
+    redraw,
   };
 }

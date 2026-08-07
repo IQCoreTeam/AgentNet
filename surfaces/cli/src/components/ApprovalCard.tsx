@@ -25,14 +25,15 @@ export function ApprovalCard({
   const danger = req.risk === "danger";
   const accent = danger ? colors.err : colors.warn;
   const canEdit = req.kind === "bash";
+  // corner focus marks (ㄱ top-right / ㄴ bottom-left), same language as the composer —
+  // this card takes the composer's slot, so it wears the same frame. Danger doubles the
+  // corner strokes where the calm card uses single lines.
+  const cols = process.stdout.columns || 80;
+  const cornerTop = " ".repeat(Math.max(0, cols - 5)) + (danger ? "══╗" : "──┐");
+  const cornerBottom = danger ? "╚══" : "└──";
   return (
-    <Box
-      flexDirection="column"
-      borderStyle={danger ? "double" : "round"}
-      borderColor={accent}
-      paddingX={1}
-      marginTop={1}
-    >
+    <Box flexDirection="column" marginTop={1}>
+      <Text color={accent}>{cornerTop}</Text>
       <Text color={accent} bold>
         {danger ? "⚠ DANGER · " : `${glyph.thinking} `}
         {req.cli} wants to use {req.tool}
@@ -88,6 +89,7 @@ export function ApprovalCard({
           ) : null}
         </Box>
       )}
+      <Text color={accent}>{cornerBottom}</Text>
     </Box>
   );
 }

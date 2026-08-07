@@ -77,6 +77,7 @@ export function App({ options }: { options: AppOptions }) {
     set(3, { status: "ok", label: "storage ready" });
     // wipe the boot banner/checklist from the scrollback so the welcome panel lands on a
     // clean screen (Ink leaves prior static output in the terminal history otherwise).
+    // Chat's frame is sized to the terminal, so the bottom chrome lands on the bottom edge.
     process.stdout.write("\x1b[2J\x1b[3J\x1b[H");
     setPhase("chat");
     if (freshCloud) {
