@@ -33,10 +33,8 @@ import { copyToClipboard } from "../clipboard.js";
 import { Message } from "../components/Message.js";
 import { StatusLine } from "../components/StatusLine.js";
 import { ApprovalCard } from "../components/ApprovalCard.js";
-import { Celebrate } from "../components/Celebrate.js";
 import { Composer } from "../components/Composer.js";
 import { WelcomePanel, type PanelField, type OwnedSkill } from "../components/WelcomePanel.js";
-import { NoticeBanner } from "../components/NoticeBanner.js";
 import { Footer } from "../components/Footer.js";
 import { SessionList } from "./SessionList.js";
 import { LoginGate } from "./LoginGate.js";
@@ -47,18 +45,70 @@ import type { EffortLevel } from "../prefs.js";
 import { type Mood } from "../components/Iggy.js";
 import { useDelight } from "../components/DelightProvider.js";
 import { checkCliUpdate, CLI_UPDATE_COMMAND } from "../selfUpdate.js";
-import { thinkingLabels, castingFrames, colors, copy, glyph, pick, rule, tag } from "../theme.js";
+import { thinkingLabels, castingFrames, confetti, colors, copy, glyph, pick, rule, tag } from "../theme.js";
 
-// IQ-flavored rotating label while a turn runs — with the running clock and the escape
-// hatch, Claude-style, so a long turn reads as alive instead of stuck.
-function ThinkingLine({ elapsed }: { elapsed?: number }) {
-  const i = useFrameLoop(thinkingLabels.length, 1.2);
-  return (
-    <Box paddingLeft={2} marginTop={1}>
-      <Text color={colors.iqViolet}>{thinkingLabels[i]}</Text>
-      {elapsed !== undefined ? <Text dimColor> {Math.round(elapsed)}s · esc interrupt</Text> : null}
-    </Box>
-  );
+// The single transient slot, and the reason it exists: every one of these states used to
+// be its own conditionally-rendered element stacked in the frame, so the frame's HEIGHT
+// changed each time one appeared or cleared - a notice arriving, a turn starting, the
+// celebration after it, the idle nudge at 60s. Each change shifts every band below it,
+// which is what made the status band and the composer look like they were vanishing and
+// coming back. One row, always rendered, one state at a time: the chrome's height is now
+// constant and nothing below it can move.
+function ActivityRow({
+  notice,
+  busy,
+  elapsed,
+  skill,
+  celebrate,
+  idle,
+}: {
+  notice: string;
+  busy: boolean;
+  elapsed?: number;
+  skill: SkillActivation | null;
+  celebrate: "sparkle" | "confetti" | null;
+  idle: boolean;
+}) {
+  // one ticker drives whichever animation the active state needs; the row renders even
+  // when idle so the hook order and the row count never change.
+  const think = useFrameLoop(thinkingLabels.length, 1.2);
+  const cast = useFrameLoop(castingFrames.length, 8);
+
+  let body: React.ReactNode = <Text> </Text>;
+  if (notice) {
+    body = (
+      <>
+        <Text color={colors.ok} bold>{"┃ "}</Text>
+        <Text wrap="truncate-end">{notice}</Text>
+      </>
+    );
+  } else if (skill) {
+    body = (
+      <Text wrap="truncate-end">
+        <Text color={colors.iqCyan}>{castingFrames[cast]} </Text>
+        <Text color={colors.bone}>
+          {glyph.sparkle} {copy.castingVerbs[cast % copy.castingVerbs.length]} {copy.castingLabel}{" "}
+        </Text>
+        <Text color={colors.ok} bold>{skill.name}</Text>
+      </Text>
+    );
+  } else if (busy) {
+    body = (
+      <Text wrap="truncate-end">
+        <Text color={colors.iqViolet}>{thinkingLabels[think]}</Text>
+        {elapsed !== undefined ? <Text dimColor> {Math.round(elapsed)}s · ESC INTERRUPT</Text> : null}
+      </Text>
+    );
+  } else if (celebrate) {
+    body = (
+      <Text color={colors.ok} wrap="truncate-end">
+        {celebrate === "confetti" ? confetti : glyph.sparkle}
+      </Text>
+    );
+  } else if (idle) {
+    body = <Text dimColor wrap="truncate-end">{copy.idleNudge}</Text>;
+  }
+  return <Box height={1}>{body}</Box>;
 }
 
 // Merge the ephemeral local separators (model-switch lines) into the transcript by
@@ -97,21 +147,6 @@ function clampLiveTail(msg: ChatMessage, rows: number, cols: number): ChatMessag
   return { ...msg, text: "…\n" + lines.slice(start).join("\n") };
 }
 
-function CastingLine({ skill }: { skill: SkillActivation }) {
-  const i = useFrameLoop(castingFrames.length, 8);
-  const verb = copy.castingVerbs[i % copy.castingVerbs.length];
-  const tint = i % 2 === 0 ? colors.iqViolet : colors.iqMagenta;
-  return (
-    <Box paddingLeft={2} marginTop={1}>
-      <Box borderStyle="round" borderColor={tint} paddingX={1}>
-        <Text color={colors.iqMagenta}>{castingFrames[i]} </Text>
-        <Text color={colors.iqViolet}>{glyph.sparkle} {verb} {copy.castingLabel} </Text>
-        <Text color={colors.iqCyan}>{skill.name}</Text>
-        <Text color={colors.iqMagenta}> {castingFrames[(i + 2) % castingFrames.length]}</Text>
-      </Box>
-    </Box>
-  );
-}
 
 export function Chat({
   runtime,
@@ -1241,17 +1276,18 @@ export function Chat({
         {chat.hasMore ? <Text dimColor>… older history above · /more to load</Text> : null}
 
         {liveMsg ? <Message msg={liveMsg} live /> : null}
-
-        {chat.busy && !pendingApproval ? <ThinkingLine elapsed={chat.elapsed} /> : null}
-
-        {chat.firingSkill ? <CastingLine skill={chat.firingSkill} /> : null}
-
-        <Celebrate kind={celebrate} />
-        {idle && !chat.busy ? <Text dimColor>{copy.idleNudge}</Text> : null}
-        {notice ? <NoticeBanner text={notice} /> : null}
       </Box>
 
-      {/* bottom chrome — rule-separated bands, design-project style */}
+      {/* bottom chrome — rule-separated bands of CONSTANT height (only the composer
+          grows, and only as the user types), so nothing below ever shifts */}
+      <ActivityRow
+        notice={notice}
+        busy={chat.busy && !pendingApproval}
+        elapsed={chat.elapsed}
+        skill={chat.firingSkill}
+        celebrate={celebrate}
+        idle={idle && !chat.busy}
+      />
       <Text color={colors.bone}>{rule(ruleW)}</Text>
       <StatusLine mood={mood} cli={chat.cli} model={chat.model} effort={chat.effort} cwd={cwd} elapsed={chat.busy ? chat.elapsed : undefined} sync={cloud && cloud.kind !== "local" ? (cloudStatus ? { ok: cloudStatus.ok, error: cloudStatus.ok ? undefined : cloudStatus.error, reason: cloudStatus.ok ? undefined : cloudStatus.reason } : { ok: true }) : null} ctx={usedFrac} ctxTokens={usedTokens !== undefined ? Math.round(usedTokens) : undefined} ctxWindow={usedFrac !== undefined ? WINDOW : undefined} ctxApprox={!ctxReal} />
       <Text color={colors.bone}>{rule(ruleW)}</Text>
