@@ -7,6 +7,7 @@ import { InkApprovalChannel } from "./InkApprovalChannel.js";
 import { Banner } from "./components/Banner.js";
 import { BootChecklist, type BootStep } from "./components/BootChecklist.js";
 import { Onboarding } from "./views/Onboarding.js";
+import { LoginGate } from "./views/LoginGate.js";
 import { Chat } from "./views/Chat.js";
 import { colors } from "./theme.js";
 import {
@@ -18,7 +19,7 @@ import {
 } from "./bootstrap.js";
 import { readPrefs, savePrefs, type Prefs } from "./prefs.js";
 
-type Phase = "boot" | "onboard" | "chat" | "error";
+type Phase = "boot" | "onboard" | "login" | "chat" | "error";
 
 export interface AppOptions {
   cli?: "claude" | "codex";
@@ -119,7 +120,23 @@ export function App({ options }: { options: AppOptions }) {
         // stops the every-launch onboarding loop.)
         if (savedPrefs.onboarded || (await isInitialized())) {
           if (!alive) return;
-          await go(addr, wallet);
+          // returning user, but the engine chat will open with isn't signed in — gate on
+          // a login screen (claude/codex choice) before entering chat. Skippable.
+          const eff = options.cli ?? savedPrefs.lastCli ?? "claude";
+          if (rep[eff] !== "ok") {
+            loginDone.current = (rep2, logged) => {
+              setReport(rep2);
+              if (logged) {
+                setPrefs((p) => ({ ...p, lastCli: logged }));
+                void savePrefs({ lastCli: logged });
+              }
+              void go(addr, wallet);
+            };
+            setLoginPrefer(rep[eff] === "missing" && rep[eff === "claude" ? "codex" : "claude"] !== "missing" ? (eff === "claude" ? "codex" : "claude") : eff);
+            setPhase("login");
+          } else {
+            await go(addr, wallet);
+          }
         } else {
           if (!alive) return;
           set(3, { status: "ok", label: "storage: pick on next screen" });
@@ -144,6 +161,9 @@ export function App({ options }: { options: AppOptions }) {
 
   // set by the boot effect so Onboarding can finish with the live wallet in scope.
   const onboardFinish = React.useRef<(engine: "claude" | "codex", cfg?: StorageConfig) => void>(() => {});
+  // login-gate continuation + which engine its picker should preselect.
+  const loginDone = React.useRef<(rep: CliReport, logged?: "claude" | "codex") => void>(() => {});
+  const [loginPrefer, setLoginPrefer] = useState<"claude" | "codex">("claude");
 
   if (phase === "error") {
     return (
@@ -164,6 +184,10 @@ export function App({ options }: { options: AppOptions }) {
 
   if (phase === "onboard") {
     return <Onboarding report={report} address={address} onDone={(engine, cfg) => onboardFinish.current(engine, cfg)} />;
+  }
+
+  if (phase === "login") {
+    return <LoginGate report={report} prefer={loginPrefer} onDone={(rep, logged) => loginDone.current(rep, logged)} />;
   }
 
   // chat — apply remembered prefs as defaults (explicit flags win); --continue resumes

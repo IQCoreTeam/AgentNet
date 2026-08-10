@@ -238,19 +238,24 @@ export function Composer({
   const tail = value.slice(cursor + 1);
   const empty = value.length === 0;
 
-  // Park the REAL terminal cursor on the caret after every frame, so IME composition
-  // (Hangul/CJK preedit) renders inline instead of below the UI. Only when the geometry
-  // is knowable: single-line, unwrapped buffer. Row math mirrors what renders below the
-  // input line — the ㄴ corner line and the menu block here, plus the footer
-  // (blank margin + row) in Chat.
+  // Whether the REAL terminal cursor is parked on the caret this frame (single-line,
+  // unwrapped buffer only — the geometry is unknowable once the line wraps). While
+  // pinned, the real cursor IS the caret: the fake inverse block must not render too,
+  // or IME preedit shows up beside a second cursor and every composing glyph doubles.
+  const stdoutCols = process.stdout.columns || 80;
+  const pinned = !disabled && !value.includes("\n") && 4 + displayWidth(value) < stdoutCols;
+
+  // Park the real cursor on the caret after every frame, so IME composition
+  // (Hangul/CJK preedit) renders inline instead of below the UI. Row math mirrors what
+  // renders below the input line — the ㄴ corner line and the menu block here, plus the
+  // footer (blank margin + row) in Chat.
   useEffect(() => {
-    const cols = process.stdout.columns || 80;
-    // caret column: root paddingX(1) + "❯ "(2) + head, 1-based.
-    const col = 4 + displayWidth(head);
-    if (disabled || value.includes("\n") || 4 + displayWidth(value) >= cols) {
+    if (!pinned) {
       unpinCursor();
       return;
     }
+    // caret column: root paddingX(1) + "❯ "(2) + head, 1-based.
+    const col = 4 + displayWidth(head);
     const menuLines = menu ? menu.items.length + 2 : 0; // marginTop + items + hint row
     const footerLines = 2; // Chat renders the footer (marginTop + row) below us
     pinCursor(menuLines + footerLines + 2, col); // +2: ㄴ corner line + ink's resting line
@@ -277,6 +282,10 @@ export function Composer({
         <Text color={colors.iqCyan}>❯ </Text>
         {empty && !attached.length ? (
           <Text dimColor>message · / for commands · @ for files · Ctrl+V image</Text>
+        ) : pinned ? (
+          // real cursor is parked on the caret — drawing the fake block too would show
+          // two cursors (and doubled glyphs while the IME composes)
+          <Text>{value}</Text>
         ) : (
           <Text>
             {head}
