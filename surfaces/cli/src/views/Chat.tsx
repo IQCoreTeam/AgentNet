@@ -47,7 +47,7 @@ import type { EffortLevel } from "../prefs.js";
 import { type Mood } from "../components/Iggy.js";
 import { useDelight } from "../components/DelightProvider.js";
 import { checkCliUpdate, CLI_UPDATE_COMMAND } from "../selfUpdate.js";
-import { thinkingLabels, castingFrames, colors, copy, glyph, pick } from "../theme.js";
+import { thinkingLabels, castingFrames, colors, copy, glyph, pick, rule, tag } from "../theme.js";
 
 // IQ-flavored rotating label while a turn runs — with the running clock and the escape
 // hatch, Claude-style, so a long turn reads as alive instead of stuck.
@@ -148,9 +148,12 @@ export function Chat({
   });
   const [notice, setNotice] = useState("");
   const [localLog, setLocalLog] = useState<ChatMessage[]>([]);
-  // live terminal height - the frame is sized to it so the bottom chrome (status +
-  // composer section + footer) is structurally pinned to the bottom edge.
+  // live terminal size - the frame is sized to it so the bottom chrome (status +
+  // composer section + footer) is structurally pinned to the bottom edge, and the
+  // section rules span the full width.
   const [rows, setRows] = useState(process.stdout.rows || 24);
+  const [cols, setCols] = useState(process.stdout.columns || 80);
+  const ruleW = Math.max(0, cols - 2); // frame paddingX(1) each side
 
   // terminal resize: ink redraws the dynamic frame, but everything already printed (the
   // <Static> scrollback, the welcome logo) re-wraps into garbage — squished logos, half
@@ -158,6 +161,7 @@ export function Chat({
   useEffect(() => {
     const onResize = () => {
       setRows(process.stdout.rows || 24);
+      setCols(process.stdout.columns || 80);
       process.stdout.write("\u001b[2J\u001b[3J\u001b[H");
       chat.redraw();
     };
@@ -1199,6 +1203,19 @@ export function Chat({
         {({ m, i }) => <Message key={`${m.ts}-${i}`} msg={m} />}
       </Static>
 
+      {/* header band — hidden on short terminals so chat keeps the rows */}
+      {rows >= 20 ? (
+        <>
+          <Box justifyContent="space-between">
+            <Text color={colors.bone} bold>AGENTNET · CLI {"///"}</Text>
+            <Text dimColor>
+              {chat.sessions.length} SESSION{chat.sessions.length === 1 ? "" : "S"} · ENCRYPTED
+            </Text>
+          </Box>
+          <Text color={colors.bone}>{rule(ruleW)}</Text>
+        </>
+      ) : null}
+
       {/* content section — fills everything above the bottom chrome; newest content hugs
           the composer and older lines clip off the top (they live in scrollback). */}
       <Box flexDirection="column" flexGrow={1} justifyContent="flex-end" overflow="hidden">
@@ -1240,10 +1257,13 @@ export function Chat({
         {notice ? <NoticeBanner text={notice} /> : null}
       </Box>
 
+      {/* bottom chrome — rule-separated bands, design-project style */}
+      <Text color={colors.bone}>{rule(ruleW)}</Text>
       <StatusLine mood={mood} cli={chat.cli} model={chat.model} effort={chat.effort} cwd={cwd} elapsed={chat.busy ? chat.elapsed : undefined} sync={cloud && cloud.kind !== "local" ? (cloudStatus ? { ok: cloudStatus.ok, error: cloudStatus.ok ? undefined : cloudStatus.error, reason: cloudStatus.ok ? undefined : cloudStatus.reason } : { ok: true }) : null} ctx={usedFrac} ctxTokens={usedTokens !== undefined ? Math.round(usedTokens) : undefined} ctxWindow={usedFrac !== undefined ? WINDOW : undefined} ctxApprox={!ctxReal} />
+      <Text color={colors.bone}>{rule(ruleW)}</Text>
 
-      {/* the bottom slot: the composer — which, Claude-style, TURNS INTO the approval
-          prompt while a tool asks permission, so the interaction stays in one place */}
+      {/* the composer band — which, Claude-style, TURNS INTO the approval prompt while
+          a tool asks permission, so the interaction stays in one place */}
       {pendingApproval ? (
         <ApprovalCard
           req={pendingApproval}
@@ -1253,15 +1273,14 @@ export function Chat({
           activeDiffFileIdx={activeDiffFileIdx}
         />
       ) : (
-        <Box marginTop={1}>
-          <Composer
-            cwd={cwd}
-            onSubmit={onSubmit}
-            disabled={showSessions || panelActive}
-            history={chat.messages.filter((m) => m.role === "user").map((m) => m.text)}
-          />
-        </Box>
+        <Composer
+          cwd={cwd}
+          onSubmit={onSubmit}
+          disabled={showSessions || panelActive}
+          history={chat.messages.filter((m) => m.role === "user").map((m) => m.text)}
+        />
       )}
+      <Text color={colors.bone}>{rule(ruleW)}</Text>
       <Footer cli={chat.cli} model={chat.model} busy={chat.busy} />
     </Box>
   );

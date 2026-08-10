@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { ChatMessage } from "@iqlabs-official/agent-sdk/runtime/contract";
-import { glyph, colors } from "../theme.js";
+import { glyph, colors, tag } from "../theme.js";
 import { ToolCard } from "./ToolCard.js";
 import { Markdown } from "./Markdown.js";
 
@@ -15,7 +15,7 @@ export function Message({ msg, live }: { msg: ChatMessage; live?: boolean }) {
     return (
       <Box marginTop={1}>
         <Text color={colors.user} bold>
-          {glyph.user} you{" "}
+          {tag("you")}{" "}
         </Text>
         <Text>{msg.text}</Text>
       </Box>
@@ -25,7 +25,7 @@ export function Message({ msg, live }: { msg: ChatMessage; live?: boolean }) {
   if (msg.role === "thinking") {
     return (
       <Box paddingLeft={2}>
-        <Text color={colors.iqViolet} italic dimColor>
+        <Text color={colors.iqViolet} italic>
           {glyph.thinking} {msg.text}
         </Text>
       </Box>
@@ -34,9 +34,9 @@ export function Message({ msg, live }: { msg: ChatMessage; live?: boolean }) {
 
   if (msg.role === "summary") {
     return (
-      <Box marginTop={1} paddingLeft={1}>
-        <Text color={colors.warn}>
-          {glyph.summary} summary: {msg.text}
+      <Box marginTop={1}>
+        <Text color={colors.iqViolet}>
+          {glyph.summary} {msg.text}
         </Text>
       </Box>
     );
@@ -44,30 +44,16 @@ export function Message({ msg, live }: { msg: ChatMessage; live?: boolean }) {
 
   // assistant
   const who = msg.cli === "codex" ? "codex" : "claude";
-  const g = msg.cli === "codex" ? glyph.codex : glyph.claude;
-  const tint = msg.cli === "codex" ? colors.codex : colors.claude;
-  return <Assistant text={msg.text} who={who} g={g} tint={tint} live={!!live} />;
+  return <Assistant text={msg.text} who={who} live={!!live} />;
 }
 
-function Assistant({
-  text,
-  who,
-  g,
-  tint,
-  live,
-}: {
-  text: string;
-  who: string;
-  g: string;
-  tint: string;
-  live: boolean;
-}) {
+function Assistant({ text, who, live }: { text: string; who: string; live: boolean }) {
   // while live (turn in progress), show raw text — real token deltas already stream it in.
   // once the turn settles, re-render as full markdown (headings, lists, code, inline).
   return (
     <Box flexDirection="column" marginTop={1}>
-      <Text color={tint} bold>
-        {g} {who}
+      <Text color={colors.bone} bold>
+        {tag(who)}
       </Text>
       <Box paddingLeft={2}>{live ? <Text>{text || "…"}</Text> : <Markdown text={text} />}</Box>
     </Box>

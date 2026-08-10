@@ -47,36 +47,37 @@ export function StatusLine({
   ctxWindow?: number; // model window size (for label)
   ctxApprox?: boolean;
 }) {
-  const tint = cli === "codex" ? colors.codex : colors.claude;
   const usedFrac = ctx ?? 0;
   const tokenLabel = ctxTokens !== undefined && ctxWindow !== undefined
-    ? ` ${fmtK(ctxTokens)} / ${fmtK(ctxWindow)}`
-    : ctx !== undefined ? ` ${Math.round(usedFrac * 100)}%` : "";
+    ? `${fmtK(ctxTokens)}/${fmtK(ctxWindow)}`
+    : ctx !== undefined ? `${Math.round(usedFrac * 100)}%` : "";
 
+  // One status band, design-project style:
+  //   ( ◕ ◡ ◕ )  CLAUDE · default · repo · SYNCED        [██░░░░░░] 31k/200k · ⏱ 12.4s
   return (
-    <Box marginTop={1} flexDirection="column">
-      {/* main status row */}
+    <Box justifyContent="space-between">
       <Box>
         <Iggy mood={mood} />
-        <Text color={tint} bold>{"  "}{cli}</Text>
-        <Text dimColor>·{model ?? "default"}</Text>
-        {effort ? <Text dimColor> ·{effort}</Text> : null}
+        <Text color={colors.bone} bold>{"  "}{cli.toUpperCase()}</Text>
+        <Text dimColor> · {model ?? "default"}</Text>
+        {effort ? <Text dimColor> · {effort}</Text> : null}
         <Text dimColor> · {basename(cwd) || cwd}</Text>
-        {elapsed !== undefined ? <Text color={colors.iqCyan}> · {elapsed.toFixed(1)}s</Text> : null}
         {sync ? (
           <Text color={sync.ok ? colors.ok : colors.err}>
             {" · "}
-            {sync.ok ? "☁ synced" : sync.reason === "reauth" ? "☁ reconnect needed (/storage)" : "☁ offline"}
+            {sync.ok ? "SYNCED" : sync.reason === "reauth" ? "RECONNECT (/storage)" : "OFFLINE"}
           </Text>
         ) : null}
       </Box>
-      {/* context bar row — only shown once we have data (real or approx) */}
-      {ctx !== undefined ? (
-        <Box paddingLeft={4}>
-          <CtxBar used={usedFrac} approx={!!ctxApprox} />
-          <Text dimColor>{tokenLabel} ctx</Text>
-        </Box>
-      ) : null}
+      <Box>
+        {ctx !== undefined ? (
+          <>
+            <CtxBar used={usedFrac} approx={!!ctxApprox} />
+            <Text dimColor> {tokenLabel}</Text>
+          </>
+        ) : null}
+        {elapsed !== undefined ? <Text dimColor> · ⏱ {elapsed.toFixed(1)}s</Text> : null}
+      </Box>
     </Box>
   );
 }

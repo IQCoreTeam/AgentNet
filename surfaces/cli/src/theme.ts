@@ -2,20 +2,30 @@
 // Components read these tokens and never hardcode a color/emoji — so reskinning (or
 // adding a second theme) is a single-file edit, and the playful voice stays consistent.
 
+// Industrial mono palette (from the claude.ai/design "AgentNet CLI Screens" project):
+// bone white on near-black, warm gray for structure, ONE signal green accent. The old
+// cyan/magenta/violet keys are kept as aliases so every component reskins in place.
 export const colors = {
-  // IQ brand accents
-  iqCyan: "#27e0d6",
-  iqMagenta: "#ff5cf0",
-  iqViolet: "#9b6cff",
-  accent: "cyan",
-  dim: "gray",
-  ok: "green",
-  warn: "yellow",
-  err: "red",
-  user: "cyan",
-  claude: "#d97757", // claude's warm clay
-  codex: "#10a37f", // codex green
+  iqCyan: "#3fd96f", // primary accent (signal green)
+  iqMagenta: "#ecebe4", // titles / emphasis (bone)
+  iqViolet: "#85857e", // thinking / secondary labels (warm gray)
+  accent: "#3fd96f",
+  dim: "#85857e",
+  ok: "#3fd96f",
+  warn: "#e3b341",
+  err: "#f8514f",
+  user: "#ecebe4",
+  claude: "#ecebe4", // engines are monochrome; glyphs (◇/◆) carry identity
+  codex: "#ecebe4",
+  bone: "#ecebe4",
+  ink: "#0a0a0b",
 } as const;
+
+// Section rule — the heavy horizontal line that separates every band of the frame.
+export const rule = (w: number): string => "━".repeat(Math.max(0, w));
+
+// Industrial label: `tag("wallet")` → "//WALLET_"
+export const tag = (s: string): string => `//${s.toUpperCase()}_`;
 
 // ink-gradient supports named gradients; "vice" = cyan↔magenta = our IQ sweep.
 export const gradients = {

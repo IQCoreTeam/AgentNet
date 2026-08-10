@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
 import type { EffortLevel } from "../prefs.js";
-import { colors } from "../theme.js";
+import { colors, tag } from "../theme.js";
 
 const EFFORTS: { label: EffortLevel; hint: string }[] = [
   { label: "low",    hint: "minimal thinking, fastest" },
@@ -37,7 +37,7 @@ export function EffortPicker({
   return (
     <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
       <Text bold color={colors.iqMagenta}>
-        ❖ effort · reasoning depth
+        {tag("effort")} REASONING DEPTH
       </Text>
       {opts.map((o, i) => {
         const on = i === idx;
@@ -53,7 +53,7 @@ export function EffortPicker({
         );
       })}
       <Box marginTop={1}>
-        <Text dimColor>↑/↓ · ↵ select · esc cancel</Text>
+        <Text dimColor>↑/↓ MOVE · ↵ SELECT · ESC CANCEL</Text>
       </Box>
     </Box>
   );

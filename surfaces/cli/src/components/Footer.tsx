@@ -15,33 +15,32 @@ export function Footer({
   model?: string;
   busy: boolean;
 }) {
-  const tint = cli === "codex" ? colors.codex : colors.claude;
-  const modelLabel = model ?? "default";
+  const modelLabel = (model ?? "default").toUpperCase();
   const cols = process.stdout.columns || 80;
   const shortcuts =
     cols >= 90
-      ? ["? /help", "Esc cancel", "/new session", "/account"]
+      ? ["? /HELP", "ESC CANCEL", "/NEW SESSION", "/ACCOUNT"]
       : cols >= 64
-        ? ["? /help", "Esc cancel"]
-        : ["? /help"];
+        ? ["? /HELP", "ESC CANCEL"]
+        : ["? /HELP"];
 
   return (
-    <Box justifyContent="space-between" marginTop={1} paddingX={1}>
+    <Box justifyContent="space-between">
       {/* left: shortcuts */}
       <Box>
         {shortcuts.map((s, i) => (
           <Text key={s} dimColor>
-            {i > 0 ? "  ·  " : ""}
+            {i > 0 ? " · " : ""}
             {s}
           </Text>
         ))}
       </Box>
 
-      {/* right: engine + model pill */}
+      {/* right: engine + model */}
       <Box>
-        <Text color={busy ? colors.iqViolet : tint} bold>{"● "}</Text>
-        <Text color={tint} bold>{cli}</Text>
-        <Text dimColor>  ·  {modelLabel}</Text>
+        <Text color={busy ? colors.warn : colors.ok} bold>{"● "}</Text>
+        <Text color={colors.bone} bold>{cli.toUpperCase()}</Text>
+        <Text dimColor> · {modelLabel}</Text>
       </Box>
     </Box>
   );

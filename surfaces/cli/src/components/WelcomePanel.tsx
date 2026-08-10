@@ -1,8 +1,7 @@
 import React from "react";
 import { Box, Text, useInput } from "ink";
-import BigText from "ink-big-text";
 import { HELIUS_QUICKSTART_URL } from "@iqlabs-official/agent-sdk";
-import { colors, glyph } from "../theme.js";
+import { colors, glyph, tag } from "../theme.js";
 
 // Focusable rows, in order. settings first, then one row per owned skill, then the market
 // entry. A single focus index walks all of them (Ctrl+S enters; [tab]/[↑↓] move). The
@@ -22,8 +21,8 @@ export interface OwnedSkill {
   name: string;
 }
 
-// One settings row: a focus caret, a status dot (filled = connected, hollow = not), a
-// label, and a value. The focused row is bold + caret so [tab]/[enter] read at a glance.
+// One settings row, design-project style: `//WALLET_  ◉ value`. The focused row
+// INVERTS (ink on bone) — the strongest focus signature the design uses.
 function SettingRow({
   label,
   value,
@@ -35,17 +34,16 @@ function SettingRow({
   connected: boolean;
   focused: boolean;
 }) {
+  const bg = focused ? colors.bone : undefined;
   return (
     <Box>
-      <Text color={focused ? colors.iqCyan : undefined}>{focused ? "▸ " : "  "}</Text>
-      <Text color={connected ? colors.ok : colors.dim}>{connected ? "◉" : "○"} </Text>
-      <Box width={8}>
-        <Text color={focused ? colors.iqCyan : connected ? undefined : colors.dim} bold={focused}>
-          {label}
+      <Box width={11}>
+        <Text backgroundColor={bg} color={focused ? colors.ink : colors.bone} bold>
+          {tag(label)}
         </Text>
       </Box>
-      <Text dimColor={!connected} bold={focused}>
-        {value}
+      <Text backgroundColor={bg} color={focused ? colors.ink : connected ? undefined : colors.dim}>
+        {connected ? "◉" : "○"} {value}
       </Text>
     </Box>
   );
@@ -138,28 +136,25 @@ export function WelcomePanel({
   return (
     <Box
       flexDirection="row"
-      borderStyle="round"
-      borderColor={colors.ok}
+      borderStyle="bold"
+      borderColor={colors.bone}
       paddingX={2}
       paddingY={1}
       marginBottom={1}
     >
-      {/* IQ wordmark (left) — grid font, our green. On a narrow terminal the big glyphs
-          would wrap into a squished mess, so fall back to a plain mark. */}
-      <Box flexDirection="column" marginRight={3} justifyContent="center">
-        {(process.stdout.columns || 80) >= 72 ? (
-          <BigText text="IQ" font="grid" colors={[colors.ok]} space={false} />
-        ) : (
-          <Text bold color={colors.ok}>IQ</Text>
-        )}
-        <Text dimColor>the agent layer</Text>
+      {/* mascot column (left) — kaomoji + dither texture, from the design project */}
+      <Box flexDirection="column" marginRight={3} justifyContent="center" alignItems="center">
+        <Text color={colors.bone}>{"( ◕ ◡ ◕ )"}</Text>
+        <Text dimColor>{"⠐⠄ ░▒▓▓▒░ ⠂⠈░▒▒░ ⡀"}</Text>
+        <Text dimColor>{" ⠈  ░░▒▒▒▒░░  ⠠⠁"}</Text>
+        <Text dimColor>THE AGENT LAYER</Text>
       </Box>
 
       {/* welcome + editable settings (middle) */}
       <Box flexDirection="column" justifyContent="center" marginRight={3}>
         <Box marginBottom={1}>
-          <Text bold color={colors.iqCyan}>
-            Welcome back{name ? ` ${name}` : ""}!
+          <Text bold color={colors.bone}>
+            {tag(`welcome back${name ? " " + name : ""}`)}
           </Text>
         </Box>
         <SettingRow label="wallet" value={shortAddr} connected={!!walletAddr} focused={active && focus === 0} />
@@ -167,8 +162,7 @@ export function WelcomePanel({
         <SettingRow label="engine" value={engine} connected focused={active && focus === 2} />
         {keyInput !== null ? (
           <Box>
-            <Text color={colors.iqCyan}>{"▸ "}</Text>
-            <Box width={8}><Text color={colors.iqCyan} bold>helius</Text></Box>
+            <Box width={11}><Text color={colors.iqCyan} bold>{tag("helius")}</Text></Box>
             <Text>{keyInput || ""}</Text>
             <Text inverse> </Text>
           </Box>
@@ -204,7 +198,7 @@ export function WelcomePanel({
       {/* my skills (right) */}
       <Box flexDirection="column" justifyContent="center">
         <Box marginBottom={1}>
-          <Text bold color={colors.iqViolet}>my skills{ownedList.length ? ` (${ownedList.length})` : ""}</Text>
+          <Text bold color={colors.bone}>{tag(`skills${ownedList.length ? " " + ownedList.length : ""}`)}</Text>
         </Box>
         {skills === null ? (
           // still fetching — don't show "none yet" before the read resolves.
@@ -225,15 +219,24 @@ export function WelcomePanel({
             const on = active && focus === idx;
             return (
               <Box key={s.id}>
-                <Text color={on ? colors.iqCyan : undefined}>{on ? "▸ " : "  "}</Text>
-                <Text color={on ? colors.iqCyan : undefined} bold={on}>{s.name}</Text>
+                <Text
+                  backgroundColor={on ? colors.bone : undefined}
+                  color={on ? colors.ink : undefined}
+                  bold={on}
+                >
+                  {glyph.sparkle} {s.name.toUpperCase()}
+                </Text>
               </Box>
             );
           })
         )}
         <Box marginTop={1}>
-          <Text color={active && focus === marketIdx ? colors.iqCyan : colors.dim} bold={active && focus === marketIdx}>
-            {active && focus === marketIdx ? "▸ " : "  "}→ open market
+          <Text
+            backgroundColor={active && focus === marketIdx ? colors.bone : undefined}
+            color={active && focus === marketIdx ? colors.ink : colors.dim}
+            bold={active && focus === marketIdx}
+          >
+            ▸ MARKET
           </Text>
         </Box>
 

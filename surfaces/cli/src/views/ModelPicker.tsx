@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import { MODELS, loadModelOptions } from "../models.js";
-import { colors } from "../theme.js";
+import { colors, tag } from "../theme.js";
 
 // Pick a model for the current engine (↑/↓ + ↵, esc cancels). Built by hand to match the
 // SessionList look and show the per-option hint. value undefined = clear the override.
@@ -43,7 +43,7 @@ export function ModelPicker({
   return (
     <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
       <Text bold color={colors.iqMagenta}>
-        ❖ model · {cli}
+        {tag("model")} {cli.toUpperCase()}
       </Text>
       {opts.map((o, i) => {
         const on = i === safeIdx;
@@ -60,7 +60,7 @@ export function ModelPicker({
         );
       })}
       <Box marginTop={1}>
-        <Text dimColor>↑/↓ · ↵ select · esc cancel</Text>
+        <Text dimColor>↑/↓ MOVE · ↵ SELECT · ESC CANCEL</Text>
       </Box>
     </Box>
   );

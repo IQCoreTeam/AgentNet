@@ -247,8 +247,8 @@ export function Composer({
 
   // Park the real cursor on the caret after every frame, so IME composition
   // (Hangul/CJK preedit) renders inline instead of below the UI. Row math mirrors what
-  // renders below the input line — the ㄴ corner line and the menu block here, plus the
-  // footer (blank margin + row) in Chat.
+  // renders below the input line — the menu block here, plus the section rule + footer
+  // row Chat draws under us.
   useEffect(() => {
     if (!pinned) {
       unpinCursor();
@@ -257,8 +257,8 @@ export function Composer({
     // caret column: root paddingX(1) + "❯ "(2) + head, 1-based.
     const col = 4 + displayWidth(head);
     const menuLines = menu ? menu.items.length + 2 : 0; // marginTop + items + hint row
-    const footerLines = 2; // Chat renders the footer (marginTop + row) below us
-    pinCursor(menuLines + footerLines + 2, col); // +2: ㄴ corner line + ink's resting line
+    const chromeBelow = 2; // Chat: rule line + footer row
+    pinCursor(menuLines + chromeBelow + 1, col); // +1: ink's resting line
   });
   useEffect(() => () => unpinCursor(), []);
 
@@ -272,12 +272,8 @@ export function Composer({
           <Text dimColor>(↵ sends · ⌫ removes last)</Text>
         </Box>
       )}
-      {/* the input section: full-width line framed by corner focus marks — a ㄱ at the
-          top-right, a ㄴ at the bottom-left — instead of a closed box. Corners tint
-          cyan while the composer has focus, dim when something else owns the keys. */}
-      <Text color={disabled ? colors.dim : colors.iqCyan}>
-        {" ".repeat(Math.max(0, (process.stdout.columns || 80) - 5)) + "──┐"}
-      </Text>
+      {/* the input row — a full-width band between the chat frame's section rules
+          (Chat draws the rules); just the green prompt and the buffer here. */}
       <Box>
         <Text color={colors.iqCyan}>❯ </Text>
         {empty && !attached.length ? (
@@ -294,7 +290,6 @@ export function Composer({
           </Text>
         )}
       </Box>
-      <Text color={disabled ? colors.dim : colors.iqCyan}>{"└──"}</Text>
 
       {menu ? (
         <Box flexDirection="column" marginLeft={2} marginTop={1}>
