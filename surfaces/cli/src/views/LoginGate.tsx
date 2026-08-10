@@ -4,6 +4,7 @@ import { Select, TextInput } from "@inkjs/ui";
 import open from "open";
 import {
   detectCli,
+  resolveEngineBin,
   startClaudeLogin,
   startCodexLogin,
   markClaudeConnected,
@@ -72,7 +73,8 @@ export function LoginGate({
     let cancelled = false;
     setErr(null);
     setUrl("");
-    startClaudeLogin()
+    resolveEngineBin("claude")
+      .then((bin) => startClaudeLogin(bin))
       .then((login) => {
         if (cancelled) return login.cancel();
         claudeRef.current = login;
@@ -107,7 +109,8 @@ export function LoginGate({
     setErr(null);
     setUrl("");
     setCodexCode("");
-    startCodexLogin()
+    resolveEngineBin("codex")
+      .then((bin) => startCodexLogin(bin))
       .then((login) => {
         if (cancelled) return login.cancel();
         codexRef.current = login;

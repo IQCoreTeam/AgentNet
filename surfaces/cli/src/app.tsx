@@ -120,10 +120,19 @@ export function App({ options }: { options: AppOptions }) {
         // stops the every-launch onboarding loop.)
         if (savedPrefs.onboarded || (await isInitialized())) {
           if (!alive) return;
-          // returning user, but the engine chat will open with isn't signed in — gate on
-          // a login screen (claude/codex choice) before entering chat. Skippable.
+          // returning user: if the engine chat would open with isn't signed in, fall
+          // back to the OTHER engine when it is (start with what works — no gate), and
+          // only gate on the login screen when nothing is usable. An explicit --cli
+          // flag skips the silent fallback: the user asked for that engine, so gate.
           const eff = options.cli ?? savedPrefs.lastCli ?? "claude";
-          if (rep[eff] !== "ok") {
+          const other: "claude" | "codex" = eff === "claude" ? "codex" : "claude";
+          if (rep[eff] === "ok") {
+            await go(addr, wallet);
+          } else if (!options.cli && rep[other] === "ok") {
+            setPrefs((p) => ({ ...p, lastCli: other }));
+            void savePrefs({ lastCli: other });
+            await go(addr, wallet);
+          } else {
             loginDone.current = (rep2, logged) => {
               setReport(rep2);
               if (logged) {
@@ -132,10 +141,8 @@ export function App({ options }: { options: AppOptions }) {
               }
               void go(addr, wallet);
             };
-            setLoginPrefer(rep[eff] === "missing" && rep[eff === "claude" ? "codex" : "claude"] !== "missing" ? (eff === "claude" ? "codex" : "claude") : eff);
+            setLoginPrefer(rep[eff] === "missing" && rep[other] !== "missing" ? other : eff);
             setPhase("login");
-          } else {
-            await go(addr, wallet);
           }
         } else {
           if (!alive) return;

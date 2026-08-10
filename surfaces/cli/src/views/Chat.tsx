@@ -23,6 +23,8 @@ import {
   BUNDLED_SKILLS,
   startGoogleLogin,
   type GoogleLogin,
+  detectCli,
+  ENGINE_INSTALL_COMMAND,
 } from "@iqlabs-official/agent-sdk";
 import { Select, TextInput } from "@inkjs/ui";
 import open from "open";
@@ -37,6 +39,7 @@ import { WelcomePanel, type PanelField, type OwnedSkill } from "../components/We
 import { NoticeBanner } from "../components/NoticeBanner.js";
 import { Footer } from "../components/Footer.js";
 import { SessionList } from "./SessionList.js";
+import { LoginGate } from "./LoginGate.js";
 import { SkillMarket } from "./SkillMarket.js";
 import { ModelPicker } from "./ModelPicker.js";
 import { EffortPicker } from "./EffortPicker.js";
@@ -536,13 +539,28 @@ export function Chat({
     { isActive: showBtw },
   );
 
+  // Switch engines only when the target is actually usable — a missing engine gets the
+  // official install command, a logged-out one gets the inline login gate. Both call
+  // sites (panel toggle, /engine) funnel through here so the guard can't be bypassed.
+  const [engineLogin, setEngineLogin] = useState<{ target: Engine; report: CliReport } | null>(null);
+  function requestEngine(next: Engine) {
+    void detectCli().then((rep) => {
+      if (rep[next] === "ok") {
+        chat.switchEngine(next);
+        setNotice(`switched to ${next} (session carries over)`);
+      } else if (rep[next] === "missing") {
+        setNotice(`${next} is not installed · run: ${ENGINE_INSTALL_COMMAND[next]}`);
+      } else {
+        setEngineLogin({ target: next, report: rep });
+      }
+    });
+  }
+
   // welcome-panel [enter] on a field: edit it. engine toggles in place; cloud opens the
   // storage picker; wallet copies the address; github is not wired yet.
   function editPanelField(field: PanelField) {
     if (field === "engine") {
-      const next: Engine = chat.cli === "claude" ? "codex" : "claude";
-      chat.switchEngine(next);
-      setNotice(`engine → ${next} (session carries over)`);
+      requestEngine(chat.cli === "claude" ? "codex" : "claude");
       setPanelFocused(false);
       return;
     }
@@ -688,8 +706,7 @@ export function Chat({
         return;
       case "engine":
         if (arg === "claude" || arg === "codex") {
-          chat.switchEngine(arg as Engine);
-          setNotice(`switched to ${arg} (session carries over)`);
+          requestEngine(arg as Engine);
         } else setNotice("usage: /engine claude|codex");
         return;
       case "model":
@@ -1023,6 +1040,25 @@ export function Chat({
           <Box marginTop={1}><Text dimColor>Esc  cancel</Text></Box>
         </Box>
       </Box>
+    );
+  }
+
+  // engine-switch login overlay — the target engine exists but isn't signed in.
+  if (engineLogin) {
+    return (
+      <LoginGate
+        report={engineLogin.report}
+        prefer={engineLogin.target}
+        onDone={(_rep, logged) => {
+          setEngineLogin(null);
+          if (logged) {
+            chat.switchEngine(logged);
+            setNotice(`switched to ${logged} (session carries over)`);
+          } else {
+            setNotice("login skipped · staying on " + chat.cli);
+          }
+        }}
+      />
     );
   }
 

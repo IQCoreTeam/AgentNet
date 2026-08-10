@@ -102,7 +102,7 @@ export {
 export type { SkillOrigin, ClassifiedSkill, SkillManifest, NftSkillRecord } from "./skill-market/registry.js";
 
 export { createRuntime } from "./runtime/index.js";
-export { detectCli } from "./runtime/detect.js";
+export { detectCli, resolveEngineBin } from "./runtime/detect.js";
 export { ENGINE_INSTALL_COMMAND, ENGINE_UPDATE_COMMAND, CODEX_UPDATE_COMMAND } from "./runtime/engineInstall.js";
 export { getEngineVersions, updateEngine, isVersionOlder, type EngineVersionInfo } from "./runtime/engineVersions.js";
 export type { CliStatus, CliReport } from "./runtime/detect.js";
