@@ -162,6 +162,38 @@ export interface PublishSkillInput {
 }
 
 /**
+ * Build the standard NFT JSON that gets code-in'd for BOTH a skill and a workflow
+ * (skill-nft-json.md §2/§4/§4b) — the single source of truth for that shape, so the
+ * two publish paths cannot drift. Attribute order is fixed: `category` once, then each
+ * hashtag as a repeated `skill` trait, then each prerequisite as a `requiredSkill`
+ * trait (workflows only). `image` is emitted only when present, and required-skill
+ * traits only when supplied, so a skill (no image → omitted, no requiredSkills → none)
+ * and a workflow (image omitted) each serialize byte-for-byte as they did before this
+ * was extracted. Built before the first tx so the signature total stays predictable.
+ */
+export function buildItemJson(item: {
+  name: string;
+  description: string;
+  text: string;
+  image?: string;
+  category?: string;
+  hashtags?: string[];
+  requiredSkills?: string[];
+}): string {
+  const attributes: { trait_type: string; value: string }[] = [];
+  if (item.category) attributes.push({ trait_type: "category", value: item.category });
+  for (const tag of item.hashtags ?? []) attributes.push({ trait_type: "skill", value: tag });
+  for (const mint of item.requiredSkills ?? []) attributes.push({ trait_type: "requiredSkill", value: mint });
+  return JSON.stringify({
+    name: item.name,
+    description: item.description,
+    ...(item.image ? { image: item.image } : {}), // §3 — omit when absent
+    attributes,
+    skillText: item.text,
+  });
+}
+
+/**
  * Publish a skill. The skill mint's authority is the gate program's mint-auth PDA
  * (so only buy_item can mint it), and its config (price, empty required_skills) is
  * registered on-chain via publish_item.
@@ -192,17 +224,15 @@ export async function publishSkill(
   // code-in the standard NFT JSON (skill-nft-json.md §2): name/description +
   // standard `attributes` (category once, each hashtag as a repeated "skill"
   // trait, §4) + the SKILL.md body in `skillText`. One inscription holds
-  // everything search/detail needs — traits do NOT go on the mint. Built before
-  // the first tx so the signature total can be predicted from the JSON size.
-  const attributes: { trait_type: string; value: string }[] = [];
-  if (input.category) attributes.push({ trait_type: "category", value: input.category });
-  for (const tag of input.hashtags ?? []) attributes.push({ trait_type: "skill", value: tag });
-  const skillJson = JSON.stringify({
+  // everything search/detail needs — traits do NOT go on the mint. buildItemJson
+  // is the shared shape used by the workflow path too, so they can't drift.
+  const skillJson = buildItemJson({
     name: input.name,
     description: input.description,
-    ...(input.image ? { image: input.image } : {}), // §3 — omit when absent
-    attributes,
-    skillText: input.text,
+    text: input.text,
+    image: input.image,
+    category: input.category,
+    hashtags: input.hashtags,
   });
 
   // Wrap the signer so each wallet signature advances the publish gauge. `phase` is

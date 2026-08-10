@@ -14,7 +14,7 @@ import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
 
 import { codeIn, signerAddress, ensureDbRoot, itemMetadataUri } from "../core/chain.js";
 import { getWorkflowsCollectionMint } from "../core/seed.js";
-import { trackSignatures, estimatePublishSigns, type PublishProgress } from "./skill.js";
+import { trackSignatures, estimatePublishSigns, buildItemJson, type PublishProgress } from "./skill.js";
 import { createSkillMint } from "./token2022.js";
 import { checkWorkflowFormat, FormatError } from "./checkFormat.js";
 import {
@@ -52,17 +52,15 @@ export async function publishWorkflow(
   // code-in the standard NFT JSON (skill-nft-json.md §2, §4b): same shape as a
   // skill — category once, each hashtag a repeated "skill" trait — plus one
   // "requiredSkill" trait per prerequisite (valued by the skill's mint id, §4b).
-  // The body (recipe) goes in skillText. Traits live here, not on the mint.
-  // Built before the first tx so the signature total can be predicted.
-  const attributes: { trait_type: string; value: string }[] = [];
-  if (input.category) attributes.push({ trait_type: "category", value: input.category });
-  for (const tag of input.hashtags ?? []) attributes.push({ trait_type: "skill", value: tag });
-  for (const mint of input.requiredSkills) attributes.push({ trait_type: "requiredSkill", value: mint });
-  const workflowJson = JSON.stringify({
+  // The body (recipe) goes in skillText. buildItemJson is shared with the skill
+  // path so description + attributes can't silently diverge between the two.
+  const workflowJson = buildItemJson({
     name: input.name,
     description: input.description,
-    attributes,
-    skillText: input.text,
+    text: input.text,
+    category: input.category,
+    hashtags: input.hashtags,
+    requiredSkills: input.requiredSkills,
   });
 
   // Same signature-counting gauge as publishSkill, tagged "workflow" so the UI tints it
