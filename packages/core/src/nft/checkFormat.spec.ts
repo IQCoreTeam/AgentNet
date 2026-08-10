@@ -35,6 +35,12 @@ describe("nft/checkFormat — checkFormat", () => {
     expect(r.errors.some((e) => e.field === "description")).toBe(true);
   });
 
+  it("errors on an empty body (the permanent mint would carry no instructions)", () => {
+    const r = checkFormat(VALID.replace(/\n\nThis skill teaches.*\n/, "\n\n"));
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.field === "body")).toBe(true);
+  });
+
   it("does NOT error on a long skill (codeIn auto-chunks; no size rule)", () => {
     const r = checkFormat(VALID + "x".repeat(5000));
     expect(r.errors.some((e) => e.field === "size")).toBe(false);
