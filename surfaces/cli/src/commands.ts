@@ -8,6 +8,7 @@ export interface SlashCmd {
 export const SLASH_COMMANDS: SlashCmd[] = [
   { name: "new", desc: "start a fresh session" },
   { name: "sessions", desc: "resume or delete a session" },
+  { name: "fork", desc: "copy this session and switch to the copy" },
   { name: "resume", desc: "resume by id prefix", args: "<id>" },
   { name: "market", desc: "browse and buy skills" },
   { name: "agents", desc: "browse agents and profiles" },

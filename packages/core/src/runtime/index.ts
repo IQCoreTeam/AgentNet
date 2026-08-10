@@ -4,6 +4,7 @@
 // Messages seen before the real sessionId arrives are queued, then flushed once
 // the CLI reveals its id. The UI just calls startSession + send + onMessage.
 
+import { randomUUID } from "node:crypto";
 import { Connection } from "@solana/web3.js";
 import { spawnCli } from "./spawn.js";
 import { SessionStore } from "../account/store.js";
@@ -325,6 +326,18 @@ export function createRuntime(
       await store.remove(sessionId);
     },
 
+    async forkSession(sessionId, opts) {
+      const src = (await store.listMine()).find((s) => s.sessionId === sessionId);
+      // A fork is a new session in its own right, so it gets its own id and a name that
+      // says where it came from. "(2)" walks up if you branch the same thread twice.
+      const base = opts?.title ?? nextForkTitle(src?.title || "untitled", await store.listMine());
+      const newId = randomUUID();
+      await store.fork(sessionId, newId, base, opts?.upTo);
+      const forked = (await store.listMine()).find((s) => s.sessionId === newId);
+      if (!forked) throw new Error("fork did not land in the session list");
+      return forked;
+    },
+
     // Push any local sessions the cloud is missing. Delegates to the mirror's frugal
     // backfill (single cloud.list + only-missing uploads); no-op when storage has no
     // cloud tier. Surfaces call this ONLY after an explicit (re)connect.
@@ -332,4 +345,16 @@ export function createRuntime(
       return (await storage.backfill?.()) ?? { uploaded: 0, missing: 0 };
     },
   };
+}
+
+// "cli ui polish" -> "cli ui polish (2)" -> "(3)" ... so a second fork of the same thread
+// does not collide with the first in a list you scan by name.
+function nextForkTitle(base: string, existing: { title?: string }[]): string {
+  const stem = base.replace(/\s*\(\d+\)$/, "");
+  const taken = new Set(existing.map((s) => s.title ?? ""));
+  for (let n = 2; n < 100; n++) {
+    const t = `${stem} (${n})`;
+    if (!taken.has(t)) return t;
+  }
+  return `${stem} (fork)`;
 }

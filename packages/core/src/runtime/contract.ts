@@ -200,6 +200,11 @@ export interface AgentRuntime {
   // delete a saved session (all its pages). The UI removes it from the list.
   deleteSession(sessionId: string): Promise<void>;
 
+  // Copy a session under a new id and return it. `upTo` keeps only the first N messages,
+  // which is "fork from here": branch a conversation without spending the original.
+  // Nothing is re-run - the copy is the same log, so it is instant.
+  forkSession(sessionId: string, opts?: { title?: string; upTo?: number }): Promise<SessionMeta>;
+
   // Push local sessions the cloud is missing (one-shot). A surface calls this ONLY right
   // after an explicit (re)connect — never on passive startup — so it can never become a
   // per-launch cloud storm. No-op (0 uploads) when the storage has no cloud tier or is

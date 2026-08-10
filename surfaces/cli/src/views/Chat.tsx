@@ -810,6 +810,23 @@ export function Chat({
         setNotice(pick(copy.signoffs));
         setTimeout(() => exit(), 350);
         return;
+      case "fork": {
+        if (!chat.pendingId) {
+          setNotice("nothing to fork yet - say something first");
+          return;
+        }
+        // "/fork here" keeps only what you have said and heard so far; bare "/fork" takes
+        // the whole thing. Either way the original stays exactly where it was.
+        const upTo = arg === "here" ? chat.messages.length : undefined;
+        void chat
+          .forkSession(chat.pendingId, upTo)
+          .then((m) => {
+            chat.openSession(m.sessionId);
+            setNotice(`forked to "${m.title}" - the original is untouched`);
+          })
+          .catch((e: unknown) => setNotice(`fork failed: ${e instanceof Error ? e.message : String(e)}`));
+        return;
+      }
       case "new":
         chat.newSession();
         setPanelFocused(false); // empty session again → panel shows, focus back on composer
@@ -1252,6 +1269,12 @@ export function Chat({
           setShowSessions(false);
         }}
         onDelete={(id) => void chat.deleteSession(id)}
+        onFork={(id) => {
+          void chat
+            .forkSession(id)
+            .then((m) => setNotice(`forked to "${m.title}"`))
+            .catch((e: unknown) => setNotice(`fork failed: ${e instanceof Error ? e.message : String(e)}`));
+        }}
         onClose={() => setShowSessions(false)}
       />
     );

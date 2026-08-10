@@ -390,6 +390,18 @@ export function useChat(
     setEpoch((e) => e + 1);
   }, []);
 
+  // Fork: copy this session under a new id and switch to it. Instant - it is the same log
+  // re-encoded, nothing is re-run - and the original is untouched, which is the point:
+  // try a second direction without spending the first. `upTo` forks "from here".
+  const forkSession = useCallback(
+    async (sessionId: string, upTo?: number): Promise<SessionMeta> => {
+      const meta = await runtime.forkSession(sessionId, { upTo });
+      await refreshSessions();
+      return meta;
+    },
+    [runtime, refreshSessions],
+  );
+
   const deleteSession = useCallback(
     async (id: string) => {
       await runtime.deleteSession(id);
@@ -434,6 +446,7 @@ export function useChat(
     newSession,
     deleteSession,
     refreshSessions,
+    forkSession,
     firingSkill,
     turnError,
     clearTurnError: () => setTurnError(null),

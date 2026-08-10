@@ -174,6 +174,47 @@ export class SessionStore {
     });
   }
 
+  // Copy a session under a fresh id: read every page of the source, re-encode the records
+  // under the new id, write them back out as full pages. A blob-level copy would be
+  // cheaper but wrong - each page carries its own meta line naming the session it belongs
+  // to, so the copy has to be re-encoded, not just re-keyed. `upTo` truncates the copy to
+  // the first N messages, which is what "fork from here" means: the same conversation up
+  // to a point, free to go somewhere else after it.
+  async fork(
+    srcId: string,
+    newId: string,
+    title: string,
+    upTo?: number,
+  ): Promise<{ messages: number }> {
+    const key = await this.getKey();
+    const last = await this.lastPageIndex(srcId);
+    if (last < 0) throw new Error(`no such session: ${srcId}`);
+
+    let meta: Omit<CanonicalSession, "messages"> | null = null;
+    const messages: ChatMessage[] = [];
+    for (let p = 0; p <= last; p++) {
+      const page = await this.loadPage(srcId, p);
+      if (!page) continue;
+      if (!meta) meta = { sessionId: newId, cli: page.cli, title, ts: page.ts, lastDevice: page.lastDevice };
+      messages.push(...page.messages);
+    }
+    if (!meta) throw new Error(`could not read session: ${srcId}`);
+    const keep = upTo === undefined ? messages : messages.slice(0, Math.max(0, upTo));
+
+    // Write out in PAGE_SIZE chunks, each opened by its own meta line, exactly the shape
+    // appendMessage would have produced had the copy been typed in from scratch.
+    for (let i = 0; i < Math.max(1, keep.length); i += PAGE_SIZE) {
+      const pk = pageKey(newId, Math.floor(i / PAGE_SIZE));
+      await this.write(pk, await encodeRecord(key, metaRecord(meta)));
+      for (const m of keep.slice(i, i + PAGE_SIZE)) {
+        await this.write(pk, await encodeRecord(key, msgRecord(m)));
+      }
+    }
+    this.cur.delete(newId);
+    this.cacheMeta(Math.floor(Math.max(0, keep.length - 1) / PAGE_SIZE), meta);
+    return { messages: keep.length };
+  }
+
   async remove(sessionId: string): Promise<void> {
     this.cur.delete(sessionId);
     this.metaCache.delete(sessionId);

@@ -54,12 +54,14 @@ export function SessionList({
   activeId,
   onResume,
   onDelete,
+  onFork,
   onClose,
 }: {
   sessions: SessionMeta[];
   activeId?: string;
   onResume: (id: string) => void;
   onDelete: (id: string) => void;
+  onFork: (id: string) => void;
   onClose: () => void;
 }) {
   const [idx, setIdx] = useState(0);
@@ -70,6 +72,7 @@ export function SessionList({
     if (key.escape) return onClose();
     if (sessions.length === 0) return;
     if (key.return) onResume(sessions[clamped].sessionId);
+    else if (input === "f") onFork(sessions[clamped].sessionId);
     else if (input === "d") {
       onDelete(sessions[clamped].sessionId);
       setIdx((i) => Math.max(0, Math.min(i, sessions.length - 2)));
@@ -126,7 +129,7 @@ export function SessionList({
         </Box>
       )}
       <Text color={colors.bone}>{rule(ruleW)}</Text>
-      <Text dimColor>←/→ MOVE · ↵ RESUME · D DELETE · ESC BACK</Text>
+      <Text dimColor>⇥/←/→ MOVE · ↵ RESUME · F FORK · D DELETE · ESC BACK</Text>
     </Box>
   );
 }
