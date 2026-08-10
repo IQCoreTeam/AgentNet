@@ -3,6 +3,7 @@ import type {
   ApprovalRequest,
   ApprovalDecision,
 } from "@iqlabs-official/agent-sdk/runtime/approval/channel";
+import { callAttention, clearAttention } from "./notify.js";
 
 // The CLI's implementation of the ApprovalChannel seam. The engine calls request() and
 // awaits; we surface the pending request to the React layer (subscribe) and resolve the
@@ -18,6 +19,9 @@ export class InkApprovalChannel implements ApprovalChannel {
     return new Promise<ApprovalDecision>((resolve) => {
       this.pending = { req, resolve };
       this.listener?.(req);
+      // The turn is now blocked on a human. If that human is in another window they have
+      // no way to know - the card is drawn on a terminal they are not looking at.
+      callAttention(`${req.cli} wants to use ${req.tool}`);
     });
   }
 
@@ -35,6 +39,7 @@ export class InkApprovalChannel implements ApprovalChannel {
     const p = this.pending;
     if (p && p.req.id === id) {
       this.pending = null;
+      clearAttention();
       this.listener?.(null);
       p.resolve(decision);
     }

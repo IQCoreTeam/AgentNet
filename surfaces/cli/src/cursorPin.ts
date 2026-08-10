@@ -28,18 +28,36 @@ function pinSeq(): string {
   return `\u001b7${upSeq}\u001b[${col}G\u001b[?25h`;
 }
 
+// Synchronized output (DEC private mode 2026). Between BSU and ESU the terminal holds the
+// frame back and swaps it in one go, so a repaint can never be seen half-drawn. Without it
+// every ink render is: erase N lines, then draw N lines - and the gap between those two is
+// exactly the flicker, worst on a slow pipe like tmux or a remote shell. Terminals that do
+// not know the mode ignore the sequence, which is why this needs no capability probe;
+// AGENTNET_NO_SYNC=1 turns it off for anything that mishandles it.
+const BSU = "\u001b[?2026h";
+const ESU = "\u001b[?2026l";
+const syncOn = () => Boolean(process.stdout.isTTY) && !process.env.AGENTNET_NO_SYNC;
+
+// One stdout filter serves both jobs, because they have to compose in a fixed order:
+// restore ink's cursor, let ink write, re-pin the caret - and the whole thing wrapped in
+// one synchronized frame, emitted as a SINGLE write so the terminal sees it atomically.
 function install() {
   if (installed) return;
   installed = true;
   const original = process.stdout.write.bind(process.stdout);
   raw = (chunk: string) => original(chunk);
   process.stdout.write = ((chunk: unknown, ...rest: unknown[]) => {
-    if (!active) return (original as (...a: unknown[]) => boolean)(chunk, ...rest);
-    raw("\u001b8"); // DECRC — back to where ink expects the cursor
-    const ok = (original as (...a: unknown[]) => boolean)(chunk, ...rest);
-    raw(pinSeq()); // re-park on the caret after the frame lands
-    return ok;
+    const call = original as (...a: unknown[]) => boolean;
+    // Only strings can be spliced; a Buffer write goes straight through untouched.
+    if (typeof chunk !== "string" || (!active && !syncOn())) return call(chunk, ...rest);
+    const body = active ? `\u001b8${chunk}${pinSeq()}` : chunk;
+    return call(syncOn() ? `${BSU}${body}${ESU}` : body, ...rest);
   }) as typeof process.stdout.write;
+}
+
+// Called once at boot so frames are synchronized even before the composer pins anything.
+export function installStdoutFilter() {
+  if (syncOn()) install();
 }
 
 export function pinCursor(rowsUp: number, targetCol: number) {

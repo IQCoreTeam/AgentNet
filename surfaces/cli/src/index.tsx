@@ -9,6 +9,7 @@ import { App, type AppOptions } from "./app.js";
 import { detectCli } from "./bootstrap.js";
 import { readPrefsSync, savePrefs } from "./prefs.js";
 import { checkCliUpdate, installedCliVersion, CLI_UPDATE_COMMAND } from "./selfUpdate.js";
+import { installStdoutFilter } from "./cursorPin.js";
 
 // Diagnostics from the core/engine layer (codex app-server tracing, the claudeModels probe,
 // bigint's native-binding fallback notice, etc.) are all plain console.error/warn calls —
@@ -46,6 +47,9 @@ function launch(options: AppOptions, calmFlag?: boolean) {
     process.exit(1);
   }
   quietDiagnosticsToFile();
+  // Wrap every frame in a synchronized-output pair before ink paints anything, so the
+  // terminal never shows a half-erased frame. Must run before render().
+  installStdoutFilter();
   // Ink's own render() re-patches console.log/error/warn by default (patchConsole: true)
   // to inject any stray console output above the live UI — which is exactly what clobbers
   // our redirect above the moment render() runs, since Ink's patch installs AFTER ours and
