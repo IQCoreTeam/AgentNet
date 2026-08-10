@@ -124,8 +124,8 @@ console.log("6. webview market messages match the shared contract");
 {
   const html = chatHtml();
   // requests the webview SENDS (UI -> host) and events it HANDLES (host -> UI)
-  const REQUESTS = ["searchSkills", "buySkill", "ownedSkills"];
-  const EVENTS = ["searchResults", "buyResult", "ownedSkills", "skillActive"];
+  const REQUESTS = ["searchSkills", "buySkill", "buyAllSkills", "ownedSkills"];
+  const EVENTS = ["searchResults", "buyResult", "buyAllResult", "ownedSkills", "skillActive"];
   for (const t of REQUESTS) {
     check(`webview sends '${t}'`, html.includes(`type: '${t}'`));
   }
