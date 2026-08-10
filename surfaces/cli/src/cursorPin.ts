@@ -11,9 +11,19 @@ let col = 1; // 1-based target column
 let installed = false;
 let raw: (chunk: string) => boolean;
 
+// The pin only ever drives a REAL terminal. Piped/redirected/captured output (a harness
+// collecting the CLI's stdout, `| tee`, a CI log) must receive plain text: raw
+// save/restore-cursor escapes in a captured stream get replayed into whatever terminal
+// later prints that log and scramble it.
+function canPin(): boolean {
+  return Boolean(process.stdout.isTTY);
+}
+
 function pinSeq(): string {
   // DECSC at ink's resting spot, then move to the caret and show the cursor.
-  return `\u001b7\u001b[${up}A\u001b[${col}G\u001b[?25h`;
+  // ESC[0A still moves up one row on most emulators, so omit the move when up is 0.
+  const upSeq = up > 0 ? `\u001b[${up}A` : "";
+  return `\u001b7${upSeq}\u001b[${col}G\u001b[?25h`;
 }
 
 function install() {
@@ -31,6 +41,7 @@ function install() {
 }
 
 export function pinCursor(rowsUp: number, targetCol: number) {
+  if (!canPin()) return;
   install();
   if (active) raw("\u001b8"); // undo the previous pin before measuring a new one
   up = rowsUp;
@@ -44,6 +55,62 @@ export function unpinCursor() {
   if (!active) return;
   active = false;
   raw("\u001b8\u001b[?25l");
+}
+
+// Where the caret actually sits on screen once the buffer is laid out.
+export interface BufferLayout {
+  rows: string[]; // the display rows the composer renders, one per screen line
+  caretRow: number; // 0-based row the caret is on
+  caretCol: number; // 0-based terminal-cell offset within that row
+}
+
+// Lay a buffer out into the exact display rows the composer will render: explicit
+// newlines first, then a HARD wrap at `width` cells. Hard (character-level) rather than
+// word-level on purpose — ink's default word wrap makes the caret's screen position
+// unknowable, which is why the pin used to give up the moment a line wrapped and left
+// Hangul/CJK composition stranded below the frame. Wrapping here means we render the
+// rows ourselves and always know which cell the caret is on.
+export function layoutBuffer(value: string, cursor: number, width: number): BufferLayout {
+  const w = Math.max(1, width);
+  const rows: string[] = [];
+  let row = "";
+  let rowW = 0;
+  let caretRow = 0;
+  let caretCol = 0;
+  let found = false;
+  let idx = 0;
+  const mark = () => {
+    caretRow = rows.length;
+    caretCol = rowW;
+    found = true;
+  };
+  for (const ch of value) {
+    if (ch === "\n") {
+      if (idx === cursor) mark(); // caret on the newline = end of the row it terminates
+      rows.push(row);
+      row = "";
+      rowW = 0;
+      idx += 1;
+      continue;
+    }
+    const cw = displayWidth(ch);
+    if (rowW + cw > w) {
+      rows.push(row);
+      row = "";
+      rowW = 0;
+    }
+    if (idx === cursor) mark(); // mark AFTER wrapping, so the caret follows the char
+    row += ch;
+    rowW += cw;
+    idx += ch.length;
+  }
+  if (idx === cursor) mark(); // caret at end of buffer
+  rows.push(row);
+  if (!found) {
+    caretRow = rows.length - 1;
+    caretCol = rowW;
+  }
+  return { rows, caretRow, caretCol };
 }
 
 // Terminal-cell width of a string: East Asian wide/fullwidth code points take 2 columns.

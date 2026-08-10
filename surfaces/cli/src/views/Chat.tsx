@@ -97,10 +97,6 @@ function clampLiveTail(msg: ChatMessage, rows: number, cols: number): ChatMessag
   return { ...msg, text: "…\n" + lines.slice(start).join("\n") };
 }
 
-// The transcript tail re-renders on every keystroke/animation tick now that it lives
-// inside the dynamic frame — memo so markdown/highlighting only re-computes per message.
-const MemoMessage = React.memo(Message);
-
 function CastingLine({ skill }: { skill: SkillActivation }) {
   const i = useFrameLoop(castingFrames.length, 8);
   const verb = copy.castingVerbs[i % copy.castingVerbs.length];
@@ -1182,28 +1178,32 @@ export function Chat({
     ? clampLiveTail(lastMsg, rows, process.stdout.columns || 80)
     : null;
 
-  // Claude-style sectioned layout: the frame OWNS the whole terminal. The transcript tail
-  // stays on screen inside the content section (bottom-aligned, clipped at the top);
-  // messages older than the tail are archived to <Static> — real scrollback above the
-  // frame. The cut only ever moves forward, so Static stays append-only.
-  const TAIL = 8;
-  const cut = Math.max(0, committed.length - TAIL);
-  const archived = committed.slice(0, cut);
-  const tail = committed.slice(cut);
-
   // the welcome control panel shows on an empty, idle session. Focus stays on the composer
   // by default; Ctrl+S moves focus INTO the panel (panelActive), which then owns
   // tab/arrow/enter and disables the composer until Esc hands focus back.
   const showPanel = chat.messages.length === 0 && !chat.busy;
   const panelActive = showPanel && panelFocused;
 
+  // The dynamic frame must FIT on screen — ink cannot erase lines that have scrolled off,
+  // and a frame taller than the terminal smears old paints into the scrollback. So the
+  // approval card, which takes the composer's band, gets a row budget: the rest of the
+  // chrome (header 2 · rule/status/rule 3 · rule/footer 2) plus a little slack.
+  const approvalMaxRows = Math.max(6, rows - 10);
+
   return (
-    <Box flexDirection="column" paddingX={1} height={rows - 1}>
-      <Static key={chat.epoch} items={archived.map((m, i) => ({ m, i }))}>
+    <Box flexDirection="column" paddingX={1}>
+      {/* The settled transcript is printed ONCE into real terminal scrollback — never
+          re-rendered, never clipped, scrollable with the terminal's own scrollbar. Only
+          live/in-flight content lives in the dynamic frame below, which is what keeps the
+          composer at the bottom of the viewport without a fixed-height frame fighting it.
+          (A fixed frame with the transcript inside clipped long output and made the
+          conversation read as disconnected chunks.) */}
+      <Static key={chat.epoch} items={committed.map((m, i) => ({ m, i }))}>
         {({ m, i }) => <Message key={`${m.ts}-${i}`} msg={m} />}
       </Static>
 
-      {/* header band — hidden on short terminals so chat keeps the rows */}
+      {/* header band — separates the scrolling transcript from the live control chrome.
+          Hidden on short terminals so the frame keeps its rows for content. */}
       {rows >= 20 ? (
         <>
           <Box justifyContent="space-between">
@@ -1216,9 +1216,7 @@ export function Chat({
         </>
       ) : null}
 
-      {/* content section — fills everything above the bottom chrome; newest content hugs
-          the composer and older lines clip off the top (they live in scrollback). */}
-      <Box flexDirection="column" flexGrow={1} justifyContent="flex-end" overflow="hidden">
+      <Box flexDirection="column">
         {/* startup welcome panel — shown only on empty session so it doesn't re-appear.
             Logo-left / editable settings-right: wallet, cloud, engine + github. The composer
             keeps focus until Ctrl+S; then tab/enter control the panel, Esc returns to chat. */}
@@ -1240,11 +1238,7 @@ export function Chat({
         ) : null}
         {showPanel ? <Text dimColor>{copy.emptySessions}</Text> : null}
 
-        {chat.hasMore && tail.length < TAIL ? <Text dimColor>… older history above · /more to load</Text> : null}
-
-        {tail.map((m, i) => (
-          <MemoMessage key={`${m.ts}-${cut + i}`} msg={m} />
-        ))}
+        {chat.hasMore ? <Text dimColor>… older history above · /more to load</Text> : null}
 
         {liveMsg ? <Message msg={liveMsg} live /> : null}
 
@@ -1271,6 +1265,7 @@ export function Chat({
           replyText={replyText}
           diffExpanded={diffExpanded}
           activeDiffFileIdx={activeDiffFileIdx}
+          maxRows={approvalMaxRows}
         />
       ) : (
         <Composer

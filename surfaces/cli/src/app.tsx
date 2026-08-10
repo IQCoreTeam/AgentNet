@@ -77,9 +77,12 @@ export function App({ options }: { options: AppOptions }) {
     setWallet(w);
     set(3, { status: "ok", label: "storage ready" });
     // wipe the boot banner/checklist from the scrollback so the welcome panel lands on a
-    // clean screen (Ink leaves prior static output in the terminal history otherwise).
-    // Chat's frame is sized to the terminal, so the bottom chrome lands on the bottom edge.
-    process.stdout.write("\x1b[2J\x1b[3J\x1b[H");
+    // clean screen (Ink leaves prior static output in the terminal history otherwise),
+    // then pad down to the bottom edge. Chat's frame is only as tall as its live content,
+    // so this is what puts the composer on the bottom row of an empty session; once the
+    // transcript grows it fills the screen and holds the frame there on its own.
+    const padRows = Math.max(0, (process.stdout.rows || 24) - 1);
+    process.stdout.write("\x1b[2J\x1b[3J\x1b[H" + "\n".repeat(padRows));
     setPhase("chat");
     if (freshCloud) {
       void rt.syncCloud().catch(() => { /* best-effort; a later write or reconnect re-syncs */ });

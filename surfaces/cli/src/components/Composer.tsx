@@ -4,8 +4,22 @@ import { colors } from "../theme.js";
 import { SLASH_COMMANDS } from "../commands.js";
 import { indexFiles, filterFiles } from "../fileIndex.js";
 import { readImageFromClipboard, readImageFile, type ImageInput } from "../clipboardImage.js";
-import { pinCursor, unpinCursor, displayWidth } from "../cursorPin.js";
+import { pinCursor, unpinCursor, layoutBuffer, displayWidth } from "../cursorPin.js";
 import { useDelight } from "./DelightProvider.js";
+
+// Split a laid-out row at a terminal-CELL offset into [before, the cell's char, after],
+// so the drawn block cursor lands on the same cell the pin would have parked on.
+function splitAtCell(row: string, cell: number): [string, string, string] {
+  let head = "";
+  let w = 0;
+  const chars = [...row];
+  let i = 0;
+  for (; i < chars.length && w < cell; i++) {
+    head += chars[i];
+    w += displayWidth(chars[i]);
+  }
+  return [head, chars[i] ?? " ", chars.slice(i + 1).join("")];
+}
 
 // The input box — far past a single line. Supports:
 //   • multi-line editing (←/→ within the buffer, paste with newlines, \ + ↵ = newline)
@@ -232,33 +246,51 @@ export function Composer({
     { isActive: !disabled },
   );
 
-  // render buffer with a block cursor.
-  const head = value.slice(0, cursor);
-  const curCh = value[cursor] ?? " ";
-  const tail = value.slice(cursor + 1);
   const empty = value.length === 0;
 
-  // Whether the REAL terminal cursor is parked on the caret this frame (single-line,
-  // unwrapped buffer only — the geometry is unknowable once the line wraps). While
-  // pinned, the real cursor IS the caret: the fake inverse block must not render too,
-  // or IME preedit shows up beside a second cursor and every composing glyph doubles.
-  const stdoutCols = process.stdout.columns || 80;
-  const pinned = !disabled && !value.includes("\n") && 4 + displayWidth(value) < stdoutCols;
+  // We lay the buffer out into display rows ourselves rather than letting ink word-wrap
+  // it, so the caret's screen cell is always known — including once the text spills onto
+  // a second row. Width: the frame's paddingX(1) on each side, minus the "❯ " prompt.
+  const contentW = Math.max(1, (process.stdout.columns || 80) - 4);
+  const { rows: allRows, caretRow: bufCaretRow, caretCol } = layoutBuffer(value, cursor, contentW);
+
+  // The frame is a fixed height and does not scroll, so an unbounded composer (one long
+  // paste) would push the bands under it out of the frame and clip them away. Cap the
+  // band and scroll a window over the buffer instead, keeping the caret's row in view.
+  const maxRows = Math.max(3, Math.floor((process.stdout.rows || 24) / 3));
+  const winStart =
+    allRows.length > maxRows
+      ? Math.min(Math.max(0, bufCaretRow - maxRows + 1), allRows.length - maxRows)
+      : 0;
+  const bufRows = allRows.slice(winStart, winStart + maxRows);
+  const caretRow = bufCaretRow - winStart;
+
+  // While pinned, the REAL terminal cursor IS the caret, so no fake inverse block is
+  // drawn — two cursors would double every glyph the IME is composing. A disabled
+  // composer isn't taking input, so it shows no caret at all.
+  //
+  // The pin drives the terminal with raw save/restore-cursor escapes, so it only runs on
+  // a real TTY (see canPin) — and a few terminals/multiplexers swallow those anyway. If
+  // the pin is not running there must still be a caret on screen or you are typing blind,
+  // so those cases fall back to the drawn block cursor. AGENTNET_NO_CURSOR_PIN=1 forces
+  // that fallback (cost: IME preedit shows below the frame while composing).
+  const pinned =
+    !disabled && !process.env.AGENTNET_NO_CURSOR_PIN && Boolean(process.stdout.isTTY);
 
   // Park the real cursor on the caret after every frame, so IME composition
   // (Hangul/CJK preedit) renders inline instead of below the UI. Row math mirrors what
-  // renders below the input line — the menu block here, plus the section rule + footer
-  // row Chat draws under us.
+  // renders below the CARET's row — the rest of the wrapped buffer, the menu block here,
+  // plus the section rule + footer row Chat draws under us.
   useEffect(() => {
     if (!pinned) {
       unpinCursor();
       return;
     }
-    // caret column: root paddingX(1) + "❯ "(2) + head, 1-based.
-    const col = 4 + displayWidth(head);
+    const rowsBelowCaret = bufRows.length - 1 - caretRow;
     const menuLines = menu ? menu.items.length + 2 : 0; // marginTop + items + hint row
     const chromeBelow = 2; // Chat: rule line + footer row
-    pinCursor(menuLines + chromeBelow + 1, col); // +1: ink's resting line
+    // caret column: root paddingX(1) + "❯ "(2) + cells into the row, 1-based.
+    pinCursor(rowsBelowCaret + menuLines + chromeBelow + 1, 4 + caretCol); // +1: ink's resting line
   });
   useEffect(() => () => unpinCursor(), []);
 
@@ -277,17 +309,26 @@ export function Composer({
       <Box>
         <Text color={colors.iqCyan}>❯ </Text>
         {empty && !attached.length ? (
-          <Text dimColor>message · / for commands · @ for files · Ctrl+V image</Text>
-        ) : pinned ? (
-          // real cursor is parked on the caret — drawing the fake block too would show
-          // two cursors (and doubled glyphs while the IME composes)
-          <Text>{value}</Text>
+          <Text dimColor wrap="truncate-end">message · / for commands · @ for files · Ctrl+V image</Text>
         ) : (
-          <Text>
-            {head}
-            <Text inverse>{curCh}</Text>
-            {tail}
-          </Text>
+          // one <Text> per display row: the rows are pre-wrapped to contentW, so ink
+          // renders them verbatim and the caret's row/column stay exactly as measured.
+          // Unpinned, the caret's cell is drawn as an inverse block instead.
+          <Box flexDirection="column">
+            {bufRows.map((r, i) => {
+              if (pinned || i !== caretRow) {
+                return <Text key={i} wrap="truncate-end">{r === "" ? " " : r}</Text>;
+              }
+              const [head, curCh, tail] = splitAtCell(r, caretCol);
+              return (
+                <Text key={i} wrap="truncate-end">
+                  {head}
+                  <Text inverse>{curCh}</Text>
+                  {tail}
+                </Text>
+              );
+            })}
+          </Box>
         )}
       </Box>
 
