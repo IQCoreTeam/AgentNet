@@ -1389,20 +1389,6 @@ export function Chat({
         )}
       </Static>
 
-      {/* header band — separates the scrolling transcript from the live control chrome.
-          Hidden on short terminals so the frame keeps its rows for content. */}
-      {rows >= 20 ? (
-        <>
-          <Box justifyContent="space-between">
-            <Text color={colors.bone} bold>AGENTNET · CLI</Text>
-            <Text dimColor>
-              {chat.sessions.length} SESSION{chat.sessions.length === 1 ? "" : "S"} · ENCRYPTED
-            </Text>
-          </Box>
-          <Text color={colors.bone}>{rule(ruleW)}</Text>
-        </>
-      ) : null}
-
       <Box flexDirection="column">
         {/* startup welcome panel — shown only on empty session so it doesn't re-appear.
             Logo-left / editable settings-right: wallet, cloud, engine + github. The composer
