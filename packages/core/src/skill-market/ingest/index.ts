@@ -39,6 +39,11 @@ import { toSkillMd, skillSlug, slugifyName, skillBodyKey } from "./convert.js";
 
 export type Cli = "claude" | "codex";
 
+// Post-buy install retry budget: enough attempts/spacing to outlast the metadata
+// propagation lag after a purchase, short enough not to stall the buy flow.
+const INSTALL_RETRY_ATTEMPTS = 3;
+const INSTALL_RETRY_DELAY_MS = 2000;
+
 function skillsDir(cli: Cli): string {
   return cli === "claude" ? claudeSkillsDir() : codexSkillsDir();
 }
@@ -124,6 +129,21 @@ export class SkillSync {
   }
 
   /**
+   * installBoughtAll, retried through the post-buy metadata lag. A mint that just landed
+   * on-chain (irreversibly) can be momentarily unreadable — the content RPC / indexer trails
+   * the tx by a beat — so a single install right after the buy can miss. Returns the slug the
+   * instant one lands, null on a total miss; never throws, preserving the best-effort contract.
+   */
+  async installBoughtAllRetry(skillMint: string): Promise<string | null> {
+    for (let i = 0; i < INSTALL_RETRY_ATTEMPTS; i++) {
+      const slug = await this.installBoughtAll(skillMint).catch(() => null);
+      if (slug) return slug;
+      if (i < INSTALL_RETRY_ATTEMPTS - 1) await new Promise((resolve) => setTimeout(resolve, INSTALL_RETRY_DELAY_MS));
+    }
+    return null;
+  }
+
+  /**
    * Buy a skill on-chain AND equip it (write its SKILL.md into both runtimes' skills dirs)
    * in one call — the single source of truth for "a purchase = owned + usable now". Shared
    * by the human marketplace UI and the agent's buy_skill MCP tool so both paths equip
@@ -157,8 +177,10 @@ export class SkillSync {
     invalidateHeldMints(buyerWallet);
     // Equip is best-effort: the purchase already landed on-chain (irreversible), so a
     // content/fs hiccup during install must NOT surface as a failed buy — that could
-    // prompt a costly re-buy. slug=null just means "owned, equips on the next owned-sync".
-    const slug = await this.installBoughtAll(skillId).catch(() => null);
+    // prompt a costly re-buy. installBoughtAllRetry retries the direct-mint install a few
+    // times (the just-bought mint's metadata can lag the tx by a beat) and never throws;
+    // slug=null just means "owned, equips on the next owned-sync".
+    const slug = await this.installBoughtAllRetry(skillId);
     return { txSig, slug };
   }
 

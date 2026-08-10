@@ -18,7 +18,7 @@ import { buySkill, publishSkill as corePublishSkill, type PublishProgress } from
 import { publishWorkflow as corePublishWorkflow } from "../../nft/workflow.js";
 import { getSolBalance } from "../../notes/index.js";
 import { readSkillText, readSkillMintMetadata } from "../../nft/token2022.js";
-import { heldSkillCreators } from "../../notes/holdings.js";
+import { heldSkillCreators, invalidateHeldMints } from "../../notes/holdings.js";
 import { claudeSkillsDir } from "../../core/paths.js";
 import { classifySkills, readSkillManifest } from "../registry.js";
 import { readDisposed } from "../equipState.js";
@@ -615,19 +615,27 @@ export async function marketplaceEnv(wallet: Wallet) {
 
       let bought = 0;
       let failed = 0;
+      const boughtMints: string[] = [];
       for (const s of toBuy) {
         try {
           await buySkill(conn, wallet, { skillId: s.id, buyerWallet: wallet.address, creatorWallet: s.creator || wallet.address });
           bought++;
+          boughtMints.push(s.id);
         } catch {
           failed++;
         }
       }
-      if (bought > 0) {
-        await Promise.all([
-          skills.injectOwned("claude", wallet.address),
-          skills.injectOwned("codex", wallet.address),
-        ]).catch(() => {});
+      // Install each mint we ACTUALLY bought directly (installBoughtAllRetry), instead of
+      // one holdings-enumeration injectOwned pass. That enumeration is a racing read: the
+      // freshly-bought mints can lag out of the wallet's DAS holdings for a beat, so the
+      // pass installs the old set and misses the new buys. The per-mint retry equips exactly
+      // what we just bought and never throws — a miss can't surface as a failed purchase.
+      if (boughtMints.length > 0) {
+        await Promise.all(boughtMints.map((m) => skills.installBoughtAllRetry(m)));
+        // Bust the held-mints cache so a later owned-sync reconcile reads the NEW holdings
+        // (not the stale pre-buy set) and can't park the skills we just installed. Without
+        // this, the fix's own target scenario still ends with the bought skills unequipped.
+        invalidateHeldMints(wallet.address);
       }
       return { ok: bought > 0 || toBuy.length === 0, bought, failed };
     },
