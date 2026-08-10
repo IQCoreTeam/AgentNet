@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import { colors, diff as diffTheme } from "../theme.js";
-import { padBlock } from "../format.js";
+import { padCells, wrapHard } from "../format.js";
 
 // Shaded diff — added lines on a dark-green band, removed on dark-red, hunks dim violet,
 // context dim. Lines are padded to a rectangle so the bands read as clean blocks; a header
@@ -49,14 +49,21 @@ function parseMultiFileDiff(diff: string): FileDiff[] {
 // shows the +adds/−dels counts. The diff text is the engine's — we only tint + pad.
 export function DiffView({
   diff,
+  width,
   maxLines = 40,
   expanded = false,
   activeFileIdx = 0,
+  interactive = true,
 }: {
   diff: string;
+  width: number; // cells available INSIDE whatever card is hosting the diff
   maxLines?: number;
   expanded?: boolean;
   activeFileIdx?: number;
+  // false in the transcript, where there is no key handler listening: the summary must
+  // not advertise a "[d]" that does nothing, and the diff shows itself instead of
+  // hiding behind a toggle that can never be pressed.
+  interactive?: boolean;
 }) {
   const files = parseMultiFileDiff(diff);
   const fileDiff = files[activeFileIdx] || files[0] || { path: "Workspace Changes", lines: [] };
@@ -72,9 +79,24 @@ export function DiffView({
     0,
   );
 
-  const shown = all.slice(0, maxLines);
-  const hidden = all.length - shown.length;
-  const { lines } = padBlock(shown);
+  // Wrap FIRST, then clamp, so `maxLines` is a budget of real screen rows. Clamping raw
+  // diff lines and letting them wrap afterwards is how a "20 line" diff quietly became 35
+  // rows and pushed the answer keys out of the frame.
+  const bandW = Math.max(8, width);
+  const rows: Array<{ text: string; raw: string }> = [];
+  for (const raw of all) {
+    // Keep the +/- marker in column 0 and give continuations a blank gutter, so a wrapped
+    // line still reads as one change rather than as a new added/removed line.
+    const prefix = raw.startsWith("+") || raw.startsWith("-") ? raw[0] : raw.slice(0, 1);
+    const rest = raw.slice(1);
+    const wrapped = wrapHard(rest, bandW - 1);
+    for (let i = 0; i < wrapped.length; i++) {
+      rows.push({ text: (i === 0 ? prefix : " ") + wrapped[i], raw });
+    }
+    if (rows.length > maxLines + 1) break;
+  }
+  const shownRows = rows.slice(0, maxLines);
+  const hidden = all.length - new Set(shownRows.map((r) => r.raw)).size;
 
   if (!expanded) {
     return (
@@ -83,9 +105,14 @@ export function DiffView({
           <Text color={colors.ok}>+{totalAdds}</Text> <Text color={colors.err}>−{totalDels}</Text>
           <Text dimColor> lines changed across </Text>
           <Text color={colors.iqCyan} bold>{files.length}</Text>
-          <Text dimColor> file{files.length === 1 ? "" : "s"} (press </Text>
-          <Text color={colors.iqCyan} bold>[d]</Text>
-          <Text dimColor> to expand diff)</Text>
+          <Text dimColor> file{files.length === 1 ? "" : "s"}</Text>
+          {interactive ? (
+            <>
+              <Text dimColor> (press </Text>
+              <Text color={colors.iqCyan} bold>[d]</Text>
+              <Text dimColor> to expand diff)</Text>
+            </>
+          ) : null}
         </Text>
       </Box>
     );
@@ -107,9 +134,14 @@ export function DiffView({
         <Text color={colors.ok}>+{totalAdds}</Text> <Text color={colors.err}>−{totalDels}</Text>
         <Text dimColor> lines changed across </Text>
         <Text color={colors.iqCyan} bold>{files.length}</Text>
-        <Text dimColor> file{files.length === 1 ? "" : "s"} (press </Text>
-        <Text color={colors.iqCyan} bold>[d]</Text>
-        <Text dimColor> to collapse diff)</Text>
+        <Text dimColor> file{files.length === 1 ? "" : "s"}</Text>
+        {interactive ? (
+          <>
+            <Text dimColor> (press </Text>
+            <Text color={colors.iqCyan} bold>[d]</Text>
+            <Text dimColor> to collapse diff)</Text>
+          </>
+        ) : null}
       </Text>
 
       {files.length > 1 ? (
@@ -119,10 +151,9 @@ export function DiffView({
         </Box>
       ) : null}
 
-      {lines.map((line, i) => {
-        const raw = shown[i];
-        return <HighlightDiffLine key={i} line={line} raw={raw} />;
-      })}
+      {shownRows.map((r, i) => (
+        <HighlightDiffLine key={i} line={padCells(r.text, bandW)} raw={r.raw} />
+      ))}
       {hidden > 0 ? <Text dimColor>⎿ +{hidden} more lines</Text> : null}
     </Box>
   );

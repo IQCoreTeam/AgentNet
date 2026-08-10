@@ -3,7 +3,7 @@ import { Box, Text, useInput } from "ink";
 import type { SessionMeta } from "@iqlabs-official/agent-sdk/runtime/contract";
 import { colors, glyph, copy, rule, tag } from "../theme.js";
 import { ChipCarousel } from "../components/ChipCarousel.js";
-import { displayWidth } from "../cursorPin.js";
+import { displayWidth } from "../format.js";
 
 // Compact uppercase age, design-project style: 12S / 5M / 2H / 3D.
 function age(ts: number): string {

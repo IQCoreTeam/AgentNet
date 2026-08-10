@@ -4,8 +4,35 @@ import { colors } from "../theme.js";
 import { SLASH_COMMANDS } from "../commands.js";
 import { indexFiles, filterFiles } from "../fileIndex.js";
 import { readImageFromClipboard, readImageFile, type ImageInput } from "../clipboardImage.js";
-import { pinCursor, unpinCursor, layoutBuffer, displayWidth } from "../cursorPin.js";
+import { pinCursor, unpinCursor, layoutBuffer } from "../cursorPin.js";
+import { displayWidth } from "../format.js";
 import { useDelight } from "./DelightProvider.js";
+
+const MENU_CHROME = 2; // the menu block's marginTop + its hint row
+
+// Split the band's row budget between the text buffer and the menu under it.
+//
+// Exported so the geometry can be checked directly, because it is load-bearing: ink only
+// updates incrementally while the live frame is SHORTER than the terminal. Once it isn't,
+// ink clears the screen and reprints the entire accumulated scrollback on every render
+// (ink.js: `outputHeight >= stdout.rows` → clearTerminal + fullStaticOutput), so one
+// keystroke costs one full-transcript repaint — the session appears to scroll by itself.
+// A bare "/" matches all 27 slash commands, and rendering them unwindowed was enough to
+// cross that line on any normal terminal.
+//
+// A band under MENU_ROWS_MIN cannot show a menu at all (one buffer row, one item, and the
+// menu's own two chrome rows), so on a terminal that short the menu is dropped rather than
+// allowed to push the frame over the edge. Tab completion still works without it.
+export const MENU_ROWS_MIN = 4;
+
+// Invariant: buf + menu + (menu ? MENU_CHROME : 0) <= maxRows, for every maxRows >= 1.
+export function splitBand(maxRows: number, hasMenu: boolean): { buf: number; menu: number } {
+  const total = Math.max(1, maxRows);
+  if (!hasMenu || total < MENU_ROWS_MIN) return { buf: total, menu: 0 };
+  const avail = total - MENU_CHROME; // rows the buffer and menu share
+  const buf = Math.max(1, Math.min(3, avail - 1)); // picking a command, not composing prose
+  return { buf, menu: Math.max(1, avail - buf) };
+}
 
 // Split a laid-out row at a terminal-CELL offset into [before, the cell's char, after],
 // so the drawn block cursor lands on the same cell the pin would have parked on.
@@ -30,11 +57,15 @@ export function Composer({
   cwd,
   onSubmit,
   disabled,
+  maxRows,
   history = [],
 }: {
   cwd: string;
   onSubmit: (text: string, images?: ImageInput[]) => void;
   disabled?: boolean;
+  // Rows this band may occupy. Chat owns it: it is the only place that knows what the
+  // rest of the frame already costs, so the composer must not guess its own share.
+  maxRows: number;
   history?: string[]; // prior user messages, newest last — recalled with ↑/↓
 }) {
   const [value, setValue] = useState("");
@@ -254,16 +285,28 @@ export function Composer({
   const contentW = Math.max(1, (process.stdout.columns || 80) - 4);
   const { rows: allRows, caretRow: bufCaretRow, caretCol } = layoutBuffer(value, cursor, contentW);
 
-  // The frame is a fixed height and does not scroll, so an unbounded composer (one long
-  // paste) would push the bands under it out of the frame and clip them away. Cap the
-  // band and scroll a window over the buffer instead, keeping the caret's row in view.
-  const maxRows = Math.max(3, Math.floor((process.stdout.rows || 24) / 3));
+  // `maxRows` covers this WHOLE band — the buffer AND the menu under it — and both are
+  // windowed to stay inside it (see splitBand for why that matters).
+  const { buf: bufBudget, menu: menuBudget } = splitBand(maxRows, Boolean(menu));
+  const showMenu = menuBudget > 0;
+
+  // Scroll a window over the buffer, keeping the caret's row in view.
   const winStart =
-    allRows.length > maxRows
-      ? Math.min(Math.max(0, bufCaretRow - maxRows + 1), allRows.length - maxRows)
+    allRows.length > bufBudget
+      ? Math.min(Math.max(0, bufCaretRow - bufBudget + 1), allRows.length - bufBudget)
       : 0;
-  const bufRows = allRows.slice(winStart, winStart + maxRows);
+  const bufRows = allRows.slice(winStart, winStart + bufBudget);
   const caretRow = bufCaretRow - winStart;
+
+  // …and the same over the menu, keeping the highlighted entry in view.
+  const menuItems = menu?.items ?? [];
+  const menuSel = menuItems.length ? Math.min(menuIdx, menuItems.length - 1) : 0;
+  const menuStart =
+    menuItems.length > menuBudget
+      ? Math.min(Math.max(0, menuSel - menuBudget + 1), menuItems.length - menuBudget)
+      : 0;
+  const menuWindow = menuItems.slice(menuStart, menuStart + menuBudget);
+  const menuHidden = menuItems.length - menuWindow.length;
 
   // While pinned, the REAL terminal cursor IS the caret, so no fake inverse block is
   // drawn — two cursors would double every glyph the IME is composing. A disabled
@@ -287,7 +330,7 @@ export function Composer({
       return;
     }
     const rowsBelowCaret = bufRows.length - 1 - caretRow;
-    const menuLines = menu ? menu.items.length + 2 : 0; // marginTop + items + hint row
+    const menuLines = showMenu ? menuWindow.length + MENU_CHROME : 0; // marginTop + items + hint
     const chromeBelow = 2; // Chat: rule line + footer row
     // caret column: root paddingX(1) + "❯ "(2) + cells into the row, 1-based.
     pinCursor(rowsBelowCaret + menuLines + chromeBelow + 1, 4 + caretCol); // +1: ink's resting line
@@ -332,21 +375,24 @@ export function Composer({
         )}
       </Box>
 
-      {menu ? (
+      {showMenu ? (
         <Box flexDirection="column" marginLeft={2} marginTop={1}>
-          {menu.items.map((it, i) => {
-            const on = i === Math.min(menuIdx, menu.items.length - 1);
+          {menuWindow.map((it, i) => {
+            const on = menuStart + i === menuSel;
             return (
               <Box key={it.label}>
                 <Text color={on ? colors.iqCyan : undefined}>{on ? "› " : "  "}</Text>
-                <Text color={on ? colors.iqCyan : undefined} bold={on}>
+                <Text color={on ? colors.iqCyan : undefined} bold={on} wrap="truncate-end">
                   {it.label}
                 </Text>
-                {it.hint ? <Text dimColor> · {it.hint}</Text> : null}
+                {it.hint ? <Text dimColor wrap="truncate-end"> · {it.hint}</Text> : null}
               </Box>
             );
           })}
-          <Text dimColor>↑/↓ · ⇥/↵ select · esc hide</Text>
+          <Text dimColor>
+            ↑/↓ · ⇥/↵ select · esc hide
+            {menuHidden > 0 ? ` · +${menuHidden} more` : ""}
+          </Text>
         </Box>
       ) : null}
     </Box>

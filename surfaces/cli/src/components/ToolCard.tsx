@@ -6,9 +6,22 @@ import type { ToolAction } from "@iqlabs-official/agent-sdk/runtime/contract";
 import { glyph, toolTint, colors } from "../theme.js";
 import { TodoPanel } from "./TodoPanel.js";
 import { DiffView } from "./DiffView.js";
-import { stripAnsi, clampLines, lineCount } from "../format.js";
+import { stripAnsi, clampLines, lineCount, wrapBlock } from "../format.js";
 
 const MAX_OUTPUT_LINES = 12;
+
+// Cells the card's contents get to use. The transcript renders inside ink's <Static>,
+// whose box is position:absolute and therefore sizes to its CONTENT, not to the
+// terminal — so one unbreakable stack-trace path made the whole block wider than the
+// screen and the terminal wrapped the overflow back to column 0, dumping fragments
+// outside the border. Fixing that needs BOTH halves: an explicit width (Chat sets it on
+// the Static item) so the box cannot measure wide, and hard-wrapped text here so no
+// single token can exceed that width in the first place.
+function cardWidth(): { card: number; inner: number } {
+  const cols = process.stdout.columns || 80;
+  const card = Math.max(24, cols - 3); // frame paddingX(2) + this card's marginLeft(1)
+  return { card, inner: Math.max(12, card - 4) }; // border(2) + paddingX(2)
+}
 
 // Extension → cli-highlight language name.
 const EXT_LANG: Record<string, string> = {
@@ -65,19 +78,27 @@ function Output({
   text,
   failed,
   lang,
+  width,
 }: {
   text: string;
   failed?: boolean;
   lang?: string;
+  width: number;
 }) {
   const clean = stripAnsi(text);
   const { shown, hidden } = clampLines(clean, MAX_OUTPUT_LINES);
   if (!shown.trim()) return null;
 
-  let highlighted = shown;
+  // Wrap BEFORE highlighting: highlight() inserts ANSI escapes that carry no display
+  // width, so wrapping afterwards would count them as characters and cut the rows short.
+  // Wrapping first also keeps the highlighter's own line-by-line context intact, because
+  // the wrapped rows are rejoined with newlines before it runs.
+  const wrapped = wrapBlock(shown, Math.max(8, width)).join("\n");
+
+  let highlighted = wrapped;
   if (lang && !failed) {
     try {
-      highlighted = highlight(shown, { language: lang, ignoreIllegals: true });
+      highlighted = highlight(wrapped, { language: lang, ignoreIllegals: true });
     } catch { /* keep plain */ }
   }
 
@@ -116,19 +137,31 @@ export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: str
   const okExit = tool.exitCode === undefined || tool.exitCode === 0;
   const outLines = tool.output ? lineCount(stripAnsi(tool.output)) : 0;
   const fileLang = langFor(tool.file);
+  const { card, inner } = cardWidth();
 
   let body: React.ReactNode = null;
-  if (tool.diff) body = <DiffView diff={tool.diff} />;
-  else if (tool.command) {
-    let cmd = tool.command;
+  if (tool.diff) {
+    // In the transcript there is no key handler, so a collapsed "press [d] to expand"
+    // diff could never be opened — the edit's actual before/after was unreachable. Show
+    // it, bounded, and drop the dead hint.
+    body = <DiffView diff={tool.diff} width={inner} expanded maxLines={MAX_OUTPUT_LINES} interactive={false} />;
+  } else if (tool.command) {
+    const cmdRows = wrapBlock(`$ ${tool.command}`, inner);
+    let cmd = cmdRows.join("\n");
     try {
-      cmd = highlight(tool.command, { language: "bash", ignoreIllegals: true });
+      cmd = highlight(cmd, { language: "bash", ignoreIllegals: true });
     } catch { /* keep raw */ }
-    body = <Text dimColor>$ {cmd}</Text>;
+    body = (
+      <Box flexDirection="column">
+        {cmd.split("\n").map((l, i) => (
+          <Text key={i} dimColor>{l || " "}</Text>
+        ))}
+      </Box>
+    );
   }
 
   return (
-    <Box flexDirection="column" borderStyle="single" borderColor={tint} paddingX={1} marginLeft={1} marginTop={1}>
+    <Box flexDirection="column" width={card} borderStyle="single" borderColor={tint} paddingX={1} marginLeft={1} marginTop={1}>
       {/* header row */}
       <Box>
         <Text color={tint} bold>{kindGlyph[kind]} {tool.name}</Text>
@@ -148,7 +181,7 @@ export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: str
       </Box>
       {body}
       {tool.output ? (
-        <Output text={tool.output} failed={!okExit} lang={fileLang} />
+        <Output text={tool.output} failed={!okExit} lang={fileLang} width={inner - 2} />
       ) : null}
     </Box>
   );

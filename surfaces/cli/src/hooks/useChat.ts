@@ -8,11 +8,31 @@ import type {
   SkillActivation,
 } from "@iqlabs-official/agent-sdk/runtime/contract";
 import type { ApprovalChannel } from "@iqlabs-official/agent-sdk/runtime/approval/channel";
+import type { ChatModelOption } from "@iqlabs-official/agent-sdk";
 import { readPrefs, savePrefs, type EffortLevel } from "../prefs.js";
-import { loadModelOptions } from "../models.js";
+import { loadModelOptions, MODELS } from "../models.js";
+
+// What the status band should CALL the current model. `model` is undefined whenever the
+// user has not overridden it, which is the common case — showing that as the literal
+// word "default" tells you nothing about which brain is answering. The engine's own
+// catalog already lists its recommended model first (and claudeModels relabels the
+// CLI's "default" entry with its real name, e.g. "Opus 4.8"), so resolve through it.
+// The static baseline answers synchronously so the band never flashes a placeholder;
+// the live probe upgrades it once the installed CLI reports its real catalog.
+function labelFor(cli: Engine, model: string | undefined, catalog: ChatModelOption[]): string | undefined {
+  const chosen = model ? catalog.find((o) => o.value === model) : catalog[0];
+  return chosen?.chipLabel ?? model;
+}
 
 export type Engine = "claude" | "codex";
 export type { EffortLevel };
+
+// What a /more actually did. "exhausted" = no page to fetch (no cursor, or history fully
+// loaded); "busy" = a fetch was already in flight and this call was dropped.
+export type LoadOlderResult =
+  | { status: "loaded"; count: number }
+  | { status: "exhausted" }
+  | { status: "busy" };
 
 // The REPL brain. Mirrors the vscode openChat() loop (extension.ts) but for a single
 // active chat: lazy-spawn a handle on first send, append onMessage to the transcript,
@@ -37,7 +57,33 @@ export function useChat(
   const [hasMore, setHasMore] = useState(false);
   const [cursor, setCursor] = useState<number | null>(null);
   const [epoch, setEpoch] = useState(0);
+  // In-flight page loads, so the view can say so instead of looking frozen. Decrypting and
+  // parsing a long log takes real time, and both of these block on it: `loadingOlder` is a
+  // /more page, `loadingSession` is a whole session opening (resume or switch).
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [loadingSession, setLoadingSession] = useState(false);
+  // Why the last load failed, so a dead load reads as an error instead of an empty chat.
+  const [loadSessionError, setLoadSessionError] = useState<string | null>(null);
   const [firingSkill, setFiringSkill] = useState<SkillActivation | null>(null);
+  const [modelLabel, setModelLabel] = useState<string | undefined>(() =>
+    labelFor(opts.cli, opts.model, MODELS[opts.cli]),
+  );
+
+  // Re-resolve the display name whenever the engine or the override changes.
+  useEffect(() => {
+    let live = true;
+    setModelLabel(labelFor(cli, model, MODELS[cli])); // instant, from the static baseline
+    void loadModelOptions(cli)
+      .then((catalog) => {
+        if (live) setModelLabel(labelFor(cli, model, catalog));
+      })
+      .catch(() => {
+        /* probe failed — the baseline label already on screen is the right fallback */
+      });
+    return () => {
+      live = false;
+    };
+  }, [cli, model]);
 
   useEffect(() => {
     if (firingSkill) {
@@ -47,6 +93,7 @@ export function useChat(
   }, [firingSkill]);
 
   const handle = useRef<SessionHandle | null>(null);
+  const loadingOlderRef = useRef(false);
   // keep latest cli/model in refs so ensureHandle (created once) reads current values.
   const cliRef = useRef(cli);
   const modelRef = useRef(model);
@@ -74,24 +121,47 @@ export function useChat(
   useEffect(() => {
     void refreshSessions();
     if (opts.resume) {
-      void runtime.loadSession(opts.resume).then((p) => {
-        setMessages(p.messages);
-        setHasMore(p.hasMore);
-        setCursor(p.cursor);
-        setEpoch((e) => e + 1);
-      });
+      setLoadingSession(true);
+      void runtime
+        .loadSession(opts.resume)
+        .then((p) => {
+          setMessages(p.messages);
+          setHasMore(p.hasMore);
+          setCursor(p.cursor);
+          setEpoch((e) => e + 1);
+        })
+        // A rejection here used to be unhandled; now it also has to clear the banner, or
+        // the view sits on "loading session" forever for a log that is never coming.
+        .catch(() => setLoadSessionError("could not open that session"))
+        .finally(() => setLoadingSession(false));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // load the page BEFORE the current oldest (scroll-back). Prepends + resets Static.
-  const loadOlder = useCallback(async () => {
-    if (!hasMore || cursor === null || !pendingRef.current) return;
-    const p = await runtime.loadMore(pendingRef.current, cursor);
-    setMessages((prev) => [...p.messages, ...prev]);
-    setHasMore(p.hasMore);
-    setCursor(p.cursor);
-    setEpoch((e) => e + 1);
+  // Reports what actually happened instead of announcing success the instant the request is
+  // fired. The three outcomes are kept distinct on purpose: "already loading" is not the
+  // same news as "there is nothing left", and telling the user the wrong one is the bug
+  // this replaced.
+  const loadOlder = useCallback(async (): Promise<LoadOlderResult> => {
+    if (!hasMore || cursor === null || !pendingRef.current) return { status: "exhausted" };
+    // Re-entrancy guard. `cursor` only moves once the await resolves, so two overlapping
+    // calls (holding /more, or a keypress landing on a slow log) would both fetch the SAME
+    // page and prepend it twice. A ref, not the state, because state is a render behind.
+    if (loadingOlderRef.current) return { status: "busy" };
+    loadingOlderRef.current = true;
+    setLoadingOlder(true);
+    try {
+      const p = await runtime.loadMore(pendingRef.current, cursor);
+      setMessages((prev) => [...p.messages, ...prev]);
+      setHasMore(p.hasMore);
+      setCursor(p.cursor);
+      setEpoch((e) => e + 1);
+      return { status: "loaded", count: p.messages.length };
+    } finally {
+      loadingOlderRef.current = false;
+      setLoadingOlder(false);
+    }
   }, [hasMore, cursor, runtime]);
 
   const wire = useCallback(
@@ -224,11 +294,21 @@ export function useChat(
       dropHandle();
       setPendingId(id);
       setContextTokens(undefined); setContextWindow(undefined); // reset bar — new session's usage unknown until first turn
-      const p = await runtime.loadSession(id);
-      setMessages(p.messages);
-      setHasMore(p.hasMore);
-      setCursor(p.cursor);
-      setEpoch((e) => e + 1);
+      setLoadSessionError(null);
+      setLoadingSession(true);
+      try {
+        const p = await runtime.loadSession(id);
+        setMessages(p.messages);
+        setHasMore(p.hasMore);
+        setCursor(p.cursor);
+        setEpoch((e) => e + 1);
+      } catch {
+        // Both call sites fire this with `void`, so without a catch a failed open was an
+        // unhandled rejection AND left the banner spinning on a log that never arrives.
+        setLoadSessionError("could not open that session");
+      } finally {
+        setLoadingSession(false);
+      }
     },
     [dropHandle, runtime],
   );
@@ -241,6 +321,7 @@ export function useChat(
     setContextWindow(undefined);
     setHasMore(false);
     setCursor(null);
+    setLoadSessionError(null); // a fresh session must not inherit the last one's failure
     setEpoch((e) => e + 1);
   }, [dropHandle]);
 
@@ -314,6 +395,7 @@ export function useChat(
     busy,
     cli,
     model,
+    modelLabel,
     effort,
     pendingId,
     elapsed,
@@ -321,6 +403,9 @@ export function useChat(
     contextWindow,
     hasMore,
     epoch,
+    loadingOlder,
+    loadingSession,
+    loadSessionError,
     send,
     interrupt,
     loadOlder,

@@ -30,9 +30,9 @@ import { Select, TextInput } from "@inkjs/ui";
 import open from "open";
 import { chooseStorage } from "../bootstrap.js";
 import { copyToClipboard } from "../clipboard.js";
-import { Message } from "../components/Message.js";
+import { Message, TurnHeader } from "../components/Message.js";
 import { StatusLine } from "../components/StatusLine.js";
-import { ApprovalCard } from "../components/ApprovalCard.js";
+import { ApprovalCard, APPROVAL_CHOICES, type ApprovalChoiceKey } from "../components/ApprovalCard.js";
 import { Composer } from "../components/Composer.js";
 import { WelcomePanel, type PanelField, type OwnedSkill } from "../components/WelcomePanel.js";
 import { Footer } from "../components/Footer.js";
@@ -43,6 +43,7 @@ import { ModelPicker } from "./ModelPicker.js";
 import { EffortPicker } from "./EffortPicker.js";
 import type { EffortLevel } from "../prefs.js";
 import { type Mood } from "../components/Iggy.js";
+import { Spinner } from "../components/Spinner.js";
 import { useDelight } from "../components/DelightProvider.js";
 import { checkCliUpdate, CLI_UPDATE_COMMAND } from "../selfUpdate.js";
 import { thinkingLabels, castingFrames, confetti, colors, copy, glyph, pick, rule, tag } from "../theme.js";
@@ -111,6 +112,55 @@ function ActivityRow({
   return <Box height={1}>{body}</Box>;
 }
 
+// Scrollback-pagination feedback, held to the same one-row contract as ActivityRow (and
+// for the same reason: this used to be a conditionally-rendered line, so the frame grew
+// and shrank by a row every time a page loaded or ran out).
+//
+// The webview fetches an older page when you scroll near the top and shows a pill while
+// it lands (MessageList.tsx). The CLI cannot copy that trigger: its transcript is printed
+// into the TERMINAL's own scrollback via <Static> (see the note at the render root), so
+// there is no scroll position to watch and nothing to hang a scroll handler on. `/more` is
+// the CLI's trigger; this row is the same feedback the pill gives.
+function HistoryBand({
+  hasMore,
+  loadingOlder,
+  loadingSession,
+  error,
+}: {
+  hasMore: boolean;
+  loadingOlder: boolean;
+  loadingSession: boolean;
+  error: string | null;
+}) {
+  let body: React.ReactNode = <Text> </Text>;
+  if (loadingSession) {
+    body = (
+      <Text wrap="truncate-end">
+        <Spinner /> <Text color={colors.iqViolet}>loading session…</Text>
+      </Text>
+    );
+  } else if (loadingOlder) {
+    body = (
+      <Text wrap="truncate-end">
+        <Spinner /> <Text color={colors.iqViolet}>loading older history…</Text>
+      </Text>
+    );
+  } else if (error) {
+    body = (
+      <Text color={colors.err} wrap="truncate-end">
+        {glyph.fail} {error}
+      </Text>
+    );
+  } else if (hasMore) {
+    body = (
+      <Text dimColor wrap="truncate-end">
+        … older history above · /more to load
+      </Text>
+    );
+  }
+  return <Box height={1}>{body}</Box>;
+}
+
 // Merge the ephemeral local separators (model-switch lines) into the transcript by
 // timestamp. <Static> is append-only by INDEX — gluing localLog after the messages array
 // shifts the separators to a new index every time a message lands, and Static re-prints
@@ -134,8 +184,7 @@ function interleaveByTs(msgs: ChatMessage[], local: ChatMessage[]): ChatMessage[
 // the terminal, ink can't erase the lines that scrolled off-screen and every repaint
 // stacks a stale copy into scrollback. Clamp the live text to a tail that fits — the full
 // text still lands in <Static> (real scrollback) once the turn settles.
-function clampLiveTail(msg: ChatMessage, rows: number, cols: number): ChatMessage {
-  const budget = Math.max(6, rows - 14); // leave room for status/composer/footer chrome
+function clampLiveTail(msg: ChatMessage, budget: number, cols: number): ChatMessage {
   const lines = msg.text.split("\n");
   let used = 0;
   let start = lines.length;
@@ -311,6 +360,7 @@ export function Chat({
   const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
   const [diffExpanded, setDiffExpanded] = useState(false);
   const [activeDiffFileIdx, setActiveDiffFileIdx] = useState(0);
+  const [approvalIdx, setApprovalIdx] = useState(0); // highlighted APPROVAL_CHOICES entry
   // approval reply mode: null = y/a/n buttons; "reason" = typing a deny reason;
   // "edit" = editing the bash command before allowing.
   const [replyMode, setReplyMode] = useState<"reason" | "edit" | null>(null);
@@ -428,20 +478,37 @@ export function Chat({
         setReplyText("");
         setDiffExpanded(false);
         setActiveDiffFileIdx(0);
+        setApprovalIdx(0); // every request starts focused on "allow once"
       }),
     [approval],
   );
 
-  // buttons mode: y/a/n decide; r/e open a typed reply; Esc denies (so walking away or
-  // bailing never blocks the engine forever).
+  // buttons mode. Two ways to answer the same ring, because both are muscle memory:
+  //   ←/→ move the highlight and ↵ commits it (default: allow once, so a bare ↵ approves)
+  //   the bracketed letter still decides directly, without moving anything
+  // r/e open a typed reply; Esc denies, so walking away never blocks the engine forever.
   useInput(
     (input, key) => {
       if (!pendingApproval || !approval) return;
-      if (key.escape || input === "n")
+      const decide = (k: ApprovalChoiceKey) => {
+        if (k === "y") return approval.resolve(pendingApproval.id, { outcome: "once" });
+        if (k === "a") return approval.resolve(pendingApproval.id, { outcome: "always" });
+        if (k === "n")
+          return approval.resolve(pendingApproval.id, { outcome: "deny", reason: "denied by user" });
+        return setReplyMode("reason");
+      };
+
+      if (key.leftArrow || key.rightArrow) {
+        const n = APPROVAL_CHOICES.length;
+        return setApprovalIdx((i) => (key.leftArrow ? (i - 1 + n) % n : (i + 1) % n));
+      }
+      if (key.return) return decide(APPROVAL_CHOICES[approvalIdx].key);
+      if (key.escape)
         return approval.resolve(pendingApproval.id, { outcome: "deny", reason: "denied by user" });
-      if (input === "y") return approval.resolve(pendingApproval.id, { outcome: "once" });
-      if (input === "a") return approval.resolve(pendingApproval.id, { outcome: "always" });
-      if (input === "r") return setReplyMode("reason");
+
+      const hit = APPROVAL_CHOICES.find((c) => c.key === input);
+      if (hit) return decide(hit.key);
+
       if (input === "d") return setDiffExpanded(!diffExpanded);
       if (/^[1-9]$/.test(input)) {
         const idx = parseInt(input, 10) - 1;
@@ -520,41 +587,41 @@ export function Chat({
 
   useInput(
     (_input, key) => { if (key.escape || key.return) setShowAccount(false); },
-    { isActive: showAccount },
+    { isActive: showAccount && !pendingApproval },
   );
 
   useInput(
     (_input, key) => { if (key.escape || key.return) setShowSettings(false); },
-    { isActive: showSettings },
+    { isActive: showSettings && !pendingApproval },
   );
 
   useInput(
     (_input, key) => { if (key.escape || key.return) setShowHelp(false); },
-    { isActive: showHelp },
+    { isActive: showHelp && !pendingApproval },
   );
 
   useInput(
     (_input, key) => { if (key.escape || key.return) setShowKeys(false); },
-    { isActive: showKeys },
+    { isActive: showKeys && !pendingApproval },
   );
 
   // Esc closes the cloud/storage picker (Select handles its own arrows + enter).
   useInput(
     (_input, key) => { if (key.escape) setShowCloud(false); },
-    { isActive: showCloud },
+    { isActive: showCloud && !pendingApproval },
   );
 
   // Esc cancels an in-flight gdrive connect/reconnect (the effect's cleanup cancels the
   // OAuth session/loopback server).
   useInput(
     (_input, key) => { if (key.escape) setShowGdriveConnect(false); },
-    { isActive: showGdriveConnect },
+    { isActive: showGdriveConnect && !pendingApproval },
   );
 
   // Esc backs out of the icloud/custom location prompt (TextInput owns Enter/typing).
   useInput(
     (_input, key) => { if (key.escape) { setShowLocationInput(false); setPendingCloudKind(null); } },
-    { isActive: showLocationInput },
+    { isActive: showLocationInput && !pendingApproval },
   );
 
   // Escape or Return closes the /btw overlay.
@@ -571,7 +638,7 @@ export function Chat({
         }
       }
     },
-    { isActive: showBtw },
+    { isActive: showBtw && !pendingApproval },
   );
 
   // Switch engines only when the target is actually usable — a missing engine gets the
@@ -833,8 +900,17 @@ export function Chat({
         setTimeout(() => setEggMood(null), 3000);
         return;
       case "more":
-        void chat.loadOlder();
-        setNotice("loaded older history");
+        // Report what the load DID, once it's done. This used to claim "loaded older
+        // history" the instant the request was fired — before the page existed, and even
+        // when there was nothing left to load or the read failed outright.
+        void chat
+          .loadOlder()
+          .then((r) => {
+            if (r.status === "busy") return; // the band is already showing the spinner
+            if (r.status === "exhausted") return setNotice("no older history to load");
+            setNotice(`loaded ${r.count} older message${r.count === 1 ? "" : "s"}`);
+          })
+          .catch(() => setNotice("could not load older history"));
         return;
       case "compact":
         // claude/codex honor their own /compact command; pass it through as a turn.
@@ -942,6 +1018,33 @@ export function Chat({
       : undefined);
   const usedFrac = usedTokens !== undefined ? Math.min(1, usedTokens / WINDOW) : undefined;
   const ctxReal = chat.contextTokens !== undefined;
+
+  // An approval that arrives while the user is on ANOTHER screen must not be invisible.
+  // Every overlay below owns the whole frame, so the inline card (which lives in the
+  // chat's composer slot) never got drawn — the request sat unanswered behind the market
+  // or the session list with the engine blocked on it. Mirror what the vscode surface
+  // does when its window isn't focused (approvalNotify.ts): pop the request to the
+  // front. Answering it drops straight back to the screen they were on, because the
+  // overlay's own state is untouched.
+  const overlayOpen =
+    showAccount || showSettings || showHelp || showKeys || showCloud || showGdriveConnect ||
+    showLocationInput || showModels || showEfforts || showSessions || (showMarket && !!market) ||
+    showBtw;
+  if (pendingApproval && overlayOpen) {
+    return (
+      <Box flexDirection="column" paddingX={1}>
+        <ApprovalCard
+          req={pendingApproval}
+          reply={replyMode}
+          replyText={replyText}
+          diffExpanded={diffExpanded}
+          activeDiffFileIdx={activeDiffFileIdx}
+          selected={approvalIdx}
+          popup
+        />
+      </Box>
+    );
+  }
 
   // /account overlay.
   if (showAccount) {
@@ -1209,8 +1312,35 @@ export function Chat({
   const baseCommitted = streaming ? chat.messages.slice(0, -1) : chat.messages;
   // Weave local system messages (model-switch separators etc.) into the committed history.
   const committed = interleaveByTs(baseCommitted, localLog);
+  // ONE row budget for the whole dynamic frame. It used to be two independent guesses —
+  // the streaming tail took `rows - 14` and the composer separately took `rows / 3` — and
+  // on any normal terminal their sum plus the chrome is MORE rows than exist. ink cannot
+  // erase lines that have scrolled off, so an over-tall frame smears stale paint into the
+  // scrollback: the visible band stops matching the state, which is what left the input
+  // looking stuck at the height of a recalled history entry after the buffer was cleared.
+  // Chrome first, then split what is actually left.
+  // activity 1 · 3 rules · status 1 · footer 1 · history band 1, plus the header's 2 rows
+  // where it shows. The history band is counted even when blank precisely because it is
+  // always rendered — that is what stops it from resizing the frame as pages load.
+  const CHROME_ROWS = rows >= 20 ? 9 : 7;
+  // The -1 keeps the frame strictly SHORTER than the terminal: ink switches to the
+  // full-repaint path at `outputHeight >= rows`, so merely equal is already too tall.
+  const freeRows = Math.max(2, rows - CHROME_ROWS - 1);
+  // The split is exact — composer + live === freeRows — so the frame cannot drift over.
+  const composerMaxRows = streaming ? Math.min(10, Math.max(1, Math.floor(freeRows / 2))) : freeRows;
+  const liveRows = streaming ? Math.max(1, freeRows - composerMaxRows) : 0;
+  // The message that opened the turn currently running. Shown pinned above the streaming
+  // reply so you can still read what you asked while the answer scrolls in.
+  const pinnedAsk = (() => {
+    if (!chat.busy) return null;
+    for (let i = chat.messages.length - 1; i >= 0; i--) {
+      if (chat.messages[i].role === "user") return chat.messages[i].text;
+    }
+    return null;
+  })();
+
   const liveMsg = streaming
-    ? clampLiveTail(lastMsg, rows, process.stdout.columns || 80)
+    ? clampLiveTail(lastMsg, liveRows, process.stdout.columns || 80)
     : null;
 
   // the welcome control panel shows on an empty, idle session. Focus stays on the composer
@@ -1224,6 +1354,8 @@ export function Chat({
   // approval card, which takes the composer's band, gets a row budget: the rest of the
   // chrome (header 2 · rule/status/rule 3 · rule/footer 2) plus a little slack.
   const approvalMaxRows = Math.max(6, rows - 10);
+  // content width inside the frame's paddingX(1)
+  const staticW = Math.max(20, (process.stdout.columns || 80) - 2);
 
   return (
     <Box flexDirection="column" paddingX={1}>
@@ -1233,8 +1365,19 @@ export function Chat({
           composer at the bottom of the viewport without a fixed-height frame fighting it.
           (A fixed frame with the transcript inside clipped long output and made the
           conversation read as disconnected chunks.) */}
+      {/* The explicit width is load-bearing, not cosmetic: ink renders <Static> from a
+          position:absolute box, which sizes to its CONTENT rather than to the terminal.
+          One unbreakable token (a stack-trace path, a URL) therefore made the whole
+          static block wider than the screen, and the terminal wrapped the overflow back
+          to column 0 — which is how fragments ended up printed outside the card borders.
+          Pinning the width here bounds every transcript row; the components additionally
+          hard-wrap their own text so no single token can exceed it. */}
       <Static key={chat.epoch} items={committed.map((m, i) => ({ m, i }))}>
-        {({ m, i }) => <Message key={`${m.ts}-${i}`} msg={m} />}
+        {({ m, i }) => (
+          <Box key={`${m.ts}-${i}`} width={staticW} flexDirection="column">
+            <Message msg={m} />
+          </Box>
+        )}
       </Static>
 
       {/* header band — separates the scrolling transcript from the live control chrome.
@@ -1273,23 +1416,40 @@ export function Chat({
         ) : null}
         {showPanel ? <Text dimColor>{copy.emptySessions}</Text> : null}
 
-        {chat.hasMore ? <Text dimColor>… older history above · /more to load</Text> : null}
+        <HistoryBand
+          hasMore={chat.hasMore}
+          loadingOlder={chat.loadingOlder}
+          loadingSession={chat.loadingSession}
+          error={chat.loadSessionError}
+        />
+
+        {/* the turn you are waiting on: your own message stays on screen above the reply
+            while it streams, the way the vscode surface pins its turn header. It lives in
+            the CONTENT section (which is free to grow), never in the fixed-height chrome. */}
+        {pinnedAsk ? <TurnHeader text={pinnedAsk} /> : null}
 
         {liveMsg ? <Message msg={liveMsg} live /> : null}
       </Box>
 
       {/* bottom chrome — rule-separated bands of CONSTANT height (only the composer
           grows, and only as the user types), so nothing below ever shifts */}
-      <ActivityRow
-        notice={notice}
-        busy={chat.busy && !pendingApproval}
-        elapsed={chat.elapsed}
-        skill={chat.firingSkill}
-        celebrate={celebrate}
-        idle={idle && !chat.busy}
+      <StatusLine
+        mood={mood}
+        status={
+          <ActivityRow
+            notice={notice}
+            busy={chat.busy && !pendingApproval}
+            elapsed={chat.elapsed}
+            skill={chat.firingSkill}
+            celebrate={celebrate}
+            idle={idle && !chat.busy}
+          />
+        }
+        ctx={usedFrac}
+        ctxTokens={usedTokens !== undefined ? Math.round(usedTokens) : undefined}
+        ctxWindow={usedFrac !== undefined ? WINDOW : undefined}
+        ctxApprox={!ctxReal}
       />
-      <Text color={colors.bone}>{rule(ruleW)}</Text>
-      <StatusLine mood={mood} cli={chat.cli} model={chat.model} effort={chat.effort} cwd={cwd} elapsed={chat.busy ? chat.elapsed : undefined} sync={cloud && cloud.kind !== "local" ? (cloudStatus ? { ok: cloudStatus.ok, error: cloudStatus.ok ? undefined : cloudStatus.error, reason: cloudStatus.ok ? undefined : cloudStatus.reason } : { ok: true }) : null} ctx={usedFrac} ctxTokens={usedTokens !== undefined ? Math.round(usedTokens) : undefined} ctxWindow={usedFrac !== undefined ? WINDOW : undefined} ctxApprox={!ctxReal} />
       <Text color={colors.bone}>{rule(ruleW)}</Text>
 
       {/* the composer band — which, Claude-style, TURNS INTO the approval prompt while
@@ -1302,17 +1462,25 @@ export function Chat({
           diffExpanded={diffExpanded}
           activeDiffFileIdx={activeDiffFileIdx}
           maxRows={approvalMaxRows}
+          selected={approvalIdx}
         />
-      ) : (
+      ) : null}
+      {/* The composer is HIDDEN during an approval, never unmounted. Unmounting threw
+          away its React state, so a half-typed message silently vanished the moment a
+          tool asked permission — you came back to an empty box. display:none takes it
+          out of the layout without destroying the draft, and `disabled` stops it
+          consuming the keys the approval card needs. */}
+      <Box display={pendingApproval ? "none" : "flex"} flexDirection="column">
         <Composer
           cwd={cwd}
           onSubmit={onSubmit}
-          disabled={showSessions || panelActive}
+          disabled={showSessions || panelActive || !!pendingApproval}
+          maxRows={composerMaxRows}
           history={chat.messages.filter((m) => m.role === "user").map((m) => m.text)}
         />
-      )}
+      </Box>
       <Text color={colors.bone}>{rule(ruleW)}</Text>
-      <Footer cli={chat.cli} model={chat.model} busy={chat.busy} />
+      <Footer cli={chat.cli} model={chat.modelLabel} busy={chat.busy} />
     </Box>
   );
 }

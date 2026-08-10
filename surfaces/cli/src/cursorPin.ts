@@ -1,3 +1,5 @@
+import { displayWidth, wrapHard } from "./format.js";
+
 // Inline-IME support. Ink hides the real terminal cursor and leaves it parked below the
 // frame, so Hangul/CJK composition text (drawn by the emulator AT the cursor) pops up
 // under the UI and flickers while composing. Fix: keep the real cursor parked on the
@@ -71,65 +73,36 @@ export interface BufferLayout {
 // Hangul/CJK composition stranded below the frame. Wrapping here means we render the
 // rows ourselves and always know which cell the caret is on.
 export function layoutBuffer(value: string, cursor: number, width: number): BufferLayout {
-  const w = Math.max(1, width);
   const rows: string[] = [];
-  let row = "";
-  let rowW = 0;
   let caretRow = 0;
   let caretCol = 0;
-  let found = false;
-  let idx = 0;
-  const mark = () => {
-    caretRow = rows.length;
-    caretCol = rowW;
-    found = true;
-  };
-  for (const ch of value) {
-    if (ch === "\n") {
-      if (idx === cursor) mark(); // caret on the newline = end of the row it terminates
-      rows.push(row);
-      row = "";
-      rowW = 0;
-      idx += 1;
-      continue;
+  let placed = false;
+  let idx = 0; // index into `value` of the first character of the row about to be pushed
+
+  const lines = value.split("\n");
+  for (const line of lines) {
+    const wrapped = wrapHard(line, width);
+    for (let ri = 0; ri < wrapped.length; ri++) {
+      const r = wrapped[ri];
+      const end = idx + r.length;
+      // A caret sitting exactly at a mid-line wrap boundary belongs to the NEXT row (it
+      // follows the character that moved down); at the end of the LAST row of a logical
+      // line it stays put — that is the "caret on the newline" case.
+      const lastRowOfLine = ri === wrapped.length - 1;
+      if (!placed && cursor >= idx && (cursor < end || (cursor === end && lastRowOfLine))) {
+        caretRow = rows.length;
+        caretCol = displayWidth(r.slice(0, cursor - idx));
+        placed = true;
+      }
+      rows.push(r);
+      idx = end;
     }
-    const cw = displayWidth(ch);
-    if (rowW + cw > w) {
-      rows.push(row);
-      row = "";
-      rowW = 0;
-    }
-    if (idx === cursor) mark(); // mark AFTER wrapping, so the caret follows the char
-    row += ch;
-    rowW += cw;
-    idx += ch.length;
+    idx += 1; // the "\n" that separated this line from the next
   }
-  if (idx === cursor) mark(); // caret at end of buffer
-  rows.push(row);
-  if (!found) {
+
+  if (!placed) {
     caretRow = rows.length - 1;
-    caretCol = rowW;
+    caretCol = displayWidth(rows[caretRow]);
   }
   return { rows, caretRow, caretCol };
-}
-
-// Terminal-cell width of a string: East Asian wide/fullwidth code points take 2 columns.
-// Covers what a chat composer realistically holds (Hangul, CJK, kana, fullwidth forms).
-export function displayWidth(s: string): number {
-  let w = 0;
-  for (const ch of s) {
-    const c = ch.codePointAt(0)!;
-    w +=
-      (c >= 0x1100 && c <= 0x115f) || // Hangul Jamo (leading)
-      (c >= 0x2e80 && c <= 0xa4cf) || // CJK radicals … Yi
-      (c >= 0xac00 && c <= 0xd7a3) || // Hangul syllables
-      (c >= 0xf900 && c <= 0xfaff) || // CJK compat ideographs
-      (c >= 0xfe30 && c <= 0xfe4f) || // CJK compat forms
-      (c >= 0xff00 && c <= 0xff60) || // fullwidth forms
-      (c >= 0xffe0 && c <= 0xffe6) ||
-      (c >= 0x20000 && c <= 0x3fffd) // CJK extension planes
-        ? 2
-        : 1;
-  }
-  return w;
 }

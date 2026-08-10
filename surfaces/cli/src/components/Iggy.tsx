@@ -1,7 +1,7 @@
 import React from "react";
 import { Text } from "ink";
 import { iggy, colors } from "../theme.js";
-import { displayWidth } from "../cursorPin.js";
+import { displayWidth } from "../format.js";
 import { useFrameLoop } from "../hooks/useFrameLoop.js";
 
 export type Mood = keyof typeof iggy;
