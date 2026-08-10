@@ -161,7 +161,20 @@ export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: str
   }
 
   return (
-    <Box flexDirection="column" width={card} borderStyle="single" borderColor={tint} paddingX={1} marginLeft={1} marginTop={1}>
+    // A rail, not a box. Boxing every tool call put a hard coloured rectangle around a third
+    // of the screen; the design language here is rules and rails, and the colour belongs on
+    // the tool NAME, which is the part you actually scan for.
+    <Box
+      flexDirection="column"
+      width={card}
+      borderStyle="single"
+      borderColor={colors.dim}
+      borderTop={false}
+      borderRight={false}
+      borderBottom={false}
+      paddingLeft={1}
+      marginTop={1}
+    >
       {/* header row */}
       <Box>
         <Text color={tint} bold>{kindGlyph[kind]} {tool.name}</Text>

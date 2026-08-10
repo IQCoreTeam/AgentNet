@@ -56,6 +56,7 @@ import { thinkingLabels, castingFrames, confetti, colors, copy, glyph, pick, rul
 // coming back. One row, always rendered, one state at a time: the chrome's height is now
 // constant and nothing below it can move.
 function ActivityRow({
+  error,
   notice,
   busy,
   elapsed,
@@ -63,6 +64,7 @@ function ActivityRow({
   celebrate,
   idle,
 }: {
+  error: string | null;
   notice: string;
   busy: boolean;
   elapsed?: number;
@@ -76,7 +78,14 @@ function ActivityRow({
   const cast = useFrameLoop(castingFrames.length, 8);
 
   let body: React.ReactNode = <Text> </Text>;
-  if (notice) {
+  if (error) {
+    body = (
+      <>
+        <Text color={colors.err} bold>{"\u2503 "}</Text>
+        <Text color={colors.err} wrap="truncate-end">{error}</Text>
+      </>
+    );
+  } else if (notice) {
     body = (
       <>
         <Text color={colors.ok} bold>{"┃ "}</Text>
@@ -1050,7 +1059,7 @@ export function Chat({
   if (showAccount) {
     return (
       <Box flexDirection="column" paddingX={1}>
-        <Box borderStyle="round" borderColor={colors.iqCyan} flexDirection="column" paddingX={2} paddingY={1}>
+        <Box borderStyle="round" borderColor={colors.bone} flexDirection="column" paddingX={2} paddingY={1}>
           <Text bold color={colors.iqCyan}>account</Text>
           {accountLines.map((line, i) => (
             <Text key={i} dimColor>{line}</Text>
@@ -1065,7 +1074,7 @@ export function Chat({
   if (showSettings) {
     return (
       <Box flexDirection="column" paddingX={1}>
-        <Box borderStyle="round" borderColor={colors.iqCyan} flexDirection="column" paddingX={2} paddingY={1}>
+        <Box borderStyle="round" borderColor={colors.bone} flexDirection="column" paddingX={2} paddingY={1}>
           <Text bold color={colors.iqCyan}>settings</Text>
           <Text dimColor>{`engine    ${chat.cli}`}</Text>
           <Text dimColor>{`model     ${chat.model ?? "default"}`}</Text>
@@ -1085,7 +1094,7 @@ export function Chat({
   if (showHelp) {
     return (
       <Box flexDirection="column" paddingX={1}>
-        <Box borderStyle="round" borderColor={colors.iqCyan} flexDirection="column" paddingX={2} paddingY={1}>
+        <Box borderStyle="round" borderColor={colors.bone} flexDirection="column" paddingX={2} paddingY={1}>
           <Text bold color={colors.iqCyan}>commands</Text>
           {SLASH_COMMANDS.map((c) => (
             <Text key={c.name} dimColor>{`/${c.name}${c.args ? ` ${c.args}` : ""}`.padEnd(24)}{c.desc}</Text>
@@ -1102,7 +1111,7 @@ export function Chat({
   if (showKeys) {
     return (
       <Box flexDirection="column" paddingX={1}>
-        <Box borderStyle="round" borderColor={colors.iqCyan} flexDirection="column" paddingX={2} paddingY={1}>
+        <Box borderStyle="round" borderColor={colors.bone} flexDirection="column" paddingX={2} paddingY={1}>
           <Text bold color={colors.iqCyan}>keyboard shortcuts</Text>
           <Text dimColor>{"Enter".padEnd(16)}send message</Text>
           <Text dimColor>{"Ctrl+C".padEnd(16)}interrupt a turn · again to quit</Text>
@@ -1125,7 +1134,7 @@ export function Chat({
   if (showCloud) {
     return (
       <Box flexDirection="column" paddingX={1}>
-        <Box borderStyle="round" borderColor={colors.iqCyan} flexDirection="column" paddingX={2} paddingY={1}>
+        <Box borderStyle="round" borderColor={colors.bone} flexDirection="column" paddingX={2} paddingY={1}>
           <Text bold color={colors.iqCyan}>storage</Text>
           <Text dimColor>where your sessions live (local is always on; a cloud just mirrors it)</Text>
           <Box marginTop={1}>
@@ -1144,7 +1153,7 @@ export function Chat({
   if (showGdriveConnect) {
     return (
       <Box flexDirection="column" paddingX={1}>
-        <Box borderStyle="round" borderColor={colors.iqCyan} flexDirection="column" paddingX={2} paddingY={1} gap={1}>
+        <Box borderStyle="round" borderColor={colors.bone} flexDirection="column" paddingX={2} paddingY={1} gap={1}>
           <Text bold color={colors.iqCyan}>sign in to Google Drive</Text>
           {!gdriveUrl && !gdriveErr && <Text dimColor>starting OAuth flow…</Text>}
           {gdriveUrl && (
@@ -1167,7 +1176,7 @@ export function Chat({
   if (showLocationInput && pendingCloudKind) {
     return (
       <Box flexDirection="column" paddingX={1}>
-        <Box borderStyle="round" borderColor={colors.iqCyan} flexDirection="column" paddingX={2} paddingY={1}>
+        <Box borderStyle="round" borderColor={colors.bone} flexDirection="column" paddingX={2} paddingY={1}>
           <Text bold color={colors.iqCyan}>
             {pendingCloudKind === "icloud" ? "iCloud folder path:" : "endpoint base URL:"}
           </Text>
@@ -1385,7 +1394,7 @@ export function Chat({
       {rows >= 20 ? (
         <>
           <Box justifyContent="space-between">
-            <Text color={colors.bone} bold>AGENTNET · CLI {"///"}</Text>
+            <Text color={colors.bone} bold>AGENTNET · CLI</Text>
             <Text dimColor>
               {chat.sessions.length} SESSION{chat.sessions.length === 1 ? "" : "S"} · ENCRYPTED
             </Text>
@@ -1437,6 +1446,7 @@ export function Chat({
         mood={mood}
         status={
           <ActivityRow
+            error={chat.turnError}
             notice={notice}
             busy={chat.busy && !pendingApproval}
             elapsed={chat.elapsed}

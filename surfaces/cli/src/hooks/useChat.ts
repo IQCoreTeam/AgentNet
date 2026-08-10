@@ -64,6 +64,8 @@ export function useChat(
   const [loadingSession, setLoadingSession] = useState(false);
   // Why the last load failed, so a dead load reads as an error instead of an empty chat.
   const [loadSessionError, setLoadSessionError] = useState<string | null>(null);
+  // Why the last turn failed to start, so a dead send says so instead of going quiet.
+  const [turnError, setTurnError] = useState<string | null>(null);
   const [firingSkill, setFiringSkill] = useState<SkillActivation | null>(null);
   const [modelLabel, setModelLabel] = useState<string | undefined>(() =>
     labelFor(opts.cli, opts.model, MODELS[opts.cli]),
@@ -234,16 +236,30 @@ export function useChat(
   const send = useCallback(
     async (text: string, images?: import("@iqlabs-official/agent-sdk/runtime/contract").ImageInput[]) => {
       setBusy(true);
-      const h = await ensureHandle();
-      h.send(text, images && images.length ? images : undefined);
+      setTurnError(null);
+      try {
+        const h = await ensureHandle();
+        h.send(text, images && images.length ? images : undefined);
+      } catch (e: unknown) {
+        // Spawning the engine can fail for ordinary reasons - it is not installed, the login
+        // expired, the model name was rejected. Before this, the rejection was unhandled and
+        // `busy` stayed true, so the turn that never started looked like one running forever.
+        setBusy(false);
+        setTurnError(e instanceof Error ? e.message : String(e));
+      }
     },
     [ensureHandle],
   );
 
   // stop + drop the live handle (next send respawns). Used on engine/model/session change.
+  // Clearing `busy` belongs HERE, not at the call sites: onTurnEnd is the only other thing
+  // that clears it, and a dropped handle will never fire one. Every caller that forgot
+  // (engine switch, model change, open/new session) left the UI stuck on "cooking" with a
+  // timer running for as long as the session stayed open.
   const dropHandle = useCallback(() => {
     handle.current?.stop();
     handle.current = null;
+    setBusy(false);
   }, []);
 
   // cancel a running turn (Esc): stop the engine and unblock the UI immediately.
@@ -419,6 +435,8 @@ export function useChat(
     deleteSession,
     refreshSessions,
     firingSkill,
+    turnError,
+    clearTurnError: () => setTurnError(null),
     redraw,
   };
 }

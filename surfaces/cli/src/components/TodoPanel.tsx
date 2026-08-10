@@ -21,7 +21,7 @@ export function TodoPanel({ json }: { json: string }) {
   const done = todos.filter((t) => t.status === "completed").length;
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={colors.iqViolet} paddingX={1} marginLeft={2}>
+    <Box flexDirection="column" borderStyle="round" borderColor={colors.dim} paddingX={1} marginLeft={2}>
       <Text color={colors.iqViolet} bold>
         ✓ todos {done}/{todos.length}
       </Text>
