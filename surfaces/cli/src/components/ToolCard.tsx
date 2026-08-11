@@ -113,7 +113,7 @@ function Output({
           </Text>
         ))}
         {hidden > 0 ? (
-          <Text dimColor>  +{hidden} more lines</Text>
+          <Text dimColor>  +{hidden} LINES HIDDEN</Text>
         ) : null}
       </Box>
     </Box>

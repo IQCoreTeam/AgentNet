@@ -6,11 +6,11 @@ import { ToolCard } from "./ToolCard.js";
 import { Markdown } from "./Markdown.js";
 import { wrapBlock, padCells } from "../format.js";
 
-// The transcript is a list of TURNS, ported from the vscode surface: your message opens a
-// turn as a solid inverted band, and everything the agent does in reply hangs off a rail
-// under it. The band is what makes a long scrollback scannable - you find your own words,
-// not a wall of output. (A terminal cannot pin a header the way the webview does, so the
-// band carries that job: it is the only inverted thing on screen.)
+// The ONE inverted band on screen: the turn currently running, pinned above its streaming
+// reply so you can still read what you asked (the design's tab 09 "PINNED" header, and the
+// terminal's stand-in for the webview's scroll-pinned header). Settled turns in scrollback
+// do NOT use this - they render calm via <UserLine> - so the transcript is never a wall of
+// inverted bars. Reserving the invert for the live turn is what keeps a long chat scannable.
 export function TurnHeader({ text }: { text: string }) {
   const inner = Math.max(10, (process.stdout.columns || 80) - 4); // frame paddingX + "> "
   const lines = wrapBlock(text, inner);
@@ -21,6 +21,21 @@ export function TurnHeader({ text }: { text: string }) {
           {i === 0 ? "❯ " : "  "}
           {padCells(l, inner)}
         </Text>
+      ))}
+    </Box>
+  );
+}
+
+// A settled user message in the transcript: the calm form from the design's chat-turn
+// screen - just the bold `//YOU_` label over the text, no full-width invert. The label is
+// still a scan anchor for "where did I speak", without shouting a white bar down the log.
+function UserLine({ text }: { text: string }) {
+  const width = Math.max(20, (process.stdout.columns || 80) - 2);
+  return (
+    <Box flexDirection="column" marginTop={1}>
+      <Text color={colors.bone} bold>{tag("you")}</Text>
+      {wrapBlock(text, width).map((l, i) => (
+        <Text key={i}>{l || " "}</Text>
       ))}
     </Box>
   );
@@ -47,7 +62,7 @@ function Reply({ children }: { children: React.ReactNode }) {
 // recent assistant line types out (live=true) to FEEL like streaming; older lines render
 // whole. The author label uses the message's own .cli so cross-CLI threads badge right.
 export function Message({ msg, live }: { msg: ChatMessage; live?: boolean }) {
-  if (msg.role === "user") return <TurnHeader text={msg.text} />;
+  if (msg.role === "user") return <UserLine text={msg.text} />;
 
   if (msg.role === "tool") {
     return (
