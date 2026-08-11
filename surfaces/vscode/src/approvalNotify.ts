@@ -35,6 +35,19 @@ export interface NotifyTransport {
   inject: (msg: any) => void;
 }
 
+// The chat panel, as far as this file cares. Window focus alone does NOT tell you whether the
+// user can answer: a focused window with the chat panel sitting in a background tab shows them
+// nothing at all, and (because retainContextWhenHidden keeps the hidden webview alive) the card
+// renders to an audience of no one while the turn blocks.
+export interface CardSurface {
+  /** True when the card is the visible tab, not merely alive in the background. */
+  visible(): boolean;
+  /** Bring the card on screen. */
+  reveal(): void;
+  /** Fires whenever `visible()` may have changed. */
+  onDidChange(cb: () => void): vscode.Disposable;
+}
+
 const SENTINEL = "Write my own answer…"; // the "custom input" row in a pick list
 
 // ── low-level: run a tool, never reject. Resolves exit code + stdout/stderr; flags a missing
@@ -430,8 +443,49 @@ async function showPopup(req: ApprovalRequest, appName: string, sessionTitle: st
   }
 }
 
-// The decorator. Wrap the real (webview-backed) channel; on an unfocused request, race a native
-// popup against it and keep both surfaces in sync.
+// ── Tier 2, in-app: the window IS focused but the card is in a background tab. The user is
+// looking at VS Code and seeing nothing, so something has to ask — but a native dialog here
+// would yank focus out of the file they're typing in, to answer a request they never saw
+// coming. A notification asks in place instead, and offers to reveal the real card.
+//
+// Deliberately NOT offering "Always": the toast shows a truncated one-liner, and a permanent
+// grant deserves the full card (command, cwd, diff). Approve here is once-only; "Show" opens
+// the card where every option is available.
+//
+// A notification can't be dismissed programmatically, so it may outlive the request. That is
+// safe: a late answer goes through the same inject path, which dupe-guards on the request id.
+async function showNotification(
+  req: ApprovalRequest,
+  sessionTitle: string | undefined,
+  card: CardSurface,
+  signal: AbortSignal,
+): Promise<ApprovalDecision | null> {
+  const who = sessionTitle ? `${trunc(sessionTitle, 40)}: ` : "";
+  const SHOW = "Show";
+  if (req.kind === "question") {
+    // A question can be a multi-select wizard; the card is the only surface that can do it.
+    const n = Array.isArray(req.questions) ? req.questions.length : 1;
+    const picked = await Promise.resolve(
+      vscode.window.showWarningMessage(`${who}AgentNet needs your input (${n}).`, SHOW),
+    );
+    if (picked === SHOW && !signal.aborted) card.reveal();
+    return null;
+  }
+  const APPROVE = "Approve";
+  const DENY = "Deny";
+  const head = trunc(req.title || req.tool || "Approve this action?", 120);
+  const picked = await Promise.resolve(
+    vscode.window.showWarningMessage(`${who}${head}`, APPROVE, DENY, SHOW),
+  );
+  if (signal.aborted) return null;
+  if (picked === APPROVE) return { outcome: "once" };
+  if (picked === DENY) return { outcome: "deny", reason: "denied by user" };
+  if (picked === SHOW) card.reveal();
+  return null;
+}
+
+// The decorator. Wrap the real (webview-backed) channel; when the user cannot SEE the card,
+// race an extra surface against it and keep both in sync.
 export class NotifyingApprovalChannel implements ApprovalChannel {
   constructor(
     private inner: ApprovalChannel,
@@ -439,23 +493,43 @@ export class NotifyingApprovalChannel implements ApprovalChannel {
     private appName: string,
     // Resolve the human title of the session a request belongs to (for the popup title bar).
     private sessionTitleOf?: (req: ApprovalRequest) => string | undefined,
+    // The panel holding the card. Optional: without it this falls back to focus-only, which
+    // is what it did before — a focused window was assumed to mean a card the user can see.
+    private card?: CardSurface,
   ) {}
 
+  // Can the user actually answer on the card right now? Both halves are required: the window
+  // must have OS focus AND the card must be the visible tab.
+  private answerable(): boolean {
+    return vscode.window.state.focused && (this.card ? this.card.visible() : true);
+  }
+
   async request(req: ApprovalRequest): Promise<ApprovalDecision> {
-    // Focused (or an unsupported platform): the webview card is already on-screen — nothing to add.
-    if (vscode.window.state.focused) return this.inner.request(req);
+    // The card is on screen and the user is looking at it — nothing to add.
+    if (this.answerable()) return this.inner.request(req);
 
     const ac = new AbortController();
     let settled = false;
-    // Focus back = user returned to VS Code -> tear down the modal, let them use the card.
-    const focusSub = vscode.window.onDidChangeWindowState((e) => {
-      if (e.focused) ac.abort();
-    });
+    // The card became answerable (focus returned, or they switched back to its tab) -> tear
+    // down the extra surface and let them use the card itself.
+    const watch: vscode.Disposable[] = [
+      vscode.window.onDidChangeWindowState(() => { if (this.answerable()) ac.abort(); }),
+    ];
+    if (this.card) watch.push(this.card.onDidChange(() => { if (this.answerable()) ac.abort(); }));
 
-    // Popup path: an answer is injected as if the webview posted it, so `inner` resolves and
-    // dupe-guards; then clear the stale card. A cancel/abort yields null -> card stays.
+    // Which extra surface, by WHY the card can't be answered:
+    //   window unfocused     -> native OS dialog; the user is in another app entirely, so
+    //                           taking focus is the whole point.
+    //   focused, card hidden -> VS Code notification; they're already here, don't hijack them.
     const sessionTitle = this.sessionTitleOf?.(req);
-    const popup = showPopup(req, this.appName, sessionTitle, ac.signal)
+    const ask =
+      this.card && vscode.window.state.focused
+        ? showNotification(req, sessionTitle, this.card, ac.signal)
+        : showPopup(req, this.appName, sessionTitle, ac.signal);
+
+    // An answer is injected as if the webview posted it, so `inner` resolves and dupe-guards;
+    // then clear the stale card. A cancel/abort yields null -> card stays.
+    const popup = ask
       .then((decision) => {
         if (decision && !settled) {
           this.transport.inject({
@@ -476,7 +550,7 @@ export class NotifyingApprovalChannel implements ApprovalChannel {
       ac.abort(); // kill the modal if it's still up
       return decision;
     } finally {
-      focusSub.dispose();
+      for (const d of watch) d.dispose();
       void popup;
     }
   }

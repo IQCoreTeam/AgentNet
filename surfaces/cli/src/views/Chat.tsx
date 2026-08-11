@@ -1055,7 +1055,7 @@ export function Chat({
   const overlayOpen =
     showAccount || showSettings || showHelp || showKeys || showCloud || showGdriveConnect ||
     showLocationInput || showModels || showEfforts || showSessions || (showMarket && !!market) ||
-    showBtw;
+    showBtw || !!engineLogin;
   if (pendingApproval && overlayOpen) {
     return (
       <Box flexDirection="column" paddingX={1}>

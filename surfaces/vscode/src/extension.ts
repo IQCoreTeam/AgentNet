@@ -514,14 +514,20 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
   // This panel's OWN approval channel — tool approvals from sessions started here
   // dock in THIS panel (it shares this panel's transport). Drained on dispose so a
   // request to a closed panel auto-denies instead of hanging the engine.
-  // Wrap the webview channel so that, when this window is NOT focused, an approval also pops a
-  // native macOS dialog (answerable without switching back). The webview card stays the source
-  // of truth; whichever surface answers first wins (see approvalNotify.ts).
+  // Wrap the webview channel so that, whenever the user can't SEE this card, the approval also
+  // surfaces somewhere they are looking: a native dialog when the window is unfocused, a VS Code
+  // notification when the window is focused but this panel is a background tab. The webview card
+  // stays the source of truth; whichever surface answers first wins (see approvalNotify.ts).
   const approval = new NotifyingApprovalChannel(
     withTimeout(new TransportApprovalChannel(transport)),
     transport,
     vscode.env.appName,
     (req) => sessionTitles.get(req.sessionId) || undefined,
+    {
+      visible: () => panel.visible,
+      reveal: () => panel.reveal(),
+      onDidChange: (cb) => panel.onDidChangeViewState(() => cb()),
+    },
   );
   panel.onDidDispose(() => approval.drain?.());
 

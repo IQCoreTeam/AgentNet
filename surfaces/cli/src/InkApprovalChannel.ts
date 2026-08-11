@@ -20,8 +20,21 @@ export class InkApprovalChannel implements ApprovalChannel {
       this.pending = { req, resolve };
       this.listener?.(req);
       // The turn is now blocked on a human. If that human is in another window they have
-      // no way to know - the card is drawn on a terminal they are not looking at.
-      callAttention(`${req.cli} wants to use ${req.tool}`);
+      // no way to know - the card is drawn on a terminal they are not looking at. The
+      // escalated dialog carries Approve/Deny buttons; a click resolves right there.
+      // resolve() checks the pending id, so a stale click after an in-terminal answer
+      // (or the next request) lands on nothing.
+      const summary =
+        `${req.cli} wants to use ${req.tool}` +
+        (req.command ? ` — ${req.command.slice(0, 80)}` : "");
+      callAttention(summary, (approve) =>
+        this.resolve(
+          req.id,
+          approve
+            ? { outcome: "once" }
+            : { outcome: "deny", reason: "denied from the popup dialog" },
+        ),
+      );
     });
   }
 
