@@ -19,6 +19,23 @@ export const colors = {
   codex: "#ecebe4",
   bone: "#ecebe4",
   ink: "#0a0a0b",
+  danger: "#ff3b30", // hard danger (destructive command / gated), distinct from err text
+} as const;
+
+// Structural surfaces from the design that are NOT brand colors: the panel backgrounds,
+// rails, and separators used to LAYER a panel above the chat (the design's overlays rise
+// out of the footer instead of replacing the frame). Kept apart from `colors` so the brand
+// palette and the structural greys never get confused.
+export const surface = {
+  locked: "#4a4a46", // a locked / not-yet-reached step (onboarding ladder)
+  rail: "#3a3a38", // heavy left rail on replies, separators between session tabs
+  pastHeader: "#2a2a28", // a scrolled-past turn header (long chat)
+  codeBg: "#101013", // inline code box background
+  panelBg: "#0e1410", // a panel that rises above the composer (green-tinted near-black)
+  panelSep: "#24352a", // row separator inside a risen panel
+  panelSepDim: "#16201a", // the fainter separator inside a risen panel
+  forkHere: "#1a2a1f", // the "up to here" marker highlight on a fork
+  successBg: "#0f1a12", // the green "wallet linked" success band (onboarding)
 } as const;
 
 // Section rule — the heavy horizontal line that separates every band of the frame.
