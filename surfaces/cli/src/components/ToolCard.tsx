@@ -6,7 +6,7 @@ import type { ToolAction } from "@iqlabs-official/agent-sdk/runtime/contract";
 import { glyph, toolTint, colors, surface } from "../theme.js";
 import { TodoPanel } from "./TodoPanel.js";
 import { DiffView } from "./DiffView.js";
-import { stripAnsi, clampLines, lineCount, wrapBlock } from "../format.js";
+import { stripAnsi, clampLines, lineCount, wrapBlock, displayWidth } from "../format.js";
 
 const MAX_OUTPUT_LINES = 12;
 
@@ -67,18 +67,39 @@ function kindOf(name: string): keyof typeof toolTint {
 // the EDIT diff and the BASH command with its output. The #101013 background reads as
 // near-nothing over the terminal, so in cells the BORDER is the silhouette; long lines
 // hard-wrap inside because a terminal has no horizontal scroll. Nothing leaves the frame.
-function CodeBox({ width, children }: { width: number; children: React.ReactNode }) {
+// `header` renders as a full-bleed title band (bg = the border's own #2a2a28) — the
+// file's title bar, the way a code block in chat carries its filename on top.
+function CodeBox({
+  width,
+  header,
+  children,
+}: {
+  width: number;
+  header?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <Box
       flexDirection="column"
       width={width}
       borderStyle="single"
       borderColor={surface.pastHeader}
-      paddingX={1}
     >
-      {children}
+      {header}
+      <Box flexDirection="column" paddingX={1}>
+        {children}
+      </Box>
     </Box>
   );
+}
+
+// Title band segments: left label (truncated from the left, so the tail of a path — the
+// part that identifies the file — survives) padded against a right-aligned meta slot.
+function bandTitle(left: string, width: number): string {
+  if (displayWidth(left) <= width) return left;
+  let tail = left;
+  while (tail.length > 1 && displayWidth(`…${tail}`) > width) tail = tail.slice(1);
+  return `…${tail}`;
 }
 
 // Output block: syntax-highlighted when a language is known, else plain.
@@ -157,16 +178,43 @@ export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: str
 
   // Interior cells of a CodeBox hosted at `inner` width: border(2) + paddingX(2).
   const boxInner = Math.max(8, inner - 4);
+  // The title band bleeds to the border, so it only loses the border cells.
+  const bandW = Math.max(8, inner - 2);
 
   let body: React.ReactNode = null;
   let outputInBox = false;
   if (tool.diff) {
+    // Adds/dels for the title band's right slot — the summary row leaves the box body.
+    const adds = tool.diff.split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++")).length;
+    const dels = tool.diff.split("\n").filter((l) => l.startsWith("-") && !l.startsWith("---")).length;
+    const meta = `+${adds} −${dels}`;
+    const title = bandTitle(tool.file || "workspace", Math.max(4, bandW - displayWidth(meta) - 3));
+    const gap = Math.max(1, bandW - displayWidth(title) - displayWidth(meta) - 2);
     // In the transcript there is no key handler, so a collapsed "press [d] to expand"
     // diff could never be opened — the edit's actual before/after was unreachable. Show
     // it, bounded, and drop the dead hint. Boxed per the design's `.code` treatment.
     body = (
-      <CodeBox width={inner}>
-        <DiffView diff={tool.diff} width={boxInner} expanded maxLines={MAX_OUTPUT_LINES} interactive={false} />
+      <CodeBox
+        width={inner}
+        header={
+          <Text backgroundColor={surface.pastHeader}>
+            <Text color={colors.bone} bold>{` ${title}`}</Text>
+            {" ".repeat(gap)}
+            <Text color={colors.ok}>+{adds}</Text>
+            <Text color={colors.dim}> </Text>
+            <Text color={colors.err}>−{dels}</Text>
+            {" "}
+          </Text>
+        }
+      >
+        <DiffView
+          diff={tool.diff}
+          width={boxInner}
+          expanded
+          maxLines={MAX_OUTPUT_LINES}
+          interactive={false}
+          summary={false}
+        />
       </CodeBox>
     );
   } else if (tool.command) {
@@ -176,15 +224,19 @@ export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: str
       cmd = highlight(cmd, { language: "bash", ignoreIllegals: true });
     } catch { /* keep raw */ }
     // Command and its output share one box, the way the design keeps a whole
-    // execution inside a single `.code` block.
+    // execution inside a single `.code` block: the command reads at full strength,
+    // a border-colored rule separates it from its (dim) output.
     outputInBox = Boolean(tool.output);
     body = (
       <CodeBox width={inner}>
         {cmd.split("\n").map((l, i) => (
-          <Text key={i} dimColor>{l || " "}</Text>
+          <Text key={i}>{l || " "}</Text>
         ))}
         {outputInBox ? (
-          <Output text={tool.output!} failed={!okExit} lang={fileLang} width={boxInner} bare />
+          <>
+            <Text color={surface.pastHeader}>{"─".repeat(boxInner)}</Text>
+            <Output text={tool.output!} failed={!okExit} lang={fileLang} width={boxInner} bare />
+          </>
         ) : null}
       </CodeBox>
     );
@@ -212,7 +264,9 @@ export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: str
       <Box>
         <Text color={okExit ? colors.ok : colors.err} bold>{okExit ? glyph.ok : glyph.fail} </Text>
         <Text color={tint} bold>{tool.name.toUpperCase()}</Text>
-        {tool.file ? (
+        {/* When a diff box follows, its title band owns the (full) path — repeating a
+            shortened copy up here just said the same thing twice in two spellings. */}
+        {tool.file && !tool.diff ? (
           <Text dimColor>
             {"  "}{shortPath(tool.file)}
           </Text>

@@ -54,6 +54,7 @@ export function DiffView({
   expanded = false,
   activeFileIdx = 0,
   interactive = true,
+  summary = true,
 }: {
   diff: string;
   width: number; // cells available INSIDE whatever card is hosting the diff
@@ -64,6 +65,9 @@ export function DiffView({
   // not advertise a "[d]" that does nothing, and the diff shows itself instead of
   // hiding behind a toggle that can never be pressed.
   interactive?: boolean;
+  // false when the host already carries the +adds/−dels (a CodeBox title band):
+  // the counts row would say it twice.
+  summary?: boolean;
 }) {
   const files = parseMultiFileDiff(diff);
   const fileDiff = files[activeFileIdx] || files[0] || { path: "Workspace Changes", lines: [] };
@@ -88,24 +92,68 @@ export function DiffView({
     0,
   );
 
+  // Hunk headers give us real line numbers, so the box can carry a dim number gutter the
+  // way an edit block does in chat: deletions numbered from the old file, additions and
+  // context from the new. The raw @@ row itself renders as a dim ⋯ separator between
+  // hunks — the numbers already say where we are.
+  const numbered: Array<
+    { raw: string; ln: number; idx: number; sep?: false } | { raw: string; sep: true }
+  > = [];
+  let oldLn = 0;
+  let newLn = 0;
+  let hasHunks = false;
+  for (const raw of all) {
+    const h = raw.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+    if (h) {
+      hasHunks = true;
+      oldLn = Number(h[1]);
+      newLn = Number(h[2]);
+      if (numbered.length > 0) numbered.push({ raw, sep: true });
+      continue;
+    }
+    const idx = numbered.length;
+    if (raw.startsWith("+")) numbered.push({ raw, ln: newLn++, idx });
+    else if (raw.startsWith("-")) numbered.push({ raw, ln: oldLn++, idx });
+    else {
+      numbered.push({ raw, ln: newLn++, idx });
+      oldLn++;
+    }
+  }
+  const gutterW = hasHunks
+    ? Math.max(2, ...numbered.map((e) => (e.sep ? 0 : String(e.ln).length)))
+    : 0;
+
   // Wrap FIRST, then clamp, so `maxLines` is a budget of real screen rows. Clamping raw
   // diff lines and letting them wrap afterwards is how a "20 line" diff quietly became 35
   // rows and pushed the answer keys out of the frame.
-  const bandW = Math.max(8, width);
-  const rows: Array<{ text: string; raw: string }> = [];
-  for (const raw of all) {
+  const bandW = Math.max(8, width - (gutterW ? gutterW + 1 : 0));
+  const rows: Array<{ text: string; raw: string; gutter: string; idx: number }> = [];
+  for (const entry of numbered) {
+    if (entry.sep) {
+      rows.push({ text: "", raw: entry.raw, gutter: "", idx: -1 });
+      continue;
+    }
+    const { raw, ln, idx } = entry;
     // Keep the +/- marker in column 0 and give continuations a blank gutter, so a wrapped
     // line still reads as one change rather than as a new added/removed line.
     const prefix = raw.startsWith("+") || raw.startsWith("-") ? raw[0] : raw.slice(0, 1);
     const rest = raw.slice(1);
     const wrapped = wrapHard(rest, bandW - 1);
     for (let i = 0; i < wrapped.length; i++) {
-      rows.push({ text: (i === 0 ? prefix : " ") + wrapped[i], raw });
+      rows.push({
+        text: (i === 0 ? prefix : " ") + wrapped[i],
+        raw,
+        idx,
+        gutter: gutterW ? (i === 0 ? String(ln).padStart(gutterW) : " ".repeat(gutterW)) : "",
+      });
     }
     if (rows.length > maxLines + 1) break;
   }
   const shownRows = rows.slice(0, maxLines);
-  const hidden = all.length - new Set(shownRows.map((r) => r.raw)).size;
+  // Hidden = CONTENT lines not on screen. Counting raw @@ furniture here is how the box
+  // once claimed "+1 more lines" while every real line was visible.
+  const contentTotal = numbered.filter((e) => !e.sep).length;
+  const hidden = contentTotal - new Set(shownRows.filter((r) => r.idx >= 0).map((r) => r.idx)).size;
 
   if (!expanded) {
     return (
@@ -139,19 +187,21 @@ export function DiffView({
 
   return (
     <Box flexDirection="column">
-      <Text>
-        <Text color={colors.ok}>+{totalAdds}</Text> <Text color={colors.err}>−{totalDels}</Text>
-        <Text dimColor> lines changed across </Text>
-        <Text color={colors.iqCyan} bold>{files.length}</Text>
-        <Text dimColor> file{files.length === 1 ? "" : "s"}</Text>
-        {interactive ? (
-          <>
-            <Text dimColor> (press </Text>
-            <Text color={colors.iqCyan} bold>[d]</Text>
-            <Text dimColor> to collapse diff)</Text>
-          </>
-        ) : null}
-      </Text>
+      {summary ? (
+        <Text>
+          <Text color={colors.ok}>+{totalAdds}</Text> <Text color={colors.err}>−{totalDels}</Text>
+          <Text dimColor> lines changed across </Text>
+          <Text color={colors.iqCyan} bold>{files.length}</Text>
+          <Text dimColor> file{files.length === 1 ? "" : "s"}</Text>
+          {interactive ? (
+            <>
+              <Text dimColor> (press </Text>
+              <Text color={colors.iqCyan} bold>[d]</Text>
+              <Text dimColor> to collapse diff)</Text>
+            </>
+          ) : null}
+        </Text>
+      ) : null}
 
       {files.length > 1 ? (
         <Box flexDirection="row" marginY={1}>
@@ -160,9 +210,16 @@ export function DiffView({
         </Box>
       ) : null}
 
-      {shownRows.map((r, i) => (
-        <HighlightDiffLine key={i} line={padCells(r.text, bandW)} raw={r.raw} />
-      ))}
+      {shownRows.map((r, i) =>
+        r.raw.startsWith("@@") && !r.text ? (
+          <Text key={i} color={diffTheme.hunk}>{`${" ".repeat(gutterW)} ⋯`}</Text>
+        ) : (
+          <Box key={i} flexDirection="row">
+            {gutterW ? <Text dimColor>{r.gutter} </Text> : null}
+            <HighlightDiffLine line={padCells(r.text, bandW)} raw={r.raw} />
+          </Box>
+        ),
+      )}
       {hidden > 0 ? <Text dimColor>⎿ +{hidden} more lines</Text> : null}
     </Box>
   );
