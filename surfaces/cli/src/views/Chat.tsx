@@ -1264,6 +1264,7 @@ export function Chat({
       <SessionList
         sessions={chat.sessions}
         activeId={chat.pendingId}
+        cloud={cloud && cloud.kind !== "local" ? cloud.kind : null}
         onResume={(id) => {
           void chat.openSession(id);
           setShowSessions(false);
