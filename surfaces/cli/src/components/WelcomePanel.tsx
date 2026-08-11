@@ -1,13 +1,14 @@
 import React from "react";
 import { Box, Text, useInput } from "ink";
 import { HELIUS_QUICKSTART_URL } from "@iqlabs-official/agent-sdk";
-import { colors, glyph, tag } from "../theme.js";
+import { colors, glyph, rule, tag } from "../theme.js";
+import { displayWidth } from "../format.js";
 
-// Focusable rows, in order. settings first, then one row per owned skill, then the market
-// entry. A single focus index walks all of them (Ctrl+S enters; [tab]/[↑↓] move). The
-// key on a settings row drives onEdit; skill/market rows are handled by their own index.
+// Focusable rows, in order: the four settings bands, then the skills band (enter = market).
 export type PanelField = "wallet" | "cloud" | "engine" | "helius";
 const SETTINGS: PanelField[] = ["wallet", "cloud", "engine", "helius"];
+const SKILLS_IDX = SETTINGS.length;
+const FOCUS_TOTAL = SKILLS_IDX + 1;
 
 // A clickable terminal hyperlink (OSC 8). Modern terminals (iTerm2, VS Code,
 // kitty, …) render `label` underlined and open `url` on ⌘/Ctrl-click; the rest
@@ -21,41 +22,84 @@ export interface OwnedSkill {
   name: string;
 }
 
-// One settings row, design-project style: `//WALLET_  ◉ value`. The focused row
-// INVERTS (ink on bone) — the strongest focus signature the design uses.
-function SettingRow({
+function truncate(s: string, w: number): string {
+  if (displayWidth(s) <= w) return s;
+  let head = s;
+  while (head.length > 1 && displayWidth(`${head}…`) > w) head = head.slice(0, -1);
+  return `${head}…`;
+}
+
+// One config band, the design's row silhouette (tab 03): `//TAG_` on the left, the value
+// on the right edge, and the focused band FULLY inverted (ink on bone, edge to edge) —
+// the design's strongest focus signature.
+function Band({
+  width,
   label,
   value,
-  connected,
+  dim,
   focused,
 }: {
+  width: number;
   label: string;
   value: string;
-  connected: boolean;
+  dim?: boolean;
   focused: boolean;
 }) {
-  const bg = focused ? colors.bone : undefined;
-  return (
-    <Box>
-      <Box width={11}>
-        <Text backgroundColor={bg} color={focused ? colors.ink : colors.bone} bold>
-          {tag(label)}
-        </Text>
-      </Box>
-      <Text backgroundColor={bg} color={focused ? colors.ink : connected ? undefined : colors.dim}>
-        {connected ? "◉" : "○"} {value}
+  const left = ` ${tag(label)}`;
+  const fitted = truncate(value, Math.max(4, width - displayWidth(left) - 3));
+  if (focused) {
+    const gap = Math.max(1, width - displayWidth(left) - displayWidth(fitted) - 1);
+    return (
+      <Text backgroundColor={colors.bone} color={colors.ink} bold>
+        {left + " ".repeat(gap) + fitted + " "}
       </Text>
+    );
+  }
+  return (
+    <Box width={width} justifyContent="space-between">
+      <Text bold color={dim ? colors.dim : colors.bone}>{left}</Text>
+      <Text color={dim ? colors.dim : undefined}>{fitted + " "}</Text>
     </Box>
   );
 }
 
-// The "welcome back" control panel: grid IQ mark (left), editable settings (middle), and a
-// "my skills" column (right). The composer keeps focus until Ctrl+S; then a single focus
-// index walks settings → owned skills → market. [enter] edits a setting, opens the market,
-// or (on a skill) is a no-op for now. Editing helius switches the panel into a key-input
-// line editor (onSetHelius commits). Esc returns focus to the composer.
+// The skills band's inline value: `✦ OWNED · ✦ built-in · ▸ MARKET`, greedily fitted to
+// one row (the design lays skills HORIZONTALLY in a single band). Owned skills read at
+// full strength, built-ins dim; whatever doesn't fit collapses into `+N`.
+function fitSkills(
+  owned: OwnedSkill[],
+  builtIn: string[],
+  width: number,
+): { pieces: Array<{ text: string; dim: boolean }>; plain: string } {
+  const market = "▸ MARKET";
+  const items = [
+    ...owned.map((s) => ({ text: `${glyph.sparkle} ${s.name.toUpperCase()}`, dim: false })),
+    ...builtIn.map((slug) => ({ text: `${glyph.sparkle} ${slug}`, dim: true })),
+  ];
+  const pieces: Array<{ text: string; dim: boolean }> = [];
+  let used = displayWidth(market);
+  let taken = 0;
+  for (const item of items) {
+    const left = items.length - taken - 1;
+    const reserve = left > 0 ? displayWidth(` · +${left}`) : 0;
+    const cost = displayWidth(`${item.text} · `);
+    if (used + cost + reserve > width) break;
+    pieces.push({ text: `${item.text} · `, dim: item.dim });
+    used += cost;
+    taken++;
+  }
+  const hidden = items.length - taken;
+  if (hidden > 0) pieces.push({ text: `+${hidden} · `, dim: true });
+  pieces.push({ text: market, dim: true });
+  return { pieces, plain: pieces.map((p) => p.text).join("") };
+}
+
+// The welcome region, tab 03 of the design: a logo column on the left behind a bold rail,
+// and full-width config bands stacked on the right — wallet, cloud, engine, helius, skills
+// — separated by bone rules, the focused band inverted. The composer keeps focus until
+// Ctrl+S; then tab/↑↓ walk the bands, [enter] edits (or opens the market from the skills
+// band), Esc returns to the composer. Editing helius turns its band into a key editor.
 export function WelcomePanel({
-  name,
   walletAddr,
   cloud,
   engine,
@@ -70,7 +114,6 @@ export function WelcomePanel({
   onOpenMarket,
   onExit,
 }: {
-  name?: string;
   walletAddr: string;
   cloud: { kind: string; account?: string } | null;
   engine: "claude" | "codex";
@@ -79,8 +122,9 @@ export function WelcomePanel({
   passive?: string[];
   dasReady: boolean;
   active: boolean;
-  // Height budget for the whole panel, handed down by Chat (which owns the frame budget).
-  // The owned-skill list is capped to whatever is left after the panel's fixed rows.
+  // Height budget handed down by Chat (which owns the frame budget). The panel's height
+  // is fixed — skills lay horizontally — so the budget only decides whether the bone
+  // rules between bands fit or the bands pack tight.
   maxRows?: number;
   onEdit: (field: PanelField) => void;
   onSetHelius: (key: string) => void;
@@ -90,34 +134,6 @@ export function WelcomePanel({
   const [focus, setFocus] = React.useState(0);
   // helius key-entry mode: when set, the panel is a line editor capturing the new key.
   const [keyInput, setKeyInput] = React.useState<string | null>(null);
-
-  // null = still loading; treat as no focusable skill rows until it resolves.
-  const allOwned = skills ?? [];
-  // Cap the drawn skill rows so the panel can't outgrow the terminal. A taller panel pushes
-  // the whole frame past `rows`, and ink then clears and reprints the entire screen on every
-  // keystroke (the empty-session flicker). maxRows is the panel's height budget; subtract the
-  // panel frame (4) and the skills column's own fixed rows — header + margin (2), the market
-  // entry (2), and the built-in block if present — and the rest is the skill list.
-  // +1 reserves the "+N more" overflow row we draw whenever the list is actually truncated.
-  const skillsFixed = 2 + 2 + 1 + (passive && passive.length ? passive.length + 2 : 0);
-  const skillCap = Math.max(0, (maxRows ?? 999) - 4 - skillsFixed);
-  const ownedList = allOwned.length > skillCap ? allOwned.slice(0, skillCap) : allOwned;
-  const hiddenSkills = allOwned.length - ownedList.length;
-  // the focus list: settings rows, then a row per VISIBLE skill, then the market entry. Hidden
-  // (overflow) skills are not focusable — focus must never land on a row that isn't drawn, and
-  // skill rows are inert anyway; the market view lists them all.
-  const total = SETTINGS.length + ownedList.length + 1;
-  const marketIdx = total - 1;
-  const skillStart = SETTINGS.length;
-
-  function activate(i: number) {
-    if (i < SETTINGS.length) {
-      const field = SETTINGS[i];
-      if (field === "helius") return setKeyInput("");
-      return onEdit(field);
-    }
-    if (i === marketIdx) return onOpenMarket();
-  }
 
   useInput(
     (input, key) => {
@@ -133,63 +149,128 @@ export function WelcomePanel({
         return;
       }
       if (key.escape) return onExit();
-      if (key.tab && key.shift) return setFocus((f) => (f + total - 1) % total);
-      if (key.tab || key.downArrow) return setFocus((f) => (f + 1) % total);
-      if (key.upArrow) return setFocus((f) => (f + total - 1) % total);
-      if (key.return) return activate(focus);
+      if (key.tab && key.shift) return setFocus((f) => (f + FOCUS_TOTAL - 1) % FOCUS_TOTAL);
+      if (key.tab || key.downArrow) return setFocus((f) => (f + 1) % FOCUS_TOTAL);
+      if (key.upArrow) return setFocus((f) => (f + FOCUS_TOTAL - 1) % FOCUS_TOTAL);
+      if (key.return) {
+        if (focus === SKILLS_IDX) return onOpenMarket();
+        const field = SETTINGS[focus];
+        if (field === "helius") return setKeyInput("");
+        return onEdit(field);
+      }
     },
     { isActive: active },
   );
 
+  const mascot = ["( ◕ ◡ ◕ )", "⠐⠄ ░▒▓▓▒░ ⠂⠈░▒▒░ ⡀", " ⠈  ░░▒▒▒▒░░  ⠠⠁", "THE AGENT LAYER"];
+  const leftW = Math.max(...mascot.map(displayWidth)) + 2; // paddingX(1) each side
+
+  const cols = process.stdout.columns || 80;
+  // Frame paddingX(2) outside, own bold border(2) + left column + its rail(1) inside.
+  const bandW = Math.max(24, cols - 2 - 2 - leftW - 1);
+
+  // The bone rules between bands are part of the silhouette but cost 4 rows; on a short
+  // terminal the bands pack tight instead. Full height: 5 bands + 4 rules + hint + border.
+  const withRules = (maxRows ?? 99) >= 12;
+
   const shortAddr = walletAddr
     ? `${walletAddr.slice(0, 4)}…${walletAddr.slice(-4)}`
-    : "(not connected)";
+    : "○ not connected";
   const cloudConnected = !!cloud && cloud.kind !== "local";
-  const cloudValue = cloudConnected
-    ? `${cloud!.kind}${cloud!.account ? ` (${cloud!.account})` : ""}`
-    : "local only";
+
+  const owned = skills ?? [];
+  const skillsValue =
+    skills === null
+      ? { pieces: [{ text: "loading…", dim: true }], plain: "loading…" }
+      : owned.length === 0 && !dasReady
+        ? {
+            pieces: [{ text: "set a helius key to see your skills", dim: true }],
+            plain: "set a helius key to see your skills",
+          }
+        : fitSkills(owned, passive ?? [], bandW - displayWidth(` ${tag("skills")}`) - 3);
+
+  const bands: React.ReactNode[] = [
+    <Band
+      key="wallet"
+      width={bandW}
+      label="wallet"
+      value={walletAddr ? `◉ ${shortAddr}` : shortAddr}
+      dim={!walletAddr}
+      focused={active && focus === 0}
+    />,
+    <Band
+      key="cloud"
+      width={bandW}
+      label="cloud"
+      value={cloudConnected ? `◉ ${cloud!.kind.toUpperCase()}${cloud!.account ? ` (${cloud!.account.toUpperCase()})` : ""}` : "○ LOCAL ONLY"}
+      dim={!cloudConnected}
+      focused={active && focus === 1}
+    />,
+    <Band
+      key="engine"
+      width={bandW}
+      label="engine"
+      value={engine.toUpperCase()}
+      focused={active && focus === 2}
+    />,
+    keyInput !== null ? (
+      <Box key="helius">
+        <Text color={colors.iqCyan} bold>{` ${tag("helius")} `}</Text>
+        <Text>{keyInput}</Text>
+        <Text inverse> </Text>
+      </Box>
+    ) : (
+      <Band
+        key="helius"
+        width={bandW}
+        label="helius"
+        value={heliusMasked ? `◉ ${heliusMasked}` : "○ DEFAULT RPC"}
+        dim={!heliusMasked}
+        focused={active && focus === 3}
+      />
+    ),
+    focus === SKILLS_IDX && active ? (
+      <Band key="skills" width={bandW} label="skills" value={skillsValue.plain} focused />
+    ) : (
+      <Box key="skills" width={bandW}>
+        <Text bold color={colors.bone}>{` ${tag("skills")}  `}</Text>
+        <Text>
+          {skillsValue.pieces.map((p, i) => (
+            <Text key={i} color={p.dim ? colors.dim : undefined}>{p.text}</Text>
+          ))}
+        </Text>
+      </Box>
+    ),
+  ];
 
   return (
-    <Box
-      flexDirection="row"
-      borderStyle="bold"
-      borderColor={colors.bone}
-      paddingX={2}
-      paddingY={1}
-      marginBottom={1}
-    >
-      {/* mascot column (left) — kaomoji + dither texture, from the design project */}
-      <Box flexDirection="column" marginRight={3} justifyContent="center" alignItems="center">
-        <Text color={colors.bone}>{"( ◕ ◡ ◕ )"}</Text>
-        <Text dimColor>{"⠐⠄ ░▒▓▓▒░ ⠂⠈░▒▒░ ⡀"}</Text>
-        <Text dimColor>{" ⠈  ░░▒▒▒▒░░  ⠠⠁"}</Text>
-        <Text dimColor>THE AGENT LAYER</Text>
+    <Box flexDirection="row" borderStyle="bold" borderColor={colors.bone} marginBottom={1}>
+      {/* logo column behind a bold rail, the design's 280px left cell */}
+      <Box
+        flexDirection="column"
+        paddingX={1}
+        justifyContent="center"
+        alignItems="center"
+        borderStyle="bold"
+        borderColor={colors.bone}
+        borderTop={false}
+        borderBottom={false}
+        borderLeft={false}
+      >
+        <Text color={colors.bone}>{mascot[0]}</Text>
+        <Text dimColor>{mascot[1]}</Text>
+        <Text dimColor>{mascot[2]}</Text>
+        <Text dimColor>{mascot[3]}</Text>
       </Box>
 
-      {/* welcome + editable settings (middle) */}
-      <Box flexDirection="column" justifyContent="center" marginRight={3}>
-        <Box marginBottom={1}>
-          <Text bold color={colors.bone}>
-            {tag(`welcome back${name ? " " + name : ""}`)}
-          </Text>
-        </Box>
-        <SettingRow label="wallet" value={shortAddr} connected={!!walletAddr} focused={active && focus === 0} />
-        <SettingRow label="cloud" value={cloudValue} connected={cloudConnected} focused={active && focus === 1} />
-        <SettingRow label="engine" value={engine} connected focused={active && focus === 2} />
-        {keyInput !== null ? (
-          <Box>
-            <Box width={11}><Text color={colors.iqCyan} bold>{tag("helius")}</Text></Box>
-            <Text>{keyInput || ""}</Text>
-            <Text inverse> </Text>
-          </Box>
-        ) : (
-          <SettingRow
-            label="helius"
-            value={heliusMasked ?? "default rpc"}
-            connected={!!heliusMasked}
-            focused={active && focus === 3}
-          />
-        )}
+      {/* stacked config bands */}
+      <Box flexDirection="column" justifyContent="center">
+        {bands.map((band, i) => (
+          <React.Fragment key={i}>
+            {i > 0 && withRules ? <Text color={colors.bone}>{rule(bandW)}</Text> : null}
+            {band}
+          </React.Fragment>
+        ))}
         {keyInput !== null ? (
           // key-entry mode: walk the user through getting a key + where it goes.
           <Box flexDirection="column" marginTop={1}>
@@ -202,76 +283,10 @@ export function WelcomePanel({
             <Text dimColor>3. [enter] save · [esc] cancel · empty = use default rpc</Text>
           </Box>
         ) : (
-          <Box marginTop={1}>
-            <Text dimColor>
-              {glyph.sparkle}{" "}
-              {active ? "[tab] move · [enter] edit · [esc] chat" : "[ctrl+s] settings"}
-            </Text>
-          </Box>
-        )}
-      </Box>
-
-      {/* my skills (right) */}
-      <Box flexDirection="column" justifyContent="center">
-        <Box marginBottom={1}>
-          <Text bold color={colors.bone}>{tag(`skills${allOwned.length ? " " + allOwned.length : ""}`)}</Text>
-        </Box>
-        {skills === null ? (
-          // still fetching — don't show "none yet" before the read resolves.
-          <Text dimColor>loading…</Text>
-        ) : allOwned.length === 0 ? (
-          dasReady ? (
-            <Text dimColor>none yet</Text>
-          ) : (
-            // public default RPC can't read owned skills — point the user at the key row.
-            <Box flexDirection="column">
-              <Text color={colors.iqViolet}>set a Helius key to see your skills</Text>
-              <Text dimColor>the default RPC can't read NFTs · edit the helius row</Text>
-            </Box>
-          )
-        ) : (
-          <>
-            {ownedList.map((s, i) => {
-              const idx = skillStart + i;
-              const on = active && focus === idx;
-              return (
-                <Box key={s.id}>
-                  <Text
-                    backgroundColor={on ? colors.bone : undefined}
-                    color={on ? colors.ink : undefined}
-                    bold={on}
-                  >
-                    {glyph.sparkle} {s.name.toUpperCase()}
-                  </Text>
-                </Box>
-              );
-            })}
-            {hiddenSkills > 0 ? <Text dimColor>{`+${hiddenSkills} more in market`}</Text> : null}
-          </>
-        )}
-        <Box marginTop={1}>
-          <Text
-            backgroundColor={active && focus === marketIdx ? colors.bone : undefined}
-            color={active && focus === marketIdx ? colors.ink : colors.dim}
-            bold={active && focus === marketIdx}
-          >
-            ▸ MARKET
+          <Text dimColor>
+            {" "}{active ? "[tab] move · [enter] edit · [esc] chat" : "[ctrl+s] settings"}
           </Text>
-        </Box>
-
-        {/* built-in skills (skill-shopping, make-skill): a small plain list, set apart from
-            owned NFTs — no color, no effects, not focusable. They ship with the app. */}
-        {passive && passive.length > 0 ? (
-          <Box flexDirection="column" marginTop={1}>
-            <Text dimColor>built-in</Text>
-            {passive.map((slug) => (
-              <Text key={slug} dimColor>
-                {"  · "}
-                {slug}
-              </Text>
-            ))}
-          </Box>
-        ) : null}
+        )}
       </Box>
     </Box>
   );
