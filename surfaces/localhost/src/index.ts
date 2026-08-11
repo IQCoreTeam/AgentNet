@@ -75,6 +75,7 @@ import {
   manualStorage,
 } from "@iqlabs-official/agent-sdk";
 import { SessionStore } from "@iqlabs-official/agent-sdk/account/store";
+import { migrateSessions } from "@iqlabs-official/agent-sdk/account/migrate";
 
 const PORT = Number(process.env.AGENTNET_PORT ?? 4317);
 const GOOGLE_AUTHORIZE_URL = process.env.GOOGLE_AUTHORIZE_URL || "";
@@ -199,31 +200,20 @@ async function ensureGuestRuntime(): Promise<AgentRuntime> {
 }
 
 // Preserve the value-first conversation when the user unlocks. Guest pages are decrypted
-// with the device key and appended into the real wallet's local store, which re-encrypts
-// them with the wallet-derived key. Existing destination sessions are never duplicated.
+// with the device key and re-encrypted into the real wallet's local store; the copy loop
+// (dedupe/resume/fault tolerance) lives in core's migrateSessions — this owns the surface
+// part only: which wallets and stores are involved.
 async function migrateGuestSessions(realWallet: Wallet): Promise<void> {
   const guest = await deviceGuestWallet();
-  const source = new SessionStore(guest, manualStorage(guest.address));
-  const destination = new SessionStore(realWallet, manualStorage(realWallet.address));
-  const existing = new Set((await destination.listMine()).map((s) => s.sessionId));
-  for (const meta of await source.listMine()) {
-    const session = await source.load(meta.sessionId);
-    if (!session) continue;
-    let start = 0;
-    if (existing.has(meta.sessionId)) {
-      const current = await destination.load(meta.sessionId);
-      if (!current || current.messages.length >= session.messages.length) continue;
-      const samePrefix = current.messages.every((message, index) =>
-        JSON.stringify(message) === JSON.stringify(session.messages[index]),
-      );
-      if (!samePrefix) continue;
-      start = current.messages.length;
-    }
-    if (session.messages.length === 0) {
-      await destination.recordMeta(meta);
-      continue;
-    }
-    for (const message of session.messages.slice(start)) await destination.appendMessage(meta, message);
+  const report = await migrateSessions(
+    new SessionStore(guest, manualStorage(guest.address)),
+    new SessionStore(realWallet, manualStorage(realWallet.address)),
+  );
+  if (report.copied || report.skipped) {
+    console.log(
+      `[wallet] guest migration: ${report.copied} session(s) copied ` +
+        `(${report.messages} messages), ${report.skipped} skipped`,
+    );
   }
 }
 
