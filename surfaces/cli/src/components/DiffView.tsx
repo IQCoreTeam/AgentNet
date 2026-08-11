@@ -232,74 +232,21 @@ function HighlightDiffLine({ line, raw }: { line: string; raw: string }) {
 
   const isAdd = raw.startsWith("+");
   const isDel = raw.startsWith("-");
-  const prefix = line[0] || "";
-  const code = line.slice(1);
-
-  const fg = isAdd ? diffTheme.addFg : isDel ? diffTheme.delFg : undefined;
-  const bg = isAdd ? diffTheme.addBg : isDel ? diffTheme.delBg : undefined;
 
   if (!isAdd && !isDel) {
     return <Text dimColor>{line}</Text>;
   }
 
-  // Basic regex tokenization for code keywords, strings, comments, numbers, booleans
-  const tokens = code.split(
-    /(\/\/.*|#.*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b(?:const|let|var|function|class|return|if|else|for|while|do|fn|def|import|export|from|true|false|null|undefined)\b|\d+)/,
-  );
-
-  const highlighted = tokens.map((token, idx) => {
-    if (!token) return null;
-
-    // Comments
-    if (token.startsWith("//") || token.startsWith("#")) {
-      return (
-        <Text key={idx} color={colors.dim} dimColor>
-          {token}
-        </Text>
-      );
-    }
-    // Strings
-    if (token.startsWith('"') || token.startsWith("'") || token.startsWith("`")) {
-      return (
-        <Text key={idx} color={colors.warn}>
-          {token}
-        </Text>
-      );
-    }
-    // Keywords
-    if (
-      /^(const|let|var|function|class|return|if|else|for|while|do|fn|def|import|export|from)$/.test(
-        token,
-      )
-    ) {
-      return (
-        <Text key={idx} color={colors.iqMagenta} bold>
-          {token}
-        </Text>
-      );
-    }
-    // Numbers & Booleans & Null
-    if (/^(true|false|null|undefined|\d+)$/.test(token)) {
-      return (
-        <Text key={idx} color={colors.iqCyan}>
-          {token}
-        </Text>
-      );
-    }
-
-    return (
-      <Text key={idx} color={fg}>
-        {token}
-      </Text>
-    );
-  });
-
+  // One uniform colour per changed line, the design's own treatment: soft green on the
+  // dark green band, soft red on the dark red band. Token-level syntax colours used to
+  // paint numbers green INSIDE a deletion — a green token on the red band muddied the
+  // one signal a diff exists to give.
+  const fg = isAdd ? diffTheme.addFg : diffTheme.delFg;
+  const bg = isAdd ? diffTheme.addBg : diffTheme.delBg;
   return (
-    <Text backgroundColor={bg}>
-      <Text color={fg} bold>
-        {prefix}
-      </Text>
-      {highlighted}
+    <Text backgroundColor={bg} color={fg}>
+      <Text bold>{line[0] || ""}</Text>
+      {line.slice(1)}
     </Text>
   );
 }
