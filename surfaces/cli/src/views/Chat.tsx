@@ -1380,6 +1380,12 @@ export function Chat({
   // tab/arrow/enter and disables the composer until Esc hands focus back.
   const showPanel = chat.messages.length === 0 && !chat.busy;
   const panelActive = showPanel && panelFocused;
+  // The welcome panel is unbudgeted content between the (empty) transcript and the chrome:
+  // on an empty session the composer is idle (~1 row) and nothing streams, so the panel may
+  // take whatever the chrome and the two bands below it (emptySessions, history) don't. Cap
+  // it here — Chat owns the frame budget — so a skill-rich wallet can't grow the owned-skill
+  // list past the terminal and trip ink's full-repaint path.
+  const panelMaxRows = Math.max(8, rows - CHROME_ROWS - 3);
 
   // The dynamic frame must FIT on screen — ink cannot erase lines that have scrolled off,
   // and a frame taller than the terminal smears old paints into the scrollback. So the
@@ -1426,6 +1432,7 @@ export function Chat({
             passive={passive}
             dasReady={dasReady}
             active={panelActive}
+            maxRows={panelMaxRows}
             onEdit={editPanelField}
             onSetHelius={setHelius}
             onOpenMarket={openMarket}

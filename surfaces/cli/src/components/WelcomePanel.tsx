@@ -64,6 +64,7 @@ export function WelcomePanel({
   passive,
   dasReady,
   active,
+  maxRows,
   onEdit,
   onSetHelius,
   onOpenMarket,
@@ -78,6 +79,9 @@ export function WelcomePanel({
   passive?: string[];
   dasReady: boolean;
   active: boolean;
+  // Height budget for the whole panel, handed down by Chat (which owns the frame budget).
+  // The owned-skill list is capped to whatever is left after the panel's fixed rows.
+  maxRows?: number;
   onEdit: (field: PanelField) => void;
   onSetHelius: (key: string) => void;
   onOpenMarket: () => void;
@@ -88,8 +92,20 @@ export function WelcomePanel({
   const [keyInput, setKeyInput] = React.useState<string | null>(null);
 
   // null = still loading; treat as no focusable skill rows until it resolves.
-  const ownedList = skills ?? [];
-  // the full focus list: settings rows, then a row per skill, then the market entry.
+  const allOwned = skills ?? [];
+  // Cap the drawn skill rows so the panel can't outgrow the terminal. A taller panel pushes
+  // the whole frame past `rows`, and ink then clears and reprints the entire screen on every
+  // keystroke (the empty-session flicker). maxRows is the panel's height budget; subtract the
+  // panel frame (4) and the skills column's own fixed rows — header + margin (2), the market
+  // entry (2), and the built-in block if present — and the rest is the skill list.
+  // +1 reserves the "+N more" overflow row we draw whenever the list is actually truncated.
+  const skillsFixed = 2 + 2 + 1 + (passive && passive.length ? passive.length + 2 : 0);
+  const skillCap = Math.max(0, (maxRows ?? 999) - 4 - skillsFixed);
+  const ownedList = allOwned.length > skillCap ? allOwned.slice(0, skillCap) : allOwned;
+  const hiddenSkills = allOwned.length - ownedList.length;
+  // the focus list: settings rows, then a row per VISIBLE skill, then the market entry. Hidden
+  // (overflow) skills are not focusable — focus must never land on a row that isn't drawn, and
+  // skill rows are inert anyway; the market view lists them all.
   const total = SETTINGS.length + ownedList.length + 1;
   const marketIdx = total - 1;
   const skillStart = SETTINGS.length;
@@ -198,12 +214,12 @@ export function WelcomePanel({
       {/* my skills (right) */}
       <Box flexDirection="column" justifyContent="center">
         <Box marginBottom={1}>
-          <Text bold color={colors.bone}>{tag(`skills${ownedList.length ? " " + ownedList.length : ""}`)}</Text>
+          <Text bold color={colors.bone}>{tag(`skills${allOwned.length ? " " + allOwned.length : ""}`)}</Text>
         </Box>
         {skills === null ? (
           // still fetching — don't show "none yet" before the read resolves.
           <Text dimColor>loading…</Text>
-        ) : ownedList.length === 0 ? (
+        ) : allOwned.length === 0 ? (
           dasReady ? (
             <Text dimColor>none yet</Text>
           ) : (
@@ -214,21 +230,24 @@ export function WelcomePanel({
             </Box>
           )
         ) : (
-          ownedList.map((s, i) => {
-            const idx = skillStart + i;
-            const on = active && focus === idx;
-            return (
-              <Box key={s.id}>
-                <Text
-                  backgroundColor={on ? colors.bone : undefined}
-                  color={on ? colors.ink : undefined}
-                  bold={on}
-                >
-                  {glyph.sparkle} {s.name.toUpperCase()}
-                </Text>
-              </Box>
-            );
-          })
+          <>
+            {ownedList.map((s, i) => {
+              const idx = skillStart + i;
+              const on = active && focus === idx;
+              return (
+                <Box key={s.id}>
+                  <Text
+                    backgroundColor={on ? colors.bone : undefined}
+                    color={on ? colors.ink : undefined}
+                    bold={on}
+                  >
+                    {glyph.sparkle} {s.name.toUpperCase()}
+                  </Text>
+                </Box>
+              );
+            })}
+            {hiddenSkills > 0 ? <Text dimColor>{`+${hiddenSkills} more in market`}</Text> : null}
+          </>
         )}
         <Box marginTop={1}>
           <Text
