@@ -63,15 +63,6 @@ function kindOf(name: string): keyof typeof toolTint {
   return "other";
 }
 
-const kindGlyph: Record<string, string> = {
-  bash: glyph.bash,
-  edit: glyph.edit,
-  write: glyph.write,
-  read: glyph.read,
-  agent: glyph.agent,
-  other: glyph.other,
-};
-
 // Output block: syntax-highlighted when a language is known, else plain.
 // Clamped to MAX_OUTPUT_LINES; fold note shows hidden count.
 function Output({
@@ -175,9 +166,13 @@ export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: str
       paddingLeft={1}
       marginTop={1}
     >
-      {/* header row */}
+      {/* header row - the design's turn node (tab 09): a green check (red cross on failure)
+          leads, then the tool in caps, then where it acted. The kind is carried by the
+          label's tint, so the old leading kind-glyph is gone and the exit marker moves up
+          front where the eye already scans for pass/fail. */}
       <Box>
-        <Text color={tint} bold>{kindGlyph[kind]} {tool.name}</Text>
+        <Text color={okExit ? colors.ok : colors.err} bold>{okExit ? glyph.ok : glyph.fail} </Text>
+        <Text color={tint} bold>{tool.name.toUpperCase()}</Text>
         {tool.file ? (
           <Text dimColor>
             {"  "}{shortPath(tool.file)}
@@ -185,11 +180,6 @@ export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: str
         ) : null}
         {outLines > 0 ? (
           <Text dimColor>  ·  {outLines}L</Text>
-        ) : null}
-        {tool.exitCode !== undefined ? (
-          <Text color={okExit ? colors.ok : colors.err}>
-            {"  "}{okExit ? glyph.ok : glyph.fail}
-          </Text>
         ) : null}
       </Box>
       {body}

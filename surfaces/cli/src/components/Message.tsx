@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { ChatMessage } from "@iqlabs-official/agent-sdk/runtime/contract";
-import { glyph, colors, tag } from "../theme.js";
+import { glyph, colors, tag, surface } from "../theme.js";
 import { ToolCard } from "./ToolCard.js";
 import { Markdown } from "./Markdown.js";
 import { wrapBlock, padCells } from "../format.js";
@@ -26,16 +26,20 @@ export function TurnHeader({ text }: { text: string }) {
   );
 }
 
-// A settled user message in the transcript: the calm form from the design's chat-turn
-// screen - just the bold `//YOU_` label over the text, no full-width invert. The label is
-// still a scan anchor for "where did I speak", without shouting a white bar down the log.
+// A settled user message in the transcript: the design's "SCROLLED PAST" turn header
+// (tab 09) - a full-width band, but the calm dark one (#2a2a28 / dim), not the loud bone.
+// So a long scrollback reads as a ladder of subtle grey bars you can scan for your own
+// words, while the bright bone invert is reserved for the single live turn (TurnHeader).
 function UserLine({ text }: { text: string }) {
-  const width = Math.max(20, (process.stdout.columns || 80) - 2);
+  const inner = Math.max(10, (process.stdout.columns || 80) - 4);
+  const lines = wrapBlock(text, inner);
   return (
     <Box flexDirection="column" marginTop={1}>
-      <Text color={colors.bone} bold>{tag("you")}</Text>
-      {wrapBlock(text, width).map((l, i) => (
-        <Text key={i}>{l || " "}</Text>
+      {lines.map((l, i) => (
+        <Text key={i} backgroundColor={surface.pastHeader} color={colors.dim}>
+          {i === 0 ? "❯ " : "  "}
+          {padCells(l, inner)}
+        </Text>
       ))}
     </Box>
   );
