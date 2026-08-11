@@ -3,7 +3,7 @@ import { Box, Text } from "ink";
 import { highlight } from "cli-highlight";
 import { basename, extname } from "node:path";
 import type { ToolAction } from "@iqlabs-official/agent-sdk/runtime/contract";
-import { glyph, toolTint, colors } from "../theme.js";
+import { glyph, toolTint, colors, surface } from "../theme.js";
 import { TodoPanel } from "./TodoPanel.js";
 import { DiffView } from "./DiffView.js";
 import { stripAnsi, clampLines, lineCount, wrapBlock } from "../format.js";
@@ -63,18 +63,39 @@ function kindOf(name: string): keyof typeof toolTint {
   return "other";
 }
 
+// The design's `.code` box (tab 09): a 1px #2a2a28 border around anything that is code —
+// the EDIT diff and the BASH command with its output. The #101013 background reads as
+// near-nothing over the terminal, so in cells the BORDER is the silhouette; long lines
+// hard-wrap inside because a terminal has no horizontal scroll. Nothing leaves the frame.
+function CodeBox({ width, children }: { width: number; children: React.ReactNode }) {
+  return (
+    <Box
+      flexDirection="column"
+      width={width}
+      borderStyle="single"
+      borderColor={surface.pastHeader}
+      paddingX={1}
+    >
+      {children}
+    </Box>
+  );
+}
+
 // Output block: syntax-highlighted when a language is known, else plain.
 // Clamped to MAX_OUTPUT_LINES; fold note shows hidden count.
+// `bare` drops the "⎿ " gutter when a CodeBox border already carries the attachment.
 function Output({
   text,
   failed,
   lang,
   width,
+  bare = false,
 }: {
   text: string;
   failed?: boolean;
   lang?: string;
   width: number;
+  bare?: boolean;
 }) {
   const clean = stripAnsi(text);
   const { shown, hidden } = clampLines(clean, MAX_OUTPUT_LINES);
@@ -94,19 +115,23 @@ function Output({
   }
 
   const lines = highlighted.split("\n");
+  const body = (
+    <Box flexDirection="column">
+      {lines.map((l, i) => (
+        <Text key={i} color={failed ? colors.err : undefined}>
+          {l || " "}
+        </Text>
+      ))}
+      {hidden > 0 ? (
+        <Text dimColor>{bare ? "" : "  "}+{hidden} LINES HIDDEN</Text>
+      ) : null}
+    </Box>
+  );
+  if (bare) return body;
   return (
     <Box marginTop={0}>
       <Text color={colors.dim}>⎿ </Text>
-      <Box flexDirection="column">
-        {lines.map((l, i) => (
-          <Text key={i} color={failed ? colors.err : undefined}>
-            {l || " "}
-          </Text>
-        ))}
-        {hidden > 0 ? (
-          <Text dimColor>  +{hidden} LINES HIDDEN</Text>
-        ) : null}
-      </Box>
+      {body}
     </Box>
   );
 }
@@ -130,24 +155,38 @@ export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: str
   const fileLang = langFor(tool.file);
   const { card, inner } = cardWidth();
 
+  // Interior cells of a CodeBox hosted at `inner` width: border(2) + paddingX(2).
+  const boxInner = Math.max(8, inner - 4);
+
   let body: React.ReactNode = null;
+  let outputInBox = false;
   if (tool.diff) {
     // In the transcript there is no key handler, so a collapsed "press [d] to expand"
     // diff could never be opened — the edit's actual before/after was unreachable. Show
-    // it, bounded, and drop the dead hint.
-    body = <DiffView diff={tool.diff} width={inner} expanded maxLines={MAX_OUTPUT_LINES} interactive={false} />;
+    // it, bounded, and drop the dead hint. Boxed per the design's `.code` treatment.
+    body = (
+      <CodeBox width={inner}>
+        <DiffView diff={tool.diff} width={boxInner} expanded maxLines={MAX_OUTPUT_LINES} interactive={false} />
+      </CodeBox>
+    );
   } else if (tool.command) {
-    const cmdRows = wrapBlock(`$ ${tool.command}`, inner);
+    const cmdRows = wrapBlock(`$ ${tool.command}`, boxInner);
     let cmd = cmdRows.join("\n");
     try {
       cmd = highlight(cmd, { language: "bash", ignoreIllegals: true });
     } catch { /* keep raw */ }
+    // Command and its output share one box, the way the design keeps a whole
+    // execution inside a single `.code` block.
+    outputInBox = Boolean(tool.output);
     body = (
-      <Box flexDirection="column">
+      <CodeBox width={inner}>
         {cmd.split("\n").map((l, i) => (
           <Text key={i} dimColor>{l || " "}</Text>
         ))}
-      </Box>
+        {outputInBox ? (
+          <Output text={tool.output!} failed={!okExit} lang={fileLang} width={boxInner} bare />
+        ) : null}
+      </CodeBox>
     );
   }
 
@@ -183,7 +222,7 @@ export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: str
         ) : null}
       </Box>
       {body}
-      {tool.output ? (
+      {tool.output && !outputInBox ? (
         <Output text={tool.output} failed={!okExit} lang={fileLang} width={inner - 2} />
       ) : null}
     </Box>

@@ -69,7 +69,16 @@ export function DiffView({
   const fileDiff = files[activeFileIdx] || files[0] || { path: "Workspace Changes", lines: [] };
   const singleDiff = fileDiff.lines.join("\n");
 
-  const all = singleDiff.replace(/\s+$/, "").split("\n");
+  // Raw patch furniture (`diff --git`, `index`, `--- a/…`, `+++ b/…`) never appears in
+  // the design's code box — the path already lives on the card header. Only change and
+  // context lines render; @@ hunks stay as dim separators.
+  const all = singleDiff
+    .replace(/\s+$/, "")
+    .split("\n")
+    .filter(
+      (l) =>
+        !/^(diff --git |index [0-9a-f]+\.\.|Index: |=+$|--- |\+\+\+ |new file mode|deleted file mode|similarity index|rename (from|to) |binary files )/i.test(l),
+    );
   const totalAdds = files.reduce(
     (acc, f) => acc + f.lines.filter((l) => l.startsWith("+") && !l.startsWith("+++")).length,
     0,
