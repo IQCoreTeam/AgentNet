@@ -1107,7 +1107,7 @@ body {
 /* PREVIEW tab: a URL bar over an <iframe> that fills the rest. Zinc palette to match the
    app; --claude accent on focus. */
 .an-preview { display: flex; flex-direction: column; height: 100%; background: #09090b; }
-.an-preview-bar { display: flex; gap: 6px; padding: 8px; align-items: center; border-bottom: 1px solid #27272a; }
+.an-preview-bar { display: flex; gap: 6px; padding: calc(env(safe-area-inset-top) + 8px) 8px 8px; align-items: center; border-bottom: 1px solid #27272a; }
 .an-preview-url { flex: 1; min-width: 0; background: #18181b; color: #e4e4e7; border: 1px solid #27272a; border-radius: 8px; padding: 8px 10px; font: 13px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; outline: none; }
 .an-preview-url:focus { border-color: var(--claude); }
 .an-preview-btn { flex: none; background: #18181b; color: #e4e4e7; border: 1px solid #27272a; border-radius: 8px; padding: 8px 11px; font: 600 13px/1 ui-monospace, monospace; cursor: pointer; }
