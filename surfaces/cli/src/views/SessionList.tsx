@@ -31,7 +31,9 @@ function cell(s: string, w: number): string {
 // bone rules. The selected row inverts edge to edge and grows a meta sub-line (age,
 // engine, last device); the live session carries ● LIVE in green. Long lists window
 // around the selection. ↑/↓ move, ↵ resume, f fork, d delete, esc back; the footer's
-// right edge reports where sessions sync to.
+// right edge reports where sessions sync to. The whole thing renders as a bordered
+// panel centered on a full-height wrapper, so opening it clears the visible screen
+// (the chat survives in terminal scrollback) instead of stacking under it.
 export function SessionList({
   sessions,
   activeId,
@@ -51,7 +53,13 @@ export function SessionList({
 }) {
   const [idx, setIdx] = useState(0);
   const clamped = Math.min(idx, Math.max(0, sessions.length - 1));
-  const w = Math.max(0, (process.stdout.columns || 80) - 2);
+  const cols = process.stdout.columns || 80;
+  const rows = process.stdout.rows || 24;
+  // A framed panel floating on a cleared screen, not a full-bleed sheet: the wrapper
+  // below fills the whole terminal, which pushes the chat into the terminal's own
+  // scrollback (scroll up and it's all still there) and gives the picker real margins.
+  const totalW = Math.max(44, Math.min(cols - 8, 84));
+  const w = totalW - 4; // bold border (2) + paddingX(1) each side
 
   useInput((input, key) => {
     if (key.escape) return onClose();
@@ -67,16 +75,17 @@ export function SessionList({
   });
 
   // Window the list so the frame never outgrows the terminal: the selected row costs 2
-  // rows + rule, the rest 1 + rule, plus header(2) + footer(1) + closing rule and the
-  // frame's own chrome outside this component.
-  const maxVisible = Math.max(3, Math.floor(((process.stdout.rows || 24) - 9) / 2));
+  // rows + rule, the rest 1 + rule, plus the frame's chrome (border 2, paddingY 2,
+  // header+rule 2, closing rule+footer 2, MORE indicators 2).
+  const maxVisible = Math.max(3, Math.floor((rows - 13) / 2));
   const start = Math.min(Math.max(0, clamped - Math.floor(maxVisible / 2)), Math.max(0, sessions.length - maxVisible));
   const visible = sessions.slice(start, start + maxVisible);
   const above = start;
   const below = sessions.length - start - visible.length;
 
   return (
-    <Box flexDirection="column" paddingX={1}>
+    <Box height={Math.max(10, rows - 1)} width={cols} justifyContent="center" alignItems="center">
+      <Box flexDirection="column" width={totalW} borderStyle="bold" borderColor={colors.bone} paddingX={1} paddingY={1}>
       <Box justifyContent="space-between">
         <Text color={colors.bone} bold>{tag("sessions")}</Text>
         <Text dimColor>{sessions.length} SESSION{sessions.length === 1 ? "" : "S"} · ENCRYPTED</Text>
@@ -90,41 +99,46 @@ export function SessionList({
           {above > 0 ? <Text dimColor>{`  ↑ ${above} MORE`}</Text> : null}
           {visible.map((s, vi) => {
             const i = start + vi;
-            const n = String(i + 1).padStart(2, "0");
             const live = s.sessionId === activeId;
             const engine = s.cli === "codex" ? glyph.codex : glyph.claude;
             const focused = i === clamped;
-            const right = live ? "● LIVE" : age(s.ts);
+            // The old S.NN index was noise - it shifted whenever the list changed. The left
+            // fixed column now carries the AGE instead (right-aligned so the titles line up);
+            // the live session still gets ● LIVE on the right edge.
+            const ageSlot = age(s.ts).padStart(4);
+            const liveTag = live ? "● LIVE" : "";
 
             if (!focused) {
+              const prefix = `  ${ageSlot}  `;
+              // Trim the title to ONE line. An untruncated long title wraps to 2-3 rows,
+              // and enough wrapped rows push the windowed box past the terminal height,
+              // which trips ink's full-repaint and smears the whole list into scrollback -
+              // the "it fills the screen" symptom. One line per row is exactly what lets
+              // the window math keep the box on screen and scroll inside it instead.
+              const titleMax = Math.max(1, w - displayWidth(prefix) - displayWidth(liveTag) - 1);
               return (
                 <React.Fragment key={s.sessionId}>
                   {vi > 0 ? <Text color={colors.bone}>{rule(w)}</Text> : null}
                   <Box width={w} justifyContent="space-between">
-                    <Text>
-                      <Text dimColor>{`  S.${n}  `}</Text>
-                      <Text color={colors.bone}>{s.title || "untitled"}</Text>
+                    <Text wrap="truncate-end">
+                      <Text dimColor>{prefix}</Text>
+                      <Text color={colors.bone}>{cell(s.title || "untitled", titleMax)}</Text>
                     </Text>
-                    <Text color={live ? colors.ok : colors.dim}>{right}</Text>
+                    {liveTag ? <Text color={colors.ok}>{liveTag}</Text> : null}
                   </Box>
                 </React.Fragment>
               );
             }
 
-            const meta = [
-              `${age(s.ts).toLowerCase()} ago`,
-              `${engine} ${s.cli}`,
-              s.lastDevice?.label,
-            ]
-              .filter(Boolean)
-              .join(" · ");
+            // Age already shows in the left slot, so the meta line carries engine + device.
+            const meta = [`${engine} ${s.cli}`, s.lastDevice?.label].filter(Boolean).join(" · ");
             return (
               <React.Fragment key={s.sessionId}>
                 {vi > 0 ? <Text color={colors.bone}>{rule(w)}</Text> : null}
                 <Text backgroundColor={colors.bone} bold>
                   <Text color={colors.ok}> ❯ </Text>
-                  <Text color={colors.ink}>{cell(`S.${n}  ${s.title || "untitled"}`, Math.max(0, w - 3 - displayWidth(right) - 1))}</Text>
-                  <Text color={live ? colors.ok : colors.ink}>{right} </Text>
+                  <Text color={colors.ink}>{cell(`${ageSlot}  ${s.title || "untitled"}`, Math.max(0, w - 3 - displayWidth(liveTag) - 1))}</Text>
+                  <Text color={live ? colors.ok : colors.ink}>{liveTag ? `${liveTag} ` : ""}</Text>
                 </Text>
                 <Text backgroundColor={colors.bone} color={colors.ink}>
                   {cell(`        ${meta}`, w)}
@@ -137,9 +151,18 @@ export function SessionList({
       )}
 
       <Text color={colors.bone}>{rule(w)}</Text>
+      {/* The how-to row: keys read at full strength, verbs stay dim — the guidance has
+          to survive next to the inverted selection without shouting over it. */}
       <Box justifyContent="space-between">
-        <Text dimColor>↑/↓ MOVE · ↵ RESUME · F FORK · D DELETE · ESC BACK</Text>
+        <Text>
+          <Text color={colors.bone} bold>↑↓</Text><Text dimColor> MOVE  </Text>
+          <Text color={colors.ok} bold>↵</Text><Text dimColor> RESUME  </Text>
+          <Text color={colors.bone} bold>F</Text><Text dimColor> FORK  </Text>
+          <Text color={colors.bone} bold>D</Text><Text dimColor> DELETE  </Text>
+          <Text color={colors.bone} bold>ESC</Text><Text dimColor> BACK</Text>
+        </Text>
         <Text dimColor>{cloud ? `SYNC: ${cloud.toUpperCase()} ◉` : "LOCAL ONLY ○"}</Text>
+      </Box>
       </Box>
     </Box>
   );

@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import { highlight } from "cli-highlight";
-import { colors } from "../theme.js";
+import { colors, surface } from "../theme.js";
 import { displayWidth, padCells, wrapHard } from "../format.js";
 
 // A small, dependency-light markdown renderer for the terminal. Handles the blocks that
@@ -116,7 +116,10 @@ export function Markdown({ text, width }: { text: string; width: number }) {
   while (i < lines.length) {
     const line = lines[i];
 
-    // fenced code block
+    // fenced code block — the same `.code` treatment ToolCard gives an edit/bash box:
+    // a #2a2a28 border with a full-bleed title band naming the language, a dim
+    // line-number gutter, and syntax colour on the code itself. This is what visually
+    // separates "code the assistant is showing you" from the prose around it.
     const fence = /^```(\w*)/.exec(line.trim());
     if (fence) {
       const lang = fence[1] || undefined;
@@ -124,19 +127,39 @@ export function Markdown({ text, width }: { text: string; width: number }) {
       i++;
       while (i < lines.length && !lines[i].trim().startsWith("```")) buf.push(lines[i++]);
       i++; // closing fence
-      // the box costs a border (2) and paddingX (2)
-      const codeW = Math.max(8, w - 4);
-      let code = buf.flatMap((l) => wrapHard(l, codeW)).join("\n");
+      const gutterW = Math.max(2, String(Math.max(1, buf.length)).length);
+      // the box costs a border (2) + paddingX (2), the gutter its digits + one space
+      const codeW = Math.max(8, w - 4 - gutterW - 1);
+      // Number SOURCE lines; a wrapped continuation row keeps a blank gutter so the
+      // numbers still index the original code. Wrap before highlighting (ANSI escapes
+      // have no display width), then split back — highlight() never changes row count.
+      const rows: { no: number | null; text: string }[] = [];
+      buf.forEach((l, li) => {
+        wrapHard(l, codeW).forEach((p, pi) => rows.push({ no: pi === 0 ? li + 1 : null, text: p }));
+      });
+      if (rows.length === 0) rows.push({ no: 1, text: "" });
+      let code = rows.map((r) => r.text).join("\n");
       try {
         code = highlight(code, { language: lang, ignoreIllegals: true });
       } catch {
         /* keep raw */
       }
+      const bandW = Math.max(8, w - 2);
       blocks.push(
-        <Box key={key++} flexDirection="column" width={w} borderStyle="round" borderColor={colors.dim} paddingX={1}>
-          {code.split("\n").map((l, n) => (
-            <Text key={n}>{l || " "}</Text>
-          ))}
+        <Box key={key++} flexDirection="column" width={w} borderStyle="single" borderColor={surface.pastHeader}>
+          <Text backgroundColor={surface.pastHeader}>
+            <Text color={colors.bone} bold>{padCells(` ${(lang || "code").toUpperCase()}`, bandW)}</Text>
+          </Text>
+          <Box flexDirection="column" paddingX={1}>
+            {code.split("\n").map((l, n) => (
+              <Text key={n}>
+                <Text color={colors.dim}>
+                  {(rows[n]?.no != null ? String(rows[n].no).padStart(gutterW) : " ".repeat(gutterW)) + " "}
+                </Text>
+                <Text>{l || " "}</Text>
+              </Text>
+            ))}
+          </Box>
         </Box>,
       );
       continue;

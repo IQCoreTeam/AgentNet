@@ -46,11 +46,13 @@ function UserLine({ text }: { text: string }) {
 }
 
 // One reply inside a turn: rail on the left so it reads as hanging off the header above.
-function Reply({ children }: { children: React.ReactNode }) {
+// `accent` turns the rail signal-green — reserved for the assistant actually SPEAKING,
+// so its words are visually distinct from tool traffic (dim rail) at a glance.
+function Reply({ accent, children }: { accent?: boolean; children: React.ReactNode }) {
   return (
     <Box
       borderStyle="single"
-      borderColor={colors.dim}
+      borderColor={accent ? colors.ok : colors.dim}
       borderTop={false}
       borderRight={false}
       borderBottom={false}
@@ -99,7 +101,7 @@ export function Message({ msg, live }: { msg: ChatMessage; live?: boolean }) {
   // assistant
   const who = msg.cli === "codex" ? "codex" : "claude";
   return (
-    <Reply>
+    <Reply accent>
       <Assistant text={msg.text} who={who} live={!!live} />
     </Reply>
   );
@@ -112,8 +114,9 @@ function Assistant({ text, who, live }: { text: string; who: string; live: boole
   const width = Math.max(20, (process.stdout.columns || 80) - 4);
   return (
     <Box flexDirection="column">
-      <Text color={colors.bone} bold>
-        {tag(who)}
+      <Text bold>
+        <Text color={colors.ok}>{who === "codex" ? glyph.codex : glyph.claude} </Text>
+        <Text color={colors.bone}>{tag(who)}</Text>
       </Text>
       {live ? <Text>{text || "…"}</Text> : <Markdown text={text} width={width} />}
     </Box>

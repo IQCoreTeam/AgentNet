@@ -103,9 +103,11 @@ function ActivityRow({
       </Text>
     );
   } else if (busy) {
+    // Signal green, not the warm-grey thinking tint: "a turn is running" is the one
+    // status the eye must find instantly, and grey-on-black buried it.
     body = (
       <Text wrap="truncate-end">
-        <Text color={colors.iqViolet}>{thinkingLabels[think]}</Text>
+        <Text color={colors.ok} bold>{thinkingLabels[think]}</Text>
         {elapsed !== undefined ? <Text dimColor> {Math.round(elapsed)}s · ESC INTERRUPT</Text> : null}
       </Text>
     );
@@ -161,9 +163,11 @@ function HistoryBand({
       </Text>
     );
   } else if (hasMore) {
+    // earlier pages fill in on their own in the background (paused only while a turn runs),
+    // so there is nothing to type - just a note that older history is still arriving.
     body = (
       <Text dimColor wrap="truncate-end">
-        … older history above · /more to load
+        … loading earlier history
       </Text>
     );
   }
@@ -243,19 +247,38 @@ export function Chat({
   const [rows, setRows] = useState(process.stdout.rows || 24);
   const [cols, setCols] = useState(process.stdout.columns || 80);
   const ruleW = Math.max(0, cols - 2); // frame paddingX(1) each side
+  // The size we last actually replayed at. A resize replays the transcript by remounting the
+  // <Static> (redraw bumps its key), and on every such remount ink APPENDS the whole
+  // transcript to an internal buffer it never trims. tmux fires a SIGWINCH on pane
+  // focus/switch WITHOUT changing the size, so an unguarded redraw-per-event grew that buffer
+  // without bound until the heap ran out (the "click around in tmux -> out of memory"). Guard
+  // on a real size change so a no-op SIGWINCH does nothing.
+  const lastSize = useRef({ rows: process.stdout.rows || 24, cols: process.stdout.columns || 80 });
 
   // terminal resize: ink redraws the dynamic frame, but everything already printed (the
   // <Static> scrollback, the welcome logo) re-wraps into garbage — squished logos, half
-  // frames. Wipe the screen and replay the transcript fresh at the new size.
+  // frames. Wipe the screen and replay the transcript fresh — but ONLY when the size truly
+  // changed, and debounced so a burst of SIGWINCH collapses into a single replay.
   useEffect(() => {
-    const onResize = () => {
-      setRows(process.stdout.rows || 24);
-      setCols(process.stdout.columns || 80);
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const apply = () => {
+      t = null;
+      const nr = process.stdout.rows || 24;
+      const nc = process.stdout.columns || 80;
+      if (nr === lastSize.current.rows && nc === lastSize.current.cols) return; // no real change
+      lastSize.current = { rows: nr, cols: nc };
+      setRows(nr);
+      setCols(nc);
       process.stdout.write("\u001b[2J\u001b[3J\u001b[H");
       chat.redraw();
     };
+    const onResize = () => {
+      if (t) clearTimeout(t);
+      t = setTimeout(apply, 120);
+    };
     process.stdout.on("resize", onResize);
     return () => {
+      if (t) clearTimeout(t);
       process.stdout.off("resize", onResize);
     };
   }, [chat.redraw]);
