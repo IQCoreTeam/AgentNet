@@ -78,6 +78,10 @@ import {
 import { SessionStore } from "@iqlabs-official/agent-sdk/account/store";
 
 const PORT = Number(process.env.AGENTNET_PORT ?? 4317);
+// Signal to the runtime that THIS surface has the PREVIEW tab + /preview/announce endpoint,
+// so the agent's memory gets the "serve web apps + hand the user a link" hint
+// (previewSection.ts). CLI/VSCode never set this, so their agents aren't told about it.
+process.env.AGENTNET_PREVIEW_PORT = String(PORT);
 const GOOGLE_AUTHORIZE_URL = process.env.GOOGLE_AUTHORIZE_URL || "";
 
 // The built React UI (surfaces/webview/dist) this host serves. Default is the sibling

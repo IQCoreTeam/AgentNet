@@ -11,6 +11,7 @@ import { SessionStore } from "../account/store.js";
 import { prepareResume } from "./inject/index.js";
 import { getDeviceProfile, buildDeviceNotice } from "../core/device.js";
 import { MemorySync, updateSkillsSection } from "../memory/index.js";
+import { updatePreviewSection } from "../memory/previewSection.js";
 import { SoulStore } from "../soul/store.js";
 import { injectSoulNative } from "../soul/convert/native.js";
 import { setSkillShoppingActive } from "../skill-market/passive.js";
@@ -154,6 +155,10 @@ export function createRuntime(
         // Must run AFTER injectAtStart, which regenerates MEMORY.md / AGENTS.md.
         const skills = await updateSkillsSection(opts.cli, opts.cwd);
         if (opts.cli === "claude" && skills.length) enabledSkills = skills.map((s) => s.name);
+        // Tell the agent about the in-app PREVIEW tab — but ONLY on the surface that has it
+        // (gated on AGENTNET_PREVIEW_PORT inside). So when it builds a web app it serves it
+        // and hands the user a http://localhost:PORT link, which renders as a preview button.
+        await updatePreviewSection(opts.cli, opts.cwd);
       } catch (e) {
         console.warn("[memory] inject failed:", e);
       }
