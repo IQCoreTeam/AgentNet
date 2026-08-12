@@ -105,6 +105,12 @@ export function useChat(
   modelRef.current = model;
   effortRef.current = effort;
   pendingRef.current = pendingId;
+  // read the live busy flag inside the long-running background backfill loop below.
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
+  // Cancels an in-flight background backfill: bumped whenever the session changes, so a slow
+  // older-history fetch for the previous session can never land in the new one.
+  const backfillToken = useRef(0);
 
   const refreshSessions = useCallback(async () => {
     setSessions(await runtime.listSessions());
@@ -131,6 +137,7 @@ export function useChat(
           setHasMore(p.hasMore);
           setCursor(p.cursor);
           setEpoch((e) => e + 1);
+          void backfillOlder(p.cursor, p.hasMore); // fill earlier pages in the background
         })
         // A rejection here used to be unhandled; now it also has to clear the banner, or
         // the view sits on "loading session" forever for a log that is never coming.
@@ -165,6 +172,55 @@ export function useChat(
       setLoadingOlder(false);
     }
   }, [hasMore, cursor, runtime]);
+
+  // Very long sessions: the newest page shows instantly (openSession/resume), then this pulls
+  // the EARLIER pages in the background a chunk at a time WITH A GAP, so the open never stalls
+  // and neither memory nor CPU spikes. Key point for memory: it does NOT reprint per chunk —
+  // each <Static> remount re-appends the whole transcript to ink's buffer, so N chunk-remounts
+  // would stack N copies. Instead it fetches quietly into a buffer and does ONE prepend+reset
+  // at the end (the cost of a single /more, once). It yields while a turn runs and a token
+  // cancels it the instant the session changes.
+  const backfillOlder = useCallback(
+    async (startCursor: number | null, startMore: boolean) => {
+      const token = ++backfillToken.current;
+      const sid = pendingRef.current;
+      if (!sid || !startMore || startCursor === null) return;
+      const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+      const buffer: ChatMessage[] = [];
+      let cur: number | null = startCursor;
+      let more: boolean = startMore;
+      loadingOlderRef.current = true; // also blocks a manual /more from racing the backfill
+      setLoadingOlder(true);
+      await sleep(500); // let the newest page settle before doing any background work
+      try {
+        while (backfillToken.current === token && more && cur !== null) {
+          if (pendingRef.current !== sid) return; // switched away → drop the buffer
+          if (busyRef.current) { await sleep(600); continue; } // a turn is running → don't compete
+          const p = await runtime.loadMore(sid, cur);
+          if (backfillToken.current !== token || pendingRef.current !== sid) return;
+          buffer.unshift(...p.messages); // each fetched page is older → goes in front, oldest first
+          cur = p.cursor;
+          more = p.hasMore;
+          await sleep(300); // the gap: gradual, and it keeps the fetch from hammering cloud storage
+        }
+        // one flush: prepend everything gathered and reset <Static> once (not per chunk).
+        if (backfillToken.current === token && pendingRef.current === sid && buffer.length) {
+          setMessages((prev) => [...buffer, ...prev]);
+          setHasMore(false);
+          setCursor(null);
+          setEpoch((e) => e + 1);
+        }
+      } catch {
+        /* a failed page read just stops the backfill; the newest page still stands */
+      } finally {
+        if (backfillToken.current === token) {
+          loadingOlderRef.current = false;
+          setLoadingOlder(false);
+        }
+      }
+    },
+    [runtime],
+  );
 
   const wire = useCallback(
     (h: SessionHandle) => {
@@ -318,6 +374,7 @@ export function useChat(
         setHasMore(p.hasMore);
         setCursor(p.cursor);
         setEpoch((e) => e + 1);
+        void backfillOlder(p.cursor, p.hasMore); // fill earlier pages in the background
       } catch {
         // Both call sites fire this with `void`, so without a catch a failed open was an
         // unhandled rejection AND left the banner spinning on a log that never arrives.
@@ -330,6 +387,7 @@ export function useChat(
   );
 
   const newSession = useCallback(() => {
+    backfillToken.current++; // cancel any background backfill from the session we're leaving
     dropHandle();
     setPendingId(undefined);
     setMessages([]);
