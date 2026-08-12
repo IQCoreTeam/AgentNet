@@ -8,6 +8,7 @@ import { CompleteCelebration } from "./market/CompleteCelebration";
 import { FundModal } from "./market/FundModal";
 import { Sessions } from "./chat/Sessions";
 import { TabBar } from "./shell/TabBar";
+import { WelcomeTutorial } from "./unlock/WelcomeTutorial";
 import { Alert } from "./Alert";
 import { useVisualViewportVars, useKeyboardChrome } from "./layoutEffects";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
@@ -139,6 +140,8 @@ export function App() {
         {state.phase === "chat" && <TabShell />}
       </div>
       <Alert />
+      {/* First-boot intro: self-gates to a wallet-less new user on the chat screen. */}
+      <WelcomeTutorial />
       {state.buyCelebrate && <CompleteCelebration label={state.buyCelebrateLabel ?? "SKILL PURCHASED"} card={state.marketDetail?.card} onDone={clearCelebrate} flicker />}
       {state.fundOpen && <FundModal />}
       {publishCelebrate && <CompleteCelebration label={state.publishKind === "workflow" ? "WORKFLOW BUILT" : "SKILL CREATED"} onDone={() => setPublishCelebrate(false)} />}

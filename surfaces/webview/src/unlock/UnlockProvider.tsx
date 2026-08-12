@@ -13,7 +13,8 @@ type UnlockScreen = "pitch" | "installed" | "connect" | "cloud" | "advanced" | "
 type UnlockAction = (walletAddress: string) => void;
 
 // CRT scanline overlay reused by the green terminal bars (title bar, Access Granted banner).
-const SCANLINES = "repeating-linear-gradient(0deg, rgba(0,0,0,0.11) 0, rgba(0,0,0,0.11) 1px, transparent 1px, transparent 4px)";
+// Exported so the first-boot Welcome tutorial textures its title bar identically.
+export const SCANLINES = "repeating-linear-gradient(0deg, rgba(0,0,0,0.11) 0, rgba(0,0,0,0.11) 1px, transparent 1px, transparent 4px)";
 // Denser scanline over solid green fills (active pip) — matches .an-btn::after so the button
 // and the pip beside it read as the same textured green.
 const GREEN_SCANLINES = "repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0, rgba(0,0,0,0.16) 1px, transparent 1px, transparent 3px)";
@@ -41,7 +42,7 @@ const REVEAL_DELAY: Record<UnlockReason, number> = {
 type UnlockContextValue = {
   unlocked: boolean;
   celebrating: boolean;
-  requestUnlock(reason: UnlockReason, onUnlocked?: UnlockAction): void;
+  requestUnlock(reason: UnlockReason, onUnlocked?: UnlockAction, opts?: { skipIntro?: boolean }): void;
 };
 
 const UnlockContext = createContext<UnlockContextValue | null>(null);
@@ -74,16 +75,18 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
     }, 1150);
   }
 
-  function requestUnlock(nextReason: UnlockReason, onUnlocked?: UnlockAction) {
+  function requestUnlock(nextReason: UnlockReason, onUnlocked?: UnlockAction, opts?: { skipIntro?: boolean }) {
     if (unlocked && state.walletAddress) {
       onUnlocked?.(state.walletAddress);
       return;
     }
     pending.current = onUnlocked ?? null;
     setReason(nextReason);
-    // The unlock flow is a tutorial: always start from the >WHY_UNLOCK pitch. Progress is
+    // The unlock flow is a tutorial: normally it starts from the >WHY_UNLOCK pitch. Progress is
     // intentionally not persisted, so reopening it replays the intro from the top every time.
-    setScreen("pitch");
+    // skipIntro lands straight on step 01 — used by the first-boot Welcome, which already showed
+    // that pitch (its sync/earn cards) so replaying it would be redundant.
+    setScreen(opts?.skipIntro ? "installed" : "pitch");
     setPitchPage(0);
     setOpen(true);
   }
@@ -252,13 +255,29 @@ const IMAGE_BRACKETS: CSSProperties = {
   ].join(","),
 };
 
-function FramedImage({ src, position }: { src: string; position?: string }) {
+// The CRT-framed pitch image (green corner brackets + scanline). Shared with the first-boot
+// Welcome tutorial so both flows frame their imagery identically.
+export function FramedImage({ src, position }: { src: string; position?: string }) {
   return (
     <div className="unlock-img-flicker relative mx-auto" style={{ width: 200, height: 132, border: "1px solid var(--an-green-line)" }}>
       <img src={src} alt="" style={{ display: "block", width: "100%", height: "100%", objectFit: "cover", objectPosition: position ?? "50% 50%", filter: "saturate(0.7)" }} />
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "repeating-linear-gradient(0deg, rgba(0,0,0,0.22) 0, rgba(0,0,0,0.22) 1px, transparent 1px, transparent 3px)" }} />
       <div style={IMAGE_BRACKETS} />
     </div>
+  );
+}
+
+// A single external "> LABEL / sub · [↗]" terminal link row. One source of truth for the
+// unlock pitch's PC-app link and the Welcome tutorial's VS Code / install-guide links.
+export function LinkRow({ label, sub, href, className = "" }: { label: string; sub: string; href: string; className?: string }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className={`flex items-center gap-2 border border-[color:var(--an-line)] px-3 py-2.5 text-left no-underline active:opacity-80 ${className}`}>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="an-term-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--an-green)]">&gt;{label}</span>
+        <span className="truncate text-[11px] text-[color:var(--an-fg-dim)]">{sub}</span>
+      </span>
+      <span className="an-term-mono shrink-0 text-[11px] text-[color:var(--an-fg-mute)]">[↗]</span>
+    </a>
   );
 }
 
@@ -312,15 +331,7 @@ function ValuePitch({ page, onPageChange, onContinue }: { page: number; onPageCh
             <FramedImage src={card.img} position={card.position} />
             <h3 className="mt-6 text-[19px] font-bold uppercase leading-[1.3] tracking-[0.08em] text-[color:var(--an-fg)]">{card.title}</h3>
             <p className="mx-auto mt-3 max-w-[280px] text-[13px] leading-[1.65] text-[color:var(--an-fg-dim)]">{card.text}</p>
-            {card.link && (
-              <a href={card.link.href} target="_blank" rel="noreferrer" className="mt-4 flex items-center gap-2 border border-[color:var(--an-line)] px-3 py-2.5 text-left no-underline active:opacity-80">
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="an-term-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--an-green)]">&gt;{card.link.label}</span>
-                  <span className="truncate text-[11px] text-[color:var(--an-fg-dim)]">{card.link.sub}</span>
-                </span>
-                <span className="an-term-mono shrink-0 text-[11px] text-[color:var(--an-fg-mute)]">[↗]</span>
-              </a>
-            )}
+            {card.link && <LinkRow className="mt-4" label={card.link.label} sub={card.link.sub} href={card.link.href} />}
           </article>
         ))}
       </div>

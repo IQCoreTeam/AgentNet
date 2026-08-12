@@ -195,6 +195,29 @@ body {
 }
 @keyframes unlock-blink { 50% { opacity: 0; } }
 
+/* ===== FIRST-BOOT WELCOME ===== a bottom-sheet overlay (same chrome as the unlock sheet)
+   shown once to a wallet-less new user; hands off to the unlock flow at Start_Setup. */
+.welcome-dot { width: 16px; height: 8px; background: var(--an-bg-2); border: 1px solid var(--an-line); }
+.welcome-dot.on {
+  border: 0;
+  background-color: var(--an-green);
+  background-image: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.16) 0, rgba(0, 0, 0, 0.16) 1px, transparent 1px, transparent 3px);
+}
+.welcome-ghost {
+  width: 100%;
+  min-height: 38px;
+  border: 0;
+  background: transparent;
+  color: var(--an-fg-dim);
+  font-family: var(--an-font-mono);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.welcome-ghost:active { opacity: 0.7; }
+
 /* ── Alert overlay (design: Component · Alert) ─────────────────────────────────
    One terminal-styled plaque used for every transient alert. It flickers in like
    a CRT boot, holds, then blinks out — mimicking a real alert() vanishing. Green

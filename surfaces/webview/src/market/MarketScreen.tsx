@@ -16,6 +16,12 @@ import { haptics } from "../haptics";
 type MarketView = "browse" | "publish" | "helius";
 export type ShellTab = "market" | "skills" | "profile";
 
+// The market-setup tutorial auto-opens the first time a wallet-less user reaches the market
+// tab this app run — so a new user who ignored the welcome intro still meets setup where it
+// matters. Tapping any locked item opens it too; this just removes the first-visit discovery
+// gap. Once per run (module scope resets on reload); requestUnlock itself no-ops once unlocked.
+let marketAutoOpenedThisRun = false;
+
 // One "market machine" serving three of the four shell tabs (screen-rearrangement §9):
 //   market  -> browse skills/workflows + publish (products only — agents live on their own tab)
 //   skills  -> the owned collection (My Skills)
@@ -73,6 +79,10 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
       setView("browse");
       marketSearching();
       send({ type: "searchSkills", query: "", kind: state.marketTab, sort: marketSort });
+      if (!unlocked && !marketAutoOpenedThisRun) {
+        marketAutoOpenedThisRun = true;
+        requestUnlock("skills");
+      }
     }
     // Clear the shared detail/profile when LEAVING this tab so the next tab's MarketScreen
     // mounts clean — otherwise its first frame shows the previous tab's open detail/profile
