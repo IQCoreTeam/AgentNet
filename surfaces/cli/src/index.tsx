@@ -47,6 +47,14 @@ function launch(options: AppOptions, calmFlag?: boolean) {
     process.exit(1);
   }
   quietDiagnosticsToFile();
+  // Some terminals / tmux configs leave mouse reporting ON for us even though we never use
+  // the mouse. Those click/scroll escape sequences (the stray "…;13;33M" coordinates) then
+  // leak into the input as garbage text and muddy the render. Turn every mouse-reporting
+  // mode OFF at startup so nothing arrives; we own no mouse behaviour to lose.
+  if (process.stdout.isTTY) {
+    const ESC = String.fromCharCode(27);
+    process.stdout.write(`${ESC}[?1000l${ESC}[?1002l${ESC}[?1003l${ESC}[?1006l${ESC}[?1015l`);
+  }
   // Wrap every frame in a synchronized-output pair before ink paints anything, so the
   // terminal never shows a half-erased frame. Must run before render().
   installStdoutFilter();
