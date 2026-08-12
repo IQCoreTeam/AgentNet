@@ -195,14 +195,20 @@ flowchart TB
 
 ## 5. Build order (after skill NFT)
 
-1. ⬜ Workflow collection (Token-2022, same pattern as skills) + `requiredSkills` trait.
-2. ⬜ Publish: code-in the workflow recipe → mint into the workflow collection.
+1. ✅ Workflow collection (Token-2022, same pattern as skills) + `requiredSkills` trait —
+   `nft/workflow.ts` `publishWorkflow` (Token-2022 mint enrolled into the workflows
+   collection; one `requiredSkill` trait per prerequisite mint).
+2. ✅ Publish: code-in the workflow recipe → mint into the workflow collection —
+   `publishWorkflow` (`codeIn` the recipe JSON → `createSkillMint` + `publishItemIx`).
 3. ✅ **Gate program `agent-workflow-nft`** — `publish_workflow` (store + verify
    prereqs are official-collection skills, no dups) + `buy_workflow` (on-chain
    hold-all check + atomic pay/mint via PDA authority). Built, deployed to devnet,
-   4 tests passing (§2). **Next: wire the SDK's `unlockWorkflow` to call it** and
-   move the workflow mint authority to the program PDA at publish.
-4. ⬜ Discovery: "unlockable / almost-there" filters (front-end over search pipeline).
+   4 tests passing (§2). SDK wiring done since: `unlockWorkflow` calls `buyItemIx`,
+   and `publishWorkflow` sets the mint authority to the gate PDA at publish
+   (`nft/workflow.ts` / `nft/workflowGate.ts`).
+4. ✅ Discovery: "unlockable / almost-there" filters (front-end over search pipeline) —
+   `search/unlock.ts` `listUnlockable` (unlockable now + "almost there" via
+   `missing`/`maxMissing`).
 5. ⬜ Runtime: once unlocked, follow the recipe to chain the skills.
 
 ## 6. Open decisions
