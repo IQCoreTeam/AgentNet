@@ -5,6 +5,10 @@ The on-device form of the vscode extension host. A thin Kotlin shell that runs o
 points a WebView at `http://127.0.0.1:4317/`. From there it's the same React UI and the
 same HTTP-RPC + SSE transport as the browser surface — one UI, one engine path.
 
+**Cutting a release build** (Play AAB or the Seeker/dApp-Store universal APK)? Follow
+`plans/play-release-setup.md` first — it has the exact commands and the two traps
+(`assembleRelease` produces a rootfs-less dud; bundletool ships the rootfs uncompressed).
+
 ## Why proot (and not a bundled binary)
 
 The official `claude` / `codex` CLIs are native **glibc/musl** binaries with **no

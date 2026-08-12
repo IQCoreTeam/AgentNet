@@ -8,6 +8,10 @@
 #                                              official claude/codex + ripgrep + AGENTS.md
 #   app/src/main/assets/agentnet-server.tar    our surfaces/localhost build output
 #
+# RELEASE BUILDS: before building anything you intend to SHIP, read
+# plans/play-release-setup.md — Play AAB comes from the android-release workflow, and the
+# Seeker/dApp-Store universal APK comes from bundleRelease + bundletool (NOT assembleRelease).
+#
 # WHERE TO RUN THIS: the rootfs must be built FOR the target arch (aarch64). Easiest is
 # to run the rootfs step ON an aarch64 Linux host (a CI arm64 runner, an arm64 VM/cloud
 # box, or inside the target proot itself). On an x86 dev machine you can build everything
