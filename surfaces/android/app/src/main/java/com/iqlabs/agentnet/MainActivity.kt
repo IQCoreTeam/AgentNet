@@ -154,6 +154,12 @@ class MainActivity : AppCompatActivity() {
             databaseEnabled = true
             allowFileAccess = false
             mediaPlaybackRequiresUserGesture = false
+            // Needed for onCreateWindow to fire: our links use target="_blank" / window.open(),
+            // which request a NEW window. Without this the WebView drops them or loads them in
+            // place (taking over our chrome-less UI). We intercept the request and hand the URL
+            // to the external browser instead — see onCreateWindow below.
+            setSupportMultipleWindows(true)
+            javaScriptCanOpenWindowsAutomatically = true
         }
         webView.webViewClient = object : WebViewClient() {
             // Our app UI is served from the loopback server (127.0.0.1) — keep that inside
@@ -161,14 +167,7 @@ class MainActivity : AppCompatActivity() {
             // ConnectClaude screen surfaces) must open in the EXTERNAL browser: otherwise
             // claude.ai would take over our WebView and the user couldn't get back to paste
             // their code. Opening externally lets them authorize, then return to the app.
-            override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
-                val host = runCatching { Uri.parse(url).host }.getOrNull() ?: return false
-                if (host == "127.0.0.1" || host == "localhost") return false // our UI: stay in
-                return runCatching {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                    true // handled: opened externally
-                }.getOrDefault(false)
-            }
+            override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = openExternally(url)
             // Our UI is loaded → drain any deep link a notification tap stashed (cold start
             // reads the intent in onCreate, before the page — and thus its JS — exists).
             override fun onPageFinished(view: WebView, url: String) {
@@ -177,6 +176,25 @@ class MainActivity : AppCompatActivity() {
             }
         }
         webView.webChromeClient = object : WebChromeClient() {
+            // A target="_blank" anchor or window.open(). We host no second WebView, so capture
+            // the destination and route it to the external browser rather than open a chrome-less
+            // in-app window with no back button. hitTestResult covers a tapped <a>; the throwaway
+            // WebView transport covers programmatic window.open where there is no anchor.
+            override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message): Boolean {
+                view.hitTestResult.extra?.let { if (openExternally(it)) return false }
+                val temp = WebView(this@MainActivity)
+                temp.webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(v: WebView, request: android.webkit.WebResourceRequest): Boolean {
+                        openExternally(request.url.toString())
+                        temp.destroy()
+                        return true
+                    }
+                }
+                (resultMsg.obj as WebView.WebViewTransport).webView = temp
+                resultMsg.sendToTarget()
+                return true
+            }
+
             override fun onConsoleMessage(m: ConsoleMessage): Boolean {
                 // Info, not Debug: retail ROMs drop app debug logs, so WebView console (our
                 // only client-side log window) was invisible. Keep it visible in logcat.
@@ -259,6 +277,19 @@ class MainActivity : AppCompatActivity() {
         }
 
         startServerFlow()
+    }
+
+    // The single place that routes a URL off our WebView: an external host opens in the system
+    // browser as its own task ("new tab"); our own loopback UI (127.0.0.1) declines with false
+    // so it stays inside the WebView. Shared by direct navigations (shouldOverrideUrlLoading)
+    // and new-window requests (onCreateWindow) so both behave identically.
+    private fun openExternally(url: String): Boolean {
+        val host = runCatching { Uri.parse(url).host }.getOrNull()
+        if (host == null || host == "127.0.0.1" || host == "localhost") return false
+        return runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            true // handled: opened in the external browser
+        }.getOrDefault(false)
     }
 
     override fun onResume() {
