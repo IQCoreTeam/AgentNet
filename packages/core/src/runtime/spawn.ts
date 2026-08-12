@@ -384,7 +384,10 @@ function claudeEngine(opts: SpawnOpts): Engine {
     ...process.env,
     ...(opts.githubToken ? gitCredentialEnv(opts.githubToken) : {}),
   };
-  if (opts.mode === "bypassPermissions" && process.getuid?.() === 0) {
+  // AGENTNET_CODEX_SANDBOX is set only by the Android launcher (ServerManager) → it marks the
+  // proot guest. Require it so IS_SANDBOX is set ONLY inside that genuinely-sandboxed guest, not
+  // on any random root host (a desktop running as root would otherwise get an unguarded bypass).
+  if (opts.mode === "bypassPermissions" && process.getuid?.() === 0 && process.env.AGENTNET_CODEX_SANDBOX) {
     claudeEnv.IS_SANDBOX = "1";
   }
 
@@ -522,7 +525,13 @@ function codexEngine(opts: SpawnOpts): Engine {
   const sandbox = process.env.AGENTNET_CODEX_SANDBOX || undefined;
   // Make the codex mode chips real: derive the approval policy + sandbox from opts.mode.
   // A mode change restages the session (session.ts), so the next spawn picks these up.
-  const codexApproval = codexApprovalPolicy(opts.mode);
+  // When the OS sandbox is FORCED by env (Android proot can't run bubblewrap → danger-full-access),
+  // a non-"full" mode must NOT weaken to on-failure: the sandbox isn't really constraining there, so
+  // the approval gate is the only real control and must keep asking. Only "full" opts out. Desktop
+  // (no env override) uses the mode's own policy.
+  const codexApproval = sandbox
+    ? (opts.mode === "full" ? "never" : "on-request")
+    : codexApprovalPolicy(opts.mode);
   const effectiveSandbox = codexSandbox(opts.mode, sandbox);
   const childEnv = { ...process.env, ...gitCredentialEnv(opts.githubToken) };
   if (opts.apiKey) {
