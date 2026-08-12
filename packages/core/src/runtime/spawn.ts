@@ -375,6 +375,19 @@ function claudeEngine(opts: SpawnOpts): Engine {
     return { behavior: "allow" as const, updatedInput: decision.updatedInput ?? input };
   };
 
+  // The SDK `env` REPLACES the subprocess environment, so start from process.env (keeps
+  // PATH / ANTHROPIC creds) and layer the git token on top when present. Claude Code refuses
+  // --dangerously-skip-permissions (bypassPermissions) when running as root "for security
+  // reasons"; the proot guest IS root AND sandboxed (Android app sandbox + proot), so signal
+  // IS_SANDBOX to let YOLO actually work on-device. Guarded to root + bypass — a no-op elsewhere.
+  const claudeEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    ...(opts.githubToken ? gitCredentialEnv(opts.githubToken) : {}),
+  };
+  if (opts.mode === "bypassPermissions" && process.getuid?.() === 0) {
+    claudeEnv.IS_SANDBOX = "1";
+  }
+
   const q = query({
     prompt: prompts(),
     options: {
@@ -408,7 +421,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
       ...(opts.enabledSkills?.length ? { skills: opts.enabledSkills } : {}),
       // Give the agent's git the configured GitHub token. The SDK `env` REPLACES the
       // subprocess environment, so spread process.env to keep PATH / ANTHROPIC creds / etc.
-      ...(opts.githubToken ? { env: { ...process.env, ...gitCredentialEnv(opts.githubToken) } } : {}),
+      env: claudeEnv,
       // NOTE: settingSources is deliberately omitted — the SDK then loads ALL sources
       // (user/project/local), which is what lets skills in the user dir (~/.claude/skills,
       // where owned NFTs + the passive workflow are installed) be discovered. Passing
