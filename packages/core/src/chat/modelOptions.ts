@@ -11,20 +11,20 @@ export type ChatModelOption = {
 // `value` (passed as the CLI/app-server model override); surfaces use the richer
 // labels/descriptions so the picker is understandable instead of exposing bare aliases.
 // No bare "default" pseudo-entry: the first real model is the sensible default, and the
-// picker shows its actual name (e.g. "Opus 4.8") instead of an opaque "default" chip.
+// picker shows its actual name (e.g. "Opus 5") instead of an opaque "default" chip.
 // This is only the offline/fallback baseline — surfaces upgrade to the CLI's live list.
 export const CHAT_MODEL_OPTIONS: Record<EngineKey, ChatModelOption[]> = {
   claude: [
     {
       value: "opus",
-      chipLabel: "Opus 4.8",
-      label: "Opus 4.8",
+      chipLabel: "Opus 5",
+      label: "Opus 5",
       description: "Most capable · Claude alias: opus",
     },
     {
       value: "sonnet",
-      chipLabel: "Sonnet 4.6",
-      label: "Sonnet 4.6",
+      chipLabel: "Sonnet 5",
+      label: "Sonnet 5",
       description: "Balanced · Claude alias: sonnet",
     },
     {

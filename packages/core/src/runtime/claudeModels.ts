@@ -14,18 +14,24 @@ import { resolveExecutable } from "./resolveExecutable.js";
 
 function modelToOption(model: ModelInfo): ChatModelOption {
   const desc = model.description?.trim();
-  let chip = model.displayName?.trim() || model.value;
-  let full = chip;
-  // The CLI's default entry is named "Default (recommended)" and hides the real model
-  // name in its description ("Opus 4.8 with 1M context · ..."). supportedModels() does not
-  // return that model as a standalone entry, so relabel the default with its actual model
-  // name instead of showing an opaque "Default" on the chip.
-  if (model.value === "default" && desc) {
-    const lead = desc.split(" · ")[0]?.trim(); // "Opus 4.8 with 1M context"
-    if (lead) {
-      full = lead;
-      chip = lead.split(" with ")[0].trim(); // "Opus 4.8"
-    }
+  const displayName = model.displayName?.trim() || model.value;
+  let chip = displayName;
+  let full = displayName;
+  // The version number lives in the DESCRIPTION ("Fable 5 · …", "Opus 5 with 1M context · …")
+  // while displayName is often the bare family ("Fable", "Sonnet", "Haiku"). Prefer the
+  // description's lead so the chip shows the real versioned name (Fable 5, Sonnet 5, Haiku 4.5),
+  // matching the CLI's own picker — but only when it's clearly "<displayName> <version>", so a
+  // distinct label like "Opus (1M context)" is left as-is.
+  const lead = desc?.split(" · ")[0]?.trim(); // "Fable 5" or "Opus 5 with 1M context"
+  if (model.value === "default" && lead) {
+    // The CLI's "Default (recommended)" hides the real model name in its description, and
+    // supportedModels() doesn't return it standalone — relabel it with the actual model name.
+    full = lead;
+    chip = lead.split(" with ")[0].trim(); // "Opus 5"
+  } else if (lead && lead.toLowerCase().startsWith(displayName.toLowerCase()) && lead.length > displayName.length) {
+    const versioned = lead.split(" with ")[0].trim(); // drop any "with 1M context" for the chip
+    chip = versioned;
+    full = versioned;
   }
   const extra = `Claude alias: ${model.value}`;
   return {
