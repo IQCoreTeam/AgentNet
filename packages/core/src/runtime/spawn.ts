@@ -142,6 +142,27 @@ function claudePermissionMode(
     : "default";
 }
 
+// Codex approval policy per UI mode. The picker sends "auto" | "readonly" | "full"; the
+// codex app-server takes an approvalPolicy. (Sandbox is a separate axis — see codexSandbox.)
+// Previously the app hardcoded "on-request" and ignored the mode, so the codex chips did
+// nothing; this makes them real.
+function codexApprovalPolicy(mode?: string): "on-request" | "on-failure" | "never" {
+  if (mode === "full") return "never"; // full access, never ask
+  if (mode === "auto") return "on-failure"; // auto-run in the workspace; ask only on failure/escalation
+  return "on-request"; // readonly + default: ask before edits, commands, network
+}
+
+// Codex OS sandbox per UI mode. AGENTNET_CODEX_SANDBOX wins when set (Android forces
+// danger-full-access because bubblewrap can't run under proot — there the approvalPolicy
+// above is the real control); otherwise derive the sandbox from the mode.
+function codexSandbox(mode: string | undefined, envSandbox: string | undefined): string | undefined {
+  if (envSandbox) return envSandbox;
+  if (mode === "full") return "danger-full-access";
+  if (mode === "readonly") return "read-only";
+  if (mode === "auto") return "workspace-write";
+  return undefined; // codex default
+}
+
 export function spawnCli(opts: SpawnOpts): Engine {
   return opts.cli === "claude" ? claudeEngine(opts) : codexEngine(opts);
 }
@@ -486,6 +507,10 @@ function codexEngine(opts: SpawnOpts): Engine {
   // AGENTNET_CODEX_SANDBOX=danger-full-access so Codex skips its own sandbox and relies on
   // proot + the app sandbox + our approval gate. Desktop leaves it unset → Codex's default.
   const sandbox = process.env.AGENTNET_CODEX_SANDBOX || undefined;
+  // Make the codex mode chips real: derive the approval policy + sandbox from opts.mode.
+  // A mode change restages the session (session.ts), so the next spawn picks these up.
+  const codexApproval = codexApprovalPolicy(opts.mode);
+  const effectiveSandbox = codexSandbox(opts.mode, sandbox);
   const childEnv = { ...process.env, ...gitCredentialEnv(opts.githubToken) };
   if (opts.apiKey) {
     childEnv.OPENAI_API_KEY = opts.apiKey;
@@ -876,9 +901,9 @@ function codexEngine(opts: SpawnOpts): Engine {
           threadId: opts.sessionId,
           model: opts.model,
           cwd: opts.cwd,
-          approvalPolicy: "on-request",
+          approvalPolicy: codexApproval,
           approvalsReviewer: "user",
-          ...(sandbox ? { sandbox } : {}),
+          ...(effectiveSandbox ? { sandbox: effectiveSandbox } : {}),
           ...(opts.effort ? { reasoning_effort: opts.effort } : {}),
         });
         cb.emitSid(opts.sessionId);
@@ -886,9 +911,9 @@ function codexEngine(opts: SpawnOpts): Engine {
         const res = await sendRequest("thread/start", {
           model: opts.model,
           cwd: opts.cwd,
-          approvalPolicy: "on-request",
+          approvalPolicy: codexApproval,
           approvalsReviewer: "user",
-          ...(sandbox ? { sandbox } : {}),
+          ...(effectiveSandbox ? { sandbox: effectiveSandbox } : {}),
           ...(opts.effort ? { reasoning_effort: opts.effort } : {}),
         });
         const threadId = res?.thread?.id;

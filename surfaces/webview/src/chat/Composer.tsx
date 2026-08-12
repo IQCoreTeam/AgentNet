@@ -65,6 +65,7 @@ const MODES: Record<Cli, { value: string; label: string; title: string }[]> = {
     { value: "acceptEdits", label: "Auto edit",  title: "Auto-accept file edits; still ask for other tools" },
     { value: "default",     label: "Ask edits",  title: "Ask before each file edit (default)" },
     { value: "plan",        label: "Plan",        title: "Plan mode: read-only until you approve the plan" },
+    { value: "bypassPermissions", label: "YOLO", title: "Skip every approval — auto-runs all commands, edits, and on-chain spends. Use with care." },
   ],
   codex: [
     { value: "auto",     label: "Auto accept", title: "Auto-accept edits + run inside the workspace (default)" },

@@ -2476,6 +2476,7 @@ export function chatHtml(): string {
       { value: 'default',     label: 'Ask edits',    title: 'Ask before each file edit (default)' },
       { value: 'acceptEdits', label: 'Auto edit',    title: 'Auto-accept file edits; still ask for other tools' },
       { value: 'plan',        label: 'Plan',         title: 'Plan mode: read-only until you approve the plan' },
+      { value: 'bypassPermissions', label: 'YOLO', title: 'Skip every approval — auto-runs all commands, edits, and on-chain spends. Use with care.' },
     ],
     codex: [
       { value: 'readonly', label: 'Read only',   title: 'Read-only sandbox; ask before edits, commands, network' },
