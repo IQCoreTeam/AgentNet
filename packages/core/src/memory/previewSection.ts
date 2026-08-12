@@ -6,13 +6,11 @@
 //
 // GATED on AGENTNET_PREVIEW_PORT: only the surface that actually HAS the preview tab + announce
 // endpoint (surfaces/localhost, incl. the Android app) sets it. On the CLI/VSCode surfaces the
-// env is unset → the block renders empty and spliceMarkedBlock removes it, so an agent there is
-// never told to hit an endpoint that doesn't exist.
+// env is unset → the block renders empty: an existing block is spliced out, and a file without
+// our markers is left untouched (no write at all), so an agent there is never told to hit an
+// endpoint that doesn't exist.
 
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { claudeMemoryDir, codexAgentsFile } from "../core/paths.js";
-import { spliceMarkedBlock } from "./convert/codex.js";
+import { memoryFileFor, spliceIntoFile } from "./skillsSection.js";
 
 const START = "<!-- agentnet:preview:start -->";
 const END = "<!-- agentnet:preview:end -->";
@@ -29,18 +27,6 @@ function renderBlock(port: string | null): string {
   return `${START}\n${line}\n${END}`;
 }
 
-/** Splice (replace-or-remove) the preview block into a file, preserving everything outside
- *  our markers. Creates the file if missing. */
-async function spliceIntoFile(file: string, block: string): Promise<void> {
-  let existing = "";
-  try {
-    existing = await readFile(file, "utf8");
-  } catch {
-    /* file doesn't exist yet — spliceMarkedBlock returns the block alone */
-  }
-  await writeFile(file, spliceMarkedBlock(existing, block, START, END));
-}
-
 /**
  * Update the "in-app preview" section for one runtime. Renders the hint ONLY when
  * AGENTNET_PREVIEW_PORT is set (the surface with the PREVIEW tab); otherwise removes the block.
@@ -49,9 +35,7 @@ async function spliceIntoFile(file: string, block: string): Promise<void> {
 export async function updatePreviewSection(cli: "claude" | "codex", cwd: string): Promise<void> {
   try {
     const port = process.env.AGENTNET_PREVIEW_PORT || null;
-    const block = renderBlock(port);
-    const file = cli === "claude" ? join(claudeMemoryDir(cwd), "MEMORY.md") : codexAgentsFile(cwd);
-    await spliceIntoFile(file, block);
+    await spliceIntoFile(memoryFileFor(cli, cwd), renderBlock(port), START, END);
   } catch {
     /* never throw from preview-section sync */
   }

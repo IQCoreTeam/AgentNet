@@ -34,9 +34,15 @@ export function Markdown({ text }: { text: string }) {
     // instead of navigating the whole webview away — the agent just prints its dev-server
     // URL and it becomes a one-tap preview. Non-loopback links are left untouched.
     ref.current.querySelectorAll<HTMLAnchorElement>("a[href]").forEach((a) => {
-      let host = "";
-      try { host = new URL(a.href).hostname; } catch { return; }
-      if (host !== "127.0.0.1" && host !== "localhost" && host !== "::1") return;
+      // Absolute links only — a relative markdown link like [x](src/app.js) resolves
+      // against this page's own loopback origin and must NOT become a preview link.
+      if (!/^https?:\/\//i.test(a.getAttribute("href") ?? "")) return;
+      let u: URL;
+      try { u = new URL(a.href); } catch { return; }
+      // ::1 is deliberately not handled — the server only ever announces 127.0.0.1.
+      if (u.hostname !== "127.0.0.1" && u.hostname !== "localhost") return;
+      // Never frame the app inside its own preview tab.
+      if (u.host === window.location.host) return;
       a.classList.add("preview-link");
       const onClick = (e: MouseEvent) => {
         e.preventDefault();

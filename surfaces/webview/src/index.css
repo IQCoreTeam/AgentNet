@@ -1087,8 +1087,8 @@ body {
   touch-action: pan-y;
 }
 
-/* Horizontal pager: a 400%-wide track of four full-width pages. The track translates
-   by -idx*25% (+ live drag) so swiping left/right pages between Chat/Skills/Agent/Market.
+/* Horizontal pager: a 500%-wide track of five full-width pages. The track translates
+   by -idx*20% (+ live drag) so swiping left/right pages between Chat/Skills/Agent/Market/Preview.
    touch-action pan-y lets vertical scroll happen natively; horizontal is JS-driven. */
 .an-pager-track {
   display: flex;
@@ -1104,23 +1104,24 @@ body {
   min-width: 0;
   overflow: hidden;
 }
-/* PREVIEW tab: a URL bar over an <iframe> that fills the rest. Zinc palette to match the
-   app; --claude accent on focus. */
-.an-preview { display: flex; flex-direction: column; height: 100%; background: #09090b; }
-.an-preview-bar { display: flex; gap: 6px; padding: calc(env(safe-area-inset-top) + 8px) 8px 8px; align-items: center; border-bottom: 1px solid #27272a; }
-.an-preview-url { flex: 1; min-width: 0; background: #18181b; color: #e4e4e7; border: 1px solid #27272a; border-radius: 8px; padding: 8px 10px; font: 13px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; outline: none; }
+/* PREVIEW tab: a URL bar over an <iframe> that fills the rest. Styled with the app's
+   --an-* tokens; --claude accent on focus. */
+.an-preview { display: flex; flex-direction: column; height: 100%; background: var(--an-bg-0); }
+.an-preview-bar { display: flex; gap: 6px; padding: calc(env(safe-area-inset-top) + 8px) 8px 8px; align-items: center; border-bottom: 1px solid var(--an-line); }
+.an-preview-url { flex: 1; min-width: 0; background: var(--an-bg-2); color: var(--an-fg); border: 1px solid var(--an-line); border-radius: var(--an-radius-sm); padding: 8px 10px; font: 13px/1.2 var(--an-font-code); outline: none; }
 .an-preview-url:focus { border-color: var(--claude); }
-.an-preview-btn { flex: none; background: #18181b; color: #e4e4e7; border: 1px solid #27272a; border-radius: 8px; padding: 8px 11px; font: 600 13px/1 ui-monospace, monospace; cursor: pointer; }
+.an-preview-btn { flex: none; background: var(--an-bg-2); color: var(--an-fg); border: 1px solid var(--an-line); border-radius: var(--an-radius-sm); padding: 8px 12px; font: 600 13px/1 var(--an-font-code); cursor: pointer; }
 .an-preview-btn:disabled { opacity: 0.4; }
-.an-preview-error { padding: 6px 10px; color: #f87171; font: 12px/1.4 ui-monospace, monospace; }
+.an-preview-error { padding: 6px 10px; color: var(--an-red); font: 12px/1.4 var(--an-font-code); }
+/* #fff backdrop is deliberate (not a token): framed dev pages assume a white canvas. */
 .an-preview-frame { flex: 1; min-height: 0; position: relative; background: #fff; }
-.an-preview-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; padding: 24px; background: #09090b; }
-.an-preview-empty-title { color: #e4e4e7; font: 600 15px/1.3 ui-monospace, monospace; }
+.an-preview-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; padding: 24px; background: var(--an-bg-0); }
+.an-preview-empty-title { color: var(--an-fg); font: 600 15px/1.3 var(--an-font-code); }
 .an-preview-hint { font-size: 11px; word-break: break-all; opacity: 0.7; }
 
 /* Loopback links in chat get a preview affordance (see Markdown.tsx). */
 .md a.preview-link { color: var(--claude); font-weight: 600; text-decoration: none; }
-.md a.preview-link::after { content: " ▸ open preview"; font-size: .82em; opacity: .75; white-space: nowrap; }
+.md a.preview-link::after { content: " — open preview"; font-size: .82em; opacity: .75; white-space: nowrap; }
 
 /* Free horizontal swipes from the pages' vertical scrollers so a left/right drag pages
    between tabs instead of being swallowed (the chat scroller sets this inline already). */

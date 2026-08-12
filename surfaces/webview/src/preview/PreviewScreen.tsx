@@ -10,18 +10,44 @@ import { openExternalUrl } from "../platform/openExternalUrl";
 // device's own localhost, matching the WebView's trust model (MainActivity keeps
 // loopback in-WebView and blocks the rest).
 export function normalizePreviewUrl(raw: string): string | null {
-  const s = raw.trim();
+  let s = raw.trim();
   if (!s) return null;
-  if (/^\d{1,5}$/.test(s)) return `http://127.0.0.1:${s}/`;
+  if (/^\d{1,5}$/.test(s)) {
+    const p = Number(s);
+    if (!(p >= 1 && p <= 65535)) return null;
+    s = `http://127.0.0.1:${p}/`;
+  }
   let u: URL;
   try {
     u = new URL(/^https?:\/\//i.test(s) ? s : `http://${s}`);
   } catch {
     return null;
   }
+  // ::1 is deliberately not accepted — the server only ever announces 127.0.0.1.
   const host = u.hostname;
-  const loopback = host === "127.0.0.1" || host === "localhost" || host === "::1";
-  return loopback ? u.toString() : null;
+  const loopback = host === "127.0.0.1" || host === "localhost";
+  if (!loopback) return null;
+  // Never frame the app itself (mirrors the server's `raw === serverPort` rejection).
+  if (u.host === window.location.host) return null;
+  return u.toString();
+}
+
+// Bar-button glyphs, matching TabBar.tsx's style (16px, stroke currentColor, width 1.8).
+function ReloadGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+      <path d="M20 3v5h-5" />
+    </svg>
+  );
+}
+function OpenExternalGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7 17 17 7" />
+      <path d="M9 7h8v8" />
+    </svg>
+  );
 }
 
 // The PREVIEW tab: an <iframe> pointed at a loopback dev server the agent (or the user)
@@ -100,9 +126,9 @@ export function PreviewScreen() {
           />
           <button type="button" className="an-preview-btn" onClick={() => go(input)}>GO</button>
           <button type="button" className="an-preview-btn" aria-label="Reload" disabled={!url}
-                  onClick={() => setNonce((n) => n + 1)}>↻</button>
+                  onClick={() => setNonce((n) => n + 1)}><ReloadGlyph /></button>
           <button type="button" className="an-preview-btn" aria-label="Open externally" disabled={!url}
-                  onClick={() => { if (url) openExternalUrl(url); }}>↗</button>
+                  onClick={() => { if (url) openExternalUrl(url); }}><OpenExternalGlyph /></button>
         </div>
         {error && <div className="an-preview-error">{error}</div>}
         <div className="an-preview-frame">
@@ -118,7 +144,7 @@ export function PreviewScreen() {
             <div className="an-preview-empty">
               <p className="an-preview-empty-title">No preview yet</p>
               <p className="dim">Ask the agent to start a dev server and announce it, or type a port above.</p>
-              <p className="dim an-preview-hint">agent: POST http://127.0.0.1:4317/preview/announce {'{'}"port": 5173{'}'}</p>
+              <p className="dim an-preview-hint">agent: POST {window.location.origin}/preview/announce {'{'}"port": 5173{'}'}</p>
             </div>
           )}
         </div>

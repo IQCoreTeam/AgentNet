@@ -77,8 +77,8 @@ const TABS: { key: TabKey; label: string; Glyph: () => JSX.Element }[] = [
   { key: "preview", label: "PREVIEW", Glyph: PreviewGlyph },
 ];
 
-// Compact centered "NAV_DOCK" (Nav Dock design, VAR_01 · mono invert): a 296px terminal bar with
-// corner-tick brackets and four equal segments. The active segment is filled by a sliding
+// Compact centered "NAV_DOCK" (Nav Dock design, VAR_01 · mono invert): a 360px terminal bar with
+// corner-tick brackets and five equal segments. The active segment is filled by a sliding
 // indicator tinted to the live ENGINE (Claude = orange, Codex = green) with dark icon/label + a
 // blinking dot; the rest read grey on near-black. The indicator tracks `position` (fractional, so
 // it follows a live page swipe) and animates on tap (transition off only while dragging).

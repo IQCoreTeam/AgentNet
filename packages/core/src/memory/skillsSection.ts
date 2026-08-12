@@ -94,16 +94,26 @@ function renderBlock(skills: InstalledSkillSummary[]): string {
   return `${START}\n${line}\n${END}`;
 }
 
-/** Splice (replace-or-append) the skills line into a file, preserving everything
- *  outside our markers. Creates the file if missing. */
-async function spliceIntoFile(file: string, block: string): Promise<void> {
+/** The memory file a runtime's managed blocks live in: claude's MEMORY.md index in the
+ *  project memory dir, or codex's repo AGENTS.md. Shared by every section updater
+ *  (skills, preview) so the mapping has one source of truth. */
+export function memoryFileFor(cli: "claude" | "codex", cwd: string): string {
+  return cli === "claude" ? join(claudeMemoryDir(cwd), "MEMORY.md") : codexAgentsFile(cwd);
+}
+
+/** Splice (replace-or-append; empty block = remove) a marker-delimited block into a file,
+ *  preserving everything outside the markers. Creates the file if missing. An empty block
+ *  with no existing markers is a no-op — never create or dirty a file just to write
+ *  nothing. Shared by every section updater (skills, preview). */
+export async function spliceIntoFile(file: string, block: string, start: string, end: string): Promise<void> {
   let existing = "";
   try {
     existing = await readFile(file, "utf8");
   } catch {
     /* file doesn't exist yet — spliceMarkedBlock returns the block alone */
   }
-  await writeFile(file, spliceMarkedBlock(existing, block, START, END));
+  if (!block && !existing.includes(start)) return;
+  await writeFile(file, spliceMarkedBlock(existing, block, start, end));
 }
 
 /**
@@ -120,9 +130,7 @@ async function spliceIntoFile(file: string, block: string): Promise<void> {
 export async function updateSkillsSection(cli: "claude" | "codex", cwd: string): Promise<InstalledSkillSummary[]> {
   try {
     const skills = await installedSkillSummaries();
-    const block = renderBlock(skills);
-    const file = cli === "claude" ? join(claudeMemoryDir(cwd), "MEMORY.md") : codexAgentsFile(cwd);
-    await spliceIntoFile(file, block);
+    await spliceIntoFile(memoryFileFor(cli, cwd), renderBlock(skills), START, END);
     return skills;
   } catch {
     /* never throw from skill-section sync */

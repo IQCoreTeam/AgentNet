@@ -1285,6 +1285,14 @@ const http = createServer(async (req, res) => {
   // tab frames it. POST {"port":N} to set, {"port":null} to clear. Loopback callers only. ──
   if (req.method === "POST" && path === "/preview/announce") {
     if (!isLoopback(req.socket.remoteAddress ?? "")) { res.writeHead(403).end("loopback only"); return; }
+    // CSRF guard: isLoopback can't stop a malicious page in an on-device BROWSER (its fetch
+    // also arrives from loopback), but a browser always sends an Origin header — reject any
+    // that isn't our own. Agents (curl / node fetch) send no Origin, so they pass untouched.
+    const origin = req.headers.origin;
+    if (origin && origin !== `http://127.0.0.1:${PORT}` && origin !== `http://localhost:${PORT}`) {
+      res.writeHead(403).end("bad origin");
+      return;
+    }
     let port: unknown;
     try { port = JSON.parse(await readBody(req))?.port; } catch { res.writeHead(400).end("bad json"); return; }
     const valid = validatePreviewPort(port, PORT);
