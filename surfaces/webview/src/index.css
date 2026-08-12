@@ -974,7 +974,7 @@ body {
    icon/label) + a blinking status dot; the rest read grey on near-black. Reuses .an-tabbar-shell
    for floating + keyboard-hide; everything here is the dock's own look. */
 .an-navdock-shell { padding: 6px 16px 0; }
-.an-navdock { width: min(296px, 100%); margin: 0 auto; }
+.an-navdock { width: min(360px, 100%); margin: 0 auto; }
 .an-navdock-status {
   display: flex;
   justify-content: space-between;
@@ -1014,7 +1014,7 @@ body {
   top: 0;
   bottom: 0;
   left: 0;
-  width: 25%;
+  width: 20%;
   z-index: 0;
   transition: transform 0.28s var(--ease-standard);
 }
@@ -1093,17 +1093,31 @@ body {
 .an-pager-track {
   display: flex;
   height: 100%;
-  width: 400%;
+  width: 500%;
   will-change: transform;
   touch-action: pan-y;
 }
 .an-page {
   position: relative;
-  width: 25%;
+  width: 20%;
   height: 100%;
   min-width: 0;
   overflow: hidden;
 }
+/* PREVIEW tab: a URL bar over an <iframe> that fills the rest. Zinc palette to match the
+   app; --claude accent on focus. */
+.an-preview { display: flex; flex-direction: column; height: 100%; background: #09090b; }
+.an-preview-bar { display: flex; gap: 6px; padding: 8px; align-items: center; border-bottom: 1px solid #27272a; }
+.an-preview-url { flex: 1; min-width: 0; background: #18181b; color: #e4e4e7; border: 1px solid #27272a; border-radius: 8px; padding: 8px 10px; font: 13px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; outline: none; }
+.an-preview-url:focus { border-color: var(--claude); }
+.an-preview-btn { flex: none; background: #18181b; color: #e4e4e7; border: 1px solid #27272a; border-radius: 8px; padding: 8px 11px; font: 600 13px/1 ui-monospace, monospace; cursor: pointer; }
+.an-preview-btn:disabled { opacity: 0.4; }
+.an-preview-error { padding: 6px 10px; color: #f87171; font: 12px/1.4 ui-monospace, monospace; }
+.an-preview-frame { flex: 1; min-height: 0; position: relative; background: #fff; }
+.an-preview-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; padding: 24px; background: #09090b; }
+.an-preview-empty-title { color: #e4e4e7; font: 600 15px/1.3 ui-monospace, monospace; }
+.an-preview-hint { font-size: 11px; word-break: break-all; opacity: 0.7; }
+
 /* Free horizontal swipes from the pages' vertical scrollers so a left/right drag pages
    between tabs instead of being swallowed (the chat scroller sets this inline already). */
 .an-pager-track .overflow-y-auto {

@@ -144,6 +144,9 @@ export interface State {
   agentProfileLoading: boolean;
   agentsLoading: boolean;
   githubStatus: { hasToken: boolean; masked?: string } | null;
+  // preview: the loopback dev-server the PREVIEW tab frames (announced by the agent via
+  // /preview/announce, or entered manually). null url = nothing announced yet.
+  preview: { port: number | null; url: string | null };
   workRepoResult: { ok: boolean; count?: number; repo?: string; error?: string; at: number } | null;
   modeByCli: Record<Cli, string>;
 }
@@ -215,6 +218,7 @@ const initialState: State = {
   agentProfileLoading: false,
   agentsLoading: false,
   githubStatus: null,
+  preview: { port: null, url: null },
   workRepoResult: null,
   isCompacting: false,
   modeByCli: {
@@ -633,6 +637,8 @@ function reducer(state: State, ev: Action): State {
       return state;
     case "githubStatus":
       return { ...state, githubStatus: { hasToken: ev.hasToken, masked: ev.masked } };
+    case "previewStatus":
+      return { ...state, preview: { port: ev.port, url: ev.url } };
     case "__loadingAgents":
       return { ...state, agentsLoading: true };
     case "__loadingAgentProfile":

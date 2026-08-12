@@ -27,6 +27,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join, normalize, extname } from "node:path";
 import { homedir } from "node:os";
+import { validatePreviewPort, previewStatusMsg, isLoopback } from "./preview.js";
 import {
   connect,
   createChatSession,
@@ -234,6 +235,8 @@ let onCloudStatus: (() => void) | null = null;
 let googleLoginSession: GoogleLogin | null = null;
 let googleLoginError: string | null = null;
 let claudeLogin: ClaudeLogin | null = null;
+// Preview: the loopback dev-server port announced via POST /preview/announce (null = none).
+let previewPort: number | null = null;
 let codexLogin: CodexLogin | null = null;
 
 // The single place that wires connect()'s cloud-status callback and adopts the result as
@@ -1074,6 +1077,10 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
       c.send({ type: "githubStatus", hasToken: !!masked, masked: masked ?? undefined });
       return;
     }
+    if (m?.type === "getPreviewStatus") {
+      c.send(previewStatusMsg(previewPort));
+      return;
+    }
     // Register a repo as verified work: push the public .agentnet marker with the
     // user's GitHub token, then register repo<->skill with the indexer. Token +
     // wallet live here on the host, never in the webview.
@@ -1267,6 +1274,20 @@ const http = createServer(async (req, res) => {
         <h2 style="color:#ff6b6b">Google login failed</h2><p>${escapeHtml(googleLoginError)}</p>
       </body></html>`);
     }
+    return;
+  }
+
+  // ── preview: an agent (or the user) announces a loopback dev-server port; the PREVIEW
+  // tab frames it. POST {"port":N} to set, {"port":null} to clear. Loopback callers only. ──
+  if (req.method === "POST" && path === "/preview/announce") {
+    if (!isLoopback(req.socket.remoteAddress ?? "")) { res.writeHead(403).end("loopback only"); return; }
+    let port: unknown;
+    try { port = JSON.parse(await readBody(req))?.port; } catch { res.writeHead(400).end("bad json"); return; }
+    const valid = validatePreviewPort(port, PORT);
+    if (valid === false) { res.writeHead(400).end("bad port"); return; }
+    previewPort = valid;
+    for (const client of clients.values()) client.send(previewStatusMsg(previewPort));
+    res.writeHead(204).end();
     return;
   }
 

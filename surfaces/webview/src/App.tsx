@@ -4,6 +4,7 @@ import { ConnectClaude } from "./onboarding/ConnectClaude";
 import { ConnectCodex } from "./onboarding/ConnectCodex";
 import { ChatScreen } from "./chat/ChatScreen";
 import { MarketScreen } from "./market/MarketScreen";
+import { PreviewScreen } from "./preview/PreviewScreen";
 import { CompleteCelebration } from "./market/CompleteCelebration";
 import { FundModal } from "./market/FundModal";
 import { Sessions } from "./chat/Sessions";
@@ -153,7 +154,7 @@ export function App() {
 // machine mounts only for the active page (it shares one store, so multiple live copies
 // would fight). Chat history lives in a left push-reveal drawer, opened by a right swipe
 // from Chat (page 0) — every other horizontal swipe pages between tabs.
-const LAST = 3; // Chat(0) Skills(1) Rank(2) Market(3)
+const LAST = 4; // Chat(0) Skills(1) Rank(2) Market(3) Preview(4)
 
 function TabShell() {
   const { state, send } = useStore();
@@ -256,7 +257,7 @@ function TabShell() {
 
   // Drawer push: the whole surface slides right (no shrink/rounding — reads as a panel).
   const surfaceTx = drawerProgress * drawerWidth;
-  // Pager: the 400%-wide track sits at -idx*25%, plus the live drag offset.
+  // Pager: the 500%-wide track sits at -idx*20%, plus the live drag offset.
   const tabPosition = Math.max(0, Math.min(LAST, idx - pageDrag / vw));
   const goToTab = (i: number) => { setIdx(i); changeDrawer(false); };
 
@@ -305,7 +306,7 @@ function TabShell() {
           <div
             className="an-pager-track"
             style={{
-              transform: `translate3d(calc(${-idx} * 25% + ${pageDrag}px), 0, 0)`,
+              transform: `translate3d(calc(${-idx} * 20% + ${pageDrag}px), 0, 0)`,
               transition: paging ? "none" : "transform var(--dur-screen) var(--ease-emphasized-decelerate)",
             }}
           >
@@ -316,6 +317,8 @@ function TabShell() {
             <MarketPage marketTab="skills" active={idx === 1} onGoMarket={() => setIdx(3)} />
             <MarketPage marketTab="profile" active={idx === 2} />
             <MarketPage marketTab="market" active={idx === 3} />
+            {/* Preview — always mounted so a running dev server keeps rendering as you page away. */}
+            <PreviewScreen />
           </div>
         </div>
 

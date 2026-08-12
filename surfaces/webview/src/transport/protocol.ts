@@ -174,6 +174,7 @@ export type ClientMessage =
   | { type: "submitGithubToken"; token: string }
   | { type: "clearGithubToken" }
   | { type: "getGithubStatus" }
+  | { type: "getPreviewStatus" }
   | { type: "registerWorkRepo"; repo: string; skillMints: string[] }
   | { type: "signTransactionResult"; id: string; signedTx?: string; error?: string };
 
@@ -255,5 +256,7 @@ export type ServerMessage =
   | { type: "publishResult"; ok: boolean; mint?: string; error?: string }
   | { type: "publishProgress"; phase: "store" | "mint" | "list"; signed: number; total?: number; percent?: number; kind: "skill" | "workflow" }
   | { type: "githubStatus"; hasToken: boolean; masked?: string }
+  // preview: the loopback dev-server URL the PREVIEW tab frames (null = none/cleared).
+  | { type: "previewStatus"; port: number | null; url: string | null }
   | { type: "workRepoRegistered"; ok: boolean; count?: number; repo?: string; error?: string }
   | { type: "signTransaction"; id: string; tx: string };

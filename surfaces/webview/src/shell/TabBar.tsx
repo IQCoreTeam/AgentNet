@@ -3,11 +3,12 @@ import { useElementHeightVariable } from "../layoutEffects";
 import { useStore } from "../state/store";
 import { useUnlock } from "../unlock/UnlockProvider";
 
-// The four top-level domains as an ordered pager: Chat · Skills · Rank · Market.
-// Skills = your owned collection; account/sync/settings live in the chat drawer.
-export type TabKey = "chat" | "skills" | "profile" | "market";
+// The five top-level domains as an ordered pager: Chat · Skills · Rank · Market · Preview.
+// Skills = your owned collection; account/sync/settings live in the chat drawer. Preview
+// frames a local dev server (127.0.0.1:PORT) the agent is running, so you can see what you build.
+export type TabKey = "chat" | "skills" | "profile" | "market" | "preview";
 
-export const TAB_ORDER: TabKey[] = ["chat", "skills", "profile", "market"];
+export const TAB_ORDER: TabKey[] = ["chat", "skills", "profile", "market", "preview"];
 
 // VAR_01 "mono invert" glyphs (16x16, stroke 1.8), matched to the Nav Dock design.
 function ChatGlyph() {
@@ -48,6 +49,16 @@ function MarketGlyph() {
     </svg>
   );
 }
+function PreviewGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <rect x="4" y="5" width="16" height="14" rx="1" />
+      <path d="M4 9 H20" />
+      <circle cx="6.6" cy="7" r="0.7" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="7" r="0.7" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
 // Small padlock badge for a gated tab (matches the Nav Dock "locked state" design).
 function LockGlyph() {
   return (
@@ -63,6 +74,7 @@ const TABS: { key: TabKey; label: string; Glyph: () => JSX.Element }[] = [
   { key: "skills", label: "SKILLS", Glyph: SkillsGlyph },
   { key: "profile", label: "RANK", Glyph: AgentGlyph },
   { key: "market", label: "MARKET", Glyph: MarketGlyph },
+  { key: "preview", label: "PREVIEW", Glyph: PreviewGlyph },
 ];
 
 // Compact centered "NAV_DOCK" (Nav Dock design, VAR_01 · mono invert): a 296px terminal bar with
@@ -99,7 +111,7 @@ export function TabBar({ position, instant, onChange }: { position: number; inst
             // Only the FOCUSED tab shows state: its blinking dot becomes a lock while that
             // section is gated (skills/rank/market before the unlock tutorial). Unfocused
             // tabs stay clean; chat is never locked.
-            const locked = on && !unlocked && key !== "chat";
+            const locked = on && !unlocked && key !== "chat" && key !== "preview";
             return (
               <button
                 key={key}

@@ -7,7 +7,8 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsx src/index.ts",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "tsx --test src/*.spec.ts"
   },
   "dependencies": {
     "@iqlabs-official/agent-sdk": "workspace:*",
