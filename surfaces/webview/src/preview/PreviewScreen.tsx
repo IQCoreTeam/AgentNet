@@ -42,6 +42,23 @@ export function PreviewScreen() {
     send({ type: "getPreviewStatus" });
   }, [send]);
 
+  // A loopback link tapped in the chat routes here (Markdown.tsx dispatches the event;
+  // the shell has already switched to this tab).
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const raw = (e as CustomEvent<{ url: string }>).detail?.url;
+      const normalized = raw ? normalizePreviewUrl(raw) : null;
+      if (!normalized) return;
+      setError(null);
+      setDirty(true);
+      setUrl(normalized);
+      setInput(normalized);
+      setNonce((n) => n + 1);
+    };
+    window.addEventListener("agentnet:openPreview", onOpen);
+    return () => window.removeEventListener("agentnet:openPreview", onOpen);
+  }, []);
+
   // Adopt the agent-announced URL unless the user has taken manual control.
   useEffect(() => {
     if (dirty) return;

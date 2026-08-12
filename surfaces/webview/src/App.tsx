@@ -167,6 +167,13 @@ function TabShell() {
       haptics.tick();
     }
   }, [idx]);
+  // A loopback link tapped in the chat (see Markdown.tsx) jumps to the PREVIEW tab;
+  // PreviewScreen picks up the same event and frames the URL.
+  useEffect(() => {
+    const onPreview = () => setIdx(LAST);
+    window.addEventListener("agentnet:openPreview", onPreview);
+    return () => window.removeEventListener("agentnet:openPreview", onPreview);
+  }, []);
   const [pageDrag, setPageDrag] = useState(0);
   const [paging, setPaging] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
