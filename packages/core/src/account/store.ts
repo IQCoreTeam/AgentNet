@@ -341,7 +341,16 @@ export class SessionStore {
           decoded++;
           const s = await this.loadPage(sessionId, page);
           if (!s) return null;
-          const meta = toSessionMeta(sessionId, s.title, s.cli, s.ts, s.lastDevice);
+          // Sort/display by LAST ACTIVITY, not creation. The page meta ts is only written
+          // when a page rolls over (every PAGE_SIZE messages), so a short session keeps its
+          // creation time forever and sinks in the list even right after you use it. The
+          // last message's own ts is already persisted and reflects the real last touch;
+          // fall back to the meta ts on an empty (meta-only) newest page. Read-side only —
+          // nothing is rewritten to disk.
+          const lastTs = s.messages.length
+            ? s.messages[s.messages.length - 1].ts ?? s.ts
+            : s.ts;
+          const meta = toSessionMeta(sessionId, s.title, s.cli, lastTs, s.lastDevice);
           this.metaCache.set(sessionId, { page, meta });
           return meta;
         } catch {
