@@ -14,11 +14,27 @@ type Pending = { req: ApprovalRequest; resolve: (d: ApprovalDecision) => void };
 export class InkApprovalChannel implements ApprovalChannel {
   private pending: Pending | null = null;
   private listener: ((req: ApprovalRequest | null) => void) | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+
+  // Auto-deny an unanswered request after this long so a turn never blocks forever when
+  // the user walks away (design tab 27: "nothing hangs forever"). This lives HERE rather
+  // than in core's generic withTimeout() because the timeout must also clear the on-screen
+  // card — resolve() does both — which a plain request()-wrapping combinator cannot.
+  constructor(private readonly timeoutMs = 10 * 60 * 1000) {}
 
   request(req: ApprovalRequest): Promise<ApprovalDecision> {
     return new Promise<ApprovalDecision>((resolve) => {
       this.pending = { req, resolve };
       this.listener?.(req);
+      if (this.timer) clearTimeout(this.timer);
+      this.timer = setTimeout(
+        () =>
+          this.resolve(req.id, {
+            outcome: "deny",
+            reason: "Approval timed out — no response in 10 minutes.",
+          }),
+        this.timeoutMs,
+      );
       // The turn is now blocked on a human. If that human is in another window they have
       // no way to know - the card is drawn on a terminal they are not looking at. The
       // escalated dialog carries Approve/Deny buttons; a click resolves right there.
@@ -52,6 +68,10 @@ export class InkApprovalChannel implements ApprovalChannel {
     const p = this.pending;
     if (p && p.req.id === id) {
       this.pending = null;
+      if (this.timer) {
+        clearTimeout(this.timer);
+        this.timer = null;
+      }
       clearAttention();
       this.listener?.(null);
       p.resolve(decision);
