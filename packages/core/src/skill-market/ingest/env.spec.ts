@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { marketplaceEnv } from "./env.js";
 import { publishSkill as corePublishSkill } from "../../nft/skill.js";
 import { publishWorkflow as corePublishWorkflow } from "../../nft/workflow.js";
+import { postAgentNote as corePostAgentNote } from "../../notes/notes.js";
 
 vi.mock("../../nft/skill.js", () => ({
   publishSkill: vi.fn().mockResolvedValue("mockSkillMint"),
@@ -20,6 +21,17 @@ vi.mock("../../core/chain.js", () => ({
 vi.mock("../../core/rpc.js", () => ({
   resolveRpcUrl: vi.fn().mockResolvedValue("http://localhost:8899"),
 }));
+
+// Partial mock: only the agent-note write + re-read are stubbed; the rest of the
+// notes module stays real so nothing else in env's import graph changes shape.
+vi.mock("../../notes/notes.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../notes/notes.js")>();
+  return {
+    ...actual,
+    postAgentNote: vi.fn().mockResolvedValue("note-id"),
+    readAgentNotes: vi.fn().mockResolvedValue([]),
+  };
+});
 
 describe("skill-market/ingest/env publish", () => {
   const mockWallet = { address: "mockWalletAddress" } as any;
@@ -109,5 +121,34 @@ Some skill body`;
       image: undefined,
     }, undefined);
     expect(corePublishWorkflow).not.toHaveBeenCalled();
+  });
+});
+
+describe("skill-market/ingest/env postAgentNote", () => {
+  const mockWallet = { address: "mockWalletAddress" } as any;
+
+  // parentId is what threads a reply under its parent note (GH #101); the CLI's
+  // MarketApi passes it as the 6th arg, so it must reach the core write intact.
+  it("forwards parentId to the core write", async () => {
+    const env = await marketplaceEnv(mockWallet);
+    const res = await env.postAgentNote("agentW", "nice work", undefined, undefined, undefined, "note-1");
+
+    expect(res.ok).toBe(true);
+    expect(corePostAgentNote).toHaveBeenCalledWith(
+      expect.anything(),
+      mockWallet,
+      expect.objectContaining({ agentWallet: "agentW", text: "nice work", parentId: "note-1" }),
+    );
+  });
+
+  it("leaves parentId undefined on a top-level post", async () => {
+    const env = await marketplaceEnv(mockWallet);
+    await env.postAgentNote("agentW", "hello");
+
+    expect(corePostAgentNote).toHaveBeenCalledWith(
+      expect.anything(),
+      mockWallet,
+      expect.objectContaining({ agentWallet: "agentW", text: "hello", parentId: undefined }),
+    );
   });
 });

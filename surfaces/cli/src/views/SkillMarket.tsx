@@ -25,7 +25,8 @@ export interface MarketApi {
   listAgents(): Promise<Reputation[]>;
   getAgentProfile(wallet: string): Promise<AgentProfile>;
   buyAllSkills(agentWallet: string): Promise<{ ok: boolean; bought: number; failed: number; error?: string }>;
-  postAgentNote(agentWallet: string, text: string, gitLink?: string, title?: string, image?: string): Promise<{ ok: boolean; error?: string }>;
+  // parentId (GH #101): id of the note this replies to; omit for a top-level post.
+  postAgentNote(agentWallet: string, text: string, gitLink?: string, title?: string, image?: string, parentId?: string): Promise<{ ok: boolean; error?: string }>;
   disposeSkill(skillId: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
   reEquipSkill(skillId: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
   disposedSkillMints?(): Promise<Record<string, string>>;
