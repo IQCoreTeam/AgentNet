@@ -12,6 +12,10 @@ import { useFrameLoop } from "../hooks/useFrameLoop.js";
 import {
   getStorageInfo,
   disconnectCloud,
+  getSessionIndex,
+  setSessionIndex,
+  sessionIndexStatus,
+  backfillSessionIndex,
   getCodexApiKey,
   STORAGE_OPTIONS,
   type StorageKind,
@@ -986,6 +990,48 @@ export function Chat({
         // point for connect / reconnect (a dead gdrive token surfaces via the status
         // line's "reconnect needed" chip, which points here).
         setShowCloud(true);
+        return;
+      case "sessionsync":
+        // The opt-in on-chain `mysessions` list: a wallet-owned index of sessionIds so
+        // a NEW device can discover its sessions before any cloud storage is connected.
+        // Blobs stay in storage — chain-only entries are hints, not openable rows.
+        // Every row write is a real (tiny) Solana tx, which is why this is opt-in and
+        // why `on` runs the one-shot backfill right away: the list starts complete
+        // instead of only covering sessions created after the flip.
+        void (async () => {
+          const sub = arg.trim().toLowerCase();
+          try {
+            if (sub === "off") {
+              await setSessionIndex(wallet.address, false);
+              setNotice("session sync off · new sessions stay unlisted (existing rows are permanent)");
+              return;
+            }
+            if (sub === "on" || sub === "backfill") {
+              if (sub === "on") await setSessionIndex(wallet.address, true);
+              else if (!(await getSessionIndex(wallet.address))) {
+                setNotice("session sync is off — /sessionsync on first");
+                return;
+              }
+              setNotice(sub === "on" ? "session sync on · publishing your session list…" : "backfilling…");
+              // backfill itself rejects re-entry + a truncated chain view — those
+              // surface through the catch below as the notice, nothing to guard here.
+              const r = await backfillSessionIndex(wallet, await runtime.listSessions());
+              setNotice(
+                `session sync ${sub === "on" ? "on · " : ""}listed ${r.written} session${r.written === 1 ? "" : "s"} on-chain (${r.already} already there)`,
+              );
+              return;
+            }
+            const mine = await runtime.listSessions();
+            const st = await sessionIndexStatus(wallet.address, mine.map((s) => s.sessionId));
+            const elsewhere = st.chainOnly.length
+              ? ` · ${st.chainOnly.length} on other devices (connect their storage to open)`
+              : "";
+            const partial = st.truncated ? " · list truncated" : "";
+            setNotice(`session sync ${st.enabled ? "on" : "off"} · ${st.onChain.length} listed on-chain${elsewhere}${partial}`);
+          } catch (e) {
+            setNotice(`session sync: ${e instanceof Error ? e.message : "failed"}`);
+          }
+        })();
         return;
       case "logout":
         // Sign out of cloud: disconnectCloud drops the token + storage kind (keeps creds
