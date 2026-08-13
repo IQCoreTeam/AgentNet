@@ -60,18 +60,22 @@ export async function loadHeliusKey(): Promise<StoredKey | null> {
   }
 }
 
-// One network probe per distinct Helius URL (a key is expired/revoked/typo'd surprisingly
-// often). Cached so resolveRpcUrl stays cheap on repeat calls; a NEW key = a new URL = a
-// fresh probe, so re-entering a good key takes effect with no restart.
-const heliusProbe = new Map<string, boolean>();
+// One network probe per distinct Helius URL. A WORKING key rarely dies mid-session, so a
+// success is cached for a while; a REJECTED key (bad IP allowlist, revoked, transient edge
+// 403) is usually fixable, so it is re-checked soon instead of being trusted-dead for the
+// whole process — the old cache-forever meant a key you JUST fixed stayed "dead" until the
+// process restarted (re-entering the same key didn't help: same key = same URL = same cache).
+const PROBE_OK_TTL_MS = 5 * 60_000;
+const PROBE_FAIL_TTL_MS = 20_000;
+const heliusProbe = new Map<string, { ok: boolean; at: number }>();
 
-// A stored key can answer getHealth (NOT auth-gated) yet return -32401 Unauthorized on
-// every real read — which silently bricks ALL chain reads (owned skills, skill text,
-// comments) with no visible cause. Probe one real, cheap method (getVersion) to tell a
-// live key from a dead one. Any error/timeout = treat as dead and fall back.
+// A stored key can answer getHealth (NOT auth-gated) yet return -32401 Unauthorized (or a
+// bare 403 at the edge) on every real read — which silently bricks ALL chain reads (owned
+// skills, skill text, comments) with no visible cause. Probe one real, cheap method
+// (getVersion) to tell a live key from a dead one. Any error/timeout = treat as dead.
 async function heliusKeyWorks(url: string): Promise<boolean> {
-  const cached = heliusProbe.get(url);
-  if (cached !== undefined) return cached;
+  const hit = heliusProbe.get(url);
+  if (hit && Date.now() - hit.at < (hit.ok ? PROBE_OK_TTL_MS : PROBE_FAIL_TTL_MS)) return hit.ok;
   let ok = false;
   try {
     const ctrl = new AbortController();
@@ -88,7 +92,13 @@ async function heliusKeyWorks(url: string): Promise<boolean> {
   } catch {
     ok = false;
   }
-  heliusProbe.set(url, ok);
+  heliusProbe.set(url, { ok, at: Date.now() });
+  // A rejected key otherwise fails SILENTLY (resolveRpcUrl just falls back), which is exactly
+  // what makes an empty skill market impossible to diagnose. Log the HOST only, never the
+  // key/url. Bounded by the fail-TTL above, so this can't spam per chain read.
+  if (!ok) {
+    console.warn(`[rpc] Helius key rejected by ${new URL(url).host} (revoked / IP allowlist / transient?); using a public RPC — DAS reads (skill market) will be empty until the key works.`);
+  }
   return ok;
 }
 
@@ -111,10 +121,14 @@ export async function resolveRpcUrl(): Promise<string> {
   return (await heliusKeyWorks(url)) ? url : fallback;
 }
 
-/** Whether a DAS-capable RPC is configured (a Helius key, or an explicit env RPC the
- *  operator set on purpose). On the bare public default reads are empty. */
+/** Whether a DAS-capable RPC is actually ANSWERING — not merely configured. A stored Helius
+ *  key must PASS the probe (a rejected / allowlist-blocked key silently degrades to the public
+ *  RPC, which serves no DAS), or an explicit env RPC the operator set on purpose. This drives
+ *  the market's "DAS ready" status, so it must reflect reality, not key presence. The probe is
+ *  shared/cached with resolveRpcUrl (same URL), so this adds no extra round-trip in practice. */
 export async function hasDasRpc(): Promise<boolean> {
-  if (await loadHeliusKey()) return true;
+  const helius = await loadHeliusKey();
+  if (helius) return heliusKeyWorks(heliusUrl(helius.api_key));
   return !!(process.env.DAS_RPC_URL || process.env.SOLANA_RPC_URL);
 }
 

@@ -21,9 +21,10 @@ describe("core/rpc — resolveRpcUrl priority", () => {
     rmSync(home, { recursive: true, force: true });
   });
 
-  it("falls back to the public-devnet default when nothing is set", async () => {
+  it("falls back to the public network default when nothing is set", async () => {
     const { resolveRpcUrl } = await import("./rpc.js");
-    expect(await resolveRpcUrl()).toContain("api.devnet.solana.com");
+    const { getPublicRpcUrl } = await import("./seed.js");
+    expect(await resolveRpcUrl()).toBe(getPublicRpcUrl()); // network-agnostic: follows seed.ts
   });
 
   it("uses an env RPC over the default", async () => {
@@ -36,11 +37,11 @@ describe("core/rpc — resolveRpcUrl priority", () => {
     process.env.SOLANA_RPC_URL = "https://my.rpc/abc";
     // resolveRpcUrl now probes the key (getVersion) before trusting it — stub a live reply.
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ json: async () => ({ result: { "solana-core": "2.0.0" } }) }));
-    const { saveHeliusKey, resolveRpcUrl } = await import("./rpc.js");
+    const { saveHeliusKey, resolveRpcUrl, heliusUrl } = await import("./rpc.js");
     await saveHeliusKey("KEY123");
     const url = await resolveRpcUrl();
-    // central NETWORK is devnet by default → devnet.helius endpoint
-    expect(url).toBe("https://devnet.helius-rpc.com/?api-key=KEY123");
+    // templated on the central NETWORK (seed.ts); assert against that, not a hardcoded net.
+    expect(url).toBe(heliusUrl("KEY123"));
   });
 
   it("falls back to env/public when a stored Helius key is dead (Unauthorized)", async () => {
@@ -52,11 +53,20 @@ describe("core/rpc — resolveRpcUrl priority", () => {
     expect(await resolveRpcUrl()).toBe("https://my.rpc/abc");
   });
 
-  it("hasDasRpc is false on the bare default, true with a Helius key", async () => {
+  it("hasDasRpc is false with no key and true only when the stored key actually works", async () => {
+    // reflects reality, not presence: a live probe (getVersion) is required, not just a saved key.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ json: async () => ({ result: { "solana-core": "2.0.0" } }) }));
     const { hasDasRpc, saveHeliusKey } = await import("./rpc.js");
-    expect(await hasDasRpc()).toBe(false);
-    await saveHeliusKey("KEY123");
+    expect(await hasDasRpc()).toBe(false); // no key, no env RPC
+    await saveHeliusKey("LIVEKEYAAAA");
     expect(await hasDasRpc()).toBe(true);
+  });
+
+  it("hasDasRpc is false when the stored key is rejected (presence is not enough)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ json: async () => ({ error: { code: -32401, message: "Unauthorized" } }) }));
+    const { hasDasRpc, saveHeliusKey } = await import("./rpc.js");
+    await saveHeliusKey("DEADKEYBBBB");
+    expect(await hasDasRpc()).toBe(false);
   });
 
   it("maskedHeliusKey shows only the last 4 chars (null when no key)", async () => {
@@ -68,9 +78,10 @@ describe("core/rpc — resolveRpcUrl priority", () => {
 
   it("clearing the key (empty string) falls back to the default", async () => {
     const { saveHeliusKey, resolveRpcUrl, loadHeliusKey } = await import("./rpc.js");
+    const { getPublicRpcUrl } = await import("./seed.js");
     await saveHeliusKey("KEY123");
     await saveHeliusKey(""); // clear
     expect(await loadHeliusKey()).toBeNull();
-    expect(await resolveRpcUrl()).toContain("api.devnet.solana.com");
+    expect(await resolveRpcUrl()).toBe(getPublicRpcUrl());
   });
 });
