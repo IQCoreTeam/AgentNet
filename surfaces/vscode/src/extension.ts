@@ -606,6 +606,9 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
       return { dasReady: await hasDasRpc(), hasKey: !!masked, masked, network: getNetwork() };
     },
     walletAddress: () => wallet?.address ?? null,
+    // Signing wallet for the dispatcher's on-chain session index round-trip. The local
+    // keypair signs in-process, so listing costs only the tx fee — no prompt here.
+    signingWallet: () => wallet,
     // GitHub verified-work registration (issue #93 parity). Token is stored locally by core
     // (rpc.ts, 0600 file — never through the webview); registerVerifiedWork commits the marker
     // + indexes the repo against the skill mints. Mirrors the localhost surface's handler.

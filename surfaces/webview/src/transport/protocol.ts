@@ -114,6 +114,11 @@ export type ClientMessage =
   | { type: "connectCloud"; kind: string; location?: string; authHeader?: string }
   | { type: "disconnectCloud" }
   | { type: "openCloud"; kind: string; location?: string }
+  // on-chain session index (plans/offchain-session-sync.md §4-5): the wallet's opt-in
+  // `mysessions` list. status reads the current state; on/off flip the per-wallet consent
+  // (each listing is a real Solana transaction; `on` also runs the one-shot backfill);
+  // backfill re-runs the catch-up for sessions created before the flip.
+  | { type: "sessionIndex"; action: "status" | "on" | "off" | "backfill" }
   // passive skill-shopping toggle (issue #21)
   | { type: "getSkillShopping" }
   | { type: "setSkillShopping"; on: boolean }
@@ -212,6 +217,11 @@ export type ServerMessage =
   | { type: "cloudSync"; status: { ok: boolean; error?: string } | null }
   | { type: "wallet"; address: string | null }
   | { type: "skillShopping"; on: boolean }
+  // answers `sessionIndex`: listed = rows the wallet published (up to the read window);
+  // elsewhere = rows with no blob on this device ("connect their storage to open");
+  // truncated = the window filled, so counts are floors; written = rows a just-run
+  // backfill paid for. A failed action sets only `enabled` (re-read from config) + `error`.
+  | { type: "sessionIndexStatus"; enabled: boolean; listed?: number; elsewhere?: number; truncated?: boolean; written?: number; error?: string }
   | { type: "approval"; req: ApprovalRequest }
   // authoritative replay of every approval still parked server-side (answers "resendApprovals")
   | { type: "approvalsSnapshot"; reqs: ApprovalRequest[] }

@@ -11,12 +11,14 @@
 // reading a workspace cwd, persisting the "onboarded" flag, opening external URLs.
 // Those are injected as `env` callbacks so this file stays platform-free.
 
-import type { AgentRuntime, SessionHandle } from "../runtime/contract.js";
+import type { AgentRuntime, SessionHandle, Wallet } from "../runtime/contract.js";
 import type { ApprovalChannel } from "../runtime/approval/channel.js";
 import type { SkillCard, MarketRequest } from "./marketMessages.js";
 import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ChatModelOption } from "./modelOptions.js";
+import { getSessionIndex, setSessionIndex } from "../account/login.js";
+import { backfillSessionIndex, sessionIndexStatus } from "../account/sessionIndex.js";
 
 // Format a token count with thousands separators (e.g. 167000 → "167,000") for the
 // /context breakdown notice.
@@ -54,6 +56,12 @@ export interface ChatEnv {
   disconnectWallet?(): Promise<void>;
   openCloud?(kind: string, location?: string): Promise<void>;
   walletAddress(): string | null; // for the "My Wallet" view
+  // On-chain session index (plans/offchain-session-sync.md §4-5): the dispatcher owns the
+  // whole sessionIndex round-trip (core API + the runtime's session list) and only needs
+  // the wallet that SIGNS the row writes — each one is a real Solana transaction. Return
+  // null when the host has no such wallet (the localhost guest key signs messages, never
+  // transactions); the sessionIndex message then goes unanswered, matching its wallet-gated UI.
+  signingWallet?(): Wallet | null;
   storageInfo(): Promise<{ info: unknown; options: unknown; googleCredsConfigured?: boolean }>; // header storage pill
   // marketplace (issue #17): search + buy need the wallet + a chain connection, which
   // are host-held (the extension owns them), so they're delegated like wallet/cloud.
@@ -709,6 +717,51 @@ export function createChatSession(
       case "disconnectWallet": await env.disconnectWallet?.(); break;
       case "openCloud":       await env.openCloud?.(m.kind, m.location); break;
       case "wallet":          transport.send({ type: "wallet", address: env.walletAddress() }); break;
+      // ── on-chain session index (plans/offchain-session-sync.md §4-5): the wallet's
+      // opt-in `mysessions` list, same contract as the CLI's /sessionsync. Guarded on a
+      // SIGNING wallet — the localhost guest can't sign (or pay for) a row write, so its
+      // message goes unanswered, matching the wallet gate on the UI row. `on` runs the
+      // one-shot backfill immediately (CLI parity: the list starts complete instead of
+      // only covering sessions created after the flip). A failed action (backfill
+      // re-entry, truncated chain view, RPC down) reports its reason with the toggle
+      // state re-read from config, so the switch stays truthful.
+      //
+      // The chain work runs OFF the pump (fire-and-forget, CLI parity again): this
+      // dispatcher processes messages strictly in order, and `on`/`backfill` mean one
+      // real Solana transaction per unindexed session — on the localhost surface each
+      // one round-trips a UI signing prompt with a minutes-scale timeout. Awaiting
+      // that here would freeze every queued message (chat sends, stops, session
+      // opens) behind wallet prompts; even `status` does a chain read that stalls the
+      // queue for the RPC timeout when the endpoint is slow. Backfill re-entry is
+      // rejected inside backfillSessionIndex, so overlapping requests fail loudly
+      // instead of double-paying.
+      case "sessionIndex": {
+        const w = env.signingWallet?.();
+        if (!w) break;
+        void (async () => {
+          try {
+            if (m.action === "off") {
+              // Config-only: turning OFF is the safety exit and must neither depend on
+              // nor report chain health — the CLI's `off` skips the chain the same way.
+              // (The status line loses its counts until the next read; that beats
+              // painting an error over an action that fully succeeded.)
+              await setSessionIndex(w.address, false);
+              transport.send({ type: "sessionIndexStatus", enabled: false });
+              return;
+            }
+            if (m.action === "on") await setSessionIndex(w.address, true);
+            const mine = await rt.listSessions();
+            const written = m.action === "on" || m.action === "backfill"
+              ? (await backfillSessionIndex(w, mine)).written
+              : undefined;
+            const st = await sessionIndexStatus(w.address, mine.map((s) => s.sessionId));
+            transport.send({ type: "sessionIndexStatus", enabled: st.enabled, listed: st.onChain.length, elsewhere: st.chainOnly.length, truncated: st.truncated, written });
+          } catch (e) {
+            transport.send({ type: "sessionIndexStatus", enabled: await getSessionIndex(w.address).catch(() => false), error: e instanceof Error ? e.message : String(e) });
+          }
+        })();
+        break;
+      }
       // ── marketplace: search → buy → install (delegated to the host) ──
       // payload typed via the shared contract (marketMessages.ts) so a wrong field
       // is caught here, not at runtime on some surface.

@@ -1001,6 +1001,10 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
         ? await (codexModelOptionsPromise ??= listCodexModelOptions().then((r) => r.options).catch(() => null))
         : await (claudeModelOptionsPromise ??= listClaudeModelOptions(process.cwd()).catch(() => null)),
     walletAddress: () => walletAddress,
+    // Signing wallet for the dispatcher's on-chain session index round-trip: only a
+    // CONNECTED wallet qualifies — the guest key can't sign (or pay for) a row write.
+    // External wallets sign via the UI round-trip, so each listing prompts there.
+    signingWallet: () => (walletAddress && wallet ? wallet : null),
     storageInfo: async () => ({ info: await getStorageInfo(), options: STORAGE_OPTIONS, googleCredsConfigured: await hasGoogleCreds() }),
     connectCloud: async (cfg) => {
       if (wallet && walletAddress) {

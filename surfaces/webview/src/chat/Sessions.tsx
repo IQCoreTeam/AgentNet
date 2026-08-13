@@ -118,7 +118,7 @@ function StorageOption({ active, title, subtitle, onClick }: { active: boolean; 
   );
 }
 
-type SettingsMode = "list" | "configure" | "connect" | "gdrive" | "custom" | "helius" | "github" | "engines";
+type SettingsMode = "list" | "configure" | "connect" | "gdrive" | "custom" | "helius" | "github" | "engines" | "sessionsync";
 
 export function Sessions({
   onClose,
@@ -151,6 +151,11 @@ export function Sessions({
   const [busy, setBusy] = useState(false);
   const [bgExec, setBgExec] = useState(backgroundExecEnabled());
   const [screenOffExec, setScreenOffExec] = useState(screenOffExecEnabled());
+
+  // Session sync actions round-trip through the chain; hold the controls until the
+  // dispatcher's sessionIndexStatus echo (or its error) lands and clears this.
+  const [syncBusy, setSyncBusy] = useState(false);
+  useEffect(() => { setSyncBusy(false); }, [state.sessionIndex]);
 
   // Engine versions are fetched ON DEMAND only: once per app session, the first time AI
   // Connections opens (the server re-pushes fresh numbers after an update). No polling,
@@ -400,6 +405,20 @@ export function Sessions({
                 subtitle={cloudConnected ? `${info?.account ?? (info?.kind === "gdrive" ? "Google Drive" : "Custom Cloud")}${cloudSync ? ` · ${cloudSync.ok ? "synced" : "sync error"}` : ""}` : "Local only"}
                 icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7.5c0-1.4 3.1-2.5 7-2.5s7 1.1 7 2.5S14.9 10 11 10 4 8.9 4 7.5Z" /><path d="M4 7.5v7c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-7" /><path d="M4 11c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5" /></svg>}
               />
+              {/* On-chain session index (plans/offchain-session-sync.md §4-5): opt-in
+                  per-wallet session list so other devices can discover sessions before
+                  any cloud storage is connected. Wallet-gated like Storage — listing
+                  costs real transactions, so a guest has nothing to toggle. */}
+              <ProgressiveMenuRow
+                reason="sync"
+                unlocked={!!state.walletAddress}
+                onUnlocked={() => { send({ type: "sessionIndex", action: "status" }); setSettingsMode("sessionsync"); }}
+                label="Session sync"
+                subtitle={state.walletAddress
+                  ? `On-chain list${state.sessionIndex ? ` · ${state.sessionIndex.enabled ? "on" : "off"}` : ""}`
+                  : "Connect a wallet to list sessions on-chain"}
+                icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 12.5a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1.6 1.6" /><path d="M12.5 9.5a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1.6-1.6" /></svg>}
+              />
               <MenuRow
                 label="Market RPC"
                 subtitle={state.rpcStatus?.hasKey ? `${state.rpcStatus.network} · ${state.rpcStatus.masked}` : "Helius key recommended"}
@@ -529,6 +548,68 @@ export function Sessions({
             <SettingsSubHeader title="GitHub" onBack={() => setSettingsMode("configure")} />
             <div className="flex-1 overflow-y-auto flex flex-col gap-4">
               <ConnectGithub onDone={() => setSettingsMode(rootMode)} />
+            </div>
+          </div>
+        ) : settingsMode === "sessionsync" ? (
+          /* On-chain session index: toggle + one-shot backfill + the discovery status.
+             The consent copy below the switch carries the same "real transaction"
+             framing as the CLI's /sessionsync (opt-in, fees, signing prompts). */
+          <div className="flex flex-col h-full">
+            <SettingsSubHeader title="Session sync" onBack={() => setSettingsMode("configure")} />
+            <div className="flex-1 space-y-0.5 overflow-y-auto">
+              <button
+                onClick={() => {
+                  if (!state.sessionIndex || syncBusy) return;
+                  setSyncBusy(true);
+                  send({ type: "sessionIndex", action: state.sessionIndex.enabled ? "off" : "on" });
+                }}
+                disabled={!state.sessionIndex || syncBusy}
+                role="switch"
+                aria-checked={!!state.sessionIndex?.enabled}
+                className="flex w-full items-center gap-3.5 rounded-2xl px-2.5 py-3 text-left transition enabled:active:bg-[color:var(--an-bg-2)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center" style={{ color: state.sessionIndex?.enabled ? "var(--an-green)" : "var(--an-fg-dim)" }}>
+                  <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 12.5a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1.6 1.6" /><path d="M12.5 9.5a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1.6-1.6" /></svg>
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-fg)" }}>On-chain list</span>
+                  <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>
+                    {!state.sessionIndex ? "Checking…" : syncBusy ? "Working…" : state.sessionIndex.enabled ? "New sessions are listed for your other devices" : "New sessions stay unlisted"}
+                  </span>
+                </span>
+                <Toggle on={!!state.sessionIndex?.enabled} />
+              </button>
+              <p className="px-2.5 pb-1 text-[0.68rem] leading-snug" style={{ color: "var(--an-fg-mute)" }}>
+                Publishes each new session's id (never its content) so your other devices can find it. Every listing is a real Solana transaction: a small fee, and a signing prompt on web wallets. Turning it on lists your existing sessions right away.
+              </p>
+              {state.sessionIndex && (
+                <p className="an-term-mono px-2.5 pt-2 text-[11px] font-bold uppercase" style={{ color: "var(--an-fg-dim)", letterSpacing: "0.5px" }}>
+                  {`${state.sessionIndex.listed ?? 0} listed · ${state.sessionIndex.elsewhere ?? 0} on other devices${state.sessionIndex.truncated ? " · list truncated" : ""}`}
+                </p>
+              )}
+              {typeof state.sessionIndex?.written === "number" && (
+                <p className="px-2.5 pt-1 text-[0.72rem]" style={{ color: "var(--an-green)" }}>
+                  Listed {state.sessionIndex.written} session{state.sessionIndex.written === 1 ? "" : "s"} on-chain
+                </p>
+              )}
+              {state.sessionIndex?.error && (
+                <p className="px-2.5 pt-1 text-[0.72rem]" style={{ color: "var(--an-red, #e55)" }}>{state.sessionIndex.error}</p>
+              )}
+              {!!state.sessionIndex?.elsewhere && (
+                <p className="px-2.5 pt-1 text-[0.68rem] leading-snug" style={{ color: "var(--an-fg-mute)" }}>
+                  Sessions on other devices open once their storage is connected here.
+                </p>
+              )}
+              {state.sessionIndex?.enabled && (
+                <button
+                  disabled={syncBusy}
+                  onClick={() => { setSyncBusy(true); send({ type: "sessionIndex", action: "backfill" }); }}
+                  className="an-term-mono mx-2.5 mt-3 text-[11px] font-bold uppercase tracking-wide transition active:opacity-70 disabled:cursor-not-allowed disabled:opacity-40"
+                  style={{ color: "var(--an-green)", border: "1px solid color-mix(in srgb, var(--an-green) 45%, var(--an-line))", padding: "8px 12px" }}
+                >
+                  {syncBusy ? "Working" : "Backfill older sessions"}
+                </button>
+              )}
             </div>
           </div>
         ) : settingsMode === "engines" ? (

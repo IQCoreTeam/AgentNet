@@ -1750,6 +1750,18 @@ export function chatHtml(): string {
       </div>
       <div id="rpcHint" class="muted small" style="display:none;margin-top:3px"></div>
     </div>
+    <!-- on-chain session index (plans/offchain-session-sync.md §4-5): the wallet's opt-in
+         mysessions list, mirroring the CLI's /sessionsync. The hint carries the consent
+         framing (a listing is a real tx) until the wallet opts in. -->
+    <div class="wmSection">
+      <div class="wmLabel">Session sync</div>
+      <div class="wmStorage">
+        <span id="ssyncState" class="muted">…</span>
+        <button id="ssyncBtn" class="link" style="display:none"></button>
+        <button id="ssyncBackfillBtn" class="link" style="display:none">backfill</button>
+      </div>
+      <div id="ssyncHint" class="muted small" style="display:none;margin-top:3px">lists each new session on-chain so other devices can find it · a real (tiny) solana tx per listing · turning on lists your existing sessions right away</div>
+    </div>
     <div class="wmItem" id="openWalletPage">Wallet page</div>
     <div class="wmItem" id="walletSkills"><span class="wand">${WAND_SVG}</span> Skills <span class="soon" id="walletSkillCount" style="display:none"></span><span class="wmCaret" id="walletSkillCaret">▸</span></div>
     <!-- inline, scrollable list of the skills THIS wallet owns. No buy / no navigation —
@@ -4563,7 +4575,10 @@ export function chatHtml(): string {
   document.getElementById('walletPill').addEventListener('click', (e) => {
     e.stopPropagation();
     toggleMenu(walletMenu, 'wallet');
-    if (walletMenu.style.display !== 'none') vscode.postMessage({ type: 'getBalance' }); // refresh funds on open
+    if (walletMenu.style.display !== 'none') {
+      vscode.postMessage({ type: 'getBalance' }); // refresh funds on open
+      vscode.postMessage({ type: 'sessionIndex', action: 'status' }); // refresh session-sync state on open
+    }
   });
   document.getElementById('openWalletPage').addEventListener('click', () => { closeMenus(); if (myWalletAddress) showProfile(myWalletAddress); else showView('wallet'); });
   // click outside closes any open menu
@@ -4764,6 +4779,40 @@ export function chatHtml(): string {
     vscode.postMessage({ type: 'setSkillShopping', on: next });
   });
   vscode.postMessage({ type: 'getSkillShopping' }); // hydrate the switch on load
+
+  // ---- on-chain session sync (wallet menu): mirrors the CLI's /sessionsync ----
+  // Status is fetched on wallet-menu open (a status read hits the chain — never polled).
+  // turn on = flip consent + one-shot backfill in one action (the host echoes truth back);
+  // the hint under the row carries the "real transaction" framing until the wallet opts in.
+  const ssyncState = document.getElementById('ssyncState');
+  const ssyncBtn = document.getElementById('ssyncBtn');
+  const ssyncBackfillBtn = document.getElementById('ssyncBackfillBtn');
+  const ssyncHint = document.getElementById('ssyncHint');
+  let ssyncOn = false;
+  function renderSessionIndex(m) {
+    ssyncOn = !!m.enabled;
+    if (m.error) {
+      ssyncState.textContent = (ssyncOn ? 'on' : 'off') + ' · ' + m.error;
+    } else {
+      const parts = [ssyncOn ? 'on' : 'off', (m.listed || 0) + ' listed'];
+      if (m.elsewhere) parts.push(m.elsewhere + ' on other devices');
+      if (m.truncated) parts.push('list truncated');
+      if (m.written) parts.push('+' + m.written + ' published');
+      ssyncState.textContent = parts.join(' · ');
+    }
+    ssyncBtn.textContent = ssyncOn ? 'turn off' : 'turn on';
+    ssyncBtn.style.display = '';
+    ssyncBackfillBtn.style.display = ssyncOn ? '' : 'none';
+    ssyncHint.style.display = ssyncOn ? 'none' : '';
+  }
+  ssyncBtn.addEventListener('click', () => {
+    ssyncState.textContent = ssyncOn ? 'turning off…' : 'publishing…';
+    vscode.postMessage({ type: 'sessionIndex', action: ssyncOn ? 'off' : 'on' });
+  });
+  ssyncBackfillBtn.addEventListener('click', () => {
+    ssyncState.textContent = 'backfilling…';
+    vscode.postMessage({ type: 'sessionIndex', action: 'backfill' });
+  });
 
   // ---- Markets full-screen view (same contract, marketplace design) ----
   const mktSearch = document.getElementById('mktSearch');
@@ -5491,6 +5540,7 @@ export function chatHtml(): string {
     else if (m.type === 'skillActive' && m.origin === 'nft' && m.mint) flashSkill(m.name, m.mint);
     else if (m.type === 'rpcStatus') renderRpcStatus(m.status);
     else if (m.type === 'skillShopping') setShopToggle(m.on);
+    else if (m.type === 'sessionIndexStatus') renderSessionIndex(m);
     else if (m.type === 'searchResults') {
       lastMarketResults = m.results || [];
       renderMarketResults(m.results);          // the full Markets view (search lives here now)

@@ -3,11 +3,26 @@
 // the toggle (claude q.interrupt / codex child.kill), killing the turn the user was
 // watching. The fix is lazy-restage: keep the running handle, re-spawn on the NEXT
 // send carrying the live sessionId so the turn finishes and the new mode applies next.
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createChatSession } from "./session.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+
+// The sessionIndex dispatcher case is the only consumer of these two modules here.
+// Mock them whole: the real ones reach for the chain (solana web3 + config files),
+// and the case's contract — who gets called, with what, and what the reply echoes —
+// is exactly what these tests pin down.
+vi.mock("../account/login.js", () => ({
+  getSessionIndex: vi.fn(async () => false),
+  setSessionIndex: vi.fn(async () => {}),
+}));
+vi.mock("../account/sessionIndex.js", () => ({
+  backfillSessionIndex: vi.fn(async () => ({ written: 0, already: 0 })),
+  sessionIndexStatus: vi.fn(async () => ({ enabled: false, onChain: [], chainOnly: [], truncated: false })),
+}));
+import { getSessionIndex, setSessionIndex } from "../account/login.js";
+import { backfillSessionIndex, sessionIndexStatus } from "../account/sessionIndex.js";
 
 function fakeHandle(id: string, cli: "claude" | "codex") {
   const usageCbs: Array<(n: number, window?: number) => void> = [];
@@ -50,7 +65,7 @@ const waitForNotice = async (transport: any, text: string) => {
   throw new Error(`notice "${text}" was never sent`);
 };
 
-function harness(opts: { cwd?: string; ownedSkills?: string[]; googleCredsConfigured?: boolean } = {}) {
+function harness(opts: { cwd?: string; ownedSkills?: string[]; googleCredsConfigured?: boolean; signingWallet?: () => any } = {}) {
   const handles: ReturnType<typeof fakeHandle>[] = [];
   const startSession = vi.fn(async (opts: any) => {
     const h = fakeHandle("sess-" + handles.length, opts.cli);
@@ -67,6 +82,9 @@ function harness(opts: { cwd?: string; ownedSkills?: string[]; googleCredsConfig
     walletAddress: () => null,
     storageInfo: async () => ({ info: {}, options: [], googleCredsConfigured: opts.googleCredsConfigured }),
     ownedSkills: opts.ownedSkills ? async () => opts.ownedSkills : undefined,
+    // absent by default: the guest surface (localhost without a wallet) offers no
+    // signingWallet at all, which is its own case in the sessionIndex tests below.
+    signingWallet: opts.signingWallet,
   };
   const chat = createChatSession(startSessionRuntime(startSession), transport as any, env);
   return { handles, startSession, fromUI, chat, transport };
@@ -366,7 +384,7 @@ describe("chat/session — slash commands", () => {
 
     fromUI({ type: "slashCommand", command: "resume" });
     await flush();
-    expect(transport.send).toHaveBeenCalledWith({ type: "sessions", list: [], activeId: undefined, cloud: "none" });
+    expect(transport.send).toHaveBeenCalledWith({ type: "sessions", list: [], activeId: undefined, running: [], cloud: "none" });
     expect(transport.send).toHaveBeenCalledWith({ type: "notice", text: "Resume: open a session from History." });
   });
 
@@ -400,14 +418,21 @@ describe("chat/session — slash commands", () => {
     const { fromUI, transport } = harness({ ownedSkills: ["clean-code"] });
 
     fromUI({ type: "slashCommand", command: "skills" });
-    await flush();
-    expect(transport.send).toHaveBeenCalledWith({
+    // ownedSkillsMsg lazy-imports skillSource.js (a heavy module graph — seconds on a
+    // cold vitest worker), so the reply can land long after any fixed flush — poll on
+    // real time like waitForNotice does. `meta` is best-effort display data read from
+    // whatever catalog cache the machine has, so pin the contract fields and leave it free.
+    for (let i = 0; i < 500; i++) {
+      if (transport.send.mock.calls.some((c: any[]) => c[0]?.type === "ownedSkills")) break;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    expect(transport.send).toHaveBeenCalledWith(expect.objectContaining({
       type: "ownedSkills",
       names: ["clean-code"],
       mints: {},
       disposedMints: {},
       workflowMints: [],
-    });
+    }));
   });
 
   it("/review and /mcp route to the active engine handle", async () => {
@@ -448,5 +473,117 @@ describe("chat/session — slash commands", () => {
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
+  });
+});
+
+// The on-chain session index round-trip (plans/offchain-session-sync.md §4-5): the
+// dispatcher owns the whole flow, hosts only supply the SIGNING wallet. Every row
+// write is a PAID Solana transaction, so the contracts pinned here — the wallet
+// gate, 'on' running the one-shot backfill, 'off' never touching the chain, errors
+// echoing the config-read toggle — are the ones a regression would turn into
+// surprise prompts, duplicate fees, or a lying switch.
+describe("chat/session — on-chain session index", () => {
+  const wallet = { address: "WaLLetAddr111", signMessage: async () => new Uint8Array() };
+  const chainRow = (id: string) => ({ sessionId: id, modelType: "claude" as const, createdAt: 0, updatedAt: 0 });
+
+  beforeEach(() => {
+    vi.mocked(getSessionIndex).mockReset().mockResolvedValue(true);
+    vi.mocked(setSessionIndex).mockReset().mockResolvedValue(undefined);
+    vi.mocked(backfillSessionIndex).mockReset().mockResolvedValue({ written: 0, already: 0 });
+    vi.mocked(sessionIndexStatus).mockReset().mockResolvedValue({ enabled: true, onChain: [], chainOnly: [], truncated: false });
+  });
+
+  const statusMsgs = (transport: any) =>
+    transport.send.mock.calls.map((c: any[]) => c[0]).filter((m: any) => m?.type === "sessionIndexStatus");
+
+  // the chain work runs off the pump, so the reply lands asynchronously — poll for it
+  const waitForStatus = async (transport: any) => {
+    for (let i = 0; i < 200; i++) {
+      const got = statusMsgs(transport);
+      if (got.length) return got[got.length - 1];
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    throw new Error("sessionIndexStatus was never sent");
+  };
+
+  it("stays silent on a surface with no signingWallet hook (guest can't sign or pay)", async () => {
+    const { fromUI, transport } = harness(); // env.signingWallet absent entirely
+    fromUI({ type: "sessionIndex", action: "on" });
+    await flush();
+    expect(statusMsgs(transport)).toHaveLength(0);
+    expect(setSessionIndex).not.toHaveBeenCalled();
+    expect(backfillSessionIndex).not.toHaveBeenCalled();
+    expect(sessionIndexStatus).not.toHaveBeenCalled();
+  });
+
+  it("stays silent when signingWallet() returns null (localhost guest key)", async () => {
+    const { fromUI, transport } = harness({ signingWallet: () => null });
+    fromUI({ type: "sessionIndex", action: "status" });
+    await flush();
+    expect(statusMsgs(transport)).toHaveLength(0);
+    expect(sessionIndexStatus).not.toHaveBeenCalled();
+  });
+
+  it("'status' reports the chain counts without toggling config or writing rows", async () => {
+    vi.mocked(sessionIndexStatus).mockResolvedValue({
+      enabled: true,
+      onChain: [chainRow("a"), chainRow("b")],
+      chainOnly: [chainRow("b")],
+      truncated: true,
+    });
+    const { fromUI, transport } = harness({ signingWallet: () => wallet });
+    fromUI({ type: "sessionIndex", action: "status" });
+    const msg = await waitForStatus(transport);
+    expect(msg).toEqual({ type: "sessionIndexStatus", enabled: true, listed: 2, elsewhere: 1, truncated: true, written: undefined });
+    expect(sessionIndexStatus).toHaveBeenCalledWith(wallet.address, []);
+    expect(setSessionIndex).not.toHaveBeenCalled();
+    expect(backfillSessionIndex).not.toHaveBeenCalled(); // a paid write on a status read = money
+  });
+
+  it("'on' flips the per-wallet config AND runs the one-shot backfill (CLI parity)", async () => {
+    vi.mocked(backfillSessionIndex).mockResolvedValue({ written: 3, already: 2 });
+    const { fromUI, transport } = harness({ signingWallet: () => wallet });
+    fromUI({ type: "sessionIndex", action: "on" });
+    const msg = await waitForStatus(transport);
+    expect(setSessionIndex).toHaveBeenCalledWith(wallet.address, true);
+    expect(backfillSessionIndex).toHaveBeenCalledWith(wallet, []);
+    expect(msg.written).toBe(3);
+    expect(msg.error).toBeUndefined();
+  });
+
+  it("'off' confirms from config alone — no chain read, no error even with RPC down", async () => {
+    // chain fully dark: if 'off' touched it, the reply would carry an error
+    vi.mocked(sessionIndexStatus).mockRejectedValue(new Error("rpc unreachable"));
+    vi.mocked(backfillSessionIndex).mockRejectedValue(new Error("rpc unreachable"));
+    const { fromUI, transport } = harness({ signingWallet: () => wallet });
+    fromUI({ type: "sessionIndex", action: "off" });
+    const msg = await waitForStatus(transport);
+    expect(setSessionIndex).toHaveBeenCalledWith(wallet.address, false);
+    expect(msg).toEqual({ type: "sessionIndexStatus", enabled: false });
+    expect(sessionIndexStatus).not.toHaveBeenCalled();
+    expect(backfillSessionIndex).not.toHaveBeenCalled();
+  });
+
+  it("a failed action reports its reason with the toggle re-read from config", async () => {
+    vi.mocked(backfillSessionIndex).mockRejectedValue(new Error("a backfill is already running for this wallet"));
+    vi.mocked(getSessionIndex).mockResolvedValue(true); // config says on — the switch must stay truthful
+    const { fromUI, transport } = harness({ signingWallet: () => wallet });
+    fromUI({ type: "sessionIndex", action: "backfill" });
+    const msg = await waitForStatus(transport);
+    expect(msg).toEqual({ type: "sessionIndexStatus", enabled: true, error: "a backfill is already running for this wallet" });
+  });
+
+  it("chain work runs OFF the pump: a hung RPC read never blocks later messages", async () => {
+    vi.mocked(sessionIndexStatus).mockImplementation(() => new Promise(() => {})); // never resolves
+    const { fromUI, transport } = harness({ signingWallet: () => wallet });
+    fromUI({ type: "sessionIndex", action: "status" });
+    fromUI({ type: "slashCommand", command: "permissions" });
+    await flush();
+    // the strictly-ordered queue must have moved past the hung chain read
+    expect(transport.send).toHaveBeenCalledWith({
+      type: "notice",
+      text: expect.stringContaining("Current permission mode"),
+    });
+    expect(statusMsgs(transport)).toHaveLength(0); // still hung, still silent — and that's fine
   });
 });

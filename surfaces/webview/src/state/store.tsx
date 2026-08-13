@@ -145,6 +145,10 @@ export interface State {
   agentsLoading: boolean;
   githubStatus: { hasToken: boolean; masked?: string } | null;
   workRepoResult: { ok: boolean; count?: number; repo?: string; error?: string; at: number } | null;
+  // on-chain session index: the last `sessionIndexStatus` from the server. null until the
+  // Session sync screen first requests it (a status read hits the chain, never fetched
+  // passively). See protocol.ts for the field semantics.
+  sessionIndex: { enabled: boolean; listed?: number; elsewhere?: number; truncated?: boolean; written?: number; error?: string } | null;
   modeByCli: Record<Cli, string>;
 }
 
@@ -216,6 +220,7 @@ const initialState: State = {
   agentsLoading: false,
   githubStatus: null,
   workRepoResult: null,
+  sessionIndex: null,
   isCompacting: false,
   modeByCli: {
     claude: "acceptEdits",
@@ -633,6 +638,8 @@ function reducer(state: State, ev: Action): State {
       return state;
     case "githubStatus":
       return { ...state, githubStatus: { hasToken: ev.hasToken, masked: ev.masked } };
+    case "sessionIndexStatus":
+      return { ...state, sessionIndex: { enabled: ev.enabled, listed: ev.listed, elsewhere: ev.elsewhere, truncated: ev.truncated, written: ev.written, error: ev.error } };
     case "__loadingAgents":
       return { ...state, agentsLoading: true };
     case "__loadingAgentProfile":
