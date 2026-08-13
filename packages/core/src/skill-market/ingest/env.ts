@@ -22,7 +22,8 @@ import { heldSkillCreators } from "../../notes/holdings.js";
 import { claudeSkillsDir } from "../../core/paths.js";
 import { classifySkills, readSkillManifest } from "../registry.js";
 import { readDisposed } from "../equipState.js";
-import { resolveRpcUrl } from "../../core/rpc.js";
+import { resolveRpcUrl, saveGithubToken, loadGithubToken, maskedGithubToken } from "../../core/rpc.js";
+import { registerVerifiedWork } from "../../core/verifiedWork.js";
 import { init as initChain } from "../../core/chain.js";
 import type { AgentProfile, Reputation, SkillCard, SkillDetail, VerifiedRepo } from "../../chat/marketMessages.js";
 import type { Skill } from "../../core/types.js";
@@ -642,6 +643,52 @@ export async function marketplaceEnv(wallet: Wallet) {
         return { ok: true as const, notes };
       } catch (e) {
         return { ok: false as const, error: e instanceof Error ? e.message : String(e) };
+      }
+    },
+
+    // ── GitHub verified-work registration (issue #93) ──
+    // The submitGithubToken/getGithubStatus/registerWorkRepo message types already
+    // exist; these are the env members that answer them, so surfaces can take the
+    // flow from marketplaceEnv instead of re-wiring the core calls themselves
+    // (plans/cli-design-parity.md "Core/API glue needed"; vscode delegates here,
+    // localhost keeps its pre-wallet handlers + clearGithubToken on purpose). The
+    // token is stored by core (rpc.ts, 0600 file, never synced) — only the masked
+    // tail leaves here.
+    async getGithubStatus() {
+      const masked = await maskedGithubToken();
+      return { hasToken: !!masked, masked: masked ?? undefined };
+    },
+
+    // Store the token, answer with the refreshed masked status — the same shape
+    // getGithubStatus returns, so the UI has one render path for both. A failed
+    // save (unwritable tokens dir, full disk) answers as an error instead of
+    // rejecting: the dispatcher spreads this straight into githubStatus, so a
+    // rejection would hang the modal with no reply.
+    async submitGithubToken(token: string) {
+      try {
+        await saveGithubToken(token);
+        const masked = await maskedGithubToken();
+        return { hasToken: !!masked, masked: masked ?? undefined };
+      } catch (e) {
+        return { hasToken: false, masked: undefined, error: e instanceof Error ? e.message : "Saving the token failed." };
+      }
+    },
+
+    // Commit the wallet's PUBLIC-address marker to owner/name, then register the
+    // repo against the given skill mints with the indexer (verifiedWork.ts).
+    async registerWorkRepo(repo: string, skillMints: string[]) {
+      // Same refusal both surface copies give (vscode/localhost). registerVerifiedWork
+      // needs no signature — just the address string — so without this guard an env
+      // built before a wallet is connected would commit whatever address it holds as
+      // the public .agentnet marker and index it as the user's identity.
+      if (!wallet?.address) return { ok: false as const, error: "Connect a wallet first." };
+      try {
+        const stored = await loadGithubToken();
+        if (!stored?.token) return { ok: false as const, error: "Add a GitHub token first." };
+        const res = await registerVerifiedWork({ token: stored.token, repo, skillMints, walletAddress: wallet.address });
+        return { ok: true as const, count: res.count, repo: res.repo };
+      } catch (e) {
+        return { ok: false as const, error: e instanceof Error ? e.message : "Registration failed." };
       }
     },
   };

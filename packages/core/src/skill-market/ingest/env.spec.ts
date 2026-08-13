@@ -4,6 +4,8 @@ import { publishSkill as corePublishSkill } from "../../nft/skill.js";
 import { publishWorkflow as corePublishWorkflow } from "../../nft/workflow.js";
 import { postAgentNote as corePostAgentNote } from "../../notes/notes.js";
 import { getNetwork } from "../../core/seed.js";
+import { saveGithubToken, loadGithubToken, maskedGithubToken } from "../../core/rpc.js";
+import { registerVerifiedWork } from "../../core/verifiedWork.js";
 
 vi.mock("../../nft/skill.js", () => ({
   publishSkill: vi.fn().mockResolvedValue("mockSkillMint"),
@@ -30,6 +32,13 @@ vi.mock("./index.js", () => ({
 
 vi.mock("../../core/rpc.js", () => ({
   resolveRpcUrl: vi.fn().mockResolvedValue("http://localhost:8899"),
+  saveGithubToken: vi.fn(),
+  loadGithubToken: vi.fn().mockResolvedValue(null),
+  maskedGithubToken: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock("../../core/verifiedWork.js", () => ({
+  registerVerifiedWork: vi.fn(),
 }));
 
 // Partial mock: getNetwork becomes controllable (the airdrop guard needs a non-devnet
@@ -164,6 +173,88 @@ describe("skill-market/ingest/env buySkill", () => {
     const res = await env.buySkill("mintX");
 
     expect(res).toEqual({ ok: false, error: "custom program error: 0x1771", code: undefined });
+  });
+});
+
+describe("skill-market/ingest/env github", () => {
+  const mockWallet = { address: "mockWalletAddress" } as any;
+
+  it("reports no token as hasToken false", async () => {
+    vi.mocked(maskedGithubToken).mockResolvedValue(null);
+
+    const env = await marketplaceEnv(mockWallet);
+    expect(await env.getGithubStatus()).toEqual({ hasToken: false, masked: undefined });
+  });
+
+  it("stores the token and answers with the refreshed mask", async () => {
+    vi.mocked(maskedGithubToken).mockResolvedValue("••••AB12");
+
+    const env = await marketplaceEnv(mockWallet);
+    const res = await env.submitGithubToken("ghp_secret");
+
+    expect(saveGithubToken).toHaveBeenCalledWith("ghp_secret");
+    expect(res).toEqual({ hasToken: true, masked: "••••AB12" });
+  });
+
+  // The dispatcher spreads this result straight into a githubStatus reply with no
+  // catch of its own — a rejection here would be an unhandled rejection in the host
+  // and a modal that hangs on "Saving…" forever.
+  it("answers a failed token save as an error instead of rejecting", async () => {
+    vi.mocked(saveGithubToken).mockRejectedValueOnce(new Error("EACCES: permission denied"));
+
+    const env = await marketplaceEnv(mockWallet);
+    const res = await env.submitGithubToken("ghp_secret");
+
+    expect(res).toEqual({ hasToken: false, masked: undefined, error: "EACCES: permission denied" });
+  });
+
+  // Both surface copies of this flow refuse without a connected wallet;
+  // registerVerifiedWork needs no signature, so the env member must refuse too or a
+  // wallet-less env would commit its placeholder address as the public marker.
+  it("refuses to register work without a connected wallet", async () => {
+    vi.mocked(loadGithubToken).mockResolvedValue({ token: "ghp_secret" });
+
+    const env = await marketplaceEnv({ address: "" } as any);
+    const res = await env.registerWorkRepo("owner/repo", ["mint1"]);
+
+    expect(res).toEqual({ ok: false, error: "Connect a wallet first." });
+    expect(registerVerifiedWork).not.toHaveBeenCalled();
+  });
+
+  it("refuses to register work without a stored token", async () => {
+    vi.mocked(loadGithubToken).mockResolvedValue(null);
+
+    const env = await marketplaceEnv(mockWallet);
+    const res = await env.registerWorkRepo("owner/repo", ["mint1"]);
+
+    expect(res).toEqual({ ok: false, error: "Add a GitHub token first." });
+    expect(registerVerifiedWork).not.toHaveBeenCalled();
+  });
+
+  it("registers the repo with the connected wallet's address", async () => {
+    vi.mocked(loadGithubToken).mockResolvedValue({ token: "ghp_secret" });
+    vi.mocked(registerVerifiedWork).mockResolvedValue({ count: 2, repo: "owner/repo", markerAdded: true });
+
+    const env = await marketplaceEnv(mockWallet);
+    const res = await env.registerWorkRepo("owner/repo", ["mint1", "mint2"]);
+
+    expect(registerVerifiedWork).toHaveBeenCalledWith({
+      token: "ghp_secret",
+      repo: "owner/repo",
+      skillMints: ["mint1", "mint2"],
+      walletAddress: "mockWalletAddress",
+    });
+    expect(res).toEqual({ ok: true, count: 2, repo: "owner/repo" });
+  });
+
+  it("surfaces a registration failure as its message", async () => {
+    vi.mocked(loadGithubToken).mockResolvedValue({ token: "ghp_secret" });
+    vi.mocked(registerVerifiedWork).mockRejectedValue(new Error("Enter a repo as owner/name or a github.com URL."));
+
+    const env = await marketplaceEnv(mockWallet);
+    const res = await env.registerWorkRepo("not a repo", ["mint1"]);
+
+    expect(res).toEqual({ ok: false, error: "Enter a repo as owner/name or a github.com URL." });
   });
 });
 

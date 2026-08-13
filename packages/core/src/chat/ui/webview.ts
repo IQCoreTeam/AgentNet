@@ -4215,6 +4215,9 @@ export function chatHtml(): string {
       link.href = 'https://github.com/settings/tokens/new?scopes=repo&description=AgentNet';
       link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'Create a token ↗';
       const err = document.createElement('div'); err.className = 'rr-err';
+      // a failed save answers githubStatus { hasToken:false, error } — show it here so the
+      // re-rendered form explains the failure instead of looking like a silent reset.
+      if (status && status.error) { err.textContent = status.error; err.style.display = ''; }
       const btn = document.createElement('button'); btn.className = 'rr-btn'; btn.textContent = 'Save token';
       btn.addEventListener('click', () => {
         const t = inp.value.trim(); if (!t) return;

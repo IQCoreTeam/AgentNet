@@ -150,7 +150,7 @@ export type MarketEvent =
   | { type: "balance"; lamports: number | null } // wallet SOL balance (null = read failed)
   | { type: "airdropResult"; ok: boolean; lamports?: number; error?: string } // devnet faucet result (lamports = the new balance)
   // GitHub verified-work registration results (issue #93 parity)
-  | { type: "githubStatus"; hasToken: boolean; masked?: string }
+  | { type: "githubStatus"; hasToken: boolean; masked?: string; error?: string } // error = token save failed
   | { type: "workRepoRegistered"; ok: boolean; count?: number; repo?: string; error?: string }
   | { type: "skillActive"; name: string; origin: "nft"; mint: string } // nft skill fired -> casting cue
   | { type: "rpcStatus"; status: RpcStatus } // DAS-ready? which source? (issue #23)

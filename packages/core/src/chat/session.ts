@@ -92,7 +92,7 @@ export interface ChatEnv {
   // owner/name repo against the given skill mints. All three defer to core (rpc.ts token
   // store + verifiedWork.ts). A surface that can't do this simply omits them.
   getGithubStatus?(): Promise<{ hasToken: boolean; masked?: string }>;
-  submitGithubToken?(token: string): Promise<{ hasToken: boolean; masked?: string }>;
+  submitGithubToken?(token: string): Promise<{ hasToken: boolean; masked?: string; error?: string }>; // error = save failed (answered, never thrown)
   registerWorkRepo?(repo: string, skillMints: string[]): Promise<{ ok: boolean; count?: number; repo?: string; error?: string }>;
   // make-skill: publish a new skill from the UI. priceSol is the human SOL string; the
   // host converts to lamports and calls core publishSkill. Returns the new mint on success.
