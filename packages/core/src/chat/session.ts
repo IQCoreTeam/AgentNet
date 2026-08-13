@@ -473,13 +473,29 @@ export function createChatSession(
   // open()) and a fast "send" overlap, and ready's open() stops the handle send just
   // created → an empty turn. A surface may fire ready+send back-to-back (reconnect,
   // automation), so the dispatcher owns the ordering rather than trusting arrival gaps.
+  //
+  // Each message is also isolated: the pump is started with `void pump()`, so a handler
+  // that rejects would escape as an unhandled rejection and take the whole process down —
+  // one client's failed cloud connect would kill every other client's session. Catching
+  // per message keeps the process up, keeps the REST of the queue draining (a thrown
+  // handler used to abandon the messages behind it), and tells the client its action
+  // failed instead of leaving it waiting on a reply that never comes.
   const queue: any[] = [];
   let pumping = false;
   async function pump() {
     if (pumping) return;
     pumping = true;
     try {
-      while (queue.length) await handle(queue.shift());
+      while (queue.length) {
+        const m = queue.shift();
+        try {
+          await handle(m);
+        } catch (err) {
+          const text = err instanceof Error ? err.message : String(err);
+          console.warn(`[chat] ${m?.type ?? "message"} failed:`, text);
+          transport.send({ type: "notice", text: `${m?.type ?? "action"} failed: ${text}` });
+        }
+      }
     } finally {
       pumping = false;
     }
