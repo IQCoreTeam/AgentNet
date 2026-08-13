@@ -39,6 +39,28 @@ export interface MarketApi {
   ownedSkillMints?(): Promise<Record<string, string>>;
 }
 
+// ── Compile-time parity pins (plans/cli-design-parity.md "Core/API glue needed") ──
+// The api object handed to <SkillMarketView> is marketplaceEnv itself (Chat.tsx), and
+// that assignment checks env → MarketApi. It does NOT check the reverse: dropping an
+// optional param, result field, or member from MarketApi still leaves env assignable,
+// so a revert of the parity widenings would only surface once a consumer (tab 22/26 UI)
+// calls them. These type-level pins make such a revert fail the typecheck here instead.
+// Zero runtime cost — erased on compile.
+type AssertTrue<_T extends true> = never;
+// postAgentNote carries parentId (GH #101 reply threading): a 6th parameter must exist
+// (tuple index [5] is a compile error on a 5-arg signature) and accept a string id.
+type _PinPostAgentNoteParentId = AssertTrue<
+  Parameters<MarketApi["postAgentNote"]>[5] extends string | undefined ? true : false
+>;
+// buySkill surfaces the insufficient_funds classification the FUNDING panel keys off.
+type _PinBuySkillCode = AssertTrue<
+  Awaited<ReturnType<MarketApi["buySkill"]>>["code"] extends "insufficient_funds" | undefined ? true : false
+>;
+// airdrop (devnet faucet) is declared, with the lamports/error result the panel renders.
+type _PinAirdrop = AssertTrue<
+  MarketApi["airdrop"] extends () => Promise<{ ok: boolean; lamports?: number; error?: string }> ? true : false
+>;
+
 type Stage =
   | "list"
   | "detail"
