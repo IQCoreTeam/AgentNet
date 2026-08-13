@@ -81,7 +81,9 @@ function ActivityRow({
   const think = useFrameLoop(thinkingLabels.length, 1.2);
   const cast = useFrameLoop(castingFrames.length, 8);
 
-  let body: React.ReactNode = <Text> </Text>;
+  // The calm face line always carries a word (design tab 28): a steady dim "ready" when
+  // nothing is happening, replaced by the live status the moment something does.
+  let body: React.ReactNode = <Text dimColor>ready</Text>;
   if (error) {
     body = (
       <>
