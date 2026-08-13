@@ -19,6 +19,8 @@ export interface MarketApi {
   // (the FUNDING panel / Get devnet SOL) instead of a dead-end error string.
   buySkill(skillId: string, creatorWallet?: string): Promise<{ ok: boolean; slug?: string; error?: string; code?: "insufficient_funds" }>;
   solBalance(): Promise<number | null>;
+  // devnet only: one faucet grant to the connected wallet; lamports = the new balance.
+  airdrop(): Promise<{ ok: boolean; lamports?: number; error?: string }>;
   postNote(skillId: string, skillType: "skill" | "workflow" | undefined, text: string, gitLink?: string): Promise<{ ok: boolean; error?: string }>;
   publishSkill(
     input: { name: string; description: string; text: string; category?: string; hashtags?: string[]; priceSol: string; image?: string },

@@ -3,6 +3,7 @@ import { marketplaceEnv } from "./env.js";
 import { publishSkill as corePublishSkill } from "../../nft/skill.js";
 import { publishWorkflow as corePublishWorkflow } from "../../nft/workflow.js";
 import { postAgentNote as corePostAgentNote } from "../../notes/notes.js";
+import { getNetwork } from "../../core/seed.js";
 
 vi.mock("../../nft/skill.js", () => ({
   publishSkill: vi.fn().mockResolvedValue("mockSkillMint"),
@@ -30,6 +31,13 @@ vi.mock("./index.js", () => ({
 vi.mock("../../core/rpc.js", () => ({
   resolveRpcUrl: vi.fn().mockResolvedValue("http://localhost:8899"),
 }));
+
+// Partial mock: getNetwork becomes controllable (the airdrop guard needs a non-devnet
+// answer) while keeping its real devnet default and the rest of the seed module real.
+vi.mock("../../core/seed.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../core/seed.js")>();
+  return { ...actual, getNetwork: vi.fn(() => "devnet" as const) };
+});
 
 // Partial mock: only the agent-note write + re-read are stubbed; the rest of the
 // notes module stays real so nothing else in env's import graph changes shape.
@@ -156,6 +164,22 @@ describe("skill-market/ingest/env buySkill", () => {
     const res = await env.buySkill("mintX");
 
     expect(res).toEqual({ ok: false, error: "custom program error: 0x1771", code: undefined });
+  });
+});
+
+describe("skill-market/ingest/env airdrop", () => {
+  const mockWallet = { address: "mockWalletAddress" } as any;
+
+  // Mainnet has no faucet, so the guard must answer with an actionable error
+  // before any RPC is attempted (plan tab 26: wire airdrop, devnet only).
+  it("refuses off devnet without touching the connection", async () => {
+    vi.mocked(getNetwork).mockReturnValueOnce("mainnet");
+
+    const env = await marketplaceEnv(mockWallet);
+    const res = await env.airdrop();
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/devnet only/);
   });
 });
 
