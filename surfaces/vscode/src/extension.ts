@@ -299,12 +299,22 @@ function openOnboarding(context: vscode.ExtensionContext) {
   );
   panel.webview.html = onboardingHtml();
 
-  // Finish onboarding → save rpc key (if given), mark seen, build runtime (local always;
-  // cloud if `cfg`), go to chat. Empty/absent heliusKey keeps the default RPC.
+  // Finish onboarding → mark seen, build runtime (local always; cloud if `cfg`), go to
+  // chat. The Marketplace RPC key is OPTIONAL (the UI says "add it later from the wallet
+  // menu → RPC"), so it must NEVER gate entry: saved fire-and-forget so a slow or failing
+  // write can't strand onboarding. It used to be the first awaited call, so a throwing/
+  // stalling saveHeliusKey left the panel stuck with no error and no way forward — the very
+  // symptom a pasted key produced (blank skipped this branch, hence "blank works"). Started
+  // before connect() so the write lands ahead of the market's first RPC read; errors surface
+  // instead of failing silently.
   async function finish(cfg?: StorageConfig, heliusKey?: string) {
-    if (heliusKey && heliusKey.trim()) await saveHeliusKey(heliusKey.trim());
     if (cfg) await initialize(cfg, openExternal); // connect a cloud mirror (optional)
     await context.globalState.update("onboarded", true);
+    const key = heliusKey?.trim();
+    if (key) void saveHeliusKey(key).catch((e) =>
+      vscode.window.showWarningMessage(
+        `Couldn't save the Marketplace RPC key: ${errorMessage(e)} — add it later from the wallet menu → RPC.`,
+      ));
     runtime = await connect(wallet!, cloudStatusCb);
     panel.dispose();
     openChat(context);
