@@ -300,20 +300,29 @@ function openOnboarding(context: vscode.ExtensionContext) {
   panel.webview.html = onboardingHtml();
 
   // Finish onboarding → mark seen, build runtime (local always; cloud if `cfg`), go to chat.
-  // BOTH optional steps must never gate entry (the UI says both are addable later):
-  //   • Cloud: local is always on, so a cloud-connect failure — a missing Google client id,
-  //     a cancelled OAuth, a network blip — is caught, surfaced, and we continue local-only.
-  //     This (not the RPC key) was the real "stuck on the Helius screen": storage + rpc submit
-  //     as ONE message, so a throwing initialize() (e.g. Google client id missing when gdrive
-  //     was selected) froze the last screen with no error. Choosing "local only" skipped it,
-  //     which is exactly why local-only "got past" the Helius step.
-  //   • RPC key: saved fire-and-forget so a slow/failing write can't strand onboarding either,
-  //     and lands before connect() so the market's first RPC read sees it.
+  // Cloud connect can fail (missing Google client id, cancelled OAuth, network). We must NOT
+  // silently demote the user's cloud choice to local-only — cloud-vs-local is a choice they
+  // made in the UI, not ours to override on error. So on failure surface it and let THEM pick:
+  // retry, or explicitly keep local. Dismissing leaves them in onboarding (panel stays; never
+  // freeze, never auto-decide). Only a clean cloud connect — or no cloud chosen — proceeds.
+  // (A throwing initialize(), not the RPC key, was the original "stuck on the Helius screen":
+  // storage + rpc submit as one message, so it froze the last screen; that freeze is gone.)
+  // The RPC key is saved fire-and-forget so a slow/failing write can't gate entry, and lands
+  // before connect() so the market's first RPC read sees it.
   async function finish(cfg?: StorageConfig, heliusKey?: string) {
-    let cloudError: string | undefined;
     if (cfg) {
-      try { await initialize(cfg, openExternal); } // connect a cloud mirror (optional)
-      catch (e) { cloudError = errorMessage(e); } // never strand: fall through to local-only
+      try {
+        await initialize(cfg, openExternal); // connect a cloud mirror (interactive for gdrive)
+      } catch (e) {
+        const RETRY = "Retry cloud connect";
+        const LOCAL = "Keep on this device only";
+        const pick = await vscode.window.showErrorMessage(
+          `Cloud connect failed: ${errorMessage(e)}`, { modal: true }, RETRY, LOCAL,
+        );
+        if (pick === RETRY) return finish(cfg, heliusKey); // re-attempt the same choice
+        if (pick !== LOCAL) return; // dismissed → stay in onboarding, do NOT auto-local
+        // else: user explicitly chose local-only → fall through and finish local
+      }
     }
     await context.globalState.update("onboarded", true);
     const key = heliusKey?.trim();
@@ -324,11 +333,6 @@ function openOnboarding(context: vscode.ExtensionContext) {
     runtime = await connect(wallet!, cloudStatusCb);
     panel.dispose();
     openChat(context);
-    if (cloudError) {
-      vscode.window.showErrorMessage(
-        `Cloud connect failed: ${cloudError}  You're set up on this device; retry the cloud later from the chat header.`,
-      );
-    }
   }
 
   panel.webview.onDidReceiveMessage(async (m) => {
