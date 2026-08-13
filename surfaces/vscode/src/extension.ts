@@ -299,16 +299,22 @@ function openOnboarding(context: vscode.ExtensionContext) {
   );
   panel.webview.html = onboardingHtml();
 
-  // Finish onboarding → mark seen, build runtime (local always; cloud if `cfg`), go to
-  // chat. The Marketplace RPC key is OPTIONAL (the UI says "add it later from the wallet
-  // menu → RPC"), so it must NEVER gate entry: saved fire-and-forget so a slow or failing
-  // write can't strand onboarding. It used to be the first awaited call, so a throwing/
-  // stalling saveHeliusKey left the panel stuck with no error and no way forward — the very
-  // symptom a pasted key produced (blank skipped this branch, hence "blank works"). Started
-  // before connect() so the write lands ahead of the market's first RPC read; errors surface
-  // instead of failing silently.
+  // Finish onboarding → mark seen, build runtime (local always; cloud if `cfg`), go to chat.
+  // BOTH optional steps must never gate entry (the UI says both are addable later):
+  //   • Cloud: local is always on, so a cloud-connect failure — a missing Google client id,
+  //     a cancelled OAuth, a network blip — is caught, surfaced, and we continue local-only.
+  //     This (not the RPC key) was the real "stuck on the Helius screen": storage + rpc submit
+  //     as ONE message, so a throwing initialize() (e.g. Google client id missing when gdrive
+  //     was selected) froze the last screen with no error. Choosing "local only" skipped it,
+  //     which is exactly why local-only "got past" the Helius step.
+  //   • RPC key: saved fire-and-forget so a slow/failing write can't strand onboarding either,
+  //     and lands before connect() so the market's first RPC read sees it.
   async function finish(cfg?: StorageConfig, heliusKey?: string) {
-    if (cfg) await initialize(cfg, openExternal); // connect a cloud mirror (optional)
+    let cloudError: string | undefined;
+    if (cfg) {
+      try { await initialize(cfg, openExternal); } // connect a cloud mirror (optional)
+      catch (e) { cloudError = errorMessage(e); } // never strand: fall through to local-only
+    }
     await context.globalState.update("onboarded", true);
     const key = heliusKey?.trim();
     if (key) void saveHeliusKey(key).catch((e) =>
@@ -318,6 +324,11 @@ function openOnboarding(context: vscode.ExtensionContext) {
     runtime = await connect(wallet!, cloudStatusCb);
     panel.dispose();
     openChat(context);
+    if (cloudError) {
+      vscode.window.showErrorMessage(
+        `Cloud connect failed: ${cloudError}  You're set up on this device; retry the cloud later from the chat header.`,
+      );
+    }
   }
 
   panel.webview.onDidReceiveMessage(async (m) => {
