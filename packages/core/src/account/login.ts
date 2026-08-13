@@ -75,6 +75,30 @@ export async function setSkillShopping(on: boolean): Promise<void> {
   await writeFile(configFile(), JSON.stringify({ ...prev, skillShopping: on }, null, 2));
 }
 
+// On-chain session index toggle (plans/offchain-session-sync.md §4-5). Same raw-key
+// pattern as skillShopping, but the default is OFF and consent is PER WALLET (a map
+// of address → true): indexing a session writes a real Solana transaction — fees,
+// and a signature prompt on web wallets — so a CLI keypair opting in must not drag
+// a Phantom wallet sharing this device's config into surprise prompts. Consumed by
+// account/sessionIndex.ts (every write path gates on it) and the surfaces' toggles.
+export async function getSessionIndex(wallet: string): Promise<boolean> {
+  const raw = await readRawConfig();
+  const map = raw.sessionIndex;
+  return typeof map === "object" && map !== null && (map as Record<string, unknown>)[wallet] === true;
+}
+
+export async function setSessionIndex(wallet: string, on: boolean): Promise<void> {
+  await ensureDir(rootDir());
+  const prev = await readRawConfig();
+  const map = typeof prev.sessionIndex === "object" && prev.sessionIndex !== null
+    ? (prev.sessionIndex as Record<string, unknown>)
+    : {};
+  await writeFile(
+    configFile(),
+    JSON.stringify({ ...prev, sessionIndex: { ...map, [wallet]: on } }, null, 2),
+  );
+}
+
 // First-run setup: record the chosen backend and (for gdrive) run Google sign-in.
 // `openBrowser` is injected by the surface (only used for gdrive).
 export async function initialize(

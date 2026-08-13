@@ -207,3 +207,18 @@ export const REVIEW_COLUMNS = [
   "timestamp",
   "meta",
 ];
+
+// Columns for the per-wallet `mysessions` table (mysessionsHint above); the row
+// shape is the `Session` type in core/types.ts. `title` is declared so a wallet
+// MAY publish one, but the shipped writer never does — titles live inside the
+// encrypted session blobs, and a table row is public forever (the plan's "omit
+// if sensitive", applied as the default). `meta` mirrors REVIEW_COLUMNS' escape
+// hatch: columns are fixed at table creation, so the superset must exist now.
+export const SESSION_COLUMNS = [
+  "sessionId",
+  "modelType",
+  "createdAt",
+  "updatedAt",
+  "title",
+  "meta",
+];

@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { Connection } from "@solana/web3.js";
 import { spawnCli } from "./spawn.js";
 import { SessionStore } from "../account/store.js";
+import { indexNewSession } from "../account/sessionIndex.js";
 import { prepareResume } from "./inject/index.js";
 import { getDeviceProfile, buildDeviceNotice } from "../core/device.js";
 import { MemorySync, updateSkillsSection } from "../memory/index.js";
@@ -216,6 +217,11 @@ export function createRuntime(
         if (sessionId) return;
         sessionId = id;
         void flush();
+        // A fresh session just got its permanent id — publish it to the wallet's
+        // on-chain `mysessions` list (writeRow once per NEW sessionId; updates
+        // never touch the chain). Opt-in + best-effort inside indexNewSession;
+        // ephemeral sessions never leave this process.
+        if (!opts.ephemeral) void indexNewSession(wallet, id, opts.cli);
       });
       cli.onMessage((m: ChatMessage) => emit(m));
       // only nft skills get the casting cue; read fresh so same-session buys light up.
@@ -335,6 +341,9 @@ export function createRuntime(
       await store.fork(sessionId, newId, base, opts?.upTo);
       const forked = (await store.listMine()).find((s) => s.sessionId === newId);
       if (!forked) throw new Error("fork did not land in the session list");
+      // A fork mints its canonical id HERE (no CLI spawn, so no onSessionId) —
+      // publish it like any other new session. Same opt-in + best-effort gate.
+      void indexNewSession(wallet, newId, forked.cli);
       return forked;
     },
 

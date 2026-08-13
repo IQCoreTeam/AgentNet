@@ -184,6 +184,20 @@ export function skillStateFile(wallet: string): string {
   return join(skillStateDir(), `${wallet}.json`);
 }
 
+// ── on-chain session index (account/sessionIndex.ts): which sessionIds this device
+// already wrote to the wallet's `mysessions` table. Purely a tx-saving dedup cache —
+// the chain is the source of truth and this is recomputable from it, so like
+// cli-map.json it stays local and is never synced.
+
+export function chainIndexDir(): string {
+  return join(rootDir(), "chain-index");
+}
+
+/** This wallet's "already indexed on-chain" sessionId cache. Local, never synced. */
+export function chainIndexFile(wallet: string): string {
+  return join(chainIndexDir(), `${wallet}.json`);
+}
+
 /** Ensure a directory exists (mkdir -p) with 0o700 so only the owner can enter. */
 export async function ensureDir(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true, mode: 0o700 });

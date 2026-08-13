@@ -27,6 +27,7 @@ export const SLASH_COMMANDS: SlashCmd[] = [
   { name: "btw", desc: "side-channel question without interrupting session", args: "<question>" },
   { name: "wallet", desc: "show wallet address" },
   { name: "storage", desc: "view/change where sessions save (connect or reconnect cloud)" },
+  { name: "sessionsync", desc: "on-chain session list (opt-in)", args: "status|on|off|backfill" },
   { name: "logout", desc: "sign out of cloud storage (back to local-only)" },
   { name: "iq", desc: "a random IQ fact" },
   { name: "dance", desc: "Iggy dances" },

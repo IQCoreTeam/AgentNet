@@ -151,9 +151,20 @@ export {
   getStorageInfo,
   getSkillShopping,
   setSkillShopping,
+  getSessionIndex,
+  setSessionIndex,
   saveGoogleCreds,
   hasGoogleCreds,
 } from "./account/login.js";
+// on-chain session index (plans/offchain-session-sync.md): the opt-in `mysessions`
+// writer + the discovery reads a surface builds its "sessions elsewhere" hint from.
+export {
+  indexNewSession,
+  listChainSessions,
+  sessionIndexStatus,
+  backfillSessionIndex,
+} from "./account/sessionIndex.js";
+export type { SessionIndexStatus } from "./account/sessionIndex.js";
 export { STORAGE_OPTIONS } from "./account/storage/adapter.js";
 export type { StorageConfig, StorageKind } from "./account/storage/adapter.js";
 export { manualStorage } from "./account/storage/manual.js";
