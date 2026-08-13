@@ -18,6 +18,15 @@ vi.mock("../../core/chain.js", () => ({
   signerAddress: vi.fn().mockResolvedValue("mockAddress"),
 }));
 
+// The buy path goes through SkillSync.buyAndEquip (buy on-chain + equip locally);
+// stub the class so a test can make the buy fail like a broke wallet does.
+const { buyAndEquip } = vi.hoisted(() => ({ buyAndEquip: vi.fn() }));
+vi.mock("./index.js", () => ({
+  SkillSync: class {
+    buyAndEquip = buyAndEquip;
+  },
+}));
+
 vi.mock("../../core/rpc.js", () => ({
   resolveRpcUrl: vi.fn().mockResolvedValue("http://localhost:8899"),
 }));
@@ -121,6 +130,32 @@ Some skill body`;
       image: undefined,
     }, undefined);
     expect(corePublishWorkflow).not.toHaveBeenCalled();
+  });
+});
+
+describe("skill-market/ingest/env buySkill", () => {
+  const mockWallet = { address: "buyerWallet" } as any;
+
+  // The machine-readable code is what lets a surface open a fund prompt instead of
+  // only toasting the raw chain error (plan tab 26: FUNDING panel on insufficient_funds).
+  it("tags a broke-wallet failure with code insufficient_funds", async () => {
+    buyAndEquip.mockRejectedValueOnce(new Error("Attempt to debit an account but found no record of a prior credit. Logs: []"));
+
+    const env = await marketplaceEnv(mockWallet);
+    const res = await env.buySkill("mintX");
+
+    expect(res.ok).toBe(false);
+    expect(res.code).toBe("insufficient_funds");
+    expect(res.error).toMatch(/Not enough SOL/);
+  });
+
+  it("passes other buy errors through verbatim, uncoded", async () => {
+    buyAndEquip.mockRejectedValueOnce(new Error("custom program error: 0x1771"));
+
+    const env = await marketplaceEnv(mockWallet);
+    const res = await env.buySkill("mintX");
+
+    expect(res).toEqual({ ok: false, error: "custom program error: 0x1771", code: undefined });
   });
 });
 

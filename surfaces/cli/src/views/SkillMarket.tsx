@@ -15,7 +15,9 @@ import { PublishProgressView, type PublishProgress } from "./market/PublishProgr
 export interface MarketApi {
   searchSkills(query: string, kind?: "skill" | "workflow", sort?: "supply" | "stars"): Promise<SkillCard[]>;
   getSkillDetail(mint: string): Promise<SkillDetail>;
-  buySkill(skillId: string, creatorWallet?: string): Promise<{ ok: boolean; slug?: string; error?: string }>;
+  // code "insufficient_funds" marks a broke-wallet failure so the UI can offer funding
+  // (the FUNDING panel / Get devnet SOL) instead of a dead-end error string.
+  buySkill(skillId: string, creatorWallet?: string): Promise<{ ok: boolean; slug?: string; error?: string; code?: "insufficient_funds" }>;
   solBalance(): Promise<number | null>;
   postNote(skillId: string, skillType: "skill" | "workflow" | undefined, text: string, gitLink?: string): Promise<{ ok: boolean; error?: string }>;
   publishSkill(
