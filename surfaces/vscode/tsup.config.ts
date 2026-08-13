@@ -17,8 +17,17 @@ export default defineConfig({
   // (The claude/codex SDKs stay external: the SDK code is dynamically resolved at
   // runtime and spawns the user's installed CLI, so it shouldn't be inlined.)
   noExternal: [/@iqlabs-official\/agent-sdk/],
-  // map import.meta.url → the running file's URL so SDK path resolution works in CJS
-  define: { "import.meta.url": "importMetaUrl" },
+  // map import.meta.url → the running file's URL so SDK path resolution works in CJS.
+  // Also bake the Google OAuth client creds at build time (like Android's BuildConfig) so
+  // gdrive works in the SHIPPED extension — VS Code gets no shell env and no config.json, so
+  // without this clientId() always throws "Google client id missing". Sourced from the build
+  // env (the publish script / CI), never committed; empty when unset → clientId()/clientSecret()
+  // fall back to ~/.agentnet/config.json, so a dev with local creds is unaffected.
+  define: {
+    "import.meta.url": "importMetaUrl",
+    "process.env.GOOGLE_CLIENT_ID": JSON.stringify(process.env.GOOGLE_CLIENT_ID || ""),
+    "process.env.GOOGLE_CLIENT_SECRET": JSON.stringify(process.env.GOOGLE_CLIENT_SECRET || ""),
+  },
   banner: {
     js: "const { pathToFileURL } = require('node:url'); const importMetaUrl = pathToFileURL(__filename).href;",
   },

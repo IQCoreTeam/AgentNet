@@ -36,13 +36,19 @@ interface StoredToken {
 // VSCode-launched extension, which gets no shell env, still has them). They are for
 // desktop/dev flows only; Android APKs use GOOGLE_ACCESS_TOKEN_URL instead.
 function configCreds(): { id?: string; secret?: string } {
+  let raw: string;
   try {
-    const c = JSON.parse(readFileSync(configFile(), "utf8")) as {
-      google_client_id?: string;
-      google_client_secret?: string;
-    };
-    return { id: c.google_client_id, secret: c.google_client_secret };
+    raw = readFileSync(configFile(), "utf8");
   } catch {
+    return {}; // no config file yet — legitimately no creds, nothing to warn about
+  }
+  try {
+    const c = JSON.parse(raw) as { google_client_id?: string; google_client_secret?: string };
+    return { id: c.google_client_id, secret: c.google_client_secret };
+  } catch (e) {
+    // A malformed config otherwise looks identical to "no creds" and surfaces as the
+    // misleading "client id missing — add it" even when the user DID add it. Say so.
+    console.warn(`[oauth] ~/.agentnet/config.json is not valid JSON (${e instanceof Error ? e.message : String(e)}); ignoring stored Google creds.`);
     return {};
   }
 }
