@@ -34,6 +34,16 @@ export async function buildStorage(cfg: StorageConfig, walletAddress = ""): Prom
   return make(cfg, walletAddress);
 }
 
+/**
+ * True when `kind` names a backend this build can actually construct. `builders` is the
+ * one list of kinds, so callers validate against what buildStorage will really accept
+ * rather than a second copy that can drift. Used to keep an unbuildable persisted kind
+ * from reaching buildStorage (which throws) and to reject one before it is saved.
+ */
+export function isStorageKind(kind: unknown): kind is StorageKind {
+  return typeof kind === "string" && Object.prototype.hasOwnProperty.call(builders, kind);
+}
+
 // What the UI shows in the "where to save?" picker.
 export const STORAGE_OPTIONS: { kind: StorageKind; label: string; needs: string }[] = [
   { kind: "gdrive", label: "Google Drive", needs: "sign in with Google" },
