@@ -7,6 +7,28 @@ import { STORAGE_OPTIONS, type StorageConfig, type StorageKind, startCodexLogin,
 import type { CliReport, CliStatus } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../theme.js";
 import { Iggy } from "../components/Iggy.js";
+import { SetupLadder } from "../components/SetupLadder.js";
+
+// Collapse the many real onboarding steps into the design's five-rung ladder position
+// (tab 02). Wallet is already linked when onboarding starts, so the live rung is 2+.
+function rungOf(step: OnboardStep): number {
+  switch (step) {
+    case "engine":
+    case "install":
+    case "codexAuthChoice":
+    case "codexLogin":
+    case "codexApiKey":
+      return 2; // ENGINE
+    case "storage":
+    case "location":
+    case "gdriveLogin":
+      return 3; // WHERE SESSIONS LIVE
+    case "rpc":
+      return 4; // READING THE CHAIN
+    default:
+      return 2;
+  }
+}
 
 // First-run setup. Sequence: engine pick → codex login (if needed) → storage → rpc.
 //
@@ -212,11 +234,12 @@ export function Onboarding({
 
   return (
     <Box flexDirection="column" paddingX={1} gap={1}>
+      <SetupLadder rung={rungOf(step)} address={address} />
+
       <Box>
         <Iggy mood="idle" />
-        <Text bold color={colors.iqMagenta}>{" "}welcome to AgentNet</Text>
+        <Text dimColor>{" "}pick the brain you want to talk to — you can swap it any time.</Text>
       </Box>
-      <Text dimColor>wallet {address.slice(0, 6)}…{address.slice(-4)}</Text>
 
       <Box flexDirection="column">
         <Box><Text>claude </Text>{statusBadge(rep.claude)}</Box>

@@ -37,10 +37,10 @@ export interface AppOptions {
 export function App({ options }: { options: AppOptions }) {
   const [phase, setPhase] = useState<Phase>("boot");
   const [steps, setSteps] = useState<BootStep[]>([
-    { label: "loading wallet", status: "pending" },
-    { label: "checking claude", status: "pending" },
-    { label: "checking codex", status: "pending" },
-    { label: "restoring storage", status: "pending" },
+    { tag: "wallet", label: "loading wallet", status: "pending" },
+    { tag: "claude", label: "checking claude", status: "pending" },
+    { tag: "codex", label: "checking codex", status: "pending" },
+    { tag: "storage", label: "restoring storage", status: "pending" },
   ]);
   const [address, setAddress] = useState("");
   const [report, setReport] = useState<CliReport>({ claude: "missing", codex: "missing" });
@@ -75,7 +75,7 @@ export function App({ options }: { options: AppOptions }) {
     const rt = await buildRuntime(w, approval.current ?? autoApprove(), setCloudStatus);
     setRuntime(rt);
     setWallet(w);
-    set(3, { status: "ok", label: "storage ready" });
+    set(3, { status: "ok", label: "storage ready", detail: "READY" });
     // wipe the boot banner/checklist from the scrollback so the welcome panel lands on a
     // clean screen (Ink leaves prior static output in the terminal history otherwise),
     // then pad down to the bottom edge. Chat's frame is only as tall as its live content,
@@ -115,8 +115,10 @@ export function App({ options }: { options: AppOptions }) {
         const rep = await detectCli();
         if (!alive) return;
         setReport(rep);
-        set(1, { status: rep.claude === "ok" ? "ok" : "fail", label: `claude ${rep.claude}` });
-        set(2, { status: rep.codex === "ok" ? "ok" : "fail", label: `codex ${rep.codex}` });
+        const engineDetail = (s: CliReport["claude"]) =>
+          s === "ok" ? "OK" : s === "no-login" ? "NEEDS LOGIN" : "NOT INSTALLED";
+        set(1, { status: rep.claude === "ok" ? "ok" : "fail", label: `claude ${rep.claude}`, detail: engineDetail(rep.claude) });
+        set(2, { status: rep.codex === "ok" ? "ok" : "fail", label: `codex ${rep.codex}`, detail: engineDetail(rep.codex) });
 
         // onboard only on a TRUE first run: neither a finished-setup marker nor a
         // configured cloud. (Local-only writes no storage config, so the marker is what
@@ -149,7 +151,7 @@ export function App({ options }: { options: AppOptions }) {
           }
         } else {
           if (!alive) return;
-          set(3, { status: "ok", label: "storage: pick on next screen" });
+          set(3, { status: "ok", label: "storage: pick on next screen", detail: "PICK NEXT" });
           setPhase("onboard");
           onboardFinish.current = async (engine: "claude" | "codex", cfg?: StorageConfig) => {
             if (cfg) await chooseStorage(cfg);
