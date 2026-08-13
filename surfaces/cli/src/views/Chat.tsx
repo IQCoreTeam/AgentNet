@@ -3,7 +3,11 @@ import { Box, Text, Static, useApp, useInput } from "ink";
 import type { AgentRuntime, Wallet, ChatMessage, SkillActivation } from "@iqlabs-official/agent-sdk/runtime/contract";
 import type { CliReport, StorageConfig } from "@iqlabs-official/agent-sdk";
 import type { CloudStatus } from "@iqlabs-official/agent-sdk/account/storage/mirror";
-import type { ApprovalRequest } from "@iqlabs-official/agent-sdk/runtime/approval/channel";
+import type {
+  ApprovalRequest,
+  ApprovalQuestion,
+  ApprovalQuestionResponse,
+} from "@iqlabs-official/agent-sdk/runtime/approval/channel";
 import type { AppOptions } from "../app.js";
 import type { InkApprovalChannel } from "../InkApprovalChannel.js";
 import { SLASH_COMMANDS } from "../commands.js";
@@ -394,9 +398,17 @@ export function Chat({
   const [activeDiffFileIdx, setActiveDiffFileIdx] = useState(0);
   const [approvalIdx, setApprovalIdx] = useState(0); // highlighted APPROVAL_CHOICES entry
   // approval reply mode: null = y/a/n buttons; "reason" = typing a deny reason;
-  // "edit" = editing the bash command before allowing.
-  const [replyMode, setReplyMode] = useState<"reason" | "edit" | null>(null);
+  // "edit" = editing the bash command before allowing; "custom" = typing a free-form
+  // answer to an AskUserQuestion.
+  const [replyMode, setReplyMode] = useState<"reason" | "edit" | "custom" | null>(null);
   const [replyText, setReplyText] = useState("");
+  // AskUserQuestion state (kind === "question"): which option is highlighted, which are
+  // checked (multiSelect), which question of many we are on, and the answers accumulated
+  // for the questions already passed. The pick becomes the tool result, not a yes/no.
+  const [qCursor, setQCursor] = useState(0);
+  const [qChecked, setQChecked] = useState<number[]>([]);
+  const [qIndex, setQIndex] = useState(0);
+  const qAccum = useRef<ApprovalQuestionResponse[]>([]);
   const [showSessions, setShowSessions] = useState(false);
   const [showMarket, setShowMarket] = useState(false);
   // which market screen /market, /agents and /skills land on
@@ -511,8 +523,46 @@ export function Chat({
         setDiffExpanded(false);
         setActiveDiffFileIdx(0);
         setApprovalIdx(0); // every request starts focused on "allow once"
+        setQCursor(0);
+        setQChecked([]);
+        setQIndex(0);
+        qAccum.current = [];
       }),
     [approval],
+  );
+
+  // Commit one answer to an AskUserQuestion. If more questions remain, bank this response
+  // and advance; on the last one, resolve the whole request with every questionResponse —
+  // the engine turns those into the tool result. A free-form `text` (type-your-own) rides
+  // in the same shape as a picked option.
+  const answerQuestion = useCallback(
+    (
+      req: ApprovalRequest,
+      q: ApprovalQuestion,
+      pick: { selected: string[]; text?: string },
+    ) => {
+      if (!approval) return;
+      const response: ApprovalQuestionResponse = {
+        question: q.question,
+        questionId: q.id,
+        selected: pick.selected,
+        text: pick.text,
+      };
+      const all = req.questions ?? [];
+      if (qIndex + 1 < all.length) {
+        qAccum.current.push(response);
+        setQIndex((i) => i + 1);
+        setQCursor(0);
+        setQChecked([]);
+        setReplyMode(null);
+      } else {
+        approval.resolve(req.id, {
+          outcome: "once",
+          questionResponses: [...qAccum.current, response],
+        });
+      }
+    },
+    [approval, qIndex],
   );
 
   // buttons mode. Two ways to answer the same ring, because both are muscle memory:
@@ -522,6 +572,47 @@ export function Chat({
   useInput(
     (input, key) => {
       if (!pendingApproval || !approval) return;
+
+      // QUESTION (AskUserQuestion): the pick IS the answer, so this is a choice list,
+      // not a yes/no gate. ↑/↓ or number keys move; space toggles under multiSelect;
+      // ↵ commits; [t] types a free-form answer; esc cancels the whole ask.
+      if (pendingApproval.kind === "question") {
+        const q = pendingApproval.questions?.[qIndex];
+        if (!q) return;
+        const n = q.options.length;
+        if (key.upArrow) return setQCursor((i) => (i - 1 + n) % n);
+        if (key.downArrow) return setQCursor((i) => (i + 1) % n);
+        if (/^[1-9]$/.test(input)) {
+          const idx = parseInt(input, 10) - 1;
+          if (idx < n) setQCursor(idx);
+          return;
+        }
+        if (input === " " && q.multiSelect)
+          return setQChecked((c) =>
+            c.includes(qCursor) ? c.filter((x) => x !== qCursor) : [...c, qCursor],
+          );
+        if ((input === "t" || input === "T") && q.allowCustomInput) {
+          setReplyText("");
+          return setReplyMode("custom");
+        }
+        if (key.escape)
+          return approval.resolve(pendingApproval.id, { outcome: "deny", reason: "denied by user" });
+        if (key.return) {
+          const rows = q.multiSelect ? (qChecked.length ? qChecked : [qCursor]) : [qCursor];
+          const selected = rows.map((i) => q.options[i]?.label).filter(Boolean) as string[];
+          return answerQuestion(pendingApproval, q, { selected });
+        }
+        return;
+      }
+
+      // PLAN (ExitPlanMode): ↵ approves and runs it, esc saves the plan and keeps planning.
+      if (pendingApproval.kind === "plan") {
+        if (key.return) return approval.resolve(pendingApproval.id, { outcome: "once" });
+        if (key.escape)
+          return approval.resolve(pendingApproval.id, { outcome: "deny", reason: "keep planning" });
+        return;
+      }
+
       const decide = (k: ApprovalChoiceKey) => {
         if (k === "y") return approval.resolve(pendingApproval.id, { outcome: "once" });
         if (k === "a") return approval.resolve(pendingApproval.id, { outcome: "always" });
@@ -565,6 +656,10 @@ export function Chat({
         const text = replyText.trim();
         if (replyMode === "reason") {
           approval.resolve(pendingApproval.id, { outcome: "deny", reason: text || "denied by user" });
+        } else if (replyMode === "custom") {
+          // free-form answer to an AskUserQuestion — same commit path as a picked option.
+          const q = pendingApproval.questions?.[qIndex];
+          if (q) answerQuestion(pendingApproval, q, { selected: [], text });
         } else {
           approval.resolve(pendingApproval.id, {
             outcome: "once",
@@ -1089,6 +1184,9 @@ export function Chat({
           diffExpanded={diffExpanded}
           activeDiffFileIdx={activeDiffFileIdx}
           selected={approvalIdx}
+          qCursor={qCursor}
+          qChecked={qChecked}
+          qIndex={qIndex}
           popup
         />
       </Box>
@@ -1513,6 +1611,9 @@ export function Chat({
           activeDiffFileIdx={activeDiffFileIdx}
           maxRows={approvalMaxRows}
           selected={approvalIdx}
+          qCursor={qCursor}
+          qChecked={qChecked}
+          qIndex={qIndex}
         />
       ) : null}
       {/* The composer is HIDDEN during an approval, never unmounted. Unmounting threw
