@@ -87,13 +87,13 @@ export function RegisterWorkRepo() {
         </div>
       ) : (
         <>
-          <p className="an-term-mono text-[10px] leading-relaxed" style={{ color: "#7a7a7a" }}>
+          <p className="an-term-mono text-[10px] leading-relaxed" style={{ color: "var(--an-term-fg-5)" }}>
             Link a repo you built to the skills it used. We commit a public{" "}
-            <span style={{ color: "#9a9a9a" }}>.agentnet</span> marker (your wallet address only) to prove ownership.
+            <span style={{ color: "var(--an-term-fg-3)" }}>.agentnet</span> marker (your wallet address only) to prove ownership.
           </p>
 
           {!hasToken && (
-            <p className="an-term-mono text-[10px] uppercase" style={{ color: "#e0913e" }}>Add a GitHub token above first.</p>
+            <p className="an-term-mono text-[10px] uppercase" style={{ color: "var(--an-term-claude)" }}>Add a GitHub token above first.</p>
           )}
 
           <input
@@ -107,7 +107,7 @@ export function RegisterWorkRepo() {
           <div className="flex flex-col gap-3">
             <span className="an-term-label">Skills this repo used</span>
             {owned.length === 0 ? (
-              <p className="an-term-mono text-[10px] uppercase" style={{ color: "#5a5a5d" }}>No owned skills yet.</p>
+              <p className="an-term-mono text-[10px] uppercase" style={{ color: "var(--an-term-fg-7)" }}>No owned skills yet.</p>
             ) : (
               <div className="flex flex-col gap-3 max-h-44 overflow-y-auto">
                 {owned.map((name) => {
@@ -119,13 +119,13 @@ export function RegisterWorkRepo() {
                       <input type="checkbox" checked={on} onChange={() => toggle(mint)} disabled={!hasToken} className="sr-only" />
                       <span
                         className="flex h-[18px] w-[18px] shrink-0 items-center justify-center"
-                        style={{ border: on ? "1px solid #2f6b46" : "1px solid #3a3a3d", background: on ? "#0d160f" : "#0c0c0d" }}
+                        style={{ border: on ? "1px solid var(--an-term-green-line)" : "1px solid var(--an-term-line-3)", background: on ? "var(--an-term-green-bg)" : "var(--an-term-bg)" }}
                       >
                         {on && (
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--an-term-green)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
                         )}
                       </span>
-                      <span className="an-term-mono truncate text-[12px] font-bold" style={{ color: on ? "#f2f2f2" : "#cfcfcf" }}>{name}</span>
+                      <span className="an-term-mono truncate text-[12px] font-bold" style={{ color: on ? "var(--an-term-fg)" : "var(--an-term-fg-2)" }}>{name}</span>
                     </label>
                   );
                 })}
@@ -150,7 +150,7 @@ export function RegisterWorkRepo() {
             Register repo
           </button>
           {blockReason && (
-            <p className="an-term-mono text-[10px] leading-relaxed" style={{ color: "#7a7a7a" }}>{blockReason}</p>
+            <p className="an-term-mono text-[10px] leading-relaxed" style={{ color: "var(--an-term-fg-5)" }}>{blockReason}</p>
           )}
         </>
       )}

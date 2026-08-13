@@ -93,11 +93,11 @@ function ChipGroup({ label, value, options, onPick, accent = "green" }: {
   accent?: "green" | "orange";
 }) {
   const acc = accent === "orange"
-    ? { color: "#f0913e", border: "1px solid #6b4a22", background: "#1a0f06" }
-    : { color: "#4ade80", border: "1px solid #2f6b46", background: "#0d160f" };
+    ? { color: "var(--an-term-claude)", border: "1px solid var(--an-term-claude-line)", background: "var(--an-term-claude-bg)" }
+    : { color: "var(--an-term-green)", border: "1px solid var(--an-term-green-line)", background: "var(--an-term-green-bg)" };
   return (
     <div className="flex flex-col gap-2.5">
-      <div className="an-term-mono text-[9px] font-bold uppercase" style={{ color: "#6a6a6a", letterSpacing: "2px" }}>{label}</div>
+      <div className="an-term-mono text-[9px] font-bold uppercase" style={{ color: "var(--an-term-fg-6)", letterSpacing: "2px" }}>{label}</div>
       <div className="flex flex-wrap gap-2">
         {options.map((o) => {
           const on = o.value === value;
@@ -106,7 +106,7 @@ function ChipGroup({ label, value, options, onPick, accent = "green" }: {
               key={o.value}
               onClick={() => onPick(o.value)}
               className="an-term-mono text-[11px] font-bold uppercase tracking-wide transition"
-              style={on ? { ...acc, padding: "8px 14px" } : { color: "#8a8a8a", border: "1px solid #2a2a2e", padding: "8px 14px" }}
+              style={on ? { ...acc, padding: "8px 14px" } : { color: "var(--an-term-fg-4)", border: "1px solid var(--an-term-line-2)", padding: "8px 14px" }}
             >
               {o.label}
             </button>
@@ -478,7 +478,7 @@ export function Composer() {
             <div className="fixed inset-0 z-40" onClick={() => setControlsOpen(false)} />
             <div
               className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-50 flex flex-col gap-5 p-4 shadow-2xl"
-              style={{ background: "#0a0a0b", border: "1px solid #2a2a2e" }}
+              style={{ background: "var(--an-term-bg)", border: "1px solid var(--an-term-line-2)" }}
             >
               <div className="flex flex-col gap-2.5">
                 <ChipGroup
@@ -488,7 +488,7 @@ export function Composer() {
                   onPick={(v) => { setModel(v); send({ type: "model", model: v === "default" ? undefined : v }); }}
                 />
                 {/* version/detail of the selected model, from the shared catalog */}
-                <p className="an-term-mono text-[9px] uppercase leading-snug" style={{ color: "#5a5a5d", letterSpacing: "0.5px" }}>
+                <p className="an-term-mono text-[9px] uppercase leading-snug" style={{ color: "var(--an-term-fg-7)", letterSpacing: "0.5px" }}>
                   {models.find((m) => m.value === selectedModel)?.desc}
                 </p>
               </div>
@@ -687,12 +687,12 @@ export function Composer() {
           onClick={toggleMic}
           disabled={frozen}
           className="flex h-10 w-9 shrink-0 items-center justify-center disabled:opacity-40"
-          style={{ color: recording ? "#e5484d" : "var(--an-fg-mute)" }}
+          style={{ color: recording ? "var(--an-red)" : "var(--an-fg-mute)" }}
           aria-label={recording ? "Stop dictation" : "Voice input"}
           title={recording ? "Stop dictation" : "Voice input"}
         >
           {recording ? (
-            <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full" style={{ background: "#e5484d" }} />
+            <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full" style={{ background: "var(--an-red)" }} />
           ) : (
             <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <rect x="6" y="2" width="4" height="7" rx="2" /><path d="M4 7.5a4 4 0 0 0 8 0M8 11.5V14M6 14h4" />

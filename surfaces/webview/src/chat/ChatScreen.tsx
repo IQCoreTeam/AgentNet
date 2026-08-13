@@ -50,7 +50,7 @@ export function ChatScreen({ onOpenDrawer }: { onOpenDrawer: () => void }) {
         <button
           onClick={onOpenDrawer}
           className="an-bracket flex shrink-0 items-center justify-center"
-          style={{ width: "38px", height: "38px", border: "1px solid #1f1f23", color: "#cfcfcf", "--ts": "8px", "--bk": "#0d0d0e", "--tk": "#6e6e72" } as CSSProperties}
+          style={{ width: "38px", height: "38px", border: "1px solid var(--an-term-line)", color: "var(--an-term-fg-2)", "--ts": "8px", "--bk": "var(--an-term-bg)", "--tk": "var(--an-term-fg-6)" } as CSSProperties}
           title="Chats"
           aria-label="Open chat list"
         >
@@ -61,16 +61,16 @@ export function ChatScreen({ onOpenDrawer }: { onOpenDrawer: () => void }) {
         <div className="min-w-0 flex-1">
           <div
             className="truncate"
-            style={{ fontFamily: "'Space Mono', ui-monospace, monospace", fontWeight: 700, fontSize: "15px", letterSpacing: "0.5px", color: "#f2f2f2", textTransform: "uppercase" }}
+            style={{ fontFamily: "'Space Mono', ui-monospace, monospace", fontWeight: 700, fontSize: "15px", letterSpacing: "0.5px", color: "var(--an-term-fg)", textTransform: "uppercase" }}
           >
             {activeTitle}
           </div>
           {addr && (
             <div
               className="truncate"
-              style={{ fontFamily: "'Space Mono', ui-monospace, monospace", fontSize: "9px", letterSpacing: "1px", color: "#6a6a6a", marginTop: "2px" }}
+              style={{ fontFamily: "'Space Mono', ui-monospace, monospace", fontSize: "9px", letterSpacing: "1px", color: "var(--an-term-fg-6)", marginTop: "2px" }}
             >
-              {addr.slice(0, 4)}…{addr.slice(-4)} <span style={{ color: "#3a3a3a" }}>/</span> <span style={{ fontFamily: "'Noto Sans JP', sans-serif", color: "#5a5a5d" }}>チャット</span>
+              {addr.slice(0, 4)}…{addr.slice(-4)} <span style={{ color: "var(--an-term-line-3)" }}>/</span> <span style={{ fontFamily: "'Noto Sans JP', sans-serif", color: "var(--an-term-fg-7)" }}>チャット</span>
             </div>
           )}
         </div>

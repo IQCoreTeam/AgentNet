@@ -65,7 +65,7 @@ export function FundModal() {
       <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.6)" }} onClick={closeFund} aria-hidden="true" />
       <div
         className="an-bracket unlock-flicker relative w-full max-w-[300px] p-4 pb-5"
-        style={{ border: "1px solid #1d3a26", "--ts": "12px", "--bk": "var(--an-bg-0)", "--tk": "#2f6b46" } as CSSProperties}
+        style={{ border: "1px solid var(--an-term-green-line-2)", "--ts": "12px", "--bk": "var(--an-bg-0)", "--tk": "var(--an-term-green-line)" } as CSSProperties}
       >
         {/* terminal balance-check meta line */}
         <div className="an-term-mono flex items-center justify-between pb-3 text-[9px] uppercase tracking-[0.14em]" style={{ color: "var(--an-fg-mute)" }}>

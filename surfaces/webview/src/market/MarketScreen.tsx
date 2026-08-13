@@ -209,7 +209,7 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
       {/* Header (no back-to-chat button — the bottom tab bar owns top-level nav) */}
       <header
         className="flex items-start gap-2.5 border-b px-3.5 shrink-0"
-        style={{ borderColor: "#1d1d20", paddingTop: "max(0.5rem, env(safe-area-inset-top))", paddingBottom: "0.7rem" }}
+        style={{ borderColor: "var(--an-term-line)", paddingTop: "max(0.5rem, env(safe-area-inset-top))", paddingBottom: "0.7rem" }}
       >
         {onBack && (
           <button onClick={onBack} className="an-iconbtn shrink-0" aria-label="Back to settings">
@@ -223,18 +223,18 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
         {/* SKILLS: SOL balance + owned-count readout (stacked, right-aligned) */}
         {isSkills && (
           <div className="shrink-0 text-right">
-            {balanceSol && <div className="an-term-mono text-[13px] font-bold leading-none" style={{ color: "#bdbdbd", letterSpacing: "0.5px" }}>{balanceSol} ◎</div>}
-            <div className="an-term-mono text-[8px] font-bold tracking-wider" style={{ color: "#5a5a5d", marginTop: "5px" }}>[ {state.marketOwned.length} OWNED ]</div>
+            {balanceSol && <div className="an-term-mono text-[13px] font-bold leading-none" style={{ color: "var(--an-term-fg-2)", letterSpacing: "0.5px" }}>{balanceSol} ◎</div>}
+            <div className="an-term-mono text-[8px] font-bold tracking-wider" style={{ color: "var(--an-term-fg-7)", marginTop: "5px" }}>[ {state.marketOwned.length} OWNED ]</div>
           </div>
         )}
         {/* MARKET: SOL balance + publish */}
-        {isMarket && balanceSol && <span className="an-term-mono shrink-0 text-xs font-bold" style={{ color: "#bdbdbd", letterSpacing: "0.5px" }}>{balanceSol} ◎</span>}
+        {isMarket && balanceSol && <span className="an-term-mono shrink-0 text-xs font-bold" style={{ color: "var(--an-term-fg-2)", letterSpacing: "0.5px" }}>{balanceSol} ◎</span>}
         {isMarket && (
           <LockedGate reason="publish" onUnlocked={() => setView("publish")} className="shrink-0" badge={false}>
             <button
               onClick={() => setView("publish")}
               className="an-term-mono text-[10px] font-bold uppercase tracking-wider active:opacity-80"
-              style={{ color: "#4ade80", border: "1px solid #1d3a26", background: "#0d140f", padding: "7px 11px" }}
+              style={{ color: "var(--an-term-green)", border: "1px solid var(--an-term-green-line-2)", background: "var(--an-term-green-bg)", padding: "7px 11px" }}
             >
               + Publish
             </button>
@@ -265,7 +265,7 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
         <button
           onClick={() => setView("helius")}
           className="an-bracket mx-3.5 mt-2.5 shrink-0 flex items-center gap-2.5 px-3 py-2.5 active:opacity-80"
-          style={{ border: "1px solid #5a4420", color: "#e0913e", "--ts": "8px", "--bk": "#140d04", "--tk": "#c9772f" } as CSSProperties}
+          style={{ border: "1px solid var(--an-term-claude-line)", color: "var(--an-term-claude)", "--ts": "8px", "--bk": "var(--an-term-claude-bg)", "--tk": "var(--an-term-claude-2)" } as CSSProperties}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 3 L22 20 H2 Z" /><path d="M12 10 V14" /><circle cx="12" cy="17" r=".7" fill="currentColor" stroke="none" /></svg>
           <span className="an-term-mono flex-1 text-left text-[10px] font-bold uppercase tracking-wide">Add Helius key for faster results</span>
@@ -282,7 +282,7 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
 
       {/* Browse tabs (market only): skill / workflow — agents moved to their own Agent tab */}
       {isMarket && (
-        <div className="flex items-end gap-6 border-b px-3.5 mt-3 shrink-0" style={{ borderColor: "#1d1d20" }}>
+        <div className="flex items-end gap-6 border-b px-3.5 mt-3 shrink-0" style={{ borderColor: "var(--an-term-line)" }}>
           {(["skill", "workflow"] as const).map((t) => (
             <button
               key={t}
@@ -301,17 +301,17 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
           <button onClick={() => setHideOwned((v) => !v)} className="ml-auto flex items-center gap-2 pb-2.5 active:opacity-80">
             <span
               className="flex h-[16px] w-[16px] shrink-0 items-center justify-center"
-              style={{ border: hideOwned ? "1px solid #2f6b46" : "1px solid #3a3a3d", background: hideOwned ? "#0d160f" : "#0c0c0d" }}
+              style={{ border: hideOwned ? "1px solid var(--an-term-green-line)" : "1px solid var(--an-term-line-3)", background: hideOwned ? "var(--an-term-green-bg)" : "var(--an-term-bg)" }}
             >
-              {hideOwned && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}
+              {hideOwned && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--an-term-green)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}
             </span>
-            <span className="an-term-mono text-[9px] font-bold uppercase tracking-wider" style={{ color: hideOwned ? "#9a9a9a" : "#6a6a6a" }}>Hide owned</span>
+            <span className="an-term-mono text-[9px] font-bold uppercase tracking-wider" style={{ color: hideOwned ? "var(--an-term-fg-3)" : "var(--an-term-fg-6)" }}>Hide owned</span>
           </button>
           {/* SORT toggle — popularity (supply) vs GitHub stars (issue #89) */}
           <button
             onClick={() => { const next = marketSort === "stars" ? "supply" : "stars"; setMarketSort(next); runSearch(query, undefined, next); }}
             className="ml-3 an-term-mono text-[9px] font-bold uppercase tracking-wider pb-2.5 active:opacity-80"
-            style={{ color: marketSort === "stars" ? "#e0a23a" : "#6a6a6a" }}
+            style={{ color: marketSort === "stars" ? "var(--an-amber)" : "var(--an-term-fg-6)" }}
           >
             {marketSort === "stars" ? "★ Stars" : "Popular"}
           </button>
@@ -325,17 +325,17 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
             onSubmit={(e) => { e.preventDefault(); runSearch(query); }}
             className="flex gap-2"
           >
-            <div className="flex flex-1 items-center gap-2.5 px-3" style={{ height: "40px", background: "#0b0b0c", border: "1px solid #2a2a2e" }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7a7a7a" strokeWidth="1.8" className="shrink-0"><circle cx="10.5" cy="10.5" r="6.5" /><path d="M20 20l-4.5-4.5" /></svg>
+            <div className="flex flex-1 items-center gap-2.5 px-3" style={{ height: "40px", background: "var(--an-term-bg)", border: "1px solid var(--an-term-line-2)" }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--an-term-fg-5)" strokeWidth="1.8" className="shrink-0"><circle cx="10.5" cy="10.5" r="6.5" /><path d="M20 20l-4.5-4.5" /></svg>
               <input
                 className="an-term-mono min-w-0 flex-1 bg-transparent text-[11px] uppercase tracking-wide text-zinc-200 placeholder:uppercase placeholder:tracking-wide focus:outline-none"
-                style={{ color: "#e8e8e8" }}
+                style={{ color: "var(--an-term-fg)" }}
                 placeholder={`Search ${state.marketTab}s…`}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
             </div>
-            <button type="submit" className="an-term-mono text-[10px] font-bold uppercase tracking-widest active:opacity-80" style={{ padding: "0 18px", height: "40px", border: "1px solid #34343a", background: "#141416", color: "#e8e8e8" }}>
+            <button type="submit" className="an-term-mono text-[10px] font-bold uppercase tracking-widest active:opacity-80" style={{ padding: "0 18px", height: "40px", border: "1px solid var(--an-term-line-3)", background: "var(--an-bg-1)", color: "var(--an-term-fg)" }}>
               Search
             </button>
           </form>
@@ -480,13 +480,13 @@ function SkillsLocked({ onUnlock }: { onUnlock: () => void }) {
       <div className="absolute inset-0 flex items-center justify-center p-5">
         <div
           className="an-bracket unlock-denied-in w-full max-w-[290px] p-4 pb-5"
-          style={{ border: "1px solid #1d3a26", "--ts": "12px", "--bk": "var(--an-bg-0)", "--tk": "#2f6b46" } as CSSProperties}
+          style={{ border: "1px solid var(--an-term-green-line-2)", "--ts": "12px", "--bk": "var(--an-bg-0)", "--tk": "var(--an-term-green-line)" } as CSSProperties}
         >
           {/* terminal auth-check meta line */}
           <div className="an-term-mono flex items-center justify-between pb-3 text-[9px] uppercase tracking-[0.14em]" style={{ color: "var(--an-fg-mute)" }}>
             <span>&gt;AUTH_CHECK</span><span>アクセス拒否</span>
           </div>
-          <span className="mx-auto mb-3 grid h-14 w-14 place-items-center" style={{ border: "1px solid #1d3a26", background: "var(--an-green-dim)", color: "var(--an-green)" }}>
+          <span className="mx-auto mb-3 grid h-14 w-14 place-items-center" style={{ border: "1px solid var(--an-term-green-line-2)", background: "var(--an-green-dim)", color: "var(--an-green)" }}>
             <LockIcon className="h-7 w-7" />
           </span>
           {/* green scanline banner — the "Access Denied" bar (matches the Skills title bar) */}

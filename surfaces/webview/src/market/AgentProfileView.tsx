@@ -246,12 +246,12 @@ function WorkCard({
         <div className="an-tfolder-screen" style={{ background: `radial-gradient(120% 100% at 50% 22%, ${tier.from} 0%, ${tier.to} 70%)` }}>
           <div className="an-tfolder-bin" aria-hidden="true">{FOLDER_BINARY}</div>
           <div className="an-tfolder-label">&gt;VERIFIED_REPO</div>
-          <div className="an-tfolder-owner">{repo.owner}<span style={{ color: "#5a5a5d" }}>/</span></div>
+          <div className="an-tfolder-owner">{repo.owner}<span style={{ color: "var(--an-term-fg-7)" }}>/</span></div>
           <div className="an-tfolder-name">
             <span style={{ color: "var(--c)" }}>&gt;</span>
             <span className="an-tfolder-name-t">{repo.name}</span>
             <button onClick={openRepo} aria-label="Open repository" className="shrink-0 active:opacity-70">
-              <GithubMark style={{ width: 30, height: 26, color: "#cfcfcf" }} />
+              <GithubMark style={{ width: 30, height: 26, color: "var(--an-term-fg-2)" }} />
             </button>
           </div>
           <div className="an-tfolder-foot">
@@ -323,7 +323,7 @@ function NoteComposer({
       )}
       <textarea autoFocus={autoFocus} className="an-term-field resize-none leading-relaxed" rows={5} placeholder={placeholder} value={text} disabled={busy} onChange={(e) => setText(e.target.value)} />
       <input className="an-term-field" placeholder="Image link / on-chain address / tx id (optional)" value={image} disabled={busy} onChange={(e) => setImage(e.target.value)} />
-      {!imageOk && <p className="text-xs" style={{ color: "var(--an-red, #f87171)" }}>Image must be an https link, on-chain address, or tx id.</p>}
+      {!imageOk && <p className="text-xs" style={{ color: "var(--an-red)" }}>Image must be an https link, on-chain address, or tx id.</p>}
       {img && imageOk && mediaUrl(img) && <img src={mediaUrl(img)} alt="" referrerPolicy="no-referrer" className="h-20 w-20 rounded-lg object-cover" style={{ border: "1px solid var(--an-line)" }} />}
       <input className="an-term-field" placeholder="GitHub link (optional)" value={link} disabled={busy} onChange={(e) => setLink(e.target.value)} />
       <button onClick={submit} disabled={!hasContent || !imageOk || busy} className="an-btn an-btn-green">
@@ -344,9 +344,9 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
         className="relative flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-2xl border sm:max-w-md sm:rounded-2xl"
         style={{ background: "var(--an-bg-1)", borderColor: "var(--an-line)" }}
       >
-        <div className="flex shrink-0 items-center justify-between border-b px-4 py-3.5" style={{ borderColor: "#1d1d20" }}>
+        <div className="flex shrink-0 items-center justify-between border-b px-4 py-3.5" style={{ borderColor: "var(--an-term-line)" }}>
           <h2 className="an-term-title text-[14px]" style={{ letterSpacing: "1px" }}>{title}</h2>
-          <button onClick={onClose} aria-label="Close" className="-mr-1 p-1.5 active:opacity-70" style={{ color: "#9a9a9a" }}>
+          <button onClick={onClose} aria-label="Close" className="-mr-1 p-1.5 active:opacity-70" style={{ color: "var(--an-term-fg-3)" }}>
             <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
               <path d="M18 6 6 18M6 6l12 12" />
             </svg>
@@ -432,7 +432,7 @@ function ChangeProfileImage() {
         style={{ background: "var(--an-bg-2)", border: "1px solid var(--an-line)", color: "var(--an-fg)" }}
       />
       {v && !valid && (
-        <p className="text-[11px]" style={{ color: "var(--an-red, #f87171)" }}>Only an https link, on-chain address, or tx id is allowed.</p>
+        <p className="text-[11px]" style={{ color: "var(--an-red)" }}>Only an https link, on-chain address, or tx id is allowed.</p>
       )}
       {mediaUrl(v) && (
         <img src={mediaUrl(v)} alt="" referrerPolicy="no-referrer" className="h-20 w-20 rounded-xl object-cover" style={{ border: "1px solid var(--an-line)" }} />
@@ -604,13 +604,13 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
           card below is just the identity. */}
       <header
         className="flex items-center gap-2.5 border-b px-3.5 shrink-0"
-        style={{ borderColor: "#1d1d20", paddingTop: "max(0.5rem, env(safe-area-inset-top))", paddingBottom: "0.7rem" }}
+        style={{ borderColor: "var(--an-term-line)", paddingTop: "max(0.5rem, env(safe-area-inset-top))", paddingBottom: "0.7rem" }}
       >
         <button
           onClick={onBack}
           aria-label="Back"
           className="an-bracket flex shrink-0 items-center justify-center"
-          style={{ width: "38px", height: "38px", border: "1px solid #1f1f23", color: "#cfcfcf", "--ts": "8px", "--bk": "#0d0d0e", "--tk": "#6e6e72" } as CSSProperties}
+          style={{ width: "38px", height: "38px", border: "1px solid var(--an-term-line)", color: "var(--an-term-fg-2)", "--ts": "8px", "--bk": "var(--an-term-bg)", "--tk": "var(--an-term-fg-6)" } as CSSProperties}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 6l-6 6 6 6" /></svg>
         </button>
@@ -619,10 +619,10 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
           <div className="an-term-sub leading-none"><span style={{ fontFamily: "'Noto Sans JP', sans-serif" }}>代理</span> / <span style={{ fontFamily: "'Noto Sans JP', sans-serif" }}>エージェント</span></div>
         </div>
         {profile.self && (
-          <span className="an-term-mono shrink-0 text-[8px] font-bold uppercase tracking-wider" style={{ color: "#f2f2f2", border: "1px solid #3a3a3d", padding: "3px 7px" }}>YOU</span>
+          <span className="an-term-mono shrink-0 text-[8px] font-bold uppercase tracking-wider" style={{ color: "var(--an-term-fg)", border: "1px solid var(--an-term-line-3)", padding: "3px 7px" }}>YOU</span>
         )}
         {profile.self && (
-          <button onClick={() => setSettingsOpen(true)} aria-label="Settings" className="shrink-0 active:opacity-70" style={{ color: "#8a8a8a" }}><GearIcon className="h-5 w-5" /></button>
+          <button onClick={() => setSettingsOpen(true)} aria-label="Settings" className="shrink-0 active:opacity-70" style={{ color: "var(--an-term-fg-4)" }}><GearIcon className="h-5 w-5" /></button>
         )}
       </header>
       <div
@@ -666,7 +666,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
               {/* tier ladder — our real STAR_TIERS rungs, current tier lit + in-band progress */}
               <div className="an-id-ladder">
                 <span className="lab">TIER</span>
-                <button onClick={() => setHelpOpen(true)} aria-label="Tier — what is this?" className="flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-full text-[9px] font-bold active:opacity-70" style={{ border: "1px solid #2e2e31", color: "var(--an-fg-mute)" }}>?</button>
+                <button onClick={() => setHelpOpen(true)} aria-label="Tier — what is this?" className="flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-full text-[9px] font-bold active:opacity-70" style={{ border: "1px solid var(--an-term-line-2)", color: "var(--an-fg-mute)" }}>?</button>
                 <div className="an-id-rungs">
                   {STAR_TIERS.map((t) => {
                     const isCur = t.name === curTierName;
@@ -709,10 +709,10 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                 key={t}
                 onClick={() => setTab(t)}
                 className="flex-1 text-center active:opacity-80"
-                style={{ paddingTop: "10px", paddingBottom: "13px", borderBottom: active ? "2px solid #f2f2f2" : "1px solid #1d1d20" }}
+                style={{ paddingTop: "10px", paddingBottom: "13px", borderBottom: active ? "2px solid var(--an-term-fg)" : "1px solid var(--an-term-line)" }}
               >
-                <div className="an-term-mono text-[13px] font-bold uppercase" style={{ letterSpacing: "1.5px", color: active ? "#f2f2f2" : "#5a5a5d" }}>{t}</div>
-                <div style={{ fontFamily: "'Noto Sans JP', sans-serif", fontWeight: 500, fontSize: "8px", marginTop: "4px", color: active ? "#5a5a5d" : "#34343a" }}>{kana}</div>
+                <div className="an-term-mono text-[13px] font-bold uppercase" style={{ letterSpacing: "1.5px", color: active ? "var(--an-term-fg)" : "var(--an-term-fg-7)" }}>{t}</div>
+                <div style={{ fontFamily: "'Noto Sans JP', sans-serif", fontWeight: 500, fontSize: "8px", marginTop: "4px", color: active ? "var(--an-term-fg-7)" : "var(--an-term-line-3)" }}>{kana}</div>
               </button>
             );
           })}
@@ -935,18 +935,18 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                 <button
                   onClick={() => { setFabOpen(false); setComposeMode("repo"); }}
                   className="an-bracket flex items-center gap-2.5 active:opacity-80"
-                  style={{ "--tk": "#4ade80", "--bk": "#0c0c0d", "--ts": "8px", padding: "15px 16px" } as CSSProperties}
+                  style={{ "--tk": "var(--an-term-green)", "--bk": "var(--an-term-bg)", "--ts": "8px", padding: "15px 16px" } as CSSProperties}
                 >
-                  <span style={{ color: "#4ade80" }}><RepoIcon className="h-[17px] w-[17px]" /></span>
-                  <span className="an-term-mono text-[12px] font-bold uppercase" style={{ letterSpacing: "1px", color: "#f2f2f2" }}>Register GitHub work</span>
+                  <span style={{ color: "var(--an-term-green)" }}><RepoIcon className="h-[17px] w-[17px]" /></span>
+                  <span className="an-term-mono text-[12px] font-bold uppercase" style={{ letterSpacing: "1px", color: "var(--an-term-fg)" }}>Register GitHub work</span>
                 </button>
                 <button
                   onClick={() => { setFabOpen(false); setComposeMode("blog"); }}
                   className="an-bracket flex items-center gap-2.5 active:opacity-80"
-                  style={{ "--tk": "#4ade80", "--bk": "#0c0c0d", "--ts": "8px", padding: "15px 16px" } as CSSProperties}
+                  style={{ "--tk": "var(--an-term-green)", "--bk": "var(--an-term-bg)", "--ts": "8px", padding: "15px 16px" } as CSSProperties}
                 >
-                  <span style={{ color: "#4ade80" }}><PenIcon className="h-[17px] w-[17px]" /></span>
-                  <span className="an-term-mono text-[12px] font-bold uppercase" style={{ letterSpacing: "1px", color: "#f2f2f2" }}>Write blog</span>
+                  <span style={{ color: "var(--an-term-green)" }}><PenIcon className="h-[17px] w-[17px]" /></span>
+                  <span className="an-term-mono text-[12px] font-bold uppercase" style={{ letterSpacing: "1px", color: "var(--an-term-fg)" }}>Write blog</span>
                 </button>
               </>
             )}
@@ -960,10 +960,10 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
               style={{
                 width: 56,
                 height: 56,
-                "--tk": "#4ade80",
+                "--tk": "var(--an-term-green)",
                 "--ts": "13px",
-                "--bk": fabOpen ? "#0c160f" : "#0c0c0d",
-                color: "#4ade80",
+                "--bk": fabOpen ? "var(--an-term-green-bg)" : "var(--an-term-bg)",
+                color: "var(--an-term-green)",
                 boxShadow: fabOpen ? "0 0 18px rgba(74,222,128,0.18)" : "0 0 14px rgba(0,0,0,0.5)",
               } as CSSProperties}
             >

@@ -87,6 +87,38 @@
   --an-tier-gold: #ffd700;
   --an-tier-legendary: #c084fc;
 
+  /* Terminal palette — the face the phone actually wears on market, profile,
+     sessions and composer. It arrived with the July terminal mockups and lived
+     as raw hex in the tsx until it was named here; these values are the shipped
+     look, so naming them changed nothing on screen. Near-identical neighbours
+     (deltas under ~4/255) were snapped onto one step each while collapsing.
+     Reach for --an-* above first; --an-term-* is for terminal-styled chrome. */
+  --an-term-bg: #0c0c0d;          /* plaque / chip ground */
+  --an-term-bg-deep: #060608;     /* sessions drawer, deepest surface */
+  --an-term-line: #1d1d20;        /* hairline divider */
+  --an-term-line-2: #2a2a2e;      /* input and inactive chip border */
+  --an-term-line-3: #3a3a3d;      /* raised border, unchecked box */
+  --an-term-fg: #f2f2f2;          /* terminal white, brighter than --an-fg */
+  --an-term-fg-2: #cfcfcf;        /* secondary label, glyph */
+  --an-term-fg-3: #9a9a9a;        /* active meta */
+  --an-term-fg-4: #8a8a8a;        /* icon rest */
+  --an-term-fg-5: #7a7a7a;        /* helper copy */
+  --an-term-fg-6: #6a6a6a;        /* eyebrow, inactive control */
+  --an-term-fg-7: #5a5a5d;        /* dim meta, empty state */
+  --an-term-fg-8: #4a4a4d;        /* faintest, chevrons */
+  --an-term-green: #4ade80;       /* terminal accent (brighter than --an-green) */
+  --an-term-green-line: #2f6b46;
+  --an-term-green-line-2: #1d3a26;
+  --an-term-green-bg: #0d160f;
+  --an-term-claude: #f0913e;      /* engine accent inside terminal chrome */
+  --an-term-claude-2: #c9772f;
+  --an-term-claude-line: #6b4a22;
+  --an-term-claude-bg: #1a0f06;
+  --an-green-hover: #00d068;      /* legacy neon, kept as the hover step only */
+  --an-warn: #e5c07b;             /* was referenced as a var() fallback before it existed */
+  --an-run-fg: #d9fff6;           /* running session title */
+  --an-run-accent: #5fe6cf;       /* running session ticker */
+
   --an-radius: 16px;
   --an-radius-sm: 12px;   /* snapped to M3 shape grid (was 11) */
   --an-radius-pill: 999px;

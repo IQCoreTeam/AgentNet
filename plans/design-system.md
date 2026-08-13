@@ -2,7 +2,12 @@
 
 > 정체: 실제 UI가 따라야 할 하드 룰 + 추상 컨셉 + **과학적 디자인 기본기(타입/간격/사이징/레이아웃/모션/상호작용)**를 토큰 값까지 잠근 문서.
 > 색/무드 같은 껍데기가 아니라 "요소 크기와 배치, 시각적 상호작용"의 과학이 핵심.
-> 코드 기준: 색 토큰은 `surfaces/webview/src/index.css`의 `--an-*`. 수치는 모바일 리서치(출처 §11)로 검증. 날짜: 2026-06-23.
+> 코드 기준: 색 토큰은 `surfaces/webview/src/index.css`의 `--an-*`. 수치는 모바일 리서치(출처 §11)로 검증. 날짜: 2026-06-23 (§6 터미널 팔레트 2026-08-13 추가).
+>
+> **화면 인덱스:** 이 문서는 *룰*만 잠근다. 화면별 최신 디자인이 어디 있는지는 표면별 인덱스를 본다.
+> - 모바일(webview): Claude Design 프로젝트 "AgentNet Mobile Screens" (`0e8df943-a26b-4e28-9bdc-d1e91c3788a0`), `00 All Screens`가 화면 -> 코드 파일 -> 디자인 출처 매핑을 들고 있다. 이전에는 모바일 디자인이 9개 프로젝트에 흩어져 인덱스가 없었다.
+> - CLI: "AgentNet CLI Screens" (`0d659b47-e785-4aa1-8474-467ab78505a1`) + `plans/cli-design-parity.md`.
+> 둘 다 `claude_design` MCP로 읽는다.
 
 ---
 
@@ -98,7 +103,10 @@
 **Line:** `--an-line` rgba(255,255,255,.085) / `--an-line-soft` .05.
 **Accent/Semantic:** `--an-green` #3ac07a(브랜드, refined not neon; +soft/line/dim) / `--an-amber` #e0a23a(경고) / `--an-red` #e5484d(위험, 신규 토큰화) / `--an-violet` #a98bff(발행).
 
-**정리 부채:** `#00E673`(네온) 23곳, `#00d068` 등 생 hex -> 위 토큰으로 치환.
+**터미널 팔레트 (`--an-term-*`, 2026-08-13 토큰화):** 7월 터미널 목업에서 들어와 마켓/프로필/세션/컴포저가 실제로 입고 있는 얼굴. 위 브랜드 팔레트와 **별개로 공존**한다(터미널 그린 `#4ade80`는 브랜드 `--an-green` #3ac07a보다 밝다). 이전에는 tsx에 생 hex로만 존재해서 이 문서에도, 토큰 표에도 없었다. 지금은 `index.css`에 25개 토큰으로 명명됨: 표면 `--an-term-bg`/`-deep`, 라인 `--an-term-line`/`-2`/`-3`, 텍스트 램프 `--an-term-fg` ~ `-fg-8`, 그린 `--an-term-green`/`-line`/`-line-2`/`-bg`, 엔진 오렌지 `--an-term-claude*`, 그리고 `--an-green-hover`/`--an-warn`/`--an-run-fg`/`--an-run-accent`.
+- **선택 규칙:** 새 UI는 `--an-*` 브랜드 토큰 우선. `--an-term-*`는 터미널 스타일 크롬(플라크, 모노 라벨, 브래킷 코너)에만.
+- **정리 부채(해소):** tsx 생 hex 166개 -> 28개. 남은 28개는 의도된 데이터 테이블 두 곳뿐이다(`AgentProfileView`의 희귀도 램프 20, `PublishForm`의 발행 카드 그라디언트 8). 토큰화하며 인지 불가 수준(<=9/255)의 이웃값만 한 단계로 스냅했고 화면 룩은 유지했다.
+- **남은 중복:** `--an-tier-*`(index.css)와 `AgentProfileView`의 `STAR_TIERS` 램프가 같은 "희귀도 등급" 개념을 **서로 다른 값으로** 두 번 정의한다. 값이 달라 병합이 곧 시각 변경이므로 별도 결정 필요.
 **3티어 권장(§10):** primitive(#0a0b0d) -> semantic(`--an-bg-0`) -> component(`--btn-primary-bg`). AI는 의미 토큰을 더 정확히 다룸.
 
 ---

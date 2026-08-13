@@ -28,15 +28,15 @@ function SdSkel() {
 // directory shimmers in the right SHAPE and nothing jumps when the real cards land.
 function AcSkel() {
   return (
-    <div className="w-full rounded-md p-2" style={{ aspectRatio: "350 / 196", background: "#0a0a0c", border: "1px solid #34343a" }}>
-      <div className="flex h-full flex-col rounded-sm p-2" style={{ border: "1px solid #2c2c32" }}>
+    <div className="w-full rounded-md p-2" style={{ aspectRatio: "350 / 196", background: "var(--an-term-bg)", border: "1px solid var(--an-term-line-3)" }}>
+      <div className="flex h-full flex-col rounded-sm p-2" style={{ border: "1px solid var(--an-term-line-2)" }}>
         {/* top: handle + signal */}
         <div className="flex items-center justify-between">
           <Bar className="h-2 w-2/5 rounded" />
           <Bar className="h-2 w-9 rounded" />
         </div>
         {/* name row: big name + tier tag */}
-        <div className="mt-2 flex items-end justify-between border-b pb-2" style={{ borderColor: "#2c2c32" }}>
+        <div className="mt-2 flex items-end justify-between border-b pb-2" style={{ borderColor: "var(--an-term-line-2)" }}>
           <Bar className="h-6 w-2/5 rounded" />
           <Bar className="h-3 w-12 rounded-sm" />
         </div>
@@ -52,7 +52,7 @@ function AcSkel() {
           </div>
         </div>
         {/* footer */}
-        <div className="mt-1.5 border-t pt-1.5" style={{ borderColor: "#2c2c32" }}>
+        <div className="mt-1.5 border-t pt-1.5" style={{ borderColor: "var(--an-term-line-2)" }}>
           <Bar className="mx-auto h-2 w-1/3 rounded" />
         </div>
       </div>
@@ -131,12 +131,12 @@ export function AgentProfileSkeleton({ onBack }: { onBack?: () => void } = {}) {
   return (
     <div className="flex h-full flex-col bg-zinc-950">
       {/* top bar: back + title + actions (mirrors the real Agent Profile chrome header) */}
-      <header className="flex shrink-0 items-center gap-2.5 border-b px-3.5" style={{ borderColor: "#1d1d20", paddingTop: "max(0.5rem, env(safe-area-inset-top))", paddingBottom: "0.7rem" }}>
+      <header className="flex shrink-0 items-center gap-2.5 border-b px-3.5" style={{ borderColor: "var(--an-term-line)", paddingTop: "max(0.5rem, env(safe-area-inset-top))", paddingBottom: "0.7rem" }}>
         {onBack ? (
           <button
             onClick={onBack}
             className="flex h-[38px] w-[38px] items-center justify-center active:opacity-70"
-            style={{ color: "var(--an-fg-dim)", border: "1px solid #1f1f23" }}
+            style={{ color: "var(--an-fg-dim)", border: "1px solid var(--an-term-line)" }}
             aria-label="Back"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 6l-6 6 6 6" /></svg>
@@ -153,7 +153,7 @@ export function AgentProfileSkeleton({ onBack }: { onBack?: () => void } = {}) {
       <div className="flex-1 overflow-hidden">
         {/* ID card: bordered box with name, portrait + 3 big stats, tier ladder, stars gauge */}
         <div className="px-3 pt-3 pb-1">
-          <div className="border p-3" style={{ borderColor: "var(--an-line)", background: "#0a0a0c" }}>
+          <div className="border p-3" style={{ borderColor: "var(--an-line)", background: "var(--an-term-bg)" }}>
             <div className="border p-3.5" style={{ borderColor: "var(--an-line)" }}>
               <div className="flex items-start justify-between py-1.5">
                 <Bar className="h-9 w-32 rounded-sm" />

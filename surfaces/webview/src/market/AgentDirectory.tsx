@@ -201,11 +201,11 @@ export function AgentDirectory() {
           )}
         </div>
         {/* wallet search — filters the ranked list below */}
-        <div className="mb-2.5 flex items-center gap-2.5 px-3" style={{ height: "38px", background: "#0b0b0c", border: "1px solid #2a2a2e" }}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7a7a7a" strokeWidth="1.8" className="shrink-0"><circle cx="10.5" cy="10.5" r="6.5" /><path d="M20 20l-4.5-4.5" /></svg>
+        <div className="mb-2.5 flex items-center gap-2.5 px-3" style={{ height: "38px", background: "var(--an-term-bg)", border: "1px solid var(--an-term-line-2)" }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--an-term-fg-5)" strokeWidth="1.8" className="shrink-0"><circle cx="10.5" cy="10.5" r="6.5" /><path d="M20 20l-4.5-4.5" /></svg>
         <input
           className="an-term-mono min-w-0 flex-1 bg-transparent text-[11px] uppercase tracking-wide placeholder:uppercase placeholder:tracking-wide focus:outline-none"
-          style={{ color: "#e8e8e8" }}
+          style={{ color: "var(--an-term-fg)" }}
           placeholder="Search agent wallet…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -214,7 +214,7 @@ export function AgentDirectory() {
           spellCheck={false}
         />
         {query && (
-          <button onClick={() => setQuery("")} aria-label="Clear search" className="shrink-0 active:opacity-70" style={{ color: "#7a7a7a" }}>
+          <button onClick={() => setQuery("")} aria-label="Clear search" className="shrink-0 active:opacity-70" style={{ color: "var(--an-term-fg-5)" }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>
         )}
@@ -224,7 +224,7 @@ export function AgentDirectory() {
       {loading ? (
         <AgentListSkeleton rows={4} />
       ) : others.length === 0 ? (
-        <div className="an-term-mono py-10 text-center text-[11px] uppercase tracking-wider" style={{ color: "#5a5a5d" }}>
+        <div className="an-term-mono py-10 text-center text-[11px] uppercase tracking-wider" style={{ color: "var(--an-term-fg-7)" }}>
           {query.trim() ? "No agent matches that wallet" : "No other agents yet"}
         </div>
       ) : (

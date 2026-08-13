@@ -49,21 +49,21 @@ function MenuRow({ icon, label, subtitle, onClick, accent = false, locked = fals
     <button
       onClick={onClick}
       className="flex w-full items-center gap-3.5 px-1 py-4 text-left transition active:opacity-80"
-      style={{ borderBottom: "1px solid #1a1a1d" }}
+      style={{ borderBottom: "1px solid var(--an-term-line)" }}
     >
       <span
         className="flex h-[40px] w-[40px] shrink-0 items-center justify-center"
-        style={{ color: accent ? "var(--an-green)" : "#cfcfcf", border: "1px solid #232327" }}
+        style={{ color: accent ? "var(--an-green)" : "var(--an-term-fg-2)", border: "1px solid var(--an-term-line-2)" }}
       >
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="an-term-mono block text-[17px] font-bold uppercase leading-tight" style={{ color: "#f2f2f2", letterSpacing: "0.5px" }}>{label}</span>
-        {subtitle && <span className="an-term-mono block truncate text-[10px] uppercase leading-tight" style={{ color: "#6a6a6a", letterSpacing: "0.5px", marginTop: "4px" }}>{subtitle}</span>}
+        <span className="an-term-mono block text-[17px] font-bold uppercase leading-tight" style={{ color: "var(--an-term-fg)", letterSpacing: "0.5px" }}>{label}</span>
+        {subtitle && <span className="an-term-mono block truncate text-[10px] uppercase leading-tight" style={{ color: "var(--an-term-fg-6)", letterSpacing: "0.5px", marginTop: "4px" }}>{subtitle}</span>}
       </span>
       {locked
         ? <LockIcon className="h-4 w-4 shrink-0" style={{ color: "var(--an-green)" }} />
-        : <span className="an-term-mono text-[16px] font-bold" style={{ color: "#4a4a4d" }}>›</span>}
+        : <span className="an-term-mono text-[16px] font-bold" style={{ color: "var(--an-term-fg-8)" }}>›</span>}
     </button>
   );
 }
@@ -103,11 +103,11 @@ function StorageOption({ active, title, subtitle, onClick }: { active: boolean; 
       onClick={onClick}
       className="flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left transition active:scale-[0.98]"
       style={{
-        borderColor: active ? "var(--an-green-line)" : "#18181b",
+        borderColor: active ? "var(--an-green-line)" : "var(--an-term-line)",
         background: active ? "var(--an-green-dim)" : "rgba(24,24,27,0.2)",
       }}
     >
-      <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border" style={{ borderColor: active ? "var(--an-green)" : "#3f3f46" }}>
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border" style={{ borderColor: active ? "var(--an-green)" : "var(--an-term-line-3)" }}>
         {active && <span className="h-2 w-2 rounded-full" style={{ background: "var(--an-green)" }} />}
       </span>
       <span className="min-w-0 flex-1">
@@ -221,7 +221,7 @@ export function Sessions({
   const panel = (
       <div
         className={embedded ? "relative flex h-full w-full flex-col p-3" : "relative flex w-[82vw] max-w-xs flex-col p-3"}
-        style={{ background: "#060608", borderRight: "1px solid #1a1a1d", paddingTop: "max(0.75rem, env(safe-area-inset-top))", paddingBottom: settingsRoot ? "calc(var(--tabbar-height, 0px) + max(0.75rem, env(safe-area-inset-bottom)))" : "max(0.75rem, env(safe-area-inset-bottom))" }}
+        style={{ background: "var(--an-term-bg-deep)", borderRight: "1px solid var(--an-term-line)", paddingTop: "max(0.75rem, env(safe-area-inset-top))", paddingBottom: settingsRoot ? "calc(var(--tabbar-height, 0px) + max(0.75rem, env(safe-area-inset-bottom)))" : "max(0.75rem, env(safe-area-inset-bottom))" }}
         onClick={(e) => e.stopPropagation()}
       >
         {settingsMode === "list" ? (
@@ -243,7 +243,7 @@ export function Sessions({
               </button>
             </div>
 
-            <div style={{ borderTop: "1px solid #1a1a1d" }}>
+            <div style={{ borderTop: "1px solid var(--an-term-line)" }}>
               {onOpenAgent && (
                 <MenuRow
                   label="My Agent"
@@ -262,10 +262,10 @@ export function Sessions({
 
             <div className="mt-5 flex min-h-0 flex-1 flex-col">
               <div className="mb-1 flex items-center justify-between px-1">
-                <span className="an-term-mono text-[9px] font-bold uppercase" style={{ color: "#6a6a6a", letterSpacing: "2px" }}>
+                <span className="an-term-mono text-[9px] font-bold uppercase" style={{ color: "var(--an-term-fg-6)", letterSpacing: "2px" }}>
                   Recents
                 </span>
-                <span className="an-term-mono text-[9px] font-bold" style={{ color: "#4a4a4d" }}>
+                <span className="an-term-mono text-[9px] font-bold" style={{ color: "var(--an-term-fg-8)" }}>
                   {state.sessionsSynced ? `[ ${String(state.sessions.length).padStart(2, "0")} ]` : ""}
                 </span>
               </div>
@@ -287,7 +287,7 @@ export function Sessions({
                     className="mb-2 flex items-center gap-2 rounded-xl px-3 py-2"
                     style={{ background: "var(--an-bg-2)", border: "1px solid var(--an-line)" }}
                   >
-                    <WifiOffIcon className="h-4 w-4 shrink-0" style={{ color: "var(--an-warn, #e5c07b)" }} />
+                    <WifiOffIcon className="h-4 w-4 shrink-0" style={{ color: "var(--an-warn)" }} />
                     <span className="text-[0.78rem]" style={{ color: "var(--an-fg-dim)" }}>
                       {state.sessionsCloud === "reauth"
                         ? "Cloud sync signed out · showing this device only · reconnect in Storage"
@@ -328,13 +328,13 @@ export function Sessions({
                         onClose();
                       }}
                       className={`flex w-full items-center px-2.5 py-3.5 text-left active:opacity-80 ${active ? "an-bracket" : ""}`}
-                      style={active ? ({ "--tk": "#7a7a7d", "--bk": "transparent", "--ts": "8px" } as CSSProperties) : undefined}
+                      style={active ? ({ "--tk": "var(--an-term-fg-5)", "--bk": "transparent", "--ts": "8px" } as CSSProperties) : undefined}
                     >
-                      <span className="an-term-mono min-w-0 flex-1 truncate text-[15px] font-bold" style={{ color: running ? "#d9fff6" : active ? "#f2f2f2" : "#d8d8d8" }}>
+                      <span className="an-term-mono min-w-0 flex-1 truncate text-[15px] font-bold" style={{ color: running ? "var(--an-run-fg)" : active ? "var(--an-term-fg)" : "var(--an-term-fg-2)" }}>
                         {s.title || "(untitled)"}
                       </span>
                       {running && (
-                        <span className="an-term-mono an-run ml-2 flex-none text-[11px] font-bold" style={{ color: "#5fe6cf", letterSpacing: "0.5px" }}>
+                        <span className="an-term-mono an-run ml-2 flex-none text-[11px] font-bold" style={{ color: "var(--an-run-accent)", letterSpacing: "0.5px" }}>
                           RUN
                         </span>
                       )}
@@ -676,7 +676,7 @@ export function Sessions({
                     });
                     setSettingsMode(rootMode);
                   }}
-                  className="w-full rounded-lg bg-an-green hover:bg-[#00d068] text-xs font-semibold py-2.5 text-black mt-2 active:scale-95 transition disabled:opacity-40"
+                  className="w-full rounded-lg bg-an-green hover:bg-[var(--an-green-hover)] text-xs font-semibold py-2.5 text-black mt-2 active:scale-95 transition disabled:opacity-40"
                 >
                   Connect Storage
                 </button>
@@ -704,7 +704,7 @@ export function Sessions({
                         setShowManualCode(false);
                         send({ type: "startGoogleLogin" });
                       }}
-                      className="w-full rounded-lg bg-an-green hover:bg-[#00d068] text-xs font-semibold py-2.5 text-black mt-1 active:scale-95 transition disabled:opacity-40"
+                      className="w-full rounded-lg bg-an-green hover:bg-[var(--an-green-hover)] text-xs font-semibold py-2.5 text-black mt-1 active:scale-95 transition disabled:opacity-40"
                     >
                       {busy ? "Starting Login…" : "Sign in to Google Drive"}
                     </button>
@@ -771,7 +771,7 @@ export function Sessions({
                             send({ type: "googleAuthCode", code: code.trim() });
                             setCode("");
                           }}
-                          className="w-full rounded-lg bg-an-green hover:bg-[#00d068] text-xs font-semibold py-2.5 text-black mt-1 active:scale-95 transition disabled:opacity-40"
+                          className="w-full rounded-lg bg-an-green hover:bg-[var(--an-green-hover)] text-xs font-semibold py-2.5 text-black mt-1 active:scale-95 transition disabled:opacity-40"
                         >
                           Confirm
                         </button>
