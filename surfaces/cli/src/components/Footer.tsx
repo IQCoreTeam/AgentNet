@@ -17,11 +17,13 @@ export function Footer({
 }) {
   const modelLabel = (model ?? "default").toUpperCase();
   const cols = process.stdout.columns || 80;
+  // The design's footer names the panels that open (SESSIONS, MODEL) rather than raw
+  // slash commands — /sessions and /model open exactly these, so the labels stay honest.
   const shortcuts =
     cols >= 90
-      ? ["? /HELP", "ESC CANCEL", "/NEW SESSION", "/ACCOUNT"]
+      ? ["? /HELP", "ESC CANCEL", "SESSIONS", "MODEL"]
       : cols >= 64
-        ? ["? /HELP", "ESC CANCEL"]
+        ? ["? /HELP", "SESSIONS", "MODEL"]
         : ["? /HELP"];
 
   return (
