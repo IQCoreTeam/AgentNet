@@ -116,27 +116,48 @@ screenshots. Every in-scope tab read against its CLI owner.
 - GitHub `submitGithubToken`/`getGithubStatus`/`registerWorkRepo`: message
   types exist but `marketplaceEnv` exposes none -> needs CORE additions. [24,26]
 
-## Phase 2 - batch order (feature branch `cli-design-parity`)
+## Phase 2 - execution order (finalized 2026-08-13)
 
-Batches are ordered high-value-first and low-risk-first, so the CLI is
-usable earlier and the scary subsystems come last. Commit per batch.
+Ordered by CODE COHESION + dependency (not perceived impact, per sumin): same
+file/module together, shared/base code before its consumers. Each item ships
+with a QA checklist (what to smoke-test + what could regress) for sumin to
+verify before the next. Contained items go direct to main; the big clusters
+(panels, market, nav/hint) go on a branch -> merge.
 
-1. **Foundation**: add the missing structural colors + copy strings to
-   `theme.ts` (single source). No visual change yet; unblocks every batch.
-2. **Bottom chrome + rising panels** (28, 30): the highest-value fix for
-   "UI feels chaotic". Convert full-frame Sessions/Model/Fork overlays into
-   one in-frame panel slot above the composer; make footer items legible.
-3. **Core chat surfaces** (04 chat turn, 05 approval, 09 long chat): the
-   screens hit every turn. Labels, tool card, diff, pinned-turn states.
-4. **Entry surfaces** (01 boot, 02 onboarding, 03 welcome): first-run + home.
-5. **Sessions + model** (06, 07, 31 fork panel): vertical session rows,
-   model detail pane, fork picker (background option deferred to nav).
-6. **Market** (08, 24, 25): tile silhouette, detail/publish bands + plaque.
-7. **Agent system** (Phase 3): 20 directory grid, 21/22 profile+comments
-   compose, 26 connections+funding. Includes the core/API glue above.
-8. **Approval variants** (27): Kind A question, Kind B plan, 10-min auto-deny.
-9. **Big-ticket, scope-gated** (23 multi-session nav, 29 hint mode): each a
-   new subsystem. Do LAST, only if in scope - see decision below.
+### Already applied (on main as of e2757ab, CLI 0.1.2)
+- 03 Welcome (stacked //TAG_ bands), 06 Model Picker (split frame),
+  07 Sessions (vertical rows + age column), 04/09 transcript (calm //YOU_
+  bands, tool nodes, code boxes, one-colour diff), foundation `theme.ts`
+  tokens. Also non-design fixes this session: resize-OOM guard, session sort
+  by last activity, background history backfill, mouse-reporting off, approval
+  escalation popup.
+
+### Remaining, in execution order
+
+1. **Approval** (`ApprovalCard.tsx`, `InkApprovalChannel.ts`) - one cohesive
+   file, 27 extends 05:
+   - 05 card redesign: green `//REQUEST_` band, 5-col key grid, uppercase.
+   - 27 variants: Kind A (question) + Kind B (plan) renderers; 10-min auto-deny.
+2. **Startup** (`app.tsx` boot, `BootChecklist.tsx`, `Banner.tsx`; then
+   `Onboarding.tsx`, `Iggy.tsx`) - shared startup + status-band/mascot:
+   - 01 Boot: `//WALLET_//CLAUDE_//CODEX_//STORAGE_` bands, IQ logo, copy.
+   - 02 Onboarding: 5-rung ladder, step counter, meter, wallet-linked band.
+3. **Bottom chrome + panels** (`Footer.tsx`, `StatusLine.tsx`, then `Chat.tsx`
+   overlay model) - the frame-architecture cluster, do carefully, QA hard:
+   - 28 chrome: footer items `SESSIONS/MODEL`, persistent `ready` label.
+   - 30 rising-panel architecture: full-frame Sessions/Model/Fork overlays ->
+     one in-frame panel slot above the composer.
+   - 31 Fork panel: plugs into 30's slot (background-fork option waits on 23).
+4. **Market / agent** (core glue first, then `SkillMarket.tsx`, `market/*`):
+   - core glue: `MarketApi.postAgentNote(parentId)`, `buySkill` `code`,
+     `airdrop()` (additive; 22/26 depend on it).
+   - 08 tiles -> 24 skill detail -> 25 publish forge -> 20 agent directory ->
+     21 agent profile -> 22 comments compose (21/22 same file) -> 26 funding.
+5. **Big subsystems, scope-gated** (new modules; confirm scope first):
+   - 23 global nav + multi-session tabs, 29 hint mode. 31's background-fork
+     unblocks once 23 lands.
+
+Deferred by decision: 10-14 NEXT tabs.
 
 ## Phase 2 - apply, tab by tab
 
