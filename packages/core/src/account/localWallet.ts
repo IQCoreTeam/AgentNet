@@ -72,10 +72,16 @@ export async function loadOrCreateWallet(
     );
   }
 
-  // missing, or invalid+overwrite → generate and write
+  // missing, or invalid+overwrite → generate and write. The file is a plaintext ed25519
+  // secret key, so it is written owner-only (0600) inside an owner-only directory (0700) —
+  // what solana-keygen does, and what the rest of our own secrets already get (rpc.ts
+  // writes the Helius token with mode 0o600, paths.ts creates dirs with 0o700). Without
+  // the modes these defaulted to 0644: every local account could read a wallet the app
+  // invites the user to fund. Only keys we create are set here — an existing file's
+  // permissions are left to whoever created it.
   const kp = Keypair.generate();
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, JSON.stringify(Array.from(kp.secretKey)));
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  await writeFile(path, JSON.stringify(Array.from(kp.secretKey)), { mode: 0o600 });
   return { wallet: keypairWallet(kp), address: kp.publicKey.toBase58(), created: true, path };
 }
 
