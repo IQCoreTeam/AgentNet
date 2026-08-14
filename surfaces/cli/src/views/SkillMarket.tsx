@@ -7,7 +7,7 @@ import { colors, glyph } from "../theme.js";
 import type { OwnedSkill } from "../components/WelcomePanel.js";
 import { ChipCarousel } from "../components/ChipCarousel.js";
 import { Band } from "../components/Band.js";
-import { tierInfo } from "./market/tiers.js";
+import { tierInfo, tierGauge } from "./market/tiers.js";
 import { AgentProfileView, type ProfileSub } from "./market/AgentProfileView.js";
 import { SkillDetailView, type DetailSub } from "./market/SkillDetailView.js";
 import { HeliusPanel, HeliusBadge, type RpcStatusLite } from "./market/HeliusPanel.js";
@@ -730,15 +730,20 @@ export function SkillMarket({
   if (stage === "agents") {
     const short = (w: string) => `${w.slice(0, 6)}…${w.slice(-4)}`;
     const filtered = agents.filter((a) => !agentQuery.trim() || a.wallet.toLowerCase().includes(agentQuery.toLowerCase()));
-    // window to terminal height so every agent stays reachable (was hard-capped at 12)
-    const vis = Math.max(3, Math.min(filtered.length, agentRows - 8));
+    // window to terminal height so every agent stays reachable. Each agent row is now two
+    // lines (handle+tier, then stats) plus a gauge line on the selected one, so budget ~2
+    // display lines per agent under the title/search/bands chrome.
+    const vis = Math.max(2, Math.min(filtered.length, Math.floor((agentRows - 11) / 2)));
     const aStart = Math.max(0, Math.min(agentIdx - Math.floor(vis / 2), Math.max(0, filtered.length - vis)));
     return (
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
-        <Text bold color={colors.iqMagenta}>❖ agent directory</Text>
+        <Box justifyContent="space-between">
+          <Text bold color={colors.bone}>AGENTS</Text>
+          <Text dimColor>ranked by copies</Text>
+        </Box>
         <Box marginTop={1}>
           <Text color={agentTyping ? colors.iqCyan : colors.dim}>{agentTyping ? "▸ " : "  "}</Text>
-          <Text dimColor>search wallet </Text>
+          <Text dimColor>filter by wallet </Text>
           <Text>{agentQuery}</Text>
           {agentTyping ? <Text inverse> </Text> : null}
         </Box>
@@ -756,12 +761,23 @@ export function SkillMarket({
                 const i = aStart + wi;
                 const on = !agentTyping && i === agentIdx;
                 const { cur } = tierInfo(a.stars ?? 0);
+                const you = a.wallet === walletAddr;
+                const earned = a.totalEarned ? sol(Number(a.totalEarned)) : null;
                 return (
-                  <Box key={a.wallet}>
-                    <Text color={on ? colors.iqCyan : undefined}>{on ? "› " : "  "}</Text>
-                    <Box width={14}><Text dimColor>{short(a.wallet)}</Text></Box>
-                    <Text dimColor>  ×{a.totalSupply} supply · {a.skillsPublished} skills</Text>
-                    {cur ? <Text color={colors.warn}> [{cur.name}]</Text> : null}
+                  <Box key={a.wallet} flexDirection="column">
+                    <Box justifyContent="space-between">
+                      <Text color={on ? colors.iqCyan : colors.bone} bold={on || you}>
+                        {on ? "› " : "  "}{short(a.wallet)}{you ? " // YOU" : ""}
+                      </Text>
+                      <Text color={cur ? colors.warn : colors.dim}>
+                        {cur ? cur.name.toUpperCase() : "UNRANKED"}
+                      </Text>
+                    </Box>
+                    <Text dimColor>
+                      {"    CREATED "}{a.skillsPublished}{" · COPIES "}{a.totalSupply}
+                      {" · ★"}{a.stars ?? 0}{earned ? ` · EARNED ${earned}` : ""}
+                    </Text>
+                    {on ? <Text color={colors.warn}>{"    "}{tierGauge(a.stars ?? 0)}</Text> : null}
                   </Box>
                 );
               })}
@@ -770,7 +786,11 @@ export function SkillMarket({
           )}
         </Box>
         <Box marginTop={1}>
-          <Text dimColor>{agentTyping ? "type to filter · ↵/↓ browse · esc close" : "↑/↓ move · ↵ profile · [/] search · esc back"}</Text>
+          <Band label="rank" note="ONLY VERIFIED GITHUB STARS MOVE THE TIER. COPIES CANNOT BUY IT." inverted />
+        </Box>
+        <Box justifyContent="space-between">
+          <Text dimColor wrap="truncate-end">{agentTyping ? "type to filter · ↵/↓ browse · esc close" : "↑/↓ move · ↵ profile · [/] search · esc back"}</Text>
+          <Text dimColor>BRONZE 3 · SILVER 15 · GOLD 60 · <Text color={colors.ok}>LEGENDARY 250</Text></Text>
         </Box>
       </Box>
     );
