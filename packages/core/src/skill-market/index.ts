@@ -360,9 +360,15 @@ export async function handleToolCall(
       const targetDir = typeof args?.targetDir === "string" && args.targetDir.trim()
         ? args.targetDir.trim().replace(/^~(?=$|\/)/, homedir())
         : undefined;
+      // reEquip, not installBoughtAll: this is the documented re-equip path, and the
+      // files are only half of it — un-equip also records the mint as disposed, which
+      // injectOwned honours at every session start. Installing without clearing that
+      // flag put the skill back now and silently removed it again next session.
+      // reEquip clears it, restores a held copy when there is one, and otherwise falls
+      // through to installBoughtAll — so a never-disposed skill behaves exactly as before.
       const slug = targetDir
         ? await sync.installBoughtToDir(targetDir, skillId)
-        : await sync.installBoughtAll(skillId);
+        : await sync.reEquip(skillId, owner);
       if (!slug) {
         return { isError: true, content: [{ type: "text", text: `Skill ${skillId} has no readable mint metadata yet — nothing was installed. Try again shortly.` }] };
       }
