@@ -186,7 +186,7 @@ export const SKILL_TOOLS: { name: string; description: string; schema: z.ZodRawS
       "Purchase and equip a skill from the marketplace. Requires a prior verify_skill pass for the same skillId this session, AND the user's explicit confirmation of the spend.",
     schema: {
       skillId: z.string().describe("The base58 mint address of the skill to buy."),
-      creatorWallet: z.string().optional().describe("The wallet address of the skill creator (to receive payment). If unknown, leave undefined."),
+      creatorWallet: z.string().optional().describe("The skill creator's wallet address (receives payment). Optional: omit it and the creator is resolved from the marketplace catalog. Pass it only if you already have it from a search_skills result."),
     },
   },
   {
@@ -263,6 +263,22 @@ export function getAgentNetTools() {
 // wrapped at each call site so a closed transport never fails the tool.
 export type MarketEmit = (e: import("../chat/marketMessages.js").MarketEvent) => void;
 
+/**
+ * The wallet that published `skillId`, read from the same catalog `search_skills` serves
+ * (indexer when there's no DAS key, DAS otherwise). buy_item needs it for the program's
+ * has_one on config.creator, and it is NOT in the mint metadata — the catalog is where a
+ * caller would have gotten it anyway. Returns null when the skill isn't in the catalog,
+ * so the caller can refuse instead of sending a transaction that cannot succeed.
+ */
+async function skillCreator(conn: Connection, skillId: string): Promise<string | null> {
+  let source;
+  if (!(await loadHeliusKey())) {
+    try { source = indexerSource(getIndexerUrl()); } catch { source = undefined; }
+  }
+  const skills = await searchSkills(conn, { source }).catch(() => [] as Awaited<ReturnType<typeof searchSkills>>);
+  return skills.find((s) => s.id === skillId)?.creator ?? null;
+}
+
 export async function handleToolCall(
   conn: Connection,
   signer: SignerInput,
@@ -322,7 +338,22 @@ export async function handleToolCall(
     // Price is read from the item's on-chain config (set at publish) — the client doesn't
     // pass it, so it can't be forged. buyAndEquip is the SAME buy+install path the human UI
     // uses, so the agent's purchase is actually equipped (SKILL.md written), not just owned.
-    const creatorWallet = (args?.creatorWallet as string) || defaultCreatorWallet;
+    //
+    // The creator must be the SKILL's creator: buy_item carries it into the program's
+    // has_one on config.creator. Defaulting to the connected wallet put the BUYER there,
+    // so every buy that omitted creatorWallet — which the tool's own description invited —
+    // failed on-chain with ConstraintHasOne. Resolve it from the same catalog search_skills
+    // reads, and refuse rather than send a transaction that cannot succeed.
+    let creatorWallet = (args?.creatorWallet as string) || "";
+    if (!creatorWallet) {
+      creatorWallet = (await skillCreator(conn, skillId)) ?? "";
+      if (!creatorWallet) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Could not resolve the creator of ${skillId} from the marketplace catalog, and the creator is required on-chain. Run search_skills to find the skill (its result includes the creator), then pass creatorWallet explicitly.` }],
+        };
+      }
+    }
     try {
       const { txSig, slug } = await new SkillSync(conn).buyAndEquip(signer, skillId, creatorWallet);
       // Mirror the UI buy: fire buyResult so the webview shows the celebration + toast even

@@ -41,6 +41,9 @@ describe("skill-market", () => {
     signer = Keypair.generate();
     vi.clearAllMocks();
     resetBlogPostRateLimitForTests();
+    // buy_skill resolves the creator from the catalog when it isn't passed (#125), so the
+    // buy tests need a catalog entry; individual tests override this where they care.
+    vi.mocked(searchSkills).mockResolvedValue([{ id: "skill1", creator: "skillCreator111" }] as any);
   });
 
   it("exposes the marketplace tool set (incl. unequip_skill and post_blog)", () => {
@@ -136,6 +139,8 @@ describe("skill-market", () => {
     // workflows + equip. Resolve it (null = plain skill, nothing to install) so the equip
     // path is a clean no-op instead of crashing on a non-promise mock.
     vi.mocked(readSkillMintMetadata).mockResolvedValue(null as any);
+    // creatorWallet omitted -> resolved from the catalog (see beforeEach). It used to fall
+    // back to the connected wallet, which the program rejects with ConstraintHasOne (#125).
     const result = await handleToolCall(mockConn, signer, "defaultCreator", "buy_skill", { skillId: "skill1" });
     expect(result.content[0].text).toContain("Purchased skill");
     expect(result.content[0].text).toContain("mockTxSig");
@@ -145,8 +150,18 @@ describe("skill-market", () => {
     expect(buySkill).toHaveBeenCalledWith(mockConn, signer, {
       skillId: "skill1",
       buyerWallet: "mockSignerAddress",
-      creatorWallet: "defaultCreator",
+      creatorWallet: "skillCreator111",
     });
+  });
+
+  it("buy_skill refuses when the creator cannot be resolved, instead of sending a doomed tx (#125)", async () => {
+    vi.mocked(readSkillMintMetadata).mockResolvedValue(null as any);
+    vi.mocked(searchSkills).mockResolvedValue([] as any); // skill not in the catalog
+    const result = await handleToolCall(mockConn, signer, "defaultCreator", "buy_skill", { skillId: "ghost1" });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Could not resolve the creator");
+    // the buyer's own address must never be substituted into the creator slot
+    expect(buySkill).not.toHaveBeenCalled();
   });
 
   it("should handle buy_skill errors", async () => {
