@@ -3762,6 +3762,8 @@ export function chatHtml(): string {
   // frontmatter (type: workflow + requiredSkills) so the current backend mints it as a
   // workflow, and also send kind/requiredSkills for the newer contract path (forward-compat).
   let pubKind = 'skill';
+  // Armed by a short-body publish attempt so a second click confirms the permanent mint (see pubSubmit).
+  let pubBodyConfirmed = false;
   const pubFormEl = document.getElementById('pubForm');
   const pubTextWrap = document.getElementById('pubTextWrap');
   const pubReqWrap = document.getElementById('pubReqWrap');
@@ -3795,6 +3797,7 @@ export function chatHtml(): string {
   }
   function setPubKind(k) {
     pubKind = (k === 'workflow') ? 'workflow' : 'skill';
+    pubBodyConfirmed = false; // fresh view/kind: re-require confirm for an empty body
     const wf = pubKind === 'workflow';
     for (const b of document.querySelectorAll('.pubKind button')) b.classList.toggle('on', b.getAttribute('data-k') === pubKind);
     pubFormEl.classList.toggle('wf', wf);
@@ -3822,6 +3825,7 @@ export function chatHtml(): string {
   pubImage.addEventListener('input', () => {
     pubImageBadge.style.display = looksOnChain(pubImage.value) ? 'inline-block' : 'none';
   });
+  document.getElementById('pubText').addEventListener('input', () => { pubBodyConfirmed = false; }); // re-arm the empty-body guard when the body changes
   pubSubmit.addEventListener('click', () => {
     const name = document.getElementById('pubName').value.trim();
     const description = document.getElementById('pubDesc').value.trim();
@@ -3849,6 +3853,14 @@ export function chatHtml(): string {
     } else {
       text = document.getElementById('pubText').value.trim();
       if (!text) return fail('Skill text is required.');
+      // A near-empty body mints permanently and can't be deleted. Gauge the real body by
+      // dropping any leading --- frontmatter block + whitespace, then require an explicit
+      // second click (not a hard block) if it still looks empty or very short.
+      const body = text.replace(/^---[\\s\\S]*?\\n---\\s*/, '').trim();
+      if (body.length < 20 && !pubBodyConfirmed) {
+        pubBodyConfirmed = true;
+        return fail('This publishes PERMANENTLY and cannot be deleted; the body looks empty or very short \\u2014 click Publish again to submit anyway.');
+      }
     }
     if (!priceSol) return fail('Enter a price in SOL (use 0 for free).');
     if (!/^\\d+(\\.\\d+)?$/.test(priceSol)) return fail('Price must be a number in SOL (e.g. 0.1).');
@@ -5597,6 +5609,20 @@ export function chatHtml(): string {
     else if (m.type === 'buyAllResult') {
       const confirm = document.getElementById('profileBody') && document.getElementById('profileBody').querySelector('.pr-confirm');
       if (confirm) confirm.remove();
+      // Same feedback contract as a single buyResult: a COMPLETE plaque when anything
+      // landed, the orange (i) banner when nothing did — without this the whole batch
+      // (several signed mainnet txs) finishes with no visible acknowledgement at all.
+      if (m.bought > 0) {
+        showComplete(m.bought === 1 ? 'SKILL PURCHASED' : m.bought + ' SKILLS PURCHASED');
+        vscode.postMessage({ type: 'getBalance' }); // funds dropped after the batch — refresh
+        // A partial batch must not swallow its failures: those buys were attempted
+        // with real SOL on the line — surface them alongside the success plaque.
+        if (m.failed > 0) showBuyError(m.failed + ' of ' + (m.bought + m.failed) + ' purchase(s) failed');
+      } else if (!m.ok || m.failed > 0) {
+        // Only a REAL failure gets the error banner. A successful no-op (ok:true, bought:0 —
+        // e.g. you already own all of this agent's skills) is not a failure; don't alarm.
+        showBuyError(m.error || (m.failed > 0 ? m.failed + ' purchase(s) failed' : 'Purchase failed'));
+      }
       if (m.ok && currentProfileWallet) {
         // refresh profile + owned list so badges update
         vscode.postMessage({ type: 'getAgentProfile', wallet: currentProfileWallet });
