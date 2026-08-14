@@ -141,14 +141,26 @@ export function activate(context: vscode.ExtensionContext) {
 // Storage model: LOCAL is always on; a CLOUD is an optional mirror you can add now
 // or later. So onboarding is shown only on the very first run (a one-time flag),
 // NOT based on whether a cloud is configured — local-only is a valid finished state.
+// boot() must never reject: it is started unawaited from activate(), from the open/new-chat
+// commands, and from the sidebar's not-yet-booted fallback paths, so a rejection here is an
+// unhandled promise and the extension simply does nothing (no panel, no error). The configured branch has two real failure modes: an
+// unreadable/invalid keypair (localWallet throws) and a saved cloud choice that no longer
+// builds (connect -> buildStorage throws, e.g. a custom endpoint with no URL). Catch both
+// HERE, once, so no call site has to. The flag is deliberately left set: a transient
+// failure must not cost a working install its straight-to-chat launch, and onboarding
+// re-arms the flag itself. Onboarding owns the retry / keep-local choice from here.
 async function boot(context: vscode.ExtensionContext) {
-  const seen = context.globalState.get<boolean>("onboarded");
-  if (seen) {
-    wallet = (await localWallet()).wallet;
-    runtime = await connect(wallet, cloudStatusCb); // local always works; mirrors cloud if connected
-    openChat(context);
-  } else {
-    openOnboarding(context);
+  try {
+    if (context.globalState.get<boolean>("onboarded")) {
+      wallet = (await localWallet()).wallet;
+      runtime = await connect(wallet, cloudStatusCb); // local always works; mirrors cloud if connected
+      openChat(context);
+    } else {
+      openOnboarding(context);
+    }
+  } catch (e) {
+    vscode.window.showErrorMessage(`Couldn't start AgentNet: ${errorMessage(e)}`);
+    openOnboarding(context); // always a way forward, never a silent no-op
   }
   void refreshSidebar(); // reflect wallet/session state (or the onboard CTA) in the sidebar
 }
@@ -299,38 +311,52 @@ function openOnboarding(context: vscode.ExtensionContext) {
   );
   panel.webview.html = onboardingHtml();
 
-  // Finish onboarding → mark seen, build runtime (local always; cloud if `cfg`), go to chat.
-  // Cloud connect can fail (missing Google client id, cancelled OAuth, network). We must NOT
-  // silently demote the user's cloud choice to local-only — cloud-vs-local is a choice they
-  // made in the UI, not ours to override on error. So on failure surface it and let THEM pick:
-  // retry, or explicitly keep local. Dismissing leaves them in onboarding (panel stays; never
-  // freeze, never auto-decide). Only a clean cloud connect — or no cloud chosen — proceeds.
-  // (A throwing initialize(), not the RPC key, was the original "stuck on the Helius screen":
-  // storage + rpc submit as one message, so it froze the last screen; that freeze is gone.)
-  // The RPC key is saved fire-and-forget so a slow/failing write can't gate entry, and lands
-  // before connect() so the market's first RPC read sees it.
+  // Finish onboarding → build runtime (local always; cloud if `cfg`), mark seen, go to chat.
+  // Setup can fail (missing Google client id, cancelled OAuth, network, a custom endpoint
+  // with no URL). We must NOT silently demote the user's cloud choice to local-only —
+  // cloud-vs-local is a choice they made in the UI, not ours to override on error. So on
+  // failure surface it and let THEM pick: retry, or explicitly keep local. Dismissing leaves
+  // them in onboarding (panel stays; never freeze, never auto-decide).
+  // initialize() and connect() are ONE attempt under ONE try: initialize only validates and
+  // persists the choice, connect is what actually builds the backend, so a config that
+  // initialize accepts (any `custom` location, including "") can still throw one line later.
+  // connect() outside the try was the permanent strand: the seen flag was already written,
+  // so the panel hung AND every later launch re-took boot()'s configured branch and died the
+  // same way, with ~/.agentnet/config.json the only way out. The flag is now written only
+  // once a runtime exists, which is the only thing it was ever meant to claim.
+  // The RPC key is saved fire-and-forget so a slow/failing write can't gate entry, and it is
+  // issued BEFORE the awaited connect() so that connect's own round-trips are the window the
+  // write lands in (b22dd96's ordering). Saving it before setup succeeds is independent of the
+  // storage choice, and the "maybe later" path already saves it unconditionally.
   async function finish(cfg?: StorageConfig, heliusKey?: string) {
-    if (cfg) {
-      try {
-        await initialize(cfg, openExternal); // connect a cloud mirror (interactive for gdrive)
-      } catch (e) {
-        const RETRY = "Retry cloud connect";
-        const LOCAL = "Keep on this device only";
-        const pick = await vscode.window.showErrorMessage(
-          `Cloud connect failed: ${errorMessage(e)}`, { modal: true }, RETRY, LOCAL,
-        );
-        if (pick === RETRY) return finish(cfg, heliusKey); // re-attempt the same choice
-        if (pick !== LOCAL) return; // dismissed → stay in onboarding, do NOT auto-local
-        // else: user explicitly chose local-only → fall through and finish local
-      }
-    }
-    await context.globalState.update("onboarded", true);
     const key = heliusKey?.trim();
     if (key) void saveHeliusKey(key).catch((e) =>
       vscode.window.showWarningMessage(
         `Couldn't save the Marketplace RPC key: ${errorMessage(e)}. Add it later from the wallet menu → RPC.`,
       ));
-    runtime = await connect(wallet!, cloudStatusCb);
+    try {
+      if (cfg) await initialize(cfg, openExternal); // record the choice (interactive for gdrive)
+      runtime = await connect(wallet!, cloudStatusCb); // builds the cloud adapter: can throw
+    } catch (e) {
+      const RETRY = "Retry";
+      const LOCAL = "Keep on this device only";
+      const pick = await vscode.window.showErrorMessage(
+        `Couldn't finish setup: ${errorMessage(e)}`, { modal: true }, RETRY, LOCAL,
+      );
+      if (pick === RETRY) return finish(cfg, heliusKey); // re-attempt the same choice
+      if (pick !== LOCAL) return; // dismissed → stay in onboarding, do NOT auto-local
+      // Explicit local-only. The failing cloud choice may already be on disk (initialize
+      // persisted it, or it was there before), and connect() reads it back regardless of
+      // `cfg` — so drop it, then finish through the exact path the "maybe later" button
+      // takes. This is also what un-bricks an install already stranded by the old flow.
+      // Guarded: this runs inside the webview message handler, whose promise nobody awaits,
+      // so a throw here would strand the panel again — the very bug this change removes.
+      await disconnectCloud().catch((err) =>
+        vscode.window.showWarningMessage(`Couldn't clear the saved cloud choice: ${errorMessage(err)}`),
+      );
+      return finish(undefined, heliusKey);
+    }
+    await context.globalState.update("onboarded", true);
     panel.dispose();
     openChat(context);
   }
