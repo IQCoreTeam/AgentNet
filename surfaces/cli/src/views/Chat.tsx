@@ -1016,7 +1016,7 @@ export function Chat({
       case "context": {
         const win = chat.contextWindow ?? (chat.cli === "codex" ? 256_000 : 200_000);
         if (chat.contextTokens === undefined) {
-          setNotice(`Context: 0 / ${win.toLocaleString()} tokens — send a message to measure usage.`);
+          setNotice(`Context: 0 / ${win.toLocaleString()} tokens. Send a message to measure usage.`);
           return;
         }
         const used = chat.contextTokens;

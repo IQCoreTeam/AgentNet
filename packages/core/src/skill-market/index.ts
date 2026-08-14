@@ -364,7 +364,7 @@ export async function handleToolCall(
         ? await sync.installBoughtToDir(targetDir, skillId)
         : await sync.installBoughtAll(skillId);
       if (!slug) {
-        return { isError: true, content: [{ type: "text", text: `Skill ${skillId} has no readable mint metadata yet — nothing was installed. Try again shortly.` }] };
+        return { isError: true, content: [{ type: "text", text: `Skill ${skillId} has no readable mint metadata yet. Nothing was installed. Try again shortly.` }] };
       }
       const where = targetDir ?? "all detected runtimes' skills dirs";
       return { content: [{ type: "text", text: `Installed owned skill "${slug}" (${skillId}) into ${where}. Restart-based hosts (Hermes) discover it next session; live-watch hosts (OpenClaw) see it immediately.` }] };
@@ -381,7 +381,7 @@ export async function handleToolCall(
     try {
       const slug = await new SkillSync(conn).dispose(skillId, await signerAddress(signer));
       const what = slug ? `"${slug}" (${skillId})` : skillId;
-      return { content: [{ type: "text", text: `Un-equipped skill ${what} locally — it won't re-install next session. You still own the NFT on-chain (soulbound, no refund), and if you published it, it stays listed on the marketplace. Re-equip it anytime if you change your mind.` }] };
+      return { content: [{ type: "text", text: `Un-equipped skill ${what} locally. It won't re-install next session. You still own the NFT on-chain (soulbound, no refund), and if you published it, it stays listed on the marketplace. Re-equip it anytime if you change your mind.` }] };
     } catch (err: any) {
       return { isError: true, content: [{ type: "text", text: `Failed to un-equip skill: ${err.message}` }] };
     }
@@ -466,7 +466,7 @@ export async function handleToolCall(
     const priceSol = (args?.priceSol as string | undefined) ?? "0.1";
     const lamports = solToLamports(priceSol);
     if (lamports === null) {
-      return { isError: true, content: [{ type: "text", text: `Invalid priceSol "${priceSol}" — use a SOL amount like "0.1" or "0".` }] };
+      return { isError: true, content: [{ type: "text", text: `Invalid priceSol "${priceSol}" . Use a SOL amount like "0.1" or "0".` }] };
     }
     try {
       const mint = await publishSkill(conn, signer, {
@@ -479,7 +479,7 @@ export async function handleToolCall(
         image: args?.image as string | undefined,
       }, (p) => emit({ type: "publishProgress", phase: p.phase, signed: p.signed, percent: p.percent, kind: p.kind }));
       emit({ type: "publishResult", ok: true, mint });
-      return { content: [{ type: "text", text: `Published skill "${skillName}" — mint: ${mint}` }] };
+      return { content: [{ type: "text", text: `Published skill "${skillName}", mint: ${mint}` }] };
     } catch (err: any) {
       emit({ type: "publishResult", ok: false, error: err.message });
       return { isError: true, content: [{ type: "text", text: `Failed to publish skill: ${err.message}` }] };

@@ -113,7 +113,7 @@ async function serveWebview(path: string, res: ServerResponse): Promise<void> {
       return;
     }
     res.writeHead(500).end(
-      "webview build not found — run `pnpm --filter agentnet-webview build` " +
+      "webview build not found. Run `pnpm --filter agentnet-webview build` " +
         "or set AGENTNET_WEBVIEW_DIR",
     );
   }

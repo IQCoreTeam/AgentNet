@@ -12,7 +12,7 @@ const SCANLINES = "repeating-linear-gradient(0deg, rgba(0,0,0,0.22) 0, rgba(0,0,
 export function SkillReceiptOverlay({ card, onClick }: { card: SkillCard; onClick?: () => void }) {
   const sigil = useMemo(() => skillSigilSvg(card.name, card.category), [card.name, card.category]);
   const paid = card.price && card.price !== "0" ? `${(Number(card.price) / 1e9).toFixed(2)} ◎` : "FREE";
-  const mint = card.id ? `${card.id.slice(0, 4)}…${card.id.slice(-4)}` : "—";
+  const mint = card.id ? `${card.id.slice(0, 4)}…${card.id.slice(-4)}` : "-";
   const kindLabel = card.type === "workflow" ? "Workflow" : "Skill";
 
   return (

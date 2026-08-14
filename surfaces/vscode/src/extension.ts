@@ -328,7 +328,7 @@ function openOnboarding(context: vscode.ExtensionContext) {
     const key = heliusKey?.trim();
     if (key) void saveHeliusKey(key).catch((e) =>
       vscode.window.showWarningMessage(
-        `Couldn't save the Marketplace RPC key: ${errorMessage(e)} — add it later from the wallet menu → RPC.`,
+        `Couldn't save the Marketplace RPC key: ${errorMessage(e)}. Add it later from the wallet menu → RPC.`,
       ));
     runtime = await connect(wallet!, cloudStatusCb);
     panel.dispose();

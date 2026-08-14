@@ -427,7 +427,7 @@ export function useChat(
             { role: "tool", text: cmd, ts: Date.now(), tool: { name: "Bash", command: cmd, output, exitCode: code } },
           ]);
         };
-        timer = setTimeout(() => { p.kill("SIGKILL"); finish(124, "[timed out after 30s — killed]"); }, TIMEOUT_MS);
+        timer = setTimeout(() => { p.kill("SIGKILL"); finish(124, "[timed out after 30s, killed]"); }, TIMEOUT_MS);
         timer.unref?.();
         p.stdout?.on("data", (d) => append(d.toString()));
         p.stderr?.on("data", (d) => append(d.toString()));

@@ -100,7 +100,7 @@ export async function handleVaultToolCall(deps: VaultDeps, name: string, args: a
     if (!text.trim()) throw new Error("Missing required argument: text");
     try {
       const doc = await new SoulStore(deps.wallet, deps.storage).save(text);
-      return { content: [{ type: "text", text: `Soul updated (${text.length} chars) — this device ("${doc.lastWriter.label}") is now the last writer. Every machine and runtime that opens this wallet sees the new persona.` }] };
+      return { content: [{ type: "text", text: `Soul updated (${text.length} chars). This device ("${doc.lastWriter.label}") is now the last writer. Every machine and runtime that opens this wallet sees the new persona.` }] };
     } catch (err: any) {
       return { isError: true, content: [{ type: "text", text: `Failed to save soul: ${err.message}` }] };
     }

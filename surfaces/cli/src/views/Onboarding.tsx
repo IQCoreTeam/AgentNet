@@ -238,7 +238,7 @@ export function Onboarding({
 
       <Box>
         <Iggy mood="idle" />
-        <Text dimColor>{" "}pick the brain you want to talk to — you can swap it any time.</Text>
+        <Text dimColor>{" "}pick the brain you want to talk to. You can swap it any time.</Text>
       </Box>
 
       <Box flexDirection="column">
@@ -376,10 +376,10 @@ export function Onboarding({
       {step === "rpc" && (
         <Box flexDirection="column">
           <Text color={colors.iqCyan}>connect a Helius RPC? (optional)</Text>
-          <Text dimColor>the default RPC can't read NFTs, agent lists, or skill search — a free key can.</Text>
+          <Text dimColor>the default RPC can't read NFTs, agent lists, or skill search. A free key can.</Text>
           <Text dimColor>get a free key at <Text color={colors.iqCyan}>{HELIUS_QUICKSTART_URL}</Text></Text>
           <TextInput
-            placeholder="paste key or rpc url — or [enter] to skip for now"
+            placeholder="paste key or rpc url, or [enter] to skip for now"
             onSubmit={finishRpc}
           />
           {rpcErr && <Text color={colors.err}>{rpcErr}</Text>}

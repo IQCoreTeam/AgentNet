@@ -1923,7 +1923,7 @@ export function chatHtml(): string {
         <div id="pubTextWrap">
         <label class="pubLabel">Skill text<span class="req">*</span></label>
         <textarea id="pubText" rows="10" placeholder="# Skill name&#10;&#10;The SKILL.md body only — what the agent reads when this skill fires.&#10;No --- frontmatter: name & description come from the fields above."></textarea>
-        <div class="pubHint">Body only — don't add a <code>---</code> name/description block; it's built from the fields above.</div>
+        <div class="pubHint">Body only. Don't add a <code>---</code> name/description block; it's built from the fields above.</div>
         </div>
         <div id="pubReqWrap" style="display:none">
         <label class="pubLabel">Required skills<span class="req">*</span></label>
@@ -3574,7 +3574,7 @@ export function chatHtml(): string {
           input.value = ''; return;
         case 'help': {
           const helpText = slashCommandsForCli()
-            .map(function(c) { return '/' + c.name + (c.args ? ' ' + c.args : '') + ' — ' + c.desc; })
+            .map(function(c) { return '/' + c.name + (c.args ? ' ' + c.args : '') + ' - ' + c.desc; })
             .join('\\n');
           const pre = document.createElement('pre');
           pre.style.cssText = 'margin:8px 0;padding:8px 12px;background:var(--an-bg-1);border-radius:6px;font-size:0.82em;opacity:0.8';
@@ -4520,7 +4520,7 @@ export function chatHtml(): string {
       });
     } else {
       const e = document.createElement('div'); e.className = 'pr-empty';
-      e.textContent = self ? 'No comments yet.' : 'No comments yet — be the first.';
+      e.textContent = self ? 'No comments yet.' : 'No comments yet. Be the first.';
       paneCommunity.appendChild(e);
     }
 
@@ -5055,7 +5055,7 @@ export function chatHtml(): string {
     const buy = document.createElement('button'); buy.className = 'dt-buy';
     if (isDisposed(c.id)) {
       buy.textContent = 'Re-equip';
-      buy.title = "You own this — re-equip it (re-buying would mint another copy)";
+      buy.title = "You own this. Re-equip it (re-buying would mint another copy)";
       buy.addEventListener('click', () => {
         buy.disabled = true; buy.textContent = 'Re-equipping…';
         vscode.postMessage({ type: 'reEquipSkill', skillId: c.id });

@@ -121,7 +121,7 @@ export function checkFormat(skillMd: string): FormatResult {
   if (!name.trim()) {
     add(result, "name", "error", '"name" is required and must be a non-empty string');
   } else if (name.length < 1 || name.length > 64) {
-    add(result, "name", "error", `"name" must be 1–64 characters (got ${name.length})`);
+    add(result, "name", "error", `"name" must be 1-64 characters (got ${name.length})`);
   } else if (!KEBAB_RE.test(name)) {
     add(result, "name", "error", '"name" must be kebab-case (lowercase letters, digits, dots, hyphens)');
   }

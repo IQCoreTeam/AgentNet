@@ -149,7 +149,7 @@ const macPrompter: Prompter = {
   async askChoice({ question, header, options, multi, allowCustom }, signal) {
     const simple = options.length > 0 && options.length <= 3 && !multi;
     if (simple && !allowCustom) {
-      const body = question + "\n\n" + options.map((o) => "• " + o.label + (o.description ? " — " + o.description : "")).join("\n");
+      const body = question + "\n\n" + options.map((o) => "• " + o.label + (o.description ? " - " + o.description : "")).join("\n");
       const buttons = options.map((o) => `"${macEsc(o.label)}"`).join(", ");
       const r = await osa(
         `display dialog "${macEsc(body)}" with title "${macEsc(header || "AgentNet")}" buttons {${buttons}} default button "${macEsc(options[options.length - 1].label)}"`,

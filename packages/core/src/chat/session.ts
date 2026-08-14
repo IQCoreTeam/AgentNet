@@ -639,7 +639,7 @@ export function createChatSession(
           const s = slot();
           const window = s.lastWindow ?? (cli === "codex" ? 256_000 : 200_000);
           if (s.lastUsage === undefined) {
-            transport.send({ type: "notice", text: `Context: 0 / ${fmtTok(window)} tokens — send a message to measure usage.` });
+            transport.send({ type: "notice", text: `Context: 0 / ${fmtTok(window)} tokens. Send a message to measure usage.` });
             break;
           }
           const used = s.lastUsage;

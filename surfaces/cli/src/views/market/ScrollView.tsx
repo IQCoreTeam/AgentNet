@@ -32,7 +32,7 @@ export function ScrollView({
       </Box>
       {total > height ? (
         <Text dimColor>
-          {offset > 0 ? "▲" : " "} {offset + 1}–{end}/{total} {end < total ? "▼" : " "}
+          {offset > 0 ? "▲" : " "} {offset + 1}-{end}/{total} {end < total ? "▼" : " "}
         </Text>
       ) : null}
     </Box>

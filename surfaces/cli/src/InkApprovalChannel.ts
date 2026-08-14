@@ -31,7 +31,7 @@ export class InkApprovalChannel implements ApprovalChannel {
         () =>
           this.resolve(req.id, {
             outcome: "deny",
-            reason: "Approval timed out — no response in 10 minutes.",
+            reason: "Approval timed out. No response in 10 minutes.",
           }),
         this.timeoutMs,
       );
@@ -42,7 +42,7 @@ export class InkApprovalChannel implements ApprovalChannel {
       // (or the next request) lands on nothing.
       const summary =
         `${req.cli} wants to use ${req.tool}` +
-        (req.command ? ` — ${req.command.slice(0, 80)}` : "");
+        (req.command ? ` - ${req.command.slice(0, 80)}` : "");
       callAttention(summary, (approve) =>
         this.resolve(
           req.id,

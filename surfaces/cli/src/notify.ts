@@ -109,7 +109,7 @@ export function callAttention(summary: string, onDecision?: (approve: boolean) =
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => {
     timer = null;
-    termNotify(`AgentNet needs you — ${summary}`);
+    termNotify(`AgentNet needs you: ${summary}`);
     if (process.platform === "darwin" && onDecision) showDialog(summary, onDecision);
     else osNotify("AgentNet needs you", summary);
   }, NOTIFY_AFTER_MS);

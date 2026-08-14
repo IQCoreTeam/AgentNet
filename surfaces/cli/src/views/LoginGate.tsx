@@ -157,7 +157,7 @@ export function LoginGate({
     return (
       <Box flexDirection="column" paddingX={1} marginTop={1}>
         <Text bold color={colors.iqMagenta}>log in to continue</Text>
-        <Text dimColor>no engine is signed in — pick one to log in with</Text>
+        <Text dimColor>no engine is signed in. Pick one to log in with</Text>
         <Box flexDirection="column" marginTop={1}>
           <Box>
             <Box width={10}><Text bold color={colors.claude}>claude</Text></Box>

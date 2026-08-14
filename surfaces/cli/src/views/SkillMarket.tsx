@@ -58,7 +58,7 @@ const BLOG_FIELDS: BlogField[] = ["title", "text", "image", "gitLink"];
 
 const SOL = 1_000_000_000;
 function sol(lamports: number | null): string {
-  return lamports == null ? "—" : `${(lamports / SOL).toFixed(3)} SOL`;
+  return lamports == null ? "-" : `${(lamports / SOL).toFixed(3)} SOL`;
 }
 
 function clampScroll(offset: number, total: number, height: number): number {
@@ -358,7 +358,7 @@ export function SkillMarket({
       if (names.length > MAX_REQUIRED_SKILLS) { setBusy(false); setPubResult(`failed: max ${MAX_REQUIRED_SKILLS} required skills`); return; }
       const owned = (await api.ownedSkillMints?.()) ?? {};
       const missing = names.filter((n) => !owned[n]);
-      if (missing.length) { setBusy(false); setPubResult(`failed: not owned — ${missing.join(", ")}`); return; }
+      if (missing.length) { setBusy(false); setPubResult(`failed: not owned: ${missing.join(", ")}`); return; }
       // Synthesize SKILL.md frontmatter (type: workflow + requiredSkills) — the backend
       // mints it as a workflow by sniffing this out of `text` (env.ts publishFrontmatter).
       text = [

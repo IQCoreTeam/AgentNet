@@ -57,7 +57,7 @@ function clientId(): string {
   const id = process.env.GOOGLE_CLIENT_ID || configCreds().id;
   if (!id) {
     throw new Error(
-      "Google client id missing — set GOOGLE_CLIENT_ID or add \"google_client_id\" to ~/.agentnet/config.json",
+      "Google client id missing. Set GOOGLE_CLIENT_ID or add \"google_client_id\" to ~/.agentnet/config.json",
     );
   }
   return id;
@@ -432,7 +432,7 @@ export async function getAccessToken(): Promise<string> {
   if (nativeUrl) return nativeAccessToken(nativeUrl);
 
   const tok = await loadToken();
-  if (!tok) throw new Error("not signed in to Google — run googleLogin first");
+  if (!tok) throw new Error("not signed in to Google. Run googleLogin first");
   if (Date.now() < tok.expiry - 60_000) return tok.access_token;
 
   const body = new URLSearchParams({

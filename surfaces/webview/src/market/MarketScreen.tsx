@@ -435,7 +435,7 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
               className="an-alert-enter"
               message={
                 state.rpcStatus?.hasKey
-                  ? "Market load failed — your Helius key may be rate-limited or down. Update it and retry?"
+                  ? "Market load failed. Your Helius key may be rate-limited or down. Update it and retry?"
                   : "Market load failed (rate-limited or timed out). Add your own Helius key for reliable results, then retry?"
               }
               onClose={() => setShowHeliusPrompt(false)}

@@ -282,7 +282,7 @@ export function PublishForm({ onBack, initialKind = "skill" }: Props) {
                 </div>
                 {chosenReqMints.length > 0 && (
                   <p className="mt-1.5 font-mono text-[10px] text-zinc-500">
-                    {chosenReqMints.length} selected{chosenReqMints.length > MAX_REQUIRED_SKILLS ? ` — max ${MAX_REQUIRED_SKILLS}, deselect some` : ""}
+                    {chosenReqMints.length} selected{chosenReqMints.length > MAX_REQUIRED_SKILLS ? `, max ${MAX_REQUIRED_SKILLS}, deselect some` : ""}
                   </p>
                 )}
               </>

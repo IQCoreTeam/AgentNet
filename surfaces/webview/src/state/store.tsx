@@ -381,7 +381,7 @@ function reducer(state: State, ev: Action): State {
     case "__compactStart":
       return { ...state, isCompacting: true };
     case "compacted":
-      return { ...state, isCompacting: false, contextTokens: undefined, toast: "Context compacted — conversation history summarised to free space." };
+      return { ...state, isCompacting: false, contextTokens: undefined, toast: "Context compacted. Conversation history summarised to free space." };
     case "clear":
       // repaint() sends `clear` on every session open. Approvals are NOT log state — they are
       // parked engine questions, possibly for OTHER sessions (their engines are still blocked

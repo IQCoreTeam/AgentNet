@@ -374,7 +374,7 @@ export function Composer() {
         }
         case "help": {
           const lines = slashCommandsForCli(state.cli)
-            .map((c) => `/${c.name} — ${c.desc}`).join("\n");
+            .map((c) => `/${c.name} - ${c.desc}`).join("\n");
           setSlashNotice(lines);
           setText(""); return;
         }
@@ -671,7 +671,7 @@ export function Composer() {
             frozen
               ? "Answer the approval above to continue…"
               : busy && queueCount > 0
-                ? `Queued (${queueCount}) — agent will pick up next…`
+                ? `Queued (${queueCount}). Agent will pick up next…`
                 : busy
                   ? `Message ${state.cli}… (queues while busy · Esc to stop)`
                   : state.log.length === 0
