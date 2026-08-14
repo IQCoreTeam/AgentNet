@@ -69,6 +69,18 @@ describe("core/rpc — resolveRpcUrl priority", () => {
     expect(await hasDasRpc()).toBe(false);
   });
 
+  it("hasDasRpc follows the env RPC a dead key falls back to (it must agree with resolveRpcUrl)", async () => {
+    // The regression: a PRESENT but dead key used to short-circuit the env check, so the
+    // market showed "add a Helius key" while every read was already served by a working
+    // DAS-capable env RPC (and codex lost the whole MCP server via runtime's hasDasRpc gate).
+    process.env.DAS_RPC_URL = "https://das.example/rpc";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ json: async () => ({ error: { code: -32401, message: "Unauthorized" } }) }));
+    const { hasDasRpc, saveHeliusKey, resolveRpcUrl } = await import("./rpc.js");
+    await saveHeliusKey("DEADKEYCCCC"); // distinct key = distinct URL = its own probe entry
+    expect(await resolveRpcUrl()).toBe("https://das.example/rpc"); // reads DO go to the env RPC
+    expect(await hasDasRpc()).toBe(true); // so the status must not claim there is none
+  });
+
   it("maskedHeliusKey shows only the last 4 chars (null when no key)", async () => {
     const { maskedHeliusKey, saveHeliusKey } = await import("./rpc.js");
     expect(await maskedHeliusKey()).toBeNull();
