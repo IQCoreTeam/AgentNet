@@ -144,8 +144,11 @@ export async function maskedHeliusKey(): Promise<string | null> {
 
 // ── GitHub Personal Access Token ──────────────────────────────────────────────
 // Stored same way as Helius key: secret, per-device, 0o600, never synced.
-// Used so the agent can `git push` (§0b round-trips) and for cross-device
-// GitHub-based session sync (§2 continuity).
+// Two consumers only: the agent's git credential helper, so it can clone/push
+// private repos (see spawn.ts gitCredentialEnv), and verified-work registration
+// for the profile (see verifiedWork.ts). It does NOT sync chat sessions — those
+// are the encrypted-page storage backends (local | gdrive | icloud | custom);
+// this token never touches them.
 
 const GITHUB_PROVIDER = "github";
 

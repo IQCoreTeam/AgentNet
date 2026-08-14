@@ -39,7 +39,7 @@ export function ConnectGithub({ onDone }: Props) {
   return (
     <OnboardingShell
       title="GitHub Token"
-      subtitle="Lets the agent push commits and sync sessions across devices via GitHub."
+      subtitle="Lets the agent clone and push your private repos, and registers your verified work on your profile."
     >
       {status?.hasToken ? (
         <div className="flex flex-col gap-3">
