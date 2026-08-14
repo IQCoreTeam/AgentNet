@@ -23,7 +23,14 @@ const DANGER: [string, RegExp][] = [
   ["filesystem format", /\bmkfs(\.\w+)?\s+\/dev\//i],
   ["fork bomb", /:\(\)\s*\{\s*:\|:\s*&\s*\}\s*;/],
   ["curl/wget piped straight into a shell", /\b(curl|wget)\b[^\n|]*\|\s*(sudo\s+)?(bash|sh|zsh)\b/i],
-  ["reads a wallet keypair / seed phrase", /(id\.json|keypair\.json|\.config\/solana|wallet\.json|mnemonic|seed[\s_-]?phrase|secret[\s_-]?key)/i],
+  // A wallet key path flags even as a BARE mention — a deliberate false-positive
+  // tradeoff. Coupling path+verb on one line is trivially bypassed (variable
+  // indirection `F=…; cat $F | curl`, cp/mv/rsync/xxd, path and verb on separate
+  // lines), and skills are agent-executed: an instruction that points the agent at
+  // the keypair file is dangerous even without an exfil verb. A rare legit doc that
+  // names the path gets buried (rephrase to the SDK's default-keypair loading);
+  // we accept that cost for the one non-probabilistic defense over the wallet key.
+  ["reads a wallet keypair / seed phrase", /(\bid\.json|keypair\.json|\.config\/solana|wallet\.json|mnemonic|seed[\s_-]?phrase|secret[\s_-]?key)/i],
   ["exfiltrates env / secrets to the network", /\b(curl|wget|fetch|nc|netcat)\b[^\n]*\b(env|process\.env|API_KEY|TOKEN|SECRET|PRIVATE_KEY)\b/i],
   ["deletes credentials / ssh keys", /\brm\b[^\n]*(\.ssh|\.aws|\.config\/solana|credentials)/i],
 ];
