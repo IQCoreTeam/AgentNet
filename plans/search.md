@@ -200,8 +200,9 @@ flowchart LR
 2. ✅ Result view: **reader-side verify before buy** — shipped as a hard gate:
    `verify_skill` (agent judges against `VERIFY_RUBRIC`) + `scanSkillText`, and
    `VerifyGuard` blocks `buy_skill` until verified (`packages/core/src/skill-market/`).
-3. ⬜ **Agent search** (§2b): collection holders → match creators → rank by their skills'
-   total `supply`.
+3. ✅ **Agent search** (§2b): collection holders → match creators → rank by their skills'
+   total `supply`. Shipped — `reputation/reputation.ts` (`getLeaderboard`: group skills by
+   creator, rank by `totalSupply`), surfaced as `listAgents` in `skill-market/ingest/env.ts`.
 4. ⬜ Semantic query→category mapper (embed the small category/hashtag set; map the query
    onto it). Optional full-corpus embedding only if needed later.
 

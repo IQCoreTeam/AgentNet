@@ -115,19 +115,29 @@ to X via the safe fold-in default; native-summary handling is opt-in later.
 
 ---
 
-## 5. Build order (do NOT do this yet)
+## 5. Build order
 
-This is an **open design**, deliberately deferred. The plain-turn cross-CLI resume is
-done and verified; this layer sits on top.
+This began as an **open design**, deliberately deferred — since built (see per-box
+notes; the stored summary text is still a placeholder). The plain-turn cross-CLI
+resume is done and verified; this layer sits on top.
 
-- [ ] Confirm the REAL compaction signal in each CLI's output (claude jsonl summary
-      line shape; codex compaction event) — needs empirical capture, like we did for
-      the resume jsonl formats. Don't hardcode a shape until observed.
-- [ ] Add `"summary"` to `ChatMessage.role` (contract.ts) + sessionLog handling
-      (it already stores arbitrary message records, so likely a no-op).
-- [ ] Capture: emit `summary` in `convert/{claude,codex}.ts`.
-- [ ] Inject: fold-in default in `inject/{claude,codex}.ts`; native slot where supported.
+- [x] Confirm the REAL compaction signal in each CLI's output — handled: claude
+      `compact_boundary` (`runtime/convert/claude.ts`), codex `thread/compacted`
+      (`runtime/spawn.ts`). [Partial — the event is detected, but the summary *text*
+      shape is not captured; a placeholder is stored, see the capture box.]
+- [x] Add `"summary"` to `ChatMessage.role` (contract.ts) + sessionLog handling —
+      `runtime/contract.ts` (`role: … | "summary"` + `replacesUpTo`); sessionLog needed
+      no change (role-agnostic records), as predicted.
+- [x] Capture: emit `summary` in `convert/{claude,codex}.ts`. [Shipped with caveats —
+      claude in `convert/claude.ts` (`compact_boundary` → summary record); codex lives in
+      `spawn.ts` (`thread/compacted` handler), not `convert/codex.ts`; both store the
+      placeholder text `"[conversation compacted]"`, not the model's actual summary, so
+      the compacted context is NOT yet carried across.]
+- [x] Inject: fold-in default in `inject/{claude,codex}.ts`; native slot where supported.
+      [Shipped as the shared `replayable()` fold-in in `inject/index.ts`, applied to both
+      CLIs; no native-summary slot implemented yet.]
 - [ ] Verify cross-CLI: compact in claude → resume in codex still has the compacted context.
+      (Blocked on real summary text above — today only the placeholder would cross.)
 
 ## 6. Open questions
 - claude's exact on-disk summary representation (no sample captured yet — observe first).

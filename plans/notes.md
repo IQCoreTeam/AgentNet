@@ -139,4 +139,6 @@ owner.
 1. ✅ `reviews:[collectionId]:[nft]` + token-holding write gate (skill/workflow comments) — `notes/notes.ts`.
 2. ✅ `reviews:agent:[wallet]` — owner-write (self-notes/blog) + others' comments per §4.
 3. ✅ Note row with optional `gitLink`.
-4. ⬜ Front-end: render notes + git attachments on the item view and agent profile (UI — see issue #16).
+4. ✅ Front-end: render notes + git attachments on the item view and agent profile (issue #16) —
+   `chat/ui/webview.ts` (note cards + `gitLink` rendering), posting via `postNote` /
+   `postAgentNote` (`chat/session.ts`).
