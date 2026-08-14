@@ -14,17 +14,33 @@ import { resolveExecutable } from "./resolveExecutable.js";
 
 function modelToOption(model: ModelInfo): ChatModelOption {
   const desc = model.description?.trim();
-  let chip = model.displayName?.trim() || model.value;
-  let full = chip;
-  // The CLI's default entry is named "Default (recommended)" and hides the real model
-  // name in its description ("Opus 4.8 with 1M context · ..."). supportedModels() does not
-  // return that model as a standalone entry, so relabel the default with its actual model
-  // name instead of showing an opaque "Default" on the chip.
-  if (model.value === "default" && desc) {
-    const lead = desc.split(" · ")[0]?.trim(); // "Opus 4.8 with 1M context"
-    if (lead) {
-      full = lead;
-      chip = lead.split(" with ")[0].trim(); // "Opus 4.8"
+  const displayName = model.displayName?.trim() || model.value;
+  let chip = displayName;
+  let full = displayName;
+  // The version number lives in the DESCRIPTION ("Fable 5 · …", "Opus 5 with 1M context · …")
+  // while displayName is often the bare family ("Fable", "Sonnet", "Haiku"). Prefer the
+  // description's lead so the chip shows the real versioned name (Fable 5, Sonnet 5, Haiku 4.5),
+  // matching the CLI's own picker — but only when it's clearly "<displayName> <version>", so a
+  // distinct label like "Opus (1M context)" is left as-is.
+  const lead = desc?.split(" · ")[0]?.trim(); // "Fable 5" or "Opus 5 with 1M context"
+  if (model.value === "default" && lead) {
+    // The CLI's "Default (recommended)" hides the real model name in its description.
+    // Keep the "Default" identity (this entry auto-follows the CLI's recommendation) but
+    // reveal the model it currently resolves to — "Default · Opus 5". Without the "Default ·"
+    // prefix the chip reads as a bare "Opus 5", which collides with the separate explicit
+    // "Opus (1M context)" entry (the same underlying model) and looks like a duplicate.
+    full = lead;
+    chip = `Default · ${lead.split(" with ")[0].trim()}`; // "Default · Opus 5"
+  } else if (lead && lead.toLowerCase().startsWith(displayName.toLowerCase())) {
+    // Relabel ONLY when the lead is "<family> <version>" — a version token being digits with
+    // optional dotted minors ("Fable" → "Fable 5", "Haiku" → "Haiku 4.5"). Anything else after
+    // the family — "Opus (1M context)", a "Sonnet Reasoning" variant — has no version token, so
+    // we leave the chip as the bare family and don't invent a versioned name.
+    const version = lead.slice(displayName.length).match(/^\s+(\d+(?:\.\d+)*)\b/);
+    if (version) {
+      const versioned = `${lead.slice(0, displayName.length)} ${version[1]}`; // family (orig case) + version
+      chip = versioned;
+      full = versioned;
     }
   }
   const extra = `Claude alias: ${model.value}`;
