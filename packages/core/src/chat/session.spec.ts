@@ -50,7 +50,7 @@ const waitForNotice = async (transport: any, text: string) => {
   throw new Error(`notice "${text}" was never sent`);
 };
 
-function harness(opts: { cwd?: string; ownedSkills?: string[]; googleCredsConfigured?: boolean } = {}) {
+function harness(opts: { cwd?: string; ownedSkills?: string[]; googleCredsConfigured?: boolean; env?: Record<string, unknown> } = {}) {
   const handles: ReturnType<typeof fakeHandle>[] = [];
   const startSession = vi.fn(async (opts: any) => {
     const h = fakeHandle("sess-" + handles.length, opts.cli);
@@ -67,6 +67,7 @@ function harness(opts: { cwd?: string; ownedSkills?: string[]; googleCredsConfig
     walletAddress: () => null,
     storageInfo: async () => ({ info: {}, options: [], googleCredsConfigured: opts.googleCredsConfigured }),
     ownedSkills: opts.ownedSkills ? async () => opts.ownedSkills : undefined,
+    ...opts.env,
   };
   const chat = createChatSession(startSessionRuntime(startSession), transport as any, env);
   return { handles, startSession, fromUI, chat, transport };
@@ -448,5 +449,31 @@ describe("chat/session — slash commands", () => {
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
+  });
+});
+
+// A throwing handler used to escape the pump as an unhandled rejection and take the whole
+// host process down (issue #150 B1: connectCloud without Google creds). The dispatcher must
+// survive it, keep draining the queue, and tell the client its action failed.
+describe("chat/session — a handler that throws", () => {
+  it("keeps the dispatcher alive, reports the failure, and drains the rest of the queue", async () => {
+    const { fromUI, transport } = harness({
+      env: {
+        connectCloud: async () => {
+          throw new Error("gdrive needs an openBrowser callback for sign-in");
+        },
+      },
+    });
+
+    fromUI({ type: "connectCloud", kind: "gdrive" });
+    fromUI({ type: "wallet" }); // queued behind the failing message
+    await flush();
+
+    expect(transport.send).toHaveBeenCalledWith({
+      type: "notice",
+      text: "connectCloud failed: gdrive needs an openBrowser callback for sign-in",
+    });
+    // the message behind the failure is still handled — a throw must not abandon the queue
+    expect(transport.send).toHaveBeenCalledWith({ type: "wallet", address: null });
   });
 });
