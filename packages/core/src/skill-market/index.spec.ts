@@ -8,6 +8,7 @@ import { codexMcpFlags } from "../runtime/spawn.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { readDisposed } from "./equipState.js";
+import { ownedSkillMints } from "../core/skillSource.js";
 import { searchSkills } from "../search/search.js";
 import { buySkill, publishSkill } from "../nft/skill.js";
 import { postNote, postAgentNote } from "../notes/notes.js";
@@ -21,6 +22,12 @@ vi.mock("../notes/notes.js", () => ({
   postNote: vi.fn(),
   postAgentNote: vi.fn(),
 }));
+// only the ownership lookup is stubbed (it needs a DAS RPC); the rest of skillSource stays real
+vi.mock("../core/skillSource.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../core/skillSource.js")>()),
+  ownedSkillMints: vi.fn().mockResolvedValue([]),
+}));
+
 vi.mock("../core/chain.js", () => ({
   signerAddress: vi.fn().mockResolvedValue("mockSignerAddress"),
 }));
@@ -297,6 +304,29 @@ describe("skill-market", () => {
       expect(buySkill).not.toHaveBeenCalled();
       // recorded in the signer wallet's synced equip state (wallet-scoped, not the manifest)
       expect([...(await readDisposed("mockSignerAddress"))]).toContain("skillX");
+    } finally {
+      process.env.AGENTNET_HOME = prev;
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  it("install_skill re-equips: it clears the disposed flag, not just the files (#126)", async () => {
+    // The bug: install_skill called installBoughtAll, which restores the files but leaves
+    // the mint recorded as disposed — so injectOwned skips it at the next session start and
+    // the skill the user just asked for silently disappears again.
+    const home = await mkdtemp(join(tmpdir(), "agentnet-reequip-"));
+    const prev = process.env.AGENTNET_HOME;
+    process.env.AGENTNET_HOME = home;
+    try {
+      vi.mocked(readSkillMintMetadata).mockResolvedValue(null as any);
+      vi.mocked(ownedSkillMints).mockResolvedValue(["skillX"]);
+      // 1. un-equip records the mint as disposed
+      await handleToolCall(mockConn, signer, "defaultCreator", "unequip_skill", { skillId: "skillX" });
+      expect([...(await readDisposed("mockSignerAddress"))]).toContain("skillX");
+
+      // 2. the documented re-equip path must clear it again
+      await handleToolCall(mockConn, signer, "defaultCreator", "install_skill", { skillId: "skillX" });
+      expect([...(await readDisposed("mockSignerAddress"))]).not.toContain("skillX");
     } finally {
       process.env.AGENTNET_HOME = prev;
       await rm(home, { recursive: true, force: true });
