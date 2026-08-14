@@ -3859,7 +3859,7 @@ export function chatHtml(): string {
       const body = text.replace(/^---[\\s\\S]*?\\n---\\s*/, '').trim();
       if (body.length < 20 && !pubBodyConfirmed) {
         pubBodyConfirmed = true;
-        return fail('This publishes PERMANENTLY and cannot be deleted; the body looks empty or very short \\u2014 click Publish again to submit anyway.');
+        return fail('This publishes PERMANENTLY and cannot be deleted; the body looks empty or very short. Click Publish again to submit anyway.');
       }
     }
     if (!priceSol) return fail('Enter a price in SOL (use 0 for free).');

@@ -137,7 +137,7 @@ export function checkFormat(skillMd: string): FormatResult {
 
   const bodyLen = body.trim().length;
   if (bodyLen === 0) {
-    add(result, "body", "error", "body is empty — it holds the instructions the agent runs, and the mint is permanent");
+    add(result, "body", "error", "body is empty. It holds the instructions the agent runs, and the mint is permanent");
   } else if (bodyLen < 50) {
     add(result, "body", "info", `Skill body is very short (${bodyLen} chars); consider expanding it`);
   }
