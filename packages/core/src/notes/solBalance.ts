@@ -1,8 +1,8 @@
 // SOL (native lamport) balance — for the OFF-mode skill-shopping funds gate (issue #21).
 //
-// NOTE: this is DIFFERENT from getBalance() in balance.ts. That reads a wallet's
-// per-skill-mint SPL token amount (Token-2022 ATA). This reads the wallet's native
-// SOL balance via conn.getBalance — the right call to decide whether someone can
+// NOTE: this reads the wallet's NATIVE SOL balance via conn.getBalance — it is not
+// a per-skill Token-2022 amount (skill ownership is a held-mint membership check;
+// see heldSkillMints in holdings.ts). The right call to decide whether someone can
 // afford a priced buy before we ever surface a "buy this?" suggestion.
 
 import { PublicKey, type Connection } from "@solana/web3.js";

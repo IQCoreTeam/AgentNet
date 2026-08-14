@@ -5141,7 +5141,7 @@ export function chatHtml(): string {
     return null;
   }
   // Ownership for the comment gate is decided by MINT, not by display name — the
-  // server gates postNote on getBalance(mint), so the UI must use the same key.
+  // server gates postNote on heldSkillMints (held-mint membership), so the UI must use the same key.
   // skillMints maps owned slug -> mint; a detail whose id is one of those values is
   // held. (Name matching breaks for held skills the catalog omits, whose detail comes
   // back with name === mint.)

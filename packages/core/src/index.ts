@@ -44,7 +44,7 @@ export type { PublishSkillInput, BuySkillInput } from "./nft/skill.js";
 export type { SkillMintMetadata } from "./nft/token2022.js";
 export { resolveMinter, tryMinterPubkey, resetMinterCache } from "./nft/minter.js";
 // notes (reviews)
-export { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes, getBalance, getSolBalance, canAffordSkill, TX_FEE_BUFFER_LAMPORTS } from "./notes/index.js";
+export { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes, getSolBalance, canAffordSkill, TX_FEE_BUFFER_LAMPORTS } from "./notes/index.js";
 export type { PostNoteInput, ReadNotesOptions, PostAgentNoteInput } from "./notes/index.js";
 // RPC resolution (issue #23): a registered Helius key wins over env over the default
 export { resolveRpcUrl, saveHeliusKey, loadHeliusKey, hasDasRpc, heliusUrl, maskedHeliusKey, HELIUS_QUICKSTART_URL, saveGithubToken, loadGithubToken, maskedGithubToken } from "./core/rpc.js";
