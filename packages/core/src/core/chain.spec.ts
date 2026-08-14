@@ -160,6 +160,64 @@ describe("core/chain", () => {
       expect(secondUrl).toContain("before=cur1"); // cursor threaded into page 2
       vi.unstubAllGlobals();
     });
+
+    // One ETag entry per distinct (pda, limit, before) page, each holding a whole decoded
+    // page — so a long-lived host browsing a marketplace must not grow it forever. Both the
+    // cap and its recency order are observable from out here: a cached URL sends
+    // `If-None-Match`, an evicted one doesn't.
+    const ETAG_MAX = 200;
+    /** Stands in for the gateway: 200 + ETag on a fresh page, 304 with no body once the
+     *  client's `If-None-Match` still matches — the path the cache exists to take. */
+    const cachingFetch = () => {
+      const issued = new Map<string, string>();
+      return vi.fn().mockImplementation((url: string, init?: any) => {
+        const sent = init?.headers?.["If-None-Match"];
+        if (sent !== undefined && sent === issued.get(url)) {
+          return Promise.resolve({ ok: false, status: 304 }); // unchanged — no body
+        }
+        const etag = `etag-${issued.size}`;
+        issued.set(url, etag);
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: { get: (h: string) => (h.toLowerCase() === "etag" ? etag : null) },
+          json: async () => ({ rows: [{ id: url }], nextCursor: null }),
+        });
+      });
+    };
+    /** Read the page keyed by `before`; resolves to the `If-None-Match` sent, or null on a miss. */
+    const readPage = async (fetchMock: any, before: string) => {
+      await readRows("reviews:agent:w", { limit: 1, before });
+      const init = fetchMock.mock.calls.at(-1)[1];
+      return init?.headers?.["If-None-Match"] ?? null;
+    };
+
+    it("evicts the oldest ETag entry past the cap instead of growing without bound", async () => {
+      const fetchMock = cachingFetch();
+      vi.stubGlobal("fetch", fetchMock);
+
+      for (let i = 0; i <= ETAG_MAX; i++) await readPage(fetchMock, `bound${i}`); // one over
+
+      expect(await readPage(fetchMock, `bound${ETAG_MAX}`)).toBeTruthy(); // newest still cached
+      expect(await readPage(fetchMock, "bound0")).toBeNull(); // oldest was dropped
+      // and the entry that survived still serves its rows off the 304 the gateway answered with
+      const reused = await readRows("reviews:agent:w", { limit: 1, before: `bound${ETAG_MAX}` });
+      expect(reused).toHaveLength(1);
+      vi.unstubAllGlobals();
+    });
+
+    it("evicts by least-recently-used, so a page still being polled survives", async () => {
+      const fetchMock = cachingFetch();
+      vi.stubGlobal("fetch", fetchMock);
+
+      for (let i = 0; i < ETAG_MAX; i++) await readPage(fetchMock, `lru${i}`); // exactly full
+      await readPage(fetchMock, "lru0"); // re-read the oldest — now the most recent
+      await readPage(fetchMock, "lruNew"); // one over the cap
+
+      expect(await readPage(fetchMock, "lru1")).toBeNull(); // the stale one went instead
+      expect(await readPage(fetchMock, "lru0")).toBeTruthy(); // the polled one stayed
+      vi.unstubAllGlobals();
+    });
   });
 
   describe("inscriptionSigOf / itemMetadataUri", () => {

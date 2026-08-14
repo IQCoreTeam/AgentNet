@@ -214,12 +214,40 @@ export async function writeRow(
 // Lets a re-read of the same page send `If-None-Match`; on a 304 the gateway
 // skips re-sending the body and we reuse the cached page. Turns polling loops
 // (a thread refreshing) from "re-decode every row" into "one conditional GET".
-// Unbounded is fine in practice — one entry per distinct (pda, limit, before)
-// page, and the set of live tables a session touches is small.
-// ponytail: plain Map, no LRU. Add eviction if a long-lived host ever churns
-// through thousands of tables.
+// One entry per distinct (pda, limit, before) page. A short-lived process touches few
+// tables, but a long-lived host (the localhost surface, an MCP server) keeps running while
+// a user browses the marketplace, and each entry holds a whole decoded page — so the map
+// is bounded: past ETAG_CACHE_MAX the least-recently-used entry is dropped. Eviction only
+// costs a re-fetch, because a miss sends no `If-None-Match` and the gateway answers 200
+// with a fresh body.
+const ETAG_CACHE_MAX = 200;
+
+/** Bounded LRU over the ETag caches. Map preserves insertion order, so the first key is
+ *  the oldest; re-inserting on read moves an entry to the end. Both caches want exactly
+ *  this and nothing more, so it lives here rather than as a general utility. */
+class EtagCache<V> {
+  private readonly entries = new Map<string, V>();
+
+  get(url: string): V | undefined {
+    const hit = this.entries.get(url);
+    if (hit === undefined) return undefined;
+    this.entries.delete(url); // re-insert so recency is the map's own order
+    this.entries.set(url, hit);
+    return hit;
+  }
+
+  set(url: string, value: V): void {
+    this.entries.delete(url);
+    this.entries.set(url, value);
+    if (this.entries.size > ETAG_CACHE_MAX) {
+      const oldest = this.entries.keys().next().value;
+      if (oldest !== undefined) this.entries.delete(oldest);
+    }
+  }
+}
+
 type GwPage = { rows: Row[]; nextCursor?: string | null };
-const rowsEtagCache = new Map<string, { etag: string; page: GwPage }>();
+const rowsEtagCache = new EtagCache<{ etag: string; page: GwPage }>();
 
 async function readRowsViaGateway(pda: PublicKey, options?: ReadOptions): Promise<Row[]> {
   const want = options?.limit ?? 100;
@@ -258,7 +286,7 @@ async function readRowsViaGateway(pda: PublicKey, options?: ReadOptions): Promis
 // readRowsViaGateway. Throws on any non-2xx so the caller falls back to reading
 // flat rows + grouping locally (threadReplies).
 export type GatewayThread = { op: Row; replies: Row[]; totalReplies: number };
-const threadsEtagCache = new Map<string, { etag: string; threads: GatewayThread[] }>();
+const threadsEtagCache = new EtagCache<{ etag: string; threads: GatewayThread[] }>();
 
 async function readThreadsViaGateway(pda: PublicKey, limit: number): Promise<GatewayThread[]> {
   const url = `${gatewayUrl()}/table/${pda.toBase58()}/threads?limit=${limit}`;
