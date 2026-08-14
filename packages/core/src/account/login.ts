@@ -11,7 +11,7 @@
 
 import { readFile, writeFile, rm } from "node:fs/promises";
 import { configFile, tokenFile, rootDir, ensureDir } from "../core/paths.js";
-import { buildStorage, type StorageConfig, type StorageKind } from "./storage/adapter.js";
+import { buildStorage, isStorageKind, type StorageConfig, type StorageKind } from "./storage/adapter.js";
 import { manualStorage, migrateLocalSessions } from "./storage/manual.js";
 import { mirrorStorage, type CloudStatus } from "./storage/mirror.js";
 import { migrateLegacyDriveSessions } from "./storage/gdrive.js";
@@ -24,9 +24,28 @@ export interface Session {
   storage: StorageAdapter;
 }
 
+// Kinds already reported as unbuildable, so the warning below is printed once per kind
+// instead of on every config read.
+const warnedKinds = new Set<string>();
+
+// A `kind` this build can't construct (a newer//hand-edited config, a backend that was
+// removed) is treated as NO cloud choice rather than a fatal one: buildStorage throws on
+// an unknown kind, and that throw used to escape the connect path and take the process
+// down on every launch — an unopenable install until config.json was deleted by hand.
+// Falling back to local-only keeps sessions working and leaves the picker free to connect
+// a real backend. Every consumer of the storage choice reads through here, so they all
+// agree on what is configured.
 async function readConfig(): Promise<StorageConfig | null> {
   try {
-    return JSON.parse(await readFile(configFile(), "utf8")) as StorageConfig;
+    const cfg = JSON.parse(await readFile(configFile(), "utf8")) as StorageConfig;
+    if (cfg?.kind != null && !isStorageKind(cfg.kind)) {
+      if (!warnedKinds.has(String(cfg.kind))) {
+        warnedKinds.add(String(cfg.kind));
+        console.warn(`[storage] ignoring unknown storage kind "${cfg.kind}" in config — using this device only`);
+      }
+      return null;
+    }
+    return cfg;
   } catch {
     return null;
   }
@@ -81,6 +100,12 @@ export async function initialize(
   cfg: StorageConfig,
   openBrowser?: (url: string) => void,
 ): Promise<void> {
+  // Validate BEFORE writing. `kind` arrives from the surfaces as a plain string, so an
+  // unbuildable value used to be persisted first and only rejected later when login built
+  // the backend — leaving a config on disk that fails on every subsequent connect.
+  if (!isStorageKind(cfg.kind)) {
+    throw new Error(`unknown storage kind: ${cfg.kind}`);
+  }
   if (cfg.kind === "gdrive" && !(await isSignedIn())) {
     if (!openBrowser) throw new Error("gdrive needs an openBrowser callback for sign-in");
     await googleLogin(openBrowser);
