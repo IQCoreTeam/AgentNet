@@ -190,7 +190,9 @@ export function SkillMarket({
   const [profileSub, setProfileSub] = useState<ProfileSub>("main");
   const [profileScroll, setProfileScroll] = useState(0);
 
-  // blog composer (self note on own profile)
+  // note composer — reused for a self blog post AND a comment on another agent (both are
+  // postAgentNote to the profile's wallet; only the gate and the landing sub differ).
+  const [composeKind, setComposeKind] = useState<"blog" | "comment">("blog");
   const [blogField, setBlogField] = useState<BlogField>("title");
   const [blogTitle, setBlogTitle] = useState("");
   const [blogText, setBlogText] = useState("");
@@ -450,7 +452,7 @@ export function SkillMarket({
       setBlogTitle(""); setBlogText(""); setBlogImage(""); setBlogGitLink("");
       const refreshed = await api.getAgentProfile(agentProfile.wallet).catch(() => null);
       if (refreshed) setAgentProfile(refreshed);
-      setProfileSub("blog");
+      setProfileSub(composeKind === "comment" ? "comments" : "blog");
       setStage("agentProfile");
     } else {
       setFlash(`post failed: ${res.error ?? "unknown"}`);
@@ -517,22 +519,32 @@ export function SkillMarket({
         profileSub === "comments" ? (agentProfile?.threads ?? []).filter((t) => !t.note.isSelfNote).reduce((s, t) => s + 1 + t.replies.length, 0) :
         profileSub === "blog" ? (agentProfile?.threads ?? []).filter((t) => t.note.isSelfNote).length : 0;
       const height = profileSub === "repos" ? 10 : 12;
+      // the design-22 gate: comment on another agent only while holding a skill they made.
+      const canComment =
+        !!agentProfile && !agentProfile.self &&
+        (agentProfile.createdSkills ?? []).some((s) => owned.has(s.name));
+      const openCompose = (mode: "blog" | "comment") => {
+        setComposeKind(mode);
+        setBlogTitle(""); setBlogText(""); setBlogImage(""); setBlogGitLink("");
+        setBlogField(mode === "comment" ? "text" : "title");
+        setStage("blogCompose");
+      };
       if (profileSub !== "main") {
         if (key.escape) { setProfileSub("main"); setProfileScroll(0); return; }
         if (key.downArrow) { setProfileScroll((o) => clampScroll(o + 1, total, height)); return; }
         if (key.upArrow) { setProfileScroll((o) => clampScroll(o - 1, total, height)); return; }
         if (key.pageDown) { setProfileScroll((o) => clampScroll(o + height, total, height)); return; }
         if (key.pageUp) { setProfileScroll((o) => clampScroll(o - height, total, height)); return; }
-        if (profileSub === "blog" && input === "n" && agentProfile?.self) {
-          setBlogField("title"); setStage("blogCompose"); return;
-        }
+        if (profileSub === "blog" && input === "n" && agentProfile?.self) { openCompose("blog"); return; }
+        if (profileSub === "comments" && input === "c" && canComment) { openCompose("comment"); return; }
         return;
       }
       if (key.escape) { setStage("agents"); setAgentProfile(null); setAgentBuyResult(null); return; }
       if (input === "r") { setProfileSub("repos"); setProfileScroll(0); return; }
       if (input === "k") { setProfileSub("comments"); setProfileScroll(0); return; }
       if (input === "g") { setProfileSub("blog"); setProfileScroll(0); return; }
-      if (input === "n" && agentProfile?.self) { setBlogField("title"); setStage("blogCompose"); return; }
+      if (input === "n" && agentProfile?.self) { openCompose("blog"); return; }
+      if (input === "c" && canComment) { openCompose("comment"); return; }
       if (input === "b" && agentProfile) void doBuyAll(agentProfile.reputation.wallet);
       return;
     }
@@ -687,10 +699,16 @@ export function SkillMarket({
 
   // ── blog composer ─────────────────────────────────────────────────────────
   if (stage === "blogCompose") {
+    const isComment = composeKind === "comment";
     const labels: Record<BlogField, string> = { title: "title   ", text: "text    ", image: "image   ", gitLink: "gitLink " };
     return (
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
-        <Text bold color={colors.iqMagenta}>❖ write a blog post</Text>
+        <Box>
+          <Band
+            label={isComment ? "reply" : "blog"}
+            note={isComment ? "TITLE · IMAGE · GITHUB LINK OPTIONAL · POSTS ON CHAIN" : "SELF NOTE · WRITTEN ON CHAIN"}
+          />
+        </Box>
         <Box flexDirection="column" marginTop={1}>
           {BLOG_FIELDS.map((f) => {
             const on = f === blogField;
