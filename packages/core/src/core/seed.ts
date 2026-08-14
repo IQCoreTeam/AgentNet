@@ -43,17 +43,17 @@ export function reviewsAgentHint(agentWallet: string): string {
 
 // ===== On-chain program / collection ids (one place — easy to swap) =====
 //
-// Current values are the DEVNET test deployment. Override any of them with the
+// Current values are the MAINNET deployment. Override any of them with the
 // matching env var when you point at a different network / collection. To move
-// to mainnet, change NETWORK below + these three (and the program's constants.rs
-// collection).
+// to another network, change NETWORK below + these three (and the program's
+// constants.rs collection).
 
 export type Network = "devnet" | "mainnet";
 
 /**
  * The single network switch. Everything network-shaped (the default RPC, the Helius
  * endpoint, the UI badge) derives from this — flip it here (or AGENTNET_NETWORK) and
- * the whole app retargets. We're on devnet for testing.
+ * the whole app retargets. Currently set to mainnet.
  */
 export const NETWORK: Network = "mainnet";
 
@@ -153,7 +153,7 @@ export const FEE_BPS = 690; // 6.9%
 
 /**
  * The TokenGroup mint skills are enrolled into. Env override wins; otherwise the
- * configured devnet test collection.
+ * configured mainnet collection.
  */
 export function getSkillsCollectionMint(): string | null {
   return process.env.AGENTNET_SKILLS_COLLECTION_PUBKEY || SKILLS_COLLECTION_MINT;
@@ -161,7 +161,7 @@ export function getSkillsCollectionMint(): string | null {
 
 /**
  * The TokenGroup mint workflows are enrolled into. Env override wins; otherwise
- * the configured devnet test collection.
+ * the configured mainnet collection.
  */
 export function getWorkflowsCollectionMint(): string | null {
   return process.env.AGENTNET_WORKFLOWS_COLLECTION_PUBKEY || WORKFLOWS_COLLECTION_MINT;

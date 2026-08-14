@@ -109,9 +109,9 @@ with a populated list.
 > workflows behind this single PDA-mint program; only the `requiredSkills` list differs.
 
 - Repo: **[IQCoreTeam/agent-workflow-nft](https://github.com/IQCoreTeam/agent-workflow-nft)** (Anchor 0.32.1).
-- Devnet program: `3ptXj4yuaQG51WTA3SZZ37jGvYFgMhgXnSKWJLASJNkt`.
-- Official skills collection it checks against: `4exdqNEcXixiMzenEBts2cE7qLmMvcVtHCjsZUGBm4Gt`
-  (`constants.rs::OFFICIAL_SKILLS_COLLECTION` — swap before mainnet).
+- Program: mainnet `8YmcHuCx323RtqC8mzTJ5CH4oVT8mPKJ7xarcPKbdgof` (`core/seed.ts::WORKFLOW_GATE_PROGRAM_ID`); the earlier devnet build was `3ptXj4yuaQG51WTA3SZZ37jGvYFgMhgXnSKWJLASJNkt`.
+- Official skills collection it checks against: mainnet `BUGHnCh2Pf93tgcxAEfhjd6tUjbY56JrSZdCRXyt7uS5`
+  (`constants.rs::OFFICIAL_SKILLS_COLLECTION`, mirrored by `core/seed.ts::SKILLS_COLLECTION_MINT`); the earlier devnet build was `4exdqNEcXixiMzenEBts2cE7qLmMvcVtHCjsZUGBm4Gt`.
 
 ```mermaid
 flowchart TB

@@ -113,6 +113,23 @@ In VS Code (Marketplace install) or the Extension Development Host window (sourc
 
 ---
 
+## Optional — cloud session sync
+
+Sessions are stored locally by default. To sync them across devices you can connect a
+cloud backend from the chat's storage settings:
+
+- **iCloud** (Mac) — no setup; pick it and you're done.
+- **Google Drive** — desktop surfaces use a native-app OAuth flow that needs **your own**
+  Google OAuth client (the app can't ship a shared one). Create an OAuth client in the
+  Google Cloud Console, then either set `GOOGLE_CLIENT_ID` (and, for client types that
+  require it, `GOOGLE_CLIENT_SECRET`) in the environment, or add
+  `"google_client_id"` / `"google_client_secret"` to `~/.agentnet/config.json`. The same
+  client-ID setup is described for the phone build in [android.md](android.md#optional--configure-google-drive-oauth-for-testing).
+  Without this you'll see *"Cloud connect failed: Google client id missing"* — that's
+  expected, not a bug; use iCloud or local storage if you don't want to set up Drive.
+
+---
+
 ## Troubleshooting
 
 - **F5 launches but no AgentNet command appears:** run `pnpm build:vscode` (the extension

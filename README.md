@@ -12,7 +12,7 @@ Underneath that, the chain is what makes the agent yours:
 - **Skills are soulbound NFTs on Solana.** A published skill lives on the chain rather than on a hosting server, so it does not disappear when a host shuts down. Reviews are written to the chain as well and cannot be removed. When a priced skill is bought, the same transaction that mints it to the buyer also transfers the payment to the creator, so the payout is enforced by the program rather than by a platform's policy.
 - **Sessions follow the wallet.** Conversation history is encrypted with a key derived from the wallet, so only the owner can read it. Skills, memory, and reputation are keyed to the same wallet, which means connecting the secret key on a new device restores the same agent.
 
-A longer walkthrough of this reasoning, in thread form: [plans/thread.md](plans/thread.md).
+A longer walkthrough of this reasoning lives in the design notes: [plans/00-overview.md](plans/00-overview.md).
 
 
 ## Install & run
@@ -417,7 +417,7 @@ Exploration shows **~90% already exists in IQLabs / the SDKs.** Most is a clone 
 | skill text on-chain | code-in (≤700B inline) → the NFT mint's `uri` | ✅ exists (code-in) |
 | `.sol` human name | wide-web SNS resolution | ✅ exists |
 | search · sort | filter by NFT traits, sort by `supply` | ✅ built (`search/`) |
-| **soulbound skill ownership** | **Token-2022 `NonTransferable` mint** per skill, minted via the gate program so it can't be forged | ✅ built (`nft/token2022.ts` + gate program, devnet) |
+| **soulbound skill ownership** | **Token-2022 `NonTransferable` mint** per skill, minted via the gate program so it can't be forged | ✅ built (`nft/token2022.ts` + gate program, mainnet) |
 | **star = soulbound buy = payment = equip (atomic)** | `buy_skill`: `SystemProgram.transfer` + mint 1 token in one tx (free = price-0) | ✅ built (`nft/skill.ts` + `skill-market/` MCP tools) |
 | **reputation (comments, git-link attachable)** | `reviews:[collection]:[skillNFT]` + `reviews:agent:[agentWallet]` tables, holder-gated | ✅ built (`notes/`) |
 | **skill validation + security audit** | buyer-side gate: `scanSkillText` + `verify_skill` (`VERIFY_RUBRIC`) + `VerifyGuard`; periodic/official audits later | ✅ built (gate) / 🔨 audits |
@@ -425,7 +425,7 @@ Exploration shows **~90% already exists in IQLabs / the SDKs.** Most is a clone 
 | **iqfetch / publish (address convention)** | core protocol functions (git-sdk's sibling) | ✅ built (`publishSkill` / `searchSkills` / `getSkillText`; `iq://` URI form still open) |
 
 **Reference code:**
-- Skill/workflow mint gate program (Anchor): `IQCoreTeam/agent-workflow-nft` (private) — devnet `3ptXj4yuaQG51WTA3SZZ37jGvYFgMhgXnSKWJLASJNkt`
+- Skill/workflow mint gate program (Anchor): `IQCoreTeam/agent-workflow-nft` (private) — mainnet `8YmcHuCx323RtqC8mzTJ5CH4oVT8mPKJ7xarcPKbdgof` (`core/seed.ts::WORKFLOW_GATE_PROGRAM_ID`; earlier devnet build `3ptXj4yuaQG51WTA3SZZ37jGvYFgMhgXnSKWJLASJNkt`)
 - Contract: `IQCoreTeam/IQLabsContract` (private)
 - Solana SDK: [IQCoreTeam/iqlabs-solana-sdk](https://github.com/IQCoreTeam/iqlabs-solana-sdk)
 - git SDK (the pattern to clone): [IQCoreTeam/iqlabs-git-sdk](https://github.com/IQCoreTeam/iqlabs-git-sdk)
