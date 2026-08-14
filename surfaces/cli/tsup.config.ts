@@ -31,6 +31,6 @@ export default defineConfig({
   // file), but this call site only uses it to fail its native-binding lookup gracefully
   // (already-tolerated: see the "bigint: Failed to load bindings" warning on every launch).
   banner: {
-    js: "#!/usr/bin/env node\nimport { createRequire as __ar_cr } from 'module';\nimport { fileURLToPath as __ar_ftp } from 'url';\nimport { dirname as __ar_dn } from 'path';\nconst require = __ar_cr(import.meta.url);\nconst exports = {};\nconst __filename = __ar_ftp(import.meta.url);\nconst __dirname = __ar_dn(__filename);",
+    js: "#!/usr/bin/env node\nimport { createRequire as __ar_cr } from 'module';\nimport { fileURLToPath as __ar_ftp } from 'url';\nimport { dirname as __ar_dn } from 'path';\nconst require = __ar_cr(import.meta.url);\nconst exports = {};\nconst __filename = __ar_ftp(import.meta.url);\nconst __dirname = __ar_dn(__filename);\nif (!process.env.AGENTNET_DEBUG) { const __ar_w = console.warn.bind(console); console.warn = (...a) => { if (typeof a[0] === 'string' && a[0].startsWith('bigint: Failed to load bindings')) return; __ar_w(...a); }; }",
   },
 });
