@@ -107,7 +107,7 @@ function isValidBase58(s: string): boolean {
  * Check a skill's SKILL.md format. NO size limit (codeIn auto-chunks). Rules:
  *   name        — required; 1–64 chars; kebab-case            (error)
  *   description — required; ≥20 chars                          (error); >500 (warning)
- *   body        — <50 chars                                    (info)
+ *   body        — empty (error); <50 chars                     (info)
  *   license     — present but not SPDX-like                    (warning)
  *   repository  — present but not an http(s) URL               (warning)
  *   category    — missing                                      (warning, search trait)
@@ -135,8 +135,11 @@ export function checkFormat(skillMd: string): FormatResult {
     add(result, "description", "warning", `"description" is long (${description.length} chars); keep it under 500`);
   }
 
-  if (body.trim().length < 50) {
-    add(result, "body", "info", `Skill body is very short (${body.trim().length} chars); consider expanding it`);
+  const bodyLen = body.trim().length;
+  if (bodyLen === 0) {
+    add(result, "body", "error", "body is empty — it holds the instructions the agent runs, and the mint is permanent");
+  } else if (bodyLen < 50) {
+    add(result, "body", "info", `Skill body is very short (${bodyLen} chars); consider expanding it`);
   }
 
   const license = frontmatter.license;
