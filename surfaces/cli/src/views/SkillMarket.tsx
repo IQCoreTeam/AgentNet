@@ -902,22 +902,45 @@ export function SkillMarket({
   // ── confirm ────────────────────────────────────────────────────────────────
   if (stage === "confirm") {
     const card = detail?.card ?? selected;
+    // design tab 26 funding gate: know before signing whether the wallet can afford it.
+    const priceLamports = card?.price && card.price !== "0" ? Number(card.price) : 0;
+    const insufficient = balance != null && priceLamports > 0 && balance < priceLamports;
     return (
-      <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.warn}>
+      <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={insufficient ? colors.err : colors.warn}>
         <Text bold color={colors.warn}>confirm purchase</Text>
         <Box marginTop={1} flexDirection="column">
           <Text>{card?.name}</Text>
           <Text dimColor>{card?.description}</Text>
           <Box marginTop={1}>
-            <Text dimColor>supply </Text><Text>×{card?.supply ?? 0}</Text>
-            <Text dimColor>   your balance </Text><Text>{sol(balance)}</Text>
+            <Text dimColor>price </Text><Text>{priceLamports ? sol(priceLamports) : "FREE"}</Text>
+            <Text dimColor>   supply </Text><Text>×{card?.supply ?? 0}</Text>
+            <Text dimColor>   your balance </Text>
+            <Text color={insufficient ? colors.err : undefined}>{sol(balance)}</Text>
           </Box>
           <Text dimColor>this signs an on-chain transaction and can't be undone</Text>
         </Box>
-        <Box marginTop={1}>
-          <Text color={colors.warn}>buy "{card?.name}"?  </Text>
-          <Text dimColor>[y] yes · [n] no</Text>
-        </Box>
+        {insufficient ? (
+          <Box marginTop={1} flexDirection="column">
+            <Band label="fund" note="INSUFFICIENT FUNDS" inverted />
+            <Text dimColor>
+              this buy needs {sol(priceLamports)}. you have {sol(balance)}.
+            </Text>
+            <Text>
+              <Text dimColor>send SOL to </Text>
+              <Text color={colors.iqCyan}>{walletAddr}</Text>
+            </Text>
+            <Box marginTop={1}>
+              <Text dimColor>fund the wallet, then </Text>
+              <Text color={colors.warn}>[y] retry</Text>
+              <Text dimColor> · [n] back</Text>
+            </Box>
+          </Box>
+        ) : (
+          <Box marginTop={1}>
+            <Text color={colors.warn}>buy "{card?.name}"?  </Text>
+            <Text dimColor>[y] yes · [n] no</Text>
+          </Box>
+        )}
       </Box>
     );
   }
