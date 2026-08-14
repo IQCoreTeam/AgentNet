@@ -1922,7 +1922,7 @@ export function chatHtml(): string {
 
         <div id="pubTextWrap">
         <label class="pubLabel">Skill text<span class="req">*</span></label>
-        <textarea id="pubText" rows="10" placeholder="# Skill name&#10;&#10;The SKILL.md body only — what the agent reads when this skill fires.&#10;No --- frontmatter: name & description come from the fields above."></textarea>
+        <textarea id="pubText" rows="10" placeholder="# Skill name&#10;&#10;The SKILL.md body only: what the agent reads when this skill fires.&#10;No --- frontmatter: name & description come from the fields above."></textarea>
         <div class="pubHint">Body only. Don't add a <code>---</code> name/description block; it's built from the fields above.</div>
         </div>
         <div id="pubReqWrap" style="display:none">
