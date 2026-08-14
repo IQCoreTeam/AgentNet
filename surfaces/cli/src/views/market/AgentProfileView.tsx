@@ -7,6 +7,7 @@ import type { AgentProfile, SkillCard, Note } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../../theme.js";
 import { tierInfo, tierGauge, repoGauge, STAR_TIERS } from "./tiers.js";
 import { ScrollView } from "./ScrollView.js";
+import { Band } from "../../components/Band.js";
 
 const short = (w: string) => `${w.slice(0, 4)}…${w.slice(-4)}`;
 
@@ -49,6 +50,9 @@ export function AgentProfileView({
   const commentCount = commentThreads.reduce((sum, t) => sum + 1 + t.replies.length, 0);
   const allSkills = profile.createdSkills ?? [];
   const unowned = allSkills.filter((s) => !owned.has(s.name));
+  // design tab 22 gate: you may comment on an agent only while holding a skill they made.
+  const heldFromAgent = allSkills.filter((s) => owned.has(s.name)).length;
+  const canComment = !self && heldFromAgent > 0;
 
   if (sub === "repos") {
     const repos = [...(profile.verifiedRepos ?? [])].sort((a, b) => (b.stars ?? 0) - (a.stars ?? 0));
@@ -99,9 +103,30 @@ export function AgentProfileView({
     ]);
     return (
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
-        <Text bold color={colors.iqMagenta}>❖ comments ({commentCount})</Text>
+        <Box>
+          <Text dimColor>AGENT  </Text>
+          <Text bold color={colors.ink} backgroundColor={colors.bone}> COMMUNITY ({commentCount}) </Text>
+        </Box>
+        <Box marginTop={1}>
+          <Band label="thread" note="TWO LEVELS · REPLIES COLLAPSE UNDER THEIR TOP COMMENT" />
+        </Box>
         <Box flexDirection="column" marginTop={1}>
-          {commentCount === 0 ? <Text dimColor>no comments yet</Text> : <ScrollView lines={lines} height={12} offset={scrollOffset} />}
+          {commentCount === 0 ? <Text dimColor>no comments yet</Text> : <ScrollView lines={lines} height={10} offset={scrollOffset} />}
+        </Box>
+        <Box marginTop={1}>
+          {self ? (
+            <Text dimColor>this is your profile · holders comment here</Text>
+          ) : canComment ? (
+            <Text>
+              <Text color={colors.ok}>{glyph.ok} UNLOCKED</Text>
+              <Text dimColor> · you hold {heldFromAgent} · [c] write a comment</Text>
+            </Text>
+          ) : (
+            <Text>
+              <Text color={colors.err}>⚠ GATED</Text>
+              <Text dimColor> · hold a skill made by this agent to comment</Text>
+            </Text>
+          )}
         </Box>
         <Box marginTop={1}><Text dimColor>↑/↓/PgUp/PgDn scroll · esc back</Text></Box>
       </Box>
@@ -120,9 +145,12 @@ export function AgentProfileView({
     ));
     return (
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
-        <Text bold color={colors.iqMagenta}>❖ blog ({blogNotes.length})</Text>
+        <Text bold color={colors.bone}>BLOG ({blogNotes.length})</Text>
+        <Box marginTop={1}>
+          <Band label="blog" note="SELF NOTES · AUTHOR EQUALS SUBJECT · WRITTEN ON CHAIN" />
+        </Box>
         <Box flexDirection="column" marginTop={1}>
-          {blogNotes.length === 0 ? <Text dimColor>no posts yet</Text> : <ScrollView lines={lines} height={12} offset={scrollOffset} />}
+          {blogNotes.length === 0 ? <Text dimColor>no posts yet</Text> : <ScrollView lines={lines} height={10} offset={scrollOffset} />}
         </Box>
         <Box marginTop={1}>
           <Text dimColor>{self ? "[n] new post · " : ""}↑/↓/PgUp/PgDn scroll · esc back</Text>
@@ -132,15 +160,25 @@ export function AgentProfileView({
   }
 
   // main
+  const held = self ? profile.createdSkills?.length ?? 0 : heldFromAgent;
   return (
     <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
-      <Box>
-        <Text bold color={colors.iqCyan}>{short(r.wallet)}</Text>
-        {cur ? <Text color={colors.warn}>  [{cur.name}]</Text> : null}
-        <Text dimColor>  {r.skillsPublished} skills · ×{r.totalSupply} supply · {r.notesReceived} notes</Text>
+      <Box justifyContent="space-between">
+        <Text bold color={colors.bone}>
+          AGENT  <Text color={colors.iqCyan}>{short(r.wallet)}</Text>
+          {self ? <Text color={colors.ok}> // YOU</Text> : null}
+        </Text>
+        <Text color={cur ? colors.warn : colors.dim}>{cur ? cur.name.toUpperCase() : "UNRANKED"}</Text>
+      </Box>
+      {/* big-number stat row, like the design's profile hero */}
+      <Box marginTop={1}>
+        <Box width={16}><Text><Text bold color={colors.bone}>{r.skillsPublished}</Text><Text dimColor> CREATED</Text></Text></Box>
+        <Box width={16}><Text><Text bold color={colors.bone}>{r.totalSupply}</Text><Text dimColor> COPIES</Text></Text></Box>
+        <Box width={16}><Text><Text bold color={colors.bone}>{held}</Text><Text dimColor> OWNED</Text></Text></Box>
       </Box>
       <Box marginTop={1}>
         <Text dimColor>tier  </Text><Text>{tierGauge(stars)}</Text>
+        {next ? <Text dimColor>  to {next.name}</Text> : <Text color={colors.ok}>  MAX</Text>}
       </Box>
       <Box>
         <Text dimColor>ladder</Text>
@@ -155,6 +193,7 @@ export function AgentProfileView({
       <Box marginTop={1}>
         <Text dimColor>
           [r] verified repos ({(profile.verifiedRepos ?? []).length}) · [k] comments ({commentCount}) · [g] blog ({blogNotes.length})
+          {canComment ? " · [c] comment" : ""}
         </Text>
       </Box>
 
