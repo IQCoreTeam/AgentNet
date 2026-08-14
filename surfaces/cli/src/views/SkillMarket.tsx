@@ -6,6 +6,7 @@ import { maskedHeliusKey, hasDasRpc, saveHeliusKey, getNetwork } from "@iqlabs-o
 import { colors, glyph } from "../theme.js";
 import type { OwnedSkill } from "../components/WelcomePanel.js";
 import { ChipCarousel } from "../components/ChipCarousel.js";
+import { Band } from "../components/Band.js";
 import { tierInfo } from "./market/tiers.js";
 import { AgentProfileView, type ProfileSub } from "./market/AgentProfileView.js";
 import { SkillDetailView, type DetailSub } from "./market/SkillDetailView.js";
@@ -84,26 +85,37 @@ function SkillChip({
   const cat = (card.category || (isWorkflow ? "workflow" : "skill")).toUpperCase().slice(0, 8);
   const price = card.price && card.price !== "0" ? sol(Number(card.price)) : "FREE";
   const { cur } = tierInfo(card.stars ?? 0);
+  // design tab 08: grey silhouette = skill, gold = workflow; the selected card lights up.
+  const accent = isWorkflow ? colors.warn : colors.dim;
   return (
     <Box
       flexDirection="column"
       width={SKILL_CHIP_W}
       paddingX={1}
       borderStyle="round"
-      borderColor={focused ? colors.iqCyan : isWorkflow ? colors.warn : colors.dim}
+      borderColor={focused ? colors.iqCyan : accent}
     >
-      <Text dimColor>[ {cat} {isWorkflow ? "/ FLOW" : "/ SKILL"} ]</Text>
-      <Text color={focused ? colors.iqCyan : undefined} bold={focused}>
+      {/* barcode glyph + category/type mark, the card's top strip */}
+      <Box justifyContent="space-between">
+        <Text color={accent}>▐▖▐</Text>
+        <Text dimColor>{cat} / {isWorkflow ? "FLOW" : "SKILL"}</Text>
+      </Box>
+      <Text color={focused ? colors.iqCyan : colors.bone} bold>
         {card.name.slice(0, SKILL_CHIP_W - 4)}
       </Text>
-      <Box>
-        <Text dimColor>×{card.supply ?? 0}</Text>
-        {card.stars ? <Text color={colors.warn}> ★{card.stars}</Text> : null}
-        {cur ? <Text color={colors.warn}> [{cur.name}]</Text> : null}
+      {/* the big supply number, like the design's card corner count */}
+      <Box justifyContent="space-between">
+        <Text bold color={colors.bone}>×{card.supply ?? 0}</Text>
+        <Text>
+          {card.stars ? <Text color={colors.warn}>★{card.stars} </Text> : null}
+          {cur ? <Text color={colors.warn}>[{cur.name}]</Text> : null}
+        </Text>
       </Box>
-      <Box>
+      <Box justifyContent="space-between">
         <Text color={colors.iqViolet}>{price}</Text>
-        <Text color={isOwned ? colors.ok : colors.dim}> {isOwned ? `OWNED${firing ? ` ${glyph.sparkle}` : ""}` : "GET"}</Text>
+        <Text color={isOwned ? colors.ok : colors.dim} bold={isOwned}>
+          {isOwned ? `OWNED${firing ? ` ${glyph.sparkle}` : ""}` : "GET"}
+        </Text>
       </Box>
     </Box>
   );
@@ -768,9 +780,18 @@ export function SkillMarket({
   if (stage === "publish") {
     if (pubResult) {
       const ok = pubResult.startsWith("published");
+      const mint = ok ? pubResult.split("mint:")[1]?.trim() : null;
       return (
         <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={ok ? colors.ok : colors.err}>
-          <Text bold color={ok ? colors.ok : colors.err}>{pubResult}</Text>
+          {ok ? (
+            <Box flexDirection="column" alignItems="center">
+              <Text dimColor>ON SUCCESS</Text>
+              <Text bold color={colors.ok}>{glyph.sparkle} {pubKind.toUpperCase()} MINTED {glyph.sparkle}</Text>
+              {mint && mint !== "?" ? <Text dimColor>{mint}</Text> : null}
+            </Box>
+          ) : (
+            <Text bold color={colors.err}>{pubResult}</Text>
+          )}
           <Box marginTop={1}><Text dimColor>[esc] / [↵] close</Text></Box>
         </Box>
       );
@@ -934,13 +955,15 @@ export function SkillMarket({
   }
 
   // ── list ───────────────────────────────────────────────────────────────────
+  const onMainnet = `${results.length} ${kind === "skill" ? "SKILL" : "WORKFLOW"}${results.length === 1 ? "" : "S"} ON MAINNET`;
   return (
     <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
-      <Box>
-        <Text bold color={colors.iqMagenta}>❖ skill market</Text>
-        <Text dimColor>   balance {sol(balance)}</Text>
-        <Text dimColor>   </Text>
-        <HeliusBadge status={rpcStatus} />
+      <Box justifyContent="space-between">
+        <Text bold color={colors.bone}>MARKET</Text>
+        <Box>
+          <Text dimColor>{onMainnet}   </Text>
+          <HeliusBadge status={rpcStatus} />
+        </Box>
       </Box>
       {/* tabs */}
       <Box marginTop={1}>
@@ -990,11 +1013,15 @@ export function SkillMarket({
         <Box marginTop={1}><Text color={colors.ok}>{glyph.sparkle} {flash}</Text></Box>
       ) : null}
       <Box marginTop={1}>
-        <Text dimColor>
+        <Band label="buy" note="ONE TX: PAY, MINT YOUR COPY, EQUIP IT." inverted />
+      </Box>
+      <Box justifyContent="space-between">
+        <Text dimColor wrap="truncate-end">
           {typing
             ? "type to search · ↵ run · [tab] skills/workflows · ↓ results · esc close"
-            : "←/→ rotate · ↵ open · [b] buy · [tab] switch · [/] search · [a] agents · [p] publish · [r] rpc · [h] hide owned · [s] sort · esc close"}
+            : "←/→ · ↵ open · [b] buy · [tab] switch · [/] search · [a] agents · [p] publish · [h] hide · [s] sort · esc"}
         </Text>
+        <Text dimColor>{sol(balance)}</Text>
       </Box>
     </Box>
   );
