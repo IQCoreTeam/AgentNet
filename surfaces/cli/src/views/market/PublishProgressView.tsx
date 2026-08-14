@@ -4,6 +4,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import { colors } from "../../theme.js";
+import { Band } from "../../components/Band.js";
 
 export interface PublishProgress {
   phase: "store" | "mint" | "list";
@@ -13,10 +14,12 @@ export interface PublishProgress {
   kind: "skill" | "workflow";
 }
 
-const PHASES: { key: PublishProgress["phase"]; label: string }[] = [
-  { key: "store", label: "storing on-chain" },
-  { key: "mint", label: "minting the NFT" },
-  { key: "list", label: "listing for sale" },
+// design tab 25: three numbered phases, each with a one-line status of what that
+// signature does.
+const PHASES: { key: PublishProgress["phase"]; label: string; sub: string }[] = [
+  { key: "store", label: "STORE", sub: "code-in chunks" },
+  { key: "mint", label: "MINT", sub: "creating token-2022 mint" },
+  { key: "list", label: "LIST", sub: "register price · self mint #1" },
 ];
 
 export function PublishProgressView({ progress }: { progress: PublishProgress | null }) {
@@ -30,19 +33,38 @@ export function PublishProgressView({ progress }: { progress: PublishProgress | 
   // Segmented forge gauge, mirroring the webview's 14-cell bar (unlock-flow design).
   const CELLS = 14;
   const filled = Math.round((overall / 100) * CELLS);
+  const remaining = total && total > signed ? total - signed : null;
   return (
     <Box flexDirection="column" marginTop={1}>
       {PHASES.map((p, i) => (
-        <Text key={p.key} color={i < idx ? colors.ok : i === idx ? colors.iqCyan : colors.dim}>
-          {i < idx ? "✓" : i === idx ? "▸" : "○"} {p.label}
-        </Text>
+        <Box key={p.key} justifyContent="space-between">
+          <Text color={i < idx ? colors.ok : i === idx ? colors.iqCyan : colors.dim} bold={i === idx}>
+            {i < idx ? "✓" : i === idx ? "▸" : "○"} {i + 1} · {p.label}
+          </Text>
+          <Text dimColor>{i < idx ? "done" : i === idx ? p.sub : ""}</Text>
+        </Box>
       ))}
-      <Text>
-        <Text color={colors.iqCyan}>{"▰".repeat(filled)}</Text>
-        <Text color={colors.dim}>{"▱".repeat(CELLS - filled)}</Text>
-        <Text dimColor> {overall}%</Text>
+      <Box marginTop={1}>
+        <Text>
+          <Text color={colors.iqCyan}>{"▰".repeat(filled)}</Text>
+          <Text color={colors.dim}>{"▱".repeat(CELLS - filled)}</Text>
+          <Text dimColor> {overall}%</Text>
+        </Text>
+      </Box>
+      <Text dimColor>
+        {signed > 0
+          ? `${signed}${total ? `/${total}` : ""} SIGNATURES_APPROVED`
+          : "waiting for the first signature…"}
       </Text>
-      <Text dimColor>{signed > 0 ? `${signed}${total ? `/${total}` : ""} signatures approved` : "waiting for the first signature…"}</Text>
+      {remaining ? (
+        <Box marginTop={1}>
+          <Band
+            label="next"
+            note={`APPROVE IN YOUR WALLET · ${remaining} SIGNATURE${remaining === 1 ? "" : "S"} LEFT`}
+            inverted
+          />
+        </Box>
+      ) : null}
     </Box>
   );
 }

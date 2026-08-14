@@ -6,11 +6,21 @@ import { Box, Text } from "ink";
 import type { SkillDetail, Note } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../../theme.js";
 import { ScrollView } from "./ScrollView.js";
+import { Band } from "../../components/Band.js";
 
 export type DetailSub = "main" | "skillText" | "comments";
 
 function noteDate(ts: number): string {
   return new Date(ts).toLocaleDateString();
+}
+
+const SOL = 1_000_000_000;
+function priceLabel(price?: string | null): string {
+  if (!price || price === "0") return "FREE";
+  return `${(Number(price) / SOL).toFixed(3)} SOL`;
+}
+function shortMint(m?: string): string {
+  return m && m.length > 12 ? `${m.slice(0, 6)}…${m.slice(-4)}` : m ?? "";
 }
 
 export function SkillDetailView({
@@ -73,12 +83,17 @@ export function SkillDetailView({
   }
 
   // main
+  const kindWord = (c.type ?? "skill").toUpperCase();
   return (
     <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
-      <Box>
+      <Box justifyContent="space-between">
+        <Text bold color={colors.bone}>{kindWord}</Text>
+        <Text dimColor>{shortMint(c.id)}{c.type === "workflow" ? " · soulbound token-2022" : " · soulbound"}</Text>
+      </Box>
+      <Box marginTop={1}>
         <Text bold color={colors.iqCyan}>{c.name}</Text>
         {firing ? <Text color={colors.iqMagenta}> ✦</Text> : null}
-        <Text dimColor>  {c.type ?? "skill"} · ×{c.supply ?? 0}{c.stars ? ` · ★${c.stars}` : ""}{isOwned ? (disposed ? " · disposed" : " · owned") : ""}</Text>
+        <Text dimColor>  ×{c.supply ?? 0}{c.stars ? ` · ★${c.stars}` : ""}{isOwned ? (disposed ? " · disposed" : " · owned") : ""}</Text>
       </Box>
       {c.description ? <Text>{c.description}</Text> : null}
       {c.category || (c.hashtags && c.hashtags.length) ? (
@@ -112,7 +127,7 @@ export function SkillDetailView({
 
       {detail.repos && detail.repos.length ? (
         <Box flexDirection="column" marginTop={1}>
-          <Text dimColor>used by · <Text color={colors.warn}>★{c.stars ?? detail.repos.reduce((s, r) => s + (r.stars || 0), 0)}</Text></Text>
+          <Band label="used by" note="VERIFIED REPOS · WHERE STARS COME FROM" />
           {detail.repos.map((r) => (
             <Box key={r.url}>
               <Text color={colors.iqCyan}>  {r.owner}/{r.name}</Text>
@@ -135,6 +150,13 @@ export function SkillDetailView({
       </Box>
 
       {flash ? <Box marginTop={1}><Text color={colors.ok}>{glyph.sparkle} {flash}</Text></Box> : null}
+      <Box marginTop={1}>
+        <Band
+          label="buy"
+          note={`${priceLabel(c.price)} · MINTS YOUR COPY, NEVER TRANSFERABLE`}
+          inverted
+        />
+      </Box>
       <Box marginTop={1}>
         <Text dimColor>
           {busy ? "working…" : isOwned
