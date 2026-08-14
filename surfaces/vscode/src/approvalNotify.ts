@@ -49,6 +49,7 @@ export interface CardSurface {
 }
 
 const SENTINEL = "Write my own answer…"; // the "custom input" row in a pick list
+const SEP = "\x1f"; // unit separator — joins list selections; a label will not contain it
 
 // ── low-level: run a tool, never reject. Resolves exit code + stdout/stderr; flags a missing
 // binary (ENOENT) so Linux can fall back zenity -> kdialog -> none. An aborted run (focus came
@@ -174,13 +175,18 @@ const macPrompter: Prompter = {
     const items = options.map((o) => `"${macEsc(o.label)}"`);
     if (allowCustom) items.push(`"${macEsc(SENTINEL)}"`);
     const multiClause = multi ? " with multiple selections allowed" : "";
+    // osascript PRINTS a list ", "-joined, so a label containing ", " is indistinguishable from
+    // two selections: {"Yes, proceed", "Deny"} prints `Yes, proceed, Deny` and parses as three.
+    // Coerce to text under the unit separator instead — the same one the zenity list uses. A
+    // cancelled dialog is `false`, and `false as text` is still "false", so that check is intact.
     const r = await osa(
-      `choose from list {${items.join(", ")}} with title "AgentNet" with prompt "${macEsc(question)}"${multiClause}`,
+      `set AppleScript's text item delimiters to (ASCII character 31)\n` +
+        `return (choose from list {${items.join(", ")}} with title "AgentNet" with prompt "${macEsc(question)}"${multiClause}) as text`,
       signal,
     );
     const out = r.stdout.trim();
     if (r.code !== 0 || out === "false" || out === "") return null;
-    let selected = out.split(", ");
+    let selected = out.split(SEP).filter(Boolean);
     let text: string | undefined;
     if (allowCustom && selected.indexOf(SENTINEL) >= 0) {
       selected = selected.filter((s) => s !== SENTINEL);
@@ -199,7 +205,6 @@ const macPrompter: Prompter = {
 // execFile passes args as literal argv (no shell), so option labels need no escaping. zenity's
 // exit codes carry the answer: 0 = OK/primary; 1 = Cancel/closed OR an --extra-button (whose
 // label prints to stdout); so OK vs extra-button vs closed are all distinguishable.
-const SEP = "\x1f"; // unit separator — a list value is very unlikely to contain it
 const zenityPrompter: Prompter = {
   async askMain({ title, body, danger }, signal) {
     const r = await run(
