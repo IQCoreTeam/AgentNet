@@ -91,6 +91,7 @@
     }
   },
   "scripts": {
+    "vscode:prepublish": "npm run build",
     "build": "tsup",
     "watch": "tsup --watch"
   },

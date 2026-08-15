@@ -113,6 +113,30 @@ In VS Code (Marketplace install) or the Extension Development Host window (sourc
 
 ---
 
+## Optional — (from source) package a .vsix
+
+To install your own build into your real VS Code (instead of the Extension Development
+Host), or to cut a Marketplace release, package the extension from `surfaces/vscode`:
+
+```bash
+cd surfaces/vscode
+npx @vscode/vsce package --no-dependencies
+code --install-extension agentnet-vscode-<version>.vsix
+```
+
+`--no-dependencies` is required, not optional. Without it `vsce` shells out to
+`npm list --production --parseable --depth=99999` to walk the dependency tree, npm cannot
+read this pnpm workspace's symlinked layout, and packaging dies with
+`npm error code ELSPROBLEMS`. Skipping the walk is safe here because nothing from
+`node_modules` ships: tsup inlines the core SDK into `dist/`, and `.vscodeignore` keeps the
+`.vsix` down to `dist/` plus `media/`.
+
+Packaging runs the `vscode:prepublish` script first, so `dist/` is always rebuilt from the
+current source and the `.vsix` can never carry a stale bundle. The `.vsix` itself is
+gitignored; rebuild it rather than committing it.
+
+---
+
 ## Optional — cloud session sync
 
 Sessions are stored locally by default. To sync them across devices you can connect a
