@@ -121,15 +121,13 @@ export async function resolveRpcUrl(): Promise<string> {
   return (await heliusKeyWorks(url)) ? url : fallback;
 }
 
-/** Whether a DAS-capable RPC is actually ANSWERING — not merely configured. A stored Helius
- *  key must PASS the probe (a rejected / allowlist-blocked key silently degrades to the public
- *  RPC, which serves no DAS), or an explicit env RPC the operator set on purpose. This drives
- *  the market's "DAS ready" status, so it must reflect reality, not key presence. The probe is
- *  shared/cached with resolveRpcUrl (same URL), so this adds no extra round-trip in practice. */
+/** Whether a DAS-capable RPC is actually ANSWERING — not merely configured. Derived from the
+ *  ONE resolver above instead of re-deciding here: everything except the bare public default
+ *  (a probed-live Helius key, or an explicit env RPC) is the DAS path, so this is true exactly
+ *  when resolveRpcUrl did NOT land on the public fallback, and the two can never disagree.
+ *  Same cost: the probe is cached per URL, so this adds no extra round-trip. */
 export async function hasDasRpc(): Promise<boolean> {
-  const helius = await loadHeliusKey();
-  if (helius) return heliusKeyWorks(heliusUrl(helius.api_key));
-  return !!(process.env.DAS_RPC_URL || process.env.SOLANA_RPC_URL);
+  return (await resolveRpcUrl()) !== getPublicRpcUrl();
 }
 
 /** A masked view of the stored key for the UI: only the last 4 chars, rest dotted.
