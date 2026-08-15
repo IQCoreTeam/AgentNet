@@ -414,7 +414,7 @@ export function Chat({
   const [showSessions, setShowSessions] = useState(false);
   const [showMarket, setShowMarket] = useState(false);
   // which market screen /market, /agents and /skills land on
-  const [marketStage, setMarketStage] = useState<"list" | "agents" | "owned">("list");
+  const [marketStage, setMarketStage] = useState<"list" | "agents" | "owned" | "github">("list");
   const [showModels, setShowModels] = useState(false);
   const [showEfforts, setShowEfforts] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
@@ -822,7 +822,7 @@ export function Chat({
     setPanelFocused(false);
   }
 
-  function openMarket(stage: "list" | "agents" | "owned" = "list") {
+  function openMarket(stage: "list" | "agents" | "owned" | "github" = "list") {
     setPanelFocused(false);
     if (!market) {
       setNotice("skill market still loading, try again in a moment");
@@ -1004,6 +1004,9 @@ export function Chat({
         return;
       case "skills":
         openMarket("owned");
+        return;
+      case "github":
+        openMarket("github");
         return;
       case "resume": {
         const hit = chat.sessions.find((s) => s.sessionId.startsWith(arg));

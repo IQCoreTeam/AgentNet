@@ -13,6 +13,7 @@ export const SLASH_COMMANDS: SlashCmd[] = [
   { name: "market", desc: "browse and buy skills" },
   { name: "agents", desc: "browse agents and profiles" },
   { name: "skills", desc: "your owned skill collection" },
+  { name: "github", desc: "connect GitHub and register verified work" },
   { name: "more", desc: "load older history (scroll-back)" },
   { name: "compact", desc: "compact the conversation context" },
   { name: "clear", desc: "clear the on-screen transcript" },
