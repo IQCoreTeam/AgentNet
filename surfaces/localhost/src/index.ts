@@ -78,6 +78,12 @@ import { SessionStore } from "@iqlabs-official/agent-sdk/account/store";
 import { migrateSessions } from "@iqlabs-official/agent-sdk/account/migrate";
 
 const PORT = Number(process.env.AGENTNET_PORT ?? 4317);
+// This surface serves the app to a user with a system browser (desktop web + the Android
+// shell), so a http://localhost:PORT link the agent hands back actually opens. Declare that
+// to the runtime, which then gives the agent the "serve web apps + hand back a link" memory
+// hint (packages/core memory/previewSection). The cli/vscode surfaces never set this, so
+// their agents are not told to serve a preview no one there would open.
+process.env.AGENTNET_PREVIEW_HINT = "1";
 const GOOGLE_AUTHORIZE_URL = process.env.GOOGLE_AUTHORIZE_URL || "";
 
 // The built React UI (surfaces/webview/dist) this host serves. Default is the sibling

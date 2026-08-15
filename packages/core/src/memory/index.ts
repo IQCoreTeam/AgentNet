@@ -67,3 +67,4 @@ export class MemorySync {
 export type { CanonicalMemory, MemoryRecord, MemoryType } from "./types.js";
 export { MemoryStore } from "./store.js";
 export { updateSkillsSection } from "./skillsSection.js";
+export { updatePreviewSection } from "./previewSection.js";
