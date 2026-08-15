@@ -10,7 +10,7 @@ import { spawnCli } from "./spawn.js";
 import { SessionStore } from "../account/store.js";
 import { prepareResume } from "./inject/index.js";
 import { getDeviceProfile, buildDeviceNotice } from "../core/device.js";
-import { MemorySync, updateSkillsSection } from "../memory/index.js";
+import { MemorySync, updateSkillsSection, updatePreviewSection } from "../memory/index.js";
 import { SoulStore } from "../soul/store.js";
 import { injectSoulNative } from "../soul/convert/native.js";
 import { setSkillShoppingActive } from "../skill-market/passive.js";
@@ -154,6 +154,10 @@ export function createRuntime(
         // Must run AFTER injectAtStart, which regenerates MEMORY.md / AGENTS.md.
         const skills = await updateSkillsSection(opts.cli, opts.cwd);
         if (opts.cli === "claude" && skills.length) enabledSkills = skills.map((s) => s.name);
+        // Same managed-block machinery: on a surface that hands back browser links (gated on
+        // AGENTNET_PREVIEW_HINT inside), tell the agent to serve web apps on a loopback port
+        // and reply with the http://localhost:PORT link; elsewhere the block self-removes.
+        await updatePreviewSection(opts.cli, opts.cwd);
       } catch (e) {
         console.warn("[memory] inject failed:", e);
       }
