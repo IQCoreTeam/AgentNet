@@ -162,11 +162,11 @@ class MainActivity : AppCompatActivity() {
             javaScriptCanOpenWindowsAutomatically = true
         }
         webView.webViewClient = object : WebViewClient() {
-            // Our app UI is served from the loopback server (127.0.0.1) — keep that inside
-            // the WebView. Any OTHER http(s) link (e.g. the Claude OAuth login page the
-            // ConnectClaude screen surfaces) must open in the EXTERNAL browser: otherwise
-            // claude.ai would take over our WebView and the user couldn't get back to paste
-            // their code. Opening externally lets them authorize, then return to the app.
+            // Our app UI is served from the loopback server at Paths.PORT — keep that inside
+            // the WebView. Any OTHER link (e.g. the Claude OAuth login page the ConnectClaude
+            // screen surfaces, or a dev server the agent starts on another loopback port) must
+            // open in the EXTERNAL browser: otherwise it would take over our WebView and the
+            // user couldn't get back. Opening externally lets them read it, then return.
             override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = openExternally(url)
             // Our UI is loaded → drain any deep link a notification tap stashed (cold start
             // reads the intent in onCreate, before the page — and thus its JS — exists).
@@ -279,15 +279,24 @@ class MainActivity : AppCompatActivity() {
         startServerFlow()
     }
 
-    // The single place that routes a URL off our WebView: an external host opens in the system
-    // browser as its own task ("new tab"); our own loopback UI (127.0.0.1) declines with false
-    // so it stays inside the WebView. Shared by direct navigations (shouldOverrideUrlLoading)
-    // and new-window requests (onCreateWindow) so both behave identically.
+    // The single place that routes a URL off our WebView: anything that isn't our own UI opens
+    // in the system browser as its own task ("new tab"); our own UI declines with false so it
+    // stays inside the WebView. Shared by direct navigations (shouldOverrideUrlLoading) and
+    // new-window requests (onCreateWindow) so both behave identically.
+    //
+    // "Our own UI" is a loopback host AT Paths.PORT, not merely a loopback host. Matching the
+    // host alone could not tell our server apart from any OTHER loopback port, so tapping a
+    // http://127.0.0.1:5173 link in a transcript (a dev server the agent just started) navigated
+    // this WebView in place and replaced the whole app with a chrome-less page — and nothing in
+    // this Activity handles back, so the only way out was force-killing the app. A URL with no
+    // explicit port parses to port -1, which is never our origin (the WebView loads from the URL
+    // constant above, port included), so it too falls through and opens externally.
     private fun openExternally(url: String): Boolean {
-        val host = runCatching { Uri.parse(url).host }.getOrNull()
-        if (host == null || host == "127.0.0.1" || host == "localhost") return false
+        val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return false
+        val host = uri.host ?: return false
+        if ((host == "127.0.0.1" || host == "localhost") && uri.port == Paths.PORT) return false
         return runCatching {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             true // handled: opened in the external browser
         }.getOrDefault(false)
     }
