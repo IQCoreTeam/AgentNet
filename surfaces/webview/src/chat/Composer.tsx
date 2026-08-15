@@ -61,14 +61,17 @@ const EFFORTS = [
 ];
 
 const MODES: Record<Cli, { value: string; label: string; title: string }[]> = {
+  // Kept in the SAME order + wording as the VSCode surface (webview.ts) so the modes read
+  // identically everywhere — the SDK's native permission-mode order.
   claude: [
-    { value: "acceptEdits", label: "Auto edit",  title: "Auto-accept file edits; still ask for other tools" },
     { value: "default",     label: "Ask edits",  title: "Ask before each file edit (default)" },
+    { value: "acceptEdits", label: "Auto edit",  title: "Auto-accept file edits; still ask for other tools" },
     { value: "plan",        label: "Plan",        title: "Plan mode: read-only until you approve the plan" },
+    { value: "bypassPermissions", label: "Bypass", title: "Bypass all permission prompts (--dangerously-skip-permissions). Auto-runs every command, edit, and on-chain spend. Use with care." },
   ],
   codex: [
-    { value: "auto",     label: "Auto accept", title: "Auto-accept edits + run inside the workspace (default)" },
     { value: "readonly", label: "Read only",   title: "Read-only sandbox; ask before edits, commands, network" },
+    { value: "auto",     label: "Auto accept", title: "Auto-accept edits + run inside the workspace; approve on failure (default)" },
     { value: "full",     label: "Full access", title: "Full disk + network access, never ask (use with care)" },
   ],
 };

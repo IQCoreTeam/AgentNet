@@ -142,6 +142,27 @@ function claudePermissionMode(
     : "default";
 }
 
+// Codex approval policy per UI mode. The picker sends "auto" | "readonly" | "full"; the
+// codex app-server takes an approvalPolicy. (Sandbox is a separate axis — see codexSandbox.)
+// Previously the app hardcoded "on-request" and ignored the mode, so the codex chips did
+// nothing; this makes them real.
+function codexApprovalPolicy(mode?: string): "on-request" | "on-failure" | "never" {
+  if (mode === "full") return "never"; // full access, never ask
+  if (mode === "auto") return "on-failure"; // auto-run in the workspace; ask only on failure/escalation
+  return "on-request"; // readonly + default: ask before edits, commands, network
+}
+
+// Codex OS sandbox per UI mode. AGENTNET_CODEX_SANDBOX wins when set (Android forces
+// danger-full-access because bubblewrap can't run under proot — there the approvalPolicy
+// above is the real control); otherwise derive the sandbox from the mode.
+function codexSandbox(mode: string | undefined, envSandbox: string | undefined): string | undefined {
+  if (envSandbox) return envSandbox;
+  if (mode === "full") return "danger-full-access";
+  if (mode === "readonly") return "read-only";
+  if (mode === "auto") return "workspace-write";
+  return undefined; // codex default
+}
+
 export function spawnCli(opts: SpawnOpts): Engine {
   return opts.cli === "claude" ? claudeEngine(opts) : codexEngine(opts);
 }
@@ -354,6 +375,22 @@ function claudeEngine(opts: SpawnOpts): Engine {
     return { behavior: "allow" as const, updatedInput: decision.updatedInput ?? input };
   };
 
+  // The SDK `env` REPLACES the subprocess environment, so start from process.env (keeps
+  // PATH / ANTHROPIC creds) and layer the git token on top when present. Claude Code refuses
+  // --dangerously-skip-permissions (bypassPermissions) when running as root "for security
+  // reasons"; the proot guest IS root AND sandboxed (Android app sandbox + proot), so signal
+  // IS_SANDBOX to let YOLO actually work on-device. Guarded to root + bypass — a no-op elsewhere.
+  const claudeEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    ...(opts.githubToken ? gitCredentialEnv(opts.githubToken) : {}),
+  };
+  // AGENTNET_CODEX_SANDBOX is set only by the Android launcher (ServerManager) → it marks the
+  // proot guest. Require it so IS_SANDBOX is set ONLY inside that genuinely-sandboxed guest, not
+  // on any random root host (a desktop running as root would otherwise get an unguarded bypass).
+  if (opts.mode === "bypassPermissions" && process.getuid?.() === 0 && process.env.AGENTNET_CODEX_SANDBOX) {
+    claudeEnv.IS_SANDBOX = "1";
+  }
+
   const q = query({
     prompt: prompts(),
     options: {
@@ -387,7 +424,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
       ...(opts.enabledSkills?.length ? { skills: opts.enabledSkills } : {}),
       // Give the agent's git the configured GitHub token. The SDK `env` REPLACES the
       // subprocess environment, so spread process.env to keep PATH / ANTHROPIC creds / etc.
-      ...(opts.githubToken ? { env: { ...process.env, ...gitCredentialEnv(opts.githubToken) } } : {}),
+      env: claudeEnv,
       // NOTE: settingSources is deliberately omitted — the SDK then loads ALL sources
       // (user/project/local), which is what lets skills in the user dir (~/.claude/skills,
       // where owned NFTs + the passive workflow are installed) be discovered. Passing
@@ -486,6 +523,16 @@ function codexEngine(opts: SpawnOpts): Engine {
   // AGENTNET_CODEX_SANDBOX=danger-full-access so Codex skips its own sandbox and relies on
   // proot + the app sandbox + our approval gate. Desktop leaves it unset → Codex's default.
   const sandbox = process.env.AGENTNET_CODEX_SANDBOX || undefined;
+  // Make the codex mode chips real: derive the approval policy + sandbox from opts.mode.
+  // A mode change restages the session (session.ts), so the next spawn picks these up.
+  // When the OS sandbox is FORCED by env (Android proot can't run bubblewrap → danger-full-access),
+  // a non-"full" mode must NOT weaken to on-failure: the sandbox isn't really constraining there, so
+  // the approval gate is the only real control and must keep asking. Only "full" opts out. Desktop
+  // (no env override) uses the mode's own policy.
+  const codexApproval = sandbox
+    ? (opts.mode === "full" ? "never" : "on-request")
+    : codexApprovalPolicy(opts.mode);
+  const effectiveSandbox = codexSandbox(opts.mode, sandbox);
   const childEnv = { ...process.env, ...gitCredentialEnv(opts.githubToken) };
   if (opts.apiKey) {
     childEnv.OPENAI_API_KEY = opts.apiKey;
@@ -876,9 +923,9 @@ function codexEngine(opts: SpawnOpts): Engine {
           threadId: opts.sessionId,
           model: opts.model,
           cwd: opts.cwd,
-          approvalPolicy: "on-request",
+          approvalPolicy: codexApproval,
           approvalsReviewer: "user",
-          ...(sandbox ? { sandbox } : {}),
+          ...(effectiveSandbox ? { sandbox: effectiveSandbox } : {}),
           ...(opts.effort ? { reasoning_effort: opts.effort } : {}),
         });
         cb.emitSid(opts.sessionId);
@@ -886,9 +933,9 @@ function codexEngine(opts: SpawnOpts): Engine {
         const res = await sendRequest("thread/start", {
           model: opts.model,
           cwd: opts.cwd,
-          approvalPolicy: "on-request",
+          approvalPolicy: codexApproval,
           approvalsReviewer: "user",
-          ...(sandbox ? { sandbox } : {}),
+          ...(effectiveSandbox ? { sandbox: effectiveSandbox } : {}),
           ...(opts.effort ? { reasoning_effort: opts.effort } : {}),
         });
         const threadId = res?.thread?.id;
