@@ -152,7 +152,10 @@ export function activate(context: vscode.ExtensionContext) {
 async function boot(context: vscode.ExtensionContext) {
   try {
     if (context.globalState.get<boolean>("onboarded")) {
-      wallet = (await localWallet()).wallet;
+      // Reopen the SAME keypair the user picked in onboarding. Without the stored path this
+      // fell back to the Solana CLI default (a different address), so wallet-encrypted session
+      // pages stopped decrypting. Never onboarded here means undefined, and localWallet keeps its own default.
+      wallet = (await localWallet(context.globalState.get<string>("keypairPath"))).wallet;
       runtime = await connect(wallet, cloudStatusCb); // local always works; mirrors cloud if connected
       openChat(context);
     } else {
@@ -372,8 +375,13 @@ function openOnboarding(context: vscode.ExtensionContext) {
         break;
       case "connectWallet": {
         try {
-          const r = await localWallet(m.path); // load AT path; create only if missing
+          // The webview path box is plain text with no shell, so a typed "~/keys/id.json" arrives
+          // literally; expand it (like install_skill expands a user-typed targetDir) so node does
+          // not create a directory literally named "~".
+          const r = await localWallet(m.path.replace(/^~(?=$|\/)/, homedir()));
           wallet = r.wallet;
+          // Remember the resolved path so the next launch reopens this exact keypair (see boot).
+          await context.globalState.update("keypairPath", r.path);
           panel.webview.postMessage({
             type: "walletConnected",
             address: r.address,
