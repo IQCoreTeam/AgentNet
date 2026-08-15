@@ -10,6 +10,11 @@ const SETTINGS: PanelField[] = ["wallet", "cloud", "engine", "helius"];
 const SKILLS_IDX = SETTINGS.length;
 const FOCUS_TOTAL = SKILLS_IDX + 1;
 
+// Narrowest a band can be before its widest content wraps: the skills row, once every
+// skill folds, still needs ` //SKILLS_ ` plus the `+N · ▸ MARKET` tail (26 cells). Below
+// this the panel drops its logo column rather than seat a too-narrow band beside it.
+const MIN_BAND = 26;
+
 // A clickable terminal hyperlink (OSC 8). Modern terminals (iTerm2, VS Code,
 // kitty, …) render `label` underlined and open `url` on ⌘/Ctrl-click; the rest
 // just show the label, so we keep the raw URL visible separately as a fallback.
@@ -167,7 +172,14 @@ export function WelcomePanel({
 
   const cols = process.stdout.columns || 80;
   // Frame paddingX(2) outside, own bold border(2) + left column + its rail(1) inside.
-  const bandW = Math.max(24, cols - 2 - 2 - leftW - 1);
+  const inner = cols - 2 - 2;
+  const besideLogo = inner - leftW - 1;
+  // The old `Math.max(24, ...)` floor kept bands 24 wide even when fewer columns remained
+  // beside the logo, so the row ran past the frame on a narrow terminal. Instead: show the
+  // logo only where a full band fits beside it, and below that drop the logo and give the
+  // bands the whole inner width. Where the logo fits, the layout is unchanged.
+  const showLogo = besideLogo >= MIN_BAND;
+  const bandW = showLogo ? besideLogo : Math.max(1, inner);
 
   // The bone rules between bands are part of the silhouette but cost 4 rows; on a short
   // terminal the bands pack tight instead. Full height: 5 bands + 4 rules + hint + border.
@@ -245,23 +257,26 @@ export function WelcomePanel({
 
   return (
     <Box flexDirection="row" borderStyle="bold" borderColor={colors.bone} marginBottom={1}>
-      {/* logo column behind a bold rail, the design's 280px left cell */}
-      <Box
-        flexDirection="column"
-        paddingX={1}
-        justifyContent="center"
-        alignItems="center"
-        borderStyle="bold"
-        borderColor={colors.bone}
-        borderTop={false}
-        borderBottom={false}
-        borderLeft={false}
-      >
-        <Text color={colors.bone}>{mascot[0]}</Text>
-        <Text dimColor>{mascot[1]}</Text>
-        <Text dimColor>{mascot[2]}</Text>
-        <Text dimColor>{mascot[3]}</Text>
-      </Box>
+      {/* logo column behind a bold rail, the design's 280px left cell; dropped when the
+          terminal is too narrow to seat it beside a readable band (see showLogo) */}
+      {showLogo ? (
+        <Box
+          flexDirection="column"
+          paddingX={1}
+          justifyContent="center"
+          alignItems="center"
+          borderStyle="bold"
+          borderColor={colors.bone}
+          borderTop={false}
+          borderBottom={false}
+          borderLeft={false}
+        >
+          <Text color={colors.bone}>{mascot[0]}</Text>
+          <Text dimColor>{mascot[1]}</Text>
+          <Text dimColor>{mascot[2]}</Text>
+          <Text dimColor>{mascot[3]}</Text>
+        </Box>
+      ) : null}
 
       {/* stacked config bands */}
       <Box flexDirection="column" justifyContent="center">
