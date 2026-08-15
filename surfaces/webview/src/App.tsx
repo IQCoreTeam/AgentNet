@@ -9,6 +9,7 @@ import { FundModal } from "./market/FundModal";
 import { Sessions } from "./chat/Sessions";
 import { TabBar } from "./shell/TabBar";
 import { WelcomeTutorial } from "./unlock/WelcomeTutorial";
+import { StarterTemplates } from "./unlock/StarterTemplates";
 import { Alert } from "./Alert";
 import { useVisualViewportVars, useKeyboardChrome } from "./layoutEffects";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
@@ -142,6 +143,8 @@ export function App() {
       <Alert />
       {/* First-boot intro: self-gates to a wallet-less new user on the chat screen. */}
       <WelcomeTutorial />
+      {/* Starter templates: self-gates to a fresh user who just connected an engine (post-welcome). */}
+      <StarterTemplates />
       {state.buyCelebrate && <CompleteCelebration label={state.buyCelebrateLabel ?? "SKILL PURCHASED"} card={state.marketDetail?.card} onDone={clearCelebrate} flicker />}
       {state.fundOpen && <FundModal />}
       {publishCelebrate && <CompleteCelebration label={state.publishKind === "workflow" ? "WORKFLOW BUILT" : "SKILL CREATED"} onDone={() => setPublishCelebrate(false)} />}

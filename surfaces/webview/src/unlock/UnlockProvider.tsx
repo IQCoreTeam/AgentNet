@@ -1,25 +1,29 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useStore } from "../state/store";
-import { ConnectWallet } from "../onboarding/ConnectWallet";
 import { HeliusKeyForm } from "../settings/HeliusKeyForm";
 import { ConnectDriveForm } from "../settings/ConnectDriveForm";
 import { CheckIcon, LockIcon } from "../icons";
 import { haptics } from "../haptics";
-import sessionsImg from "../assets/unlock-sessions.webp";
-import earnImg from "../assets/unlock-earn.webp";
 
 export type UnlockReason = "skills" | "buy" | "publish" | "comment" | "identity" | "sync";
-type UnlockScreen = "pitch" | "installed" | "connect" | "cloud" | "advanced" | "done";
+
+// The second tutorial: Full Unlock (setup). Opened from Settings or when an action needs it.
+// The wallet is auto-created on open (device-local keypair, no signature), so the flow is just
+// three optional steps: fund the wallet, back up to cloud, add a market RPC. `creating` is the
+// brief auto-create wait before Fund. No pitch, no App_Installed, no signature connect step.
+type UnlockScreen = "creating" | "fund" | "cloud" | "advanced" | "done";
+
+// Beginner-friendly funding explainer (buy with a card, or transfer from an exchange). One
+// source of truth, shared by the unlock Fund step and Settings > My Wallet.
+export const FUND_GUIDE_URL = "https://help.phantom.com/hc/en-us/articles/50063625990931-Fund-your-Phantom-wallet";
 type UnlockAction = (walletAddress: string) => void;
 
-// CRT scanline overlay reused by the green terminal bars (title bar, Access Granted banner).
+// CRT scanline overlay reused by the green terminal bars (title bar, Unlocked banner).
 // Exported so the first-boot Welcome tutorial textures its title bar identically.
 export const SCANLINES = "repeating-linear-gradient(0deg, rgba(0,0,0,0.11) 0, rgba(0,0,0,0.11) 1px, transparent 1px, transparent 4px)";
-// Denser scanline over solid green fills (active pip) — matches .an-btn::after so the button
-// and the pip beside it read as the same textured green.
-const GREEN_SCANLINES = "repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0, rgba(0,0,0,0.16) 1px, transparent 1px, transparent 3px)";
-// Four steps now (wallet · cloud · rpc are 02·03·04); the pitch is 00. Header reads xx/04.
-const SEQ: Record<UnlockScreen, string> = { pitch: "00", installed: "01", connect: "02", cloud: "03", advanced: "04", done: "04" };
+
+// Three steps: fund 01, cloud 02, rpc 03. `creating` is the pre-step wallet mint (no number).
+const SEQ: Record<UnlockScreen, string> = { creating: "00", fund: "01", cloud: "02", advanced: "03", done: "03" };
 
 const REASON_COPY: Record<UnlockReason, { title: string; returnLabel: string }> = {
   skills: { title: "Build your skill collection", returnLabel: "Open my skills" },
@@ -42,7 +46,7 @@ const REVEAL_DELAY: Record<UnlockReason, number> = {
 type UnlockContextValue = {
   unlocked: boolean;
   celebrating: boolean;
-  requestUnlock(reason: UnlockReason, onUnlocked?: UnlockAction, opts?: { skipIntro?: boolean }): void;
+  requestUnlock(reason: UnlockReason, onUnlocked?: UnlockAction): void;
 };
 
 const UnlockContext = createContext<UnlockContextValue | null>(null);
@@ -54,12 +58,11 @@ export function useUnlock(): UnlockContextValue {
 }
 
 export function UnlockProvider({ children }: { children: ReactNode }) {
-  const { state } = useStore();
+  const { state, send } = useStore();
   const unlocked = !!state.walletAddress;
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<UnlockReason>("identity");
-  const [screen, setScreen] = useState<UnlockScreen>("pitch");
-  const [pitchPage, setPitchPage] = useState(0);
+  const [screen, setScreen] = useState<UnlockScreen>("creating");
   const [celebrating, setCelebrating] = useState(false);
   const pending = useRef<UnlockAction | null>(null);
   const wasUnlocked = useRef(unlocked);
@@ -75,27 +78,27 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
     }, 1150);
   }
 
-  function requestUnlock(nextReason: UnlockReason, onUnlocked?: UnlockAction, opts?: { skipIntro?: boolean }) {
+  // Full Unlock. The wallet is created for the user (device-local keypair, no signature): with
+  // no wallet yet, mint one and wait on `creating` until it lands, then the effect below advances
+  // to Fund. If a wallet already exists, the gated action just proceeds (nothing to unlock).
+  function requestUnlock(nextReason: UnlockReason, onUnlocked?: UnlockAction) {
     if (unlocked && state.walletAddress) {
       onUnlocked?.(state.walletAddress);
       return;
     }
     pending.current = onUnlocked ?? null;
     setReason(nextReason);
-    // The unlock flow is a tutorial: normally it starts from the >WHY_UNLOCK pitch. Progress is
-    // intentionally not persisted, so reopening it replays the intro from the top every time.
-    // skipIntro lands straight on step 01 — used by the first-boot Welcome, which already showed
-    // that pitch (its sync/earn cards) so replaying it would be redundant.
-    setScreen(opts?.skipIntro ? "installed" : "pitch");
-    setPitchPage(0);
+    setScreen("creating");
     setOpen(true);
+    // Recommended path: a device-local keypair minted server-side. No wallet app, no signature.
+    send({ type: "makeLocalWallet" });
   }
 
   useEffect(() => {
     if (!wasUnlocked.current && unlocked && open) {
-      // Wallet just linked → step 3 (optional Cloud_Backup) BEFORE the optional Market RPC and
-      // the granted screen, matching the tutorial order. Connect-or-skip advances through both.
-      setScreen("cloud");
+      // Wallet just created → step 01 (Fund_Wallet), then the optional Cloud_Backup and Market
+      // RPC before the Unlocked screen. Every step here is skippable.
+      setScreen("fund");
       haptics.unlock();
     }
     wasUnlocked.current = unlocked;
@@ -109,14 +112,12 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
   const value = useMemo(() => ({ unlocked, celebrating, requestUnlock }), [unlocked, celebrating, state.walletAddress]);
   const copy = REASON_COPY[reason];
 
-  // Leaving mid-setup must not leave a half-finished "ghost" screen behind: reset the tutorial
-  // to the top so the ONLY thing that decides locked-vs-unlocked is the wallet (state.walletAddress).
-  // No seen/read marker is persisted — reopening always replays the full setup while there's no wallet.
+  // Leaving mid-setup resets to the top so the ONLY thing that decides locked-vs-unlocked is the
+  // wallet (state.walletAddress). No seen/read marker is persisted.
   function dismiss() {
     setOpen(false);
     pending.current = null;
-    setScreen("pitch");
-    setPitchPage(0);
+    setScreen("creating");
     if (unlocked) startBadgeReveal();
   }
 
@@ -131,81 +132,52 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  function go(next: UnlockScreen) {
-    setScreen(next);
-    // Escalating haptics as each pre-wallet tutorial step lands; the wallet link itself fires the
-    // big unlock buzz from the connect effect above, so the post-wallet steps buzz lighter.
-    if (next === "installed") haptics.step1();
-    else if (next === "connect") haptics.step2();
-    else haptics.tick();
-  }
-
-  // Leaving the optional Cloud_Backup step (connected or skipped) → the optional Market RPC step.
-  function enterAdvanced() {
-    setScreen("advanced");
-    haptics.tick();
-  }
-
-  // Leaving the optional RPC step (saved or skipped) → the Access Granted screen. This is the
-  // single success moment: one celebrate buzz. Feedback is haptic only — no sound.
-  function enterGranted() {
-    setScreen("done");
-    haptics.celebrate();
-  }
+  // Fund → optional Cloud_Backup → optional Market RPC → Unlocked. Post-wallet steps buzz light.
+  function enterCloud() { setScreen("cloud"); haptics.tick(); }
+  function enterAdvanced() { setScreen("advanced"); haptics.tick(); }
+  // The single success moment: one celebrate buzz. Feedback is haptic only, no sound.
+  function enterGranted() { setScreen("done"); haptics.celebrate(); }
 
   return (
     <UnlockContext.Provider value={value}>
       {children}
       {open && (
-        <div className="fixed inset-0 z-[60] flex items-end justify-center" role="dialog" aria-modal="true" aria-label="Unlock AgentNet">
-          <button type="button" className="absolute inset-0 bg-black/70" aria-label="Close unlock tutorial" onClick={unlocked ? continueAction : dismiss} />
+        <div className="fixed inset-0 z-[60] flex items-end justify-center" role="dialog" aria-modal="true" aria-label="AgentNet Full Unlock">
+          <button type="button" className="absolute inset-0 bg-black/70" aria-label="Close setup" onClick={unlocked ? continueAction : dismiss} />
           <section className="an-term-mono unlock-sheet relative z-10 flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden border border-b-0 border-[color:var(--an-line)] bg-[color:var(--an-bg-0)]">
             <div className="border-b border-[color:var(--an-line)]">
               <div className="an-term-mono flex items-center justify-between gap-2 px-4 pt-3 pb-2 text-[10px] uppercase tracking-[0.14em]" style={{ color: "var(--an-fg-mute)" }}>
-                <span>&gt;UNLOCK_SEQ {SEQ[screen]}/04</span><span>アクセス {screen === "done" ? "OK" : "******"}</span>
+                <span>&gt;UNLOCK_SEQ {SEQ[screen]}/03</span><span>アクセス {screen === "done" ? "OK" : "******"}</span>
               </div>
               <div className="mx-3 mb-3 flex items-center justify-between gap-2" style={{ backgroundColor: "var(--an-green)", backgroundImage: SCANLINES, color: "var(--an-on-green)", padding: "9px 12px" }}>
-                <h2 className="an-term-mono truncate text-[13px] font-bold uppercase tracking-[0.14em]">{copy.title}</h2>
+                <h2 className="an-term-mono truncate text-[13px] font-bold uppercase tracking-[0.14em]">AgentNet Full Unlock</h2>
                 <button type="button" onClick={unlocked ? continueAction : dismiss} className="an-term-mono shrink-0 text-[13px] font-bold leading-none active:opacity-70" aria-label="Close">[x]</button>
               </div>
             </div>
 
-            {/* key={screen} remounts the content on each step swap (so the pitch imagery
-                replays its short flicker); the step content itself no longer flickers. */}
+            {/* key={screen} remounts the content on each step swap so the icon replays its flicker. */}
             <div key={screen} className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-              {screen === "pitch" && (
-                <ValuePitch
-                  page={pitchPage}
-                  onPageChange={setPitchPage}
-                  onContinue={() => go("installed")}
-                />
-              )}
-              {screen === "installed" && (
-                <StepScreen step={1} title="App_Installed" detail="AgentNet, chat, local files, and the Linux sandbox are ready on this device.">
-                  <button type="button" onClick={() => go("connect")} className="an-btn an-btn-green mt-7 w-full">Continue to wallet</button>
-                </StepScreen>
-              )}
-              {screen === "connect" && (
-                <StepScreen step={2} title="Connect_Wallet" status="Awaiting_Signature" detail="One signature links your agent. No payment is made." icon={ICON_WALLET}>
-                  <div className="mt-6"><ConnectWallet embedded /></div>
-                  <p className="mt-4 text-center text-caption leading-relaxed text-[color:var(--an-fg-dim)]">Close this at any time. This step will be waiting when you return.</p>
+              {screen === "creating" && <CreatingWallet />}
+              {screen === "fund" && (
+                <StepScreen step={1} title="Fund_Wallet" status="Optional" detail="Your wallet was created to encrypt every chat session and to buy and sell skills. There is no need to add funds now." icon={ICON_FUND}>
+                  <FundControls address={state.walletAddress ?? ""} onDone={enterCloud} />
                 </StepScreen>
               )}
               {screen === "cloud" && (
-                <StepScreen step={3} title="Cloud_Backup" status="Needed_for_Sync" detail="Back up encrypted sessions to your own Google Drive. This is what lets another device pick up your work. Your wallet key encrypts everything before upload; nobody else can read it." icon={ICON_CLOUD}>
+                <StepScreen step={2} title="Cloud_Backup" status="Needed_for_Sync" detail="Back up encrypted sessions to your own Google Drive. This is what lets another device pick up your work. Your wallet key encrypts everything before upload; nobody else can read it." icon={ICON_CLOUD}>
                   <ConnectDriveForm onDone={enterAdvanced} skipLabel="Skip for now" />
                   <p className="mt-3 text-center text-caption leading-relaxed text-[color:var(--an-fg-mute)]">Sessions stay on this device until you connect. You can do this later in Settings.</p>
                 </StepScreen>
               )}
               {screen === "advanced" && (
-                <StepScreen step={4} title="Market_RPC" status="Optional_Module" detail="The public RPC works by default. Paste a Helius key for faster market indexing." icon={ICON_RPC}>
+                <StepScreen step={3} title="Market_RPC" status="Optional_Module" detail="Completely optional. The public RPC works by default. Paste a Helius key for faster market indexing." icon={ICON_RPC}>
                   <div className="mt-6"><HeliusKeyForm onDone={enterGranted} skipLabel="Skip for now" /></div>
                 </StepScreen>
               )}
               {screen === "done" && (
                 <div className="mx-auto max-w-sm">
-                  <Progress value={4} />
-                  <div className="unlock-flicker an-term-mono mt-6 text-center text-[17px] font-extrabold uppercase tracking-[0.18em]" style={{ backgroundColor: "var(--an-green)", backgroundImage: SCANLINES, color: "var(--an-on-green)", padding: "12px 10px" }}>Access Granted</div>
+                  <Progress value={3} />
+                  <div className="unlock-flicker an-term-mono mt-6 text-center text-[17px] font-extrabold uppercase tracking-[0.18em]" style={{ backgroundColor: "var(--an-green)", backgroundImage: SCANLINES, color: "var(--an-on-green)", padding: "12px 10px" }}>AgentNet Unlocked</div>
                   <div className="mt-5 flex flex-col gap-3">
                     {["Skills_Index", "Earning", "Comments", "Session_Sync"].map((label, i) => (
                       <div key={label} className="unlock-reward an-term-mono flex items-baseline gap-2 text-[11px] uppercase tracking-wide" style={{ color: "var(--an-green)", animationDelay: `${0.15 * (i + 1)}s` }}>
@@ -226,19 +198,18 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// Step-box glyphs, matched to the tutorial design (wallet · upload-to-cloud · rpc nodes).
-const ICON_WALLET = (
-  <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="square" aria-hidden="true"><path d="M4 7.5h15v12H4z" /><path d="M4 7.5V5.5h13v2" /><path d="M14 12.5h5v3h-5z" /></svg>
-);
+// Step-box glyphs, matched to the tutorial design (coin · upload-to-cloud · rpc nodes).
 const ICON_CLOUD = (
   <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="square" aria-hidden="true"><path d="M4 16.5h16v4H4z" /><path d="M12 13.5V4.5" /><path d="M8.5 8 12 4.5 15.5 8" /></svg>
 );
 const ICON_RPC = (
   <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="square" aria-hidden="true"><rect x="3.5" y="9.5" width="8" height="5" rx="2.5" /><rect x="12.5" y="9.5" width="8" height="5" rx="2.5" /><path d="M9 12h6" /></svg>
 );
+const ICON_FUND = (
+  <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="square" aria-hidden="true"><circle cx="12" cy="12" r="8" /><path d="M12 7.4v9.2" /><path d="M14.3 9.2c-.5-.7-1.4-1.1-2.3-1.1-1.4 0-2.4.8-2.4 1.9 0 2.5 4.9 1.3 4.9 3.8 0 1.1-1 1.9-2.5 1.9-1 0-1.9-.4-2.5-1.1" /></svg>
+);
 
-// Green corner-tick brackets around the pitch imagery, faked with eight thin gradient bars —
-// the same look as the design mockup's framed screenshots.
+// Green corner-tick brackets, faked with eight thin gradient bars — the framed-screenshot look.
 const IMAGE_BRACKETS: CSSProperties = {
   position: "absolute",
   inset: -5,
@@ -255,8 +226,8 @@ const IMAGE_BRACKETS: CSSProperties = {
   ].join(","),
 };
 
-// The CRT-framed pitch image (green corner brackets + scanline). Shared with the first-boot
-// Welcome tutorial so both flows frame their imagery identically.
+// The CRT-framed image (green corner brackets + scanline). Shared with the first-boot Welcome
+// tutorial so both flows frame their imagery identically.
 export function FramedImage({ src, position }: { src: string; position?: string }) {
   return (
     <div className="unlock-img-flicker relative mx-auto" style={{ width: 200, height: 132, border: "1px solid var(--an-green-line)" }}>
@@ -267,8 +238,8 @@ export function FramedImage({ src, position }: { src: string; position?: string 
   );
 }
 
-// A single external "> LABEL / sub · [↗]" terminal link row. One source of truth for the
-// unlock pitch's PC-app link and the Welcome tutorial's VS Code / install-guide links.
+// A single external "> LABEL / sub · [↗]" terminal link row. One source of truth for the Fund
+// step's funding link and the Welcome tutorial's VS Code / install-guide links.
 export function LinkRow({ label, sub, href, className = "" }: { label: string; sub: string; href: string; className?: string }) {
   return (
     <a href={href} target="_blank" rel="noreferrer" className={`flex items-center gap-2 border border-[color:var(--an-line)] px-3 py-2.5 text-left no-underline active:opacity-80 ${className}`}>
@@ -281,86 +252,26 @@ export function LinkRow({ label, sub, href, className = "" }: { label: string; s
   );
 }
 
-type PitchCard = {
-  img: string;
-  position: string;
-  title: ReactNode;
-  text: string;
-  caption: string;
-  link?: { label: string; sub: string; href: string };
-};
-
-function ValuePitch({ page, onPageChange, onContinue }: { page: number; onPageChange: (page: number) => void; onContinue: () => void }) {
-  const scroller = useRef<HTMLDivElement>(null);
-  const cards: PitchCard[] = [
-    {
-      img: sessionsImg,
-      position: "50% 50%",
-      title: <>Leave off here,<br />pick up anywhere</>,
-      text: "Sessions are encrypted with your wallet and follow it. Start on this phone, reopen the same work in VS Code or the CLI.",
-      caption: "Only your wallet key can decrypt them.",
-      link: { label: "GET_THE_PC_APP", sub: "VS Code / CLI install guide · github", href: "https://github.com/IQCoreTeam/AgentNet/tree/main/install-guide" },
-    },
-    {
-      img: earnImg,
-      position: "50% 65%",
-      title: <>Equip skills,<br />earn money</>,
-      text: "Collect skills from the market to grow your agent. Build your own, publish it, and get paid every time someone collects it.",
-      caption: "Setup takes about a minute.",
-    },
-  ];
-  useEffect(() => {
-    const el = scroller.current;
-    if (el) el.scrollLeft = page * el.clientWidth;
-  }, []);
-  function goPage(next: number) {
-    const bounded = Math.max(0, Math.min(cards.length - 1, next));
-    onPageChange(bounded);
-    scroller.current?.scrollTo({ left: bounded * scroller.current.clientWidth, behavior: "smooth" });
-    haptics.step1(); // same "지지징" rise as a setup-step transition
-  }
-  const last = page >= cards.length - 1;
+// The pre-step wait while the device-local keypair is minted server-side (no signature, no pay).
+function CreatingWallet() {
   return (
-    <div className="mx-auto max-w-sm">
-      <p className="an-term-mono text-center text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--an-green)]">&gt;WHY_UNLOCK<span className="unlock-cursor">_</span></p>
-      {/* pt-2: overflow-x-auto forces overflow-y to auto (CSS spec), which would clip the
-          image's corner brackets that sit 5px above each frame — the top padding gives them room. */}
-      <div ref={scroller} onScroll={(event) => onPageChange(Math.round(event.currentTarget.scrollLeft / Math.max(1, event.currentTarget.clientWidth)))} className="mt-4 flex snap-x snap-mandatory overflow-x-auto pt-2 [scrollbar-width:none]">
-        {cards.map((card, index) => (
-          <article key={index} className="w-full shrink-0 snap-center px-1 text-center">
-            <FramedImage src={card.img} position={card.position} />
-            <h3 className="mt-6 text-[19px] font-bold uppercase leading-[1.3] tracking-[0.08em] text-[color:var(--an-fg)]">{card.title}</h3>
-            <p className="mx-auto mt-3 max-w-[280px] text-[13px] leading-[1.65] text-[color:var(--an-fg-dim)]">{card.text}</p>
-            {card.link && <LinkRow className="mt-4" label={card.link.label} sub={card.link.sub} href={card.link.href} />}
-          </article>
-        ))}
-      </div>
-      <div className="mt-4 flex justify-center gap-1.5" aria-label={`Pitch ${page + 1} of ${cards.length}`}>
-        {cards.map((_, index) => (
-          <button
-            key={index}
-            onClick={() => goPage(index)}
-            className="h-2 w-4 transition-colors"
-            style={index === page
-              ? { backgroundColor: "var(--an-green)", backgroundImage: GREEN_SCANLINES }
-              : { backgroundColor: "var(--an-bg-2)", border: "1px solid var(--an-line)" }}
-            aria-label={`Show card ${index + 1}`}
-          />
-        ))}
-      </div>
-      <button type="button" onClick={() => (last ? onContinue() : goPage(page + 1))} className="an-btn an-btn-green mt-6 w-full">{last ? "Start setup" : "Next"}</button>
-      <p className="mt-3 text-center text-[11px] text-[color:var(--an-fg-mute)]">{cards[page].caption}</p>
+    <div className="mx-auto max-w-sm py-8 text-center">
+      <span className="an-term-mono mx-auto grid h-12 w-12 place-items-center border" style={{ borderColor: "var(--an-green)", background: "var(--an-green)", color: "var(--an-on-green)" }}>{ICON_FUND}</span>
+      <p className="an-term-mono mt-4 text-[10px] uppercase tracking-[0.14em] text-[color:var(--an-fg-dim)]">&gt;CREATING_WALLET<span className="unlock-cursor">_</span></p>
+      <h3 className="an-term-mono mt-1.5 text-[19px] font-bold uppercase tracking-[0.06em] text-[color:var(--an-fg)]">Setting up</h3>
+      <p className="mx-auto mt-2 max-w-xs text-body-dense leading-relaxed text-[color:var(--an-fg-dim)]">Creating your wallet. No signature, no payment. This just takes a moment.</p>
+      <span className="mx-auto mt-6 block h-5 w-5 animate-spin rounded-full border-2 border-t-transparent" style={{ borderColor: "var(--an-green)", borderTopColor: "transparent" }} />
     </div>
   );
 }
 
-function Progress({ value }: { value: 1 | 2 | 3 | 4 }) {
-  const on = value * 3; // 12 segments, 3 lit per completed step (4 steps)
+function Progress({ value }: { value: 1 | 2 | 3 }) {
+  const on = value * 3; // 9 segments, 3 lit per completed step (3 steps)
   return (
-    <div aria-label={`Unlock progress ${value} of 4`}>
-      <div className="an-term-mono mb-1.5 flex justify-between text-[10px] uppercase tracking-[0.14em] text-[color:var(--an-fg-dim)]"><span>Unlock_Progress</span><span className="text-[color:var(--an-green)]">{value}/4</span></div>
+    <div aria-label={`Unlock progress ${value} of 3`}>
+      <div className="an-term-mono mb-1.5 flex justify-between text-[10px] uppercase tracking-[0.14em] text-[color:var(--an-fg-dim)]"><span>Unlock_Progress</span><span className="text-[color:var(--an-green)]">{value}/3</span></div>
       <div className="flex gap-[3px] border border-[color:var(--an-line)] p-1" style={{ background: "rgba(255,255,255,0.02)" }}>
-        {Array.from({ length: 12 }).map((_, i) => (
+        {Array.from({ length: 9 }).map((_, i) => (
           <span key={i} className="h-2.5 flex-1" style={{ background: i < on ? "var(--an-green)" : "var(--an-bg-2)" }} />
         ))}
       </div>
@@ -368,19 +279,55 @@ function Progress({ value }: { value: 1 | 2 | 3 | 4 }) {
   );
 }
 
-function StepScreen({ step, title, detail, status, icon, children }: { step: 1 | 2 | 3 | 4; title: string; detail: string; status?: string; icon?: ReactNode; children: ReactNode }) {
+function StepScreen({ step, title, detail, status, icon, children }: { step: 1 | 2 | 3; title: string; detail: string; status?: string; icon?: ReactNode; children: ReactNode }) {
   return (
     <div className="mx-auto max-w-sm">
       <Progress value={step} />
       <div className="mt-7 text-center">
         <span className="an-term-mono mx-auto grid h-12 w-12 place-items-center border text-[13px] font-bold" style={{ borderColor: "var(--an-green)", background: "var(--an-green)", color: "var(--an-on-green)" }}>{icon ?? "[OK]"}</span>
         <p className="an-term-mono mt-4 text-[10px] uppercase tracking-[0.14em] text-[color:var(--an-fg-dim)]">
-          {status ? <>&gt;STEP_0{step}/04 · <span className="text-[color:var(--an-green)]">{status}</span></> : <>Step {step}/4</>}
+          {status ? <>&gt;STEP_0{step}/03 · <span className="text-[color:var(--an-green)]">{status}</span></> : <>Step {step}/3</>}
         </p>
         <h3 className="an-term-mono mt-1.5 text-[19px] font-bold uppercase tracking-[0.06em] text-[color:var(--an-fg)]">{title}</h3>
         <p className="mx-auto mt-2 max-w-xs text-body-dense leading-relaxed text-[color:var(--an-fg-dim)]">{detail}</p>
       </div>
       {children}
+    </div>
+  );
+}
+
+// Fund_Wallet step body: shows the auto-created wallet address with a copy control and a
+// beginner funding link. Deliberately low-pressure — both buttons just advance; nothing here
+// blocks setup. The same address + FUND_GUIDE_URL surface again in Settings > My Wallet.
+function FundControls({ address, onDone }: { address: string; onDone: () => void }) {
+  const [copied, setCopied] = useState(false);
+  async function copyAddress() {
+    haptics.tap();
+    try {
+      await navigator.clipboard.writeText(address);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = address;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  }
+  return (
+    <div className="mt-6">
+      <div className="relative border px-3 py-3 text-left" style={{ borderColor: "var(--an-green-line)", background: "var(--an-green-dim)" }}>
+        <p className="an-term-mono text-[9px] font-bold uppercase tracking-[0.12em] text-[color:var(--an-green)]">&gt;YOUR_WALLET_ADDRESS</p>
+        <button type="button" onClick={copyAddress} className="an-term-mono absolute right-2 top-2 border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.1em] active:opacity-70" style={{ borderColor: "var(--an-line)", color: "var(--an-fg-mute)" }}>{copied ? "[copied]" : "[copy]"}</button>
+        <p className="an-term-mono mt-2 break-all pr-12 text-[12px] leading-relaxed" style={{ color: "var(--an-term-fg)" }}>{address}</p>
+      </div>
+      <p className="mt-2 text-left text-[10px] leading-relaxed text-[color:var(--an-fg-mute)]">Also in the agent menu and Settings, any time.</p>
+      <LinkRow className="mt-3" label="HOW_TO_ADD_FUNDS" sub="Buy SOL and send it here · phantom guide" href={FUND_GUIDE_URL} />
+      <button type="button" onClick={onDone} className="an-btn an-btn-green mt-4 w-full">OK</button>
+      <button type="button" onClick={onDone} className="welcome-ghost mt-1">I will fund later</button>
+      <p className="mx-auto mt-2 max-w-xs text-center text-caption leading-relaxed text-[color:var(--an-fg-mute)]">Your wallet is always in the agent menu and Settings.</p>
     </div>
   );
 }

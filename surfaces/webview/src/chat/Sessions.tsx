@@ -32,7 +32,7 @@ import {
   setBackgroundExecEnabled,
   setScreenOffExecEnabled,
 } from "../platform/agentService";
-import { LockedGate, useUnlock, type UnlockReason } from "../unlock/UnlockProvider";
+import { LockedGate, useUnlock, LinkRow, FUND_GUIDE_URL, type UnlockReason } from "../unlock/UnlockProvider";
 
 // Chat list drawer — the mobile answer to vscode's multi-panel "new tab": instead of
 // splitting the screen, the ☰ menu slides this in and you pick ONE chat to show. Telegram
@@ -118,7 +118,7 @@ function StorageOption({ active, title, subtitle, onClick }: { active: boolean; 
   );
 }
 
-type SettingsMode = "list" | "configure" | "connect" | "gdrive" | "custom" | "helius" | "github" | "engines";
+type SettingsMode = "list" | "configure" | "wallet" | "connect" | "gdrive" | "custom" | "helius" | "github" | "engines";
 
 export function Sessions({
   onClose,
@@ -149,6 +149,9 @@ export function Sessions({
   const [code, setCode] = useState("");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Two-step guard on the My Wallet disconnect: a local wallet's key lives only on this device
+  // (no in-app export), so an accidental tap must not wipe it. First tap arms this confirm.
+  const [confirmDisc, setConfirmDisc] = useState(false);
   const [bgExec, setBgExec] = useState(backgroundExecEnabled());
   const [screenOffExec, setScreenOffExec] = useState(screenOffExecEnabled());
 
@@ -217,6 +220,25 @@ export function Sessions({
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [settingsMode, onClose, rootMode]);
+
+  // Copy the wallet address from the My Wallet sub-screen (clipboard API, textarea fallback for
+  // the Android WebView). Reuses the shared `copied` flash state.
+  async function copyWalletAddress() {
+    if (!state.walletAddress) return;
+    haptics.tap();
+    try {
+      await navigator.clipboard.writeText(state.walletAddress);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = state.walletAddress;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
 
   const panel = (
       <div
@@ -392,6 +414,14 @@ export function Sessions({
                   icon={<SkillIcon className="h-[22px] w-[22px]" />}
                 />
               )}
+              {state.walletAddress && (
+                <MenuRow
+                  label="My Wallet"
+                  subtitle={`${state.walletAddress.slice(0, 4)}…${state.walletAddress.slice(-4)} · add funds`}
+                  onClick={() => { setConfirmDisc(false); setSettingsMode("wallet"); }}
+                  icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="square"><path d="M4 7.5h15v12H4z" /><path d="M4 7.5V5.5h13v2" /><path d="M14 12.5h5v3h-5z" /></svg>}
+                />
+              )}
               <ProgressiveMenuRow
                 reason="sync"
                 unlocked={!!state.walletAddress}
@@ -482,25 +512,10 @@ export function Sessions({
               )}
             </div>
             {state.walletAddress ? (
+              // Non-destructive status only. Disconnect moved into My Wallet (a deliberate
+              // destination) so it can't be fat-fingered from the panel's bottom edge.
               <div className="mt-2">
                 <p className="an-sfcap">&gt;CONNECTED · <span style={{ background: "var(--an-bg-2)", color: "var(--an-fg-dim)", padding: "2px 6px" }}>{`${state.walletAddress.slice(0, 4)}…${state.walletAddress.slice(-4)}`}</span> · <span style={{ color: "var(--an-green)" }}>ONLINE</span></p>
-                <button
-                  onClick={() => {
-                    forgetAndroidWallet(); // clear the Keystore creds so we don't silently reconnect
-                    send({ type: "disconnectWallet" });
-                    onClose();
-                  }}
-                  className="an-sfcta an-sfcta-disc"
-                >
-                  <span className="ico">
-                    <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="square"><path d="M8.5 4.5H4v13h4.5" /><path d="M14 15l3-4-3-4M17 11H8.5" /></svg>
-                  </span>
-                  <span className="grow">
-                    <span className="ttl">Disconnect_Wallet</span>
-                    <span className="sub">Clears the saved session on this device</span>
-                  </span>
-                  <span className="xmk">[x]</span>
-                </button>
               </div>
             ) : (
               <div className="mt-2">
@@ -514,6 +529,56 @@ export function Sessions({
                   </span>
                   <span className="chev">&gt;&gt;</span>
                 </button>
+              </div>
+            )}
+          </div>
+        ) : settingsMode === "wallet" ? (
+          <div className="flex h-full flex-col">
+            <SettingsSubHeader title="My Wallet" onBack={() => { setConfirmDisc(false); setSettingsMode("configure"); }} />
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="relative border px-3 py-3" style={{ borderColor: "var(--an-green-line)", background: "var(--an-green-dim)" }}>
+                <p className="an-term-mono text-[9px] font-bold uppercase tracking-[0.12em]" style={{ color: "var(--an-green)" }}>&gt;YOUR_WALLET_ADDRESS</p>
+                <button type="button" onClick={copyWalletAddress} className="an-term-mono absolute right-2 top-2 border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.1em] active:opacity-70" style={{ borderColor: "var(--an-term-line-2)", color: "var(--an-fg-mute)" }}>{copied ? "[copied]" : "[copy]"}</button>
+                <p className="an-term-mono mt-2 break-all pr-12 text-[12px] leading-relaxed" style={{ color: "var(--an-term-fg)" }}>{state.walletAddress}</p>
+              </div>
+              <div className="mt-3 flex flex-col gap-2">
+                <LinkRow label="ADD_FUNDS" sub="Buy SOL and send it here · phantom guide" href={FUND_GUIDE_URL} />
+                <LinkRow label="VIEW_ON_EXPLORER" sub="solscan.io/account · opens in browser" href={`https://solscan.io/account/${state.walletAddress}`} />
+              </div>
+              <div className="an-term-mono mt-3 flex justify-between border-t pt-3 text-[10px] uppercase tracking-[0.08em]" style={{ borderColor: "var(--an-term-line)", color: "var(--an-fg-mute)" }}>
+                <span>Network</span><span style={{ color: "var(--an-term-fg-2)" }}>Solana Mainnet</span>
+              </div>
+            </div>
+            {!confirmDisc ? (
+              <button onClick={() => setConfirmDisc(true)} className="an-sfcta an-sfcta-disc mt-3">
+                <span className="ico">
+                  <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="square"><path d="M8.5 4.5H4v13h4.5" /><path d="M14 15l3-4-3-4M17 11H8.5" /></svg>
+                </span>
+                <span className="grow">
+                  <span className="ttl">Disconnect_Wallet</span>
+                  <span className="sub">Clears the saved session on this device</span>
+                </span>
+                <span className="xmk">[x]</span>
+              </button>
+            ) : (
+              <div className="mt-3">
+                <div className="border p-3" style={{ borderColor: "var(--an-red)", background: "rgba(229,72,77,0.08)" }}>
+                  <p className="an-term-mono text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: "var(--an-red)" }}>&gt;CONFIRM_DISCONNECT</p>
+                  <p className="mt-2 text-[11px] leading-relaxed" style={{ color: "var(--an-fg-dim)" }}>Make sure you can recover this wallet first. This clears its key from this device, and there is no in-app backup. If you have not saved a way to restore it, you could lose access to this wallet and any funds in it.</p>
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <button onClick={() => setConfirmDisc(false)} className="an-btn an-btn-outline flex-1">Keep wallet</button>
+                  <button
+                    onClick={() => {
+                      forgetAndroidWallet(); // clear the Keystore creds so we don't silently reconnect
+                      send({ type: "disconnectWallet" });
+                      onClose();
+                    }}
+                    className="an-btn an-btn-danger flex-1"
+                  >
+                    Disconnect
+                  </button>
+                </div>
               </div>
             )}
           </div>
