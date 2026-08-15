@@ -3,6 +3,7 @@ import { Box, Text, useInput, useStdout } from "ink";
 import type { SkillCard, SkillDetail } from "@iqlabs-official/agent-sdk";
 import type { Reputation, AgentProfile } from "@iqlabs-official/agent-sdk";
 import { maskedHeliusKey, hasDasRpc, saveHeliusKey, getNetwork } from "@iqlabs-official/agent-sdk";
+import { saveGithubToken, loadGithubToken, maskedGithubToken, registerVerifiedWork, parseGithubRepo } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../theme.js";
 import type { OwnedSkill } from "../components/WelcomePanel.js";
 import { ChipCarousel } from "../components/ChipCarousel.js";
@@ -11,6 +12,7 @@ import { tierInfo, tierGauge } from "./market/tiers.js";
 import { AgentProfileView, type ProfileSub } from "./market/AgentProfileView.js";
 import { SkillDetailView, type DetailSub } from "./market/SkillDetailView.js";
 import { HeliusPanel, HeliusBadge, type RpcStatusLite } from "./market/HeliusPanel.js";
+import { GithubPanel, type GithubStatusLite, type GithubFocus } from "./market/GithubPanel.js";
 import { PublishProgressView, type PublishProgress } from "./market/PublishProgressView.js";
 
 export interface MarketApi {
@@ -44,6 +46,7 @@ type Stage =
   | "agents"
   | "agentProfile"
   | "helius"
+  | "github"
   | "blogCompose"
   | "owned";
 
@@ -135,7 +138,7 @@ export function SkillMarket({
   ownedNames: string[];
   onBought: () => void;
   onClose: () => void;
-  initialStage?: "list" | "agents" | "owned";
+  initialStage?: "list" | "agents" | "owned" | "github";
   owned?: OwnedSkill[];
 }) {
   const [stage, setStage] = useState<Stage>(initialStage ?? "list");
@@ -204,12 +207,35 @@ export function SkillMarket({
   const [heliusKeyInput, setHeliusKeyInput] = useState("");
   const [heliusFlash, setHeliusFlash] = useState<string | null>(null);
 
+  // github verified-work screen: token connect + register-repo. Mirrors the helius
+  // screen's shape (status + one flash), plus the register form's repo/skill picker.
+  const [githubStatus, setGithubStatus] = useState<GithubStatusLite | null>(null);
+  const [ghTokenInput, setGhTokenInput] = useState("");
+  const [ghRepoInput, setGhRepoInput] = useState("");
+  const [ghSelected, setGhSelected] = useState<Record<string, boolean>>({}); // mint -> chosen
+  const [ghFocus, setGhFocus] = useState<GithubFocus>("repo");
+  const [ghSkillIdx, setGhSkillIdx] = useState(0);
+  const [ghFlash, setGhFlash] = useState<string | null>(null);
+
   const owned = new Set(ownedNames);
   const agentRows = useStdout().stdout?.rows || 24; // || not ??: detached pty reports 0
   const visibleResults = results.filter((c) => !hideOwned || !owned.has(c.name));
   // index over the FILTERED list - what's on screen is what enter/buy act on
   const clamped = Math.min(idx, Math.max(0, visibleResults.length - 1));
   const selected = visibleResults[clamped];
+
+  // The one reason /github register can't fire yet, in the order the form is filled
+  // (mirrors the app's RegisterWorkRepo blockReason). Reuses core parseGithubRepo for
+  // the client-side validity check so a bad repo is caught before any network call.
+  // Single source: both the github useInput gate and GithubPanel read this.
+  const ghChosen = Object.keys(ghSelected).filter((m) => ghSelected[m]);
+  const githubBlockReason: string | null =
+    !githubStatus?.hasToken ? "add a GitHub token above first."
+    : ghRepoInput.trim().length === 0 ? "enter a repo first: owner/name or a github.com URL."
+    : parseGithubRepo(ghRepoInput) == null ? "that repo is not valid. use owner/name or a github.com URL."
+    : ownedCollection.length === 0 ? "buy or mint a skill first, then link it here."
+    : ghChosen.length === 0 ? "pick at least one skill this repo used."
+    : null;
 
   async function search(q: string, k: "skill" | "workflow", sort: "supply" | "stars" = marketSort) {
     setLoading(true);
@@ -234,10 +260,16 @@ export function SkillMarket({
     setRpcStatus({ hasKey: !!masked, masked, network });
   }
 
+  async function refreshGithubStatus() {
+    const masked = await maskedGithubToken().catch(() => null);
+    setGithubStatus({ hasToken: !!masked, masked });
+  }
+
   useEffect(() => {
     void search("", kind);
     void api.solBalance().then(setBalance).catch(() => setBalance(null));
     void refreshRpcStatus();
+    void refreshGithubStatus();
     void api.disposedSkillMints?.().then((m) => setDisposedNames(new Set(Object.keys(m)))).catch(() => {});
     // /agents lands straight on the directory; owned needs no fetch (data via prop)
     if (initialStage === "agents") void loadAgents();
@@ -468,6 +500,43 @@ export function SkillMarket({
     setHeliusFlash(key ? "key saved" : "key cleared");
   }
 
+  // Save (or, with "", clear) the GitHub token. Mirrors doSaveHeliusKey: core stores it
+  // 0600, then we re-read the mask so the badge reflects the new state.
+  async function doSaveGithubToken(token: string) {
+    setBusy(true);
+    await saveGithubToken(token);
+    await refreshGithubStatus();
+    setBusy(false);
+    setGhTokenInput("");
+    setGhFlash(token ? "token saved" : "token removed");
+  }
+
+  // Register the repo as verified work for the chosen skills. The blockReason gate has
+  // already checked token/repo/skill presence, so this just loads the stored token and
+  // hands the whole flow to core registerVerifiedWork (marker commit + indexer POST).
+  async function doRegisterRepo() {
+    const chosen = Object.keys(ghSelected).filter((m) => ghSelected[m]);
+    const stored = await loadGithubToken();
+    if (!stored || !walletAddr) { setGhFlash("connect a wallet and a GitHub token first"); return; }
+    setBusy(true);
+    setGhFlash(null);
+    try {
+      const res = await registerVerifiedWork({
+        token: stored.token,
+        repo: ghRepoInput.trim(),
+        skillMints: chosen,
+        walletAddress: walletAddr,
+      });
+      setGhFlash(`registered ${res.count} link${res.count === 1 ? "" : "s"} for ${res.repo}${res.markerAdded ? " (marker committed)" : ""}`);
+      setGhRepoInput("");
+      setGhSelected({});
+    } catch (e) {
+      setGhFlash(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // get/set helpers for publish form fields
   function pubGet(f: Exclude<PublishField, "kind">) {
     return { name: pubName, desc: pubDesc, text: pubText, category: pubCategory, hashtags: pubHashtags, price: pubPrice, image: pubImage }[f];
@@ -493,6 +562,40 @@ export function SkillMarket({
       if (key.return) { void doSaveHeliusKey(heliusKeyInput.trim()); return; }
       if (key.backspace || key.delete) { setHeliusKeyInput((v) => v.slice(0, -1)); return; }
       if (input && !key.ctrl && !key.meta) { setHeliusKeyInput((v) => v + input); return; }
+      return;
+    }
+
+    // ── github verified work ──────────────────────────────────────────────
+    if (stage === "github") {
+      if (key.escape) { setStage("list"); setGhFlash(null); return; }
+      // No token yet: one field to paste the Personal Access Token.
+      if (!githubStatus?.hasToken) {
+        if (key.return) { void doSaveGithubToken(ghTokenInput.trim()); return; }
+        if (key.backspace || key.delete) { setGhTokenInput((v) => v.slice(0, -1)); return; }
+        if (input && !key.ctrl && !key.meta) { setGhTokenInput((v) => v + input); return; }
+        return;
+      }
+      // Token present: register-repo form. [tab] cycles token -> repo -> skills.
+      if (key.tab) { setGhFocus((f) => (f === "token" ? "repo" : f === "repo" ? "skills" : "token")); return; }
+      if (ghFocus === "token") {
+        if (input === "x" || key.return) { void doSaveGithubToken(""); return; } // remove token
+        return;
+      }
+      if (ghFocus === "skills") {
+        if (key.upArrow) { setGhSkillIdx((i) => Math.max(0, i - 1)); return; }
+        if (key.downArrow) { setGhSkillIdx((i) => Math.min(Math.max(0, ownedCollection.length - 1), i + 1)); return; }
+        if (input === " ") {
+          const cur = ownedCollection[Math.min(ghSkillIdx, Math.max(0, ownedCollection.length - 1))];
+          if (cur) setGhSelected((s) => ({ ...s, [cur.id]: !s[cur.id] }));
+          return;
+        }
+        if (key.return) { if (githubBlockReason) setGhFlash(githubBlockReason); else void doRegisterRepo(); return; }
+        return;
+      }
+      // ghFocus === "repo": text entry, enter submits (or shows why it can't).
+      if (key.return) { if (githubBlockReason) setGhFlash(githubBlockReason); else void doRegisterRepo(); return; }
+      if (key.backspace || key.delete) { setGhRepoInput((v) => v.slice(0, -1)); return; }
+      if (input && !key.ctrl && !key.meta) { setGhRepoInput((v) => v + input); return; }
       return;
     }
 
@@ -681,6 +784,7 @@ export function SkillMarket({
     if (input === "a") { setStage("agents"); void loadAgents(); return; }
     if (input === "p") { setPubResult(null); setPubProgress(null); setPubField("kind"); setPubKind("skill"); setStage("publish"); return; }
     if (input === "r") { setHeliusFlash(null); setHeliusKeyInput(""); setStage("helius"); return; }
+    if (input === "g") { setGhFlash(null); setGhFocus("repo"); setStage("github"); return; }
     if (input === "h") { setHideOwned((v) => !v); setIdx(0); return; }
     if (input === "s") { const next = marketSort === "stars" ? "supply" : "stars"; setMarketSort(next); void search(query, kind, next); return; }
     if (key.tab) {
@@ -695,6 +799,24 @@ export function SkillMarket({
   // ── helius settings ─────────────────────────────────────────────────────────
   if (stage === "helius") {
     return <HeliusPanel status={rpcStatus} keyInput={heliusKeyInput} busy={busy} flash={heliusFlash} />;
+  }
+
+  // ── github verified work ──────────────────────────────────────────────────────
+  if (stage === "github") {
+    return (
+      <GithubPanel
+        status={githubStatus}
+        tokenInput={ghTokenInput}
+        repoInput={ghRepoInput}
+        owned={ownedCollection}
+        selected={ghSelected}
+        focus={ghFocus}
+        skillIdx={Math.min(ghSkillIdx, Math.max(0, ownedCollection.length - 1))}
+        blockReason={githubBlockReason}
+        busy={busy}
+        flash={ghFlash}
+      />
+    );
   }
 
   // ── blog composer ─────────────────────────────────────────────────────────
@@ -1032,7 +1154,7 @@ export function SkillMarket({
         <Text dimColor>  ·  </Text>
         <Text color={kind === "workflow" ? colors.iqCyan : colors.dim} bold={kind === "workflow"}>workflows</Text>
         <Text dimColor>  ·  </Text>
-        <Text color={colors.dim}>[a] agents  [p] publish  [r] rpc</Text>
+        <Text color={colors.dim}>[a] agents  [p] publish  [r] rpc  [g] github</Text>
       </Box>
       {/* search box + hide-owned filter */}
       <Box marginTop={1}>
