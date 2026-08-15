@@ -515,7 +515,9 @@ export function createChatSession(
         // refresh the panel once it lands.
         void (async () => {
           await env.loadOwnedSkills?.();
-          sendMarket(await ownedSkillsMsg(env));
+          // Same rule as buySkill/publishSkill: a surface whose env has no owned-skill
+          // capability must not emit a phantom-empty ownedSkills — its own handler answers.
+          if (env.ownedSkills || env.ownedNftSkills) sendMarket(await ownedSkillsMsg(env));
         })().catch(() => {});
         break;
       case "new":   await open(); await pushSessions(); break;
@@ -613,8 +615,14 @@ export function createChatSession(
           break;
         }
         if (command === "skills") {
-          sendMarket(await ownedSkillsMsg(env));
-          transport.send({ type: "notice", text: "Skills refreshed." });
+          // Only answer if this surface actually owns the capability; otherwise its own
+          // market handler does, and a phantom-empty reply here would wipe the panel.
+          if (env.ownedSkills || env.ownedNftSkills) {
+            sendMarket(await ownedSkillsMsg(env));
+            transport.send({ type: "notice", text: "Skills refreshed." });
+          } else {
+            transport.send({ type: "notice", text: "Skills are managed by this surface." });
+          }
           break;
         }
         if (command === "compact") {
@@ -730,8 +738,13 @@ export function createChatSession(
       // is caught here, not at runtime on some surface.
       case "searchSkills": {
         const req = m as Extract<MarketRequest, { type: "searchSkills" }>;
+        // Another handler may own search on this surface (e.g. the localhost market handler).
+        // POST fans out to every recv, so answering searchResults [] here when we lack the
+        // capability would race the real handler's items — whichever lands last wins, and
+        // the [] wipes the catalog. Stay silent instead — the capable handler answers.
+        if (!env.searchSkills) break;
         try {
-          const results = env.searchSkills ? await env.searchSkills(req.query ?? "", req.kind, req.sort) : [];
+          const results = await env.searchSkills(req.query ?? "", req.kind, req.sort);
           sendMarket({ type: "searchResults", results });
         } catch (e) {
           // a chain/RPC failure must NOT leave the UI stuck on "Searching…": surface it.
@@ -790,10 +803,17 @@ export function createChatSession(
         break;
       }
       case "ownedSkills":
+        // Same race as searchSkills: without the capability our answer would be an empty
+        // set that can land after the real handler's owned list and wipe it. Stay silent —
+        // the capable handler answers.
+        if (!env.ownedSkills && !env.ownedNftSkills) break;
         sendMarket(await ownedSkillsMsg(env));
         break;
       case "getBalance":
-        sendMarket({ type: "balance", lamports: env.solBalance ? await env.solBalance() : null });
+        // Same race as searchSkills: a null balance from here can land after the real
+        // handler's lamports and blank the display. Stay silent — the capable handler answers.
+        if (!env.solBalance) break;
+        sendMarket({ type: "balance", lamports: await env.solBalance() });
         break;
       case "airdrop": {
         if (!env.airdrop) break; // another handler owns this on some surfaces (e.g. localhost)
@@ -846,8 +866,11 @@ export function createChatSession(
       }
       // issue #35: agent directory
       case "listAgents": {
+        // Same race as searchSkills: an empty directory from here can land after the real
+        // handler's agents and wipe the list. Stay silent — the capable handler answers.
+        if (!env.listAgents) break;
         try {
-          const agents = env.listAgents ? await env.listAgents() : [];
+          const agents = await env.listAgents();
           sendMarket({ type: "agents", agents });
         } catch (e) {
           sendMarket({ type: "searchError", message: e instanceof Error ? e.message : String(e) });

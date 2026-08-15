@@ -452,6 +452,91 @@ describe("chat/session — slash commands", () => {
   });
 });
 
+// Market requests fan out to EVERY recv on the transport (localhost POST). When the env
+// lacks a market capability, some surface's own handler (attachMarketHandlers) owns the
+// answer — so the dispatcher must stay SILENT, exactly like buySkill always did. The old
+// code answered anyway (searchResults [], ownedSkills [], balance null, agents []), and
+// whichever reply landed last won: the empty one could wipe the real catalog in the store.
+describe("chat/session — market requests stay silent when env lacks the capability", () => {
+  // Poll for a reply of `type` — some answers await a slow dynamic import (ownedSkillsMsg
+  // pulls in skillSource, ~400ms cold), so a fixed flush races it the same way
+  // waitForNotice explains for /init. 5ms ticks give a ~2s budget under full-suite load.
+  const waitForType = async (transport: any, type: string) => {
+    for (let i = 0; i < 400; i++) {
+      const hit = transport.send.mock.calls.find((c: any[]) => c[0]?.type === type);
+      if (hit) return hit[0];
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    throw new Error(`"${type}" was never sent`);
+  };
+  // Prove SILENCE deterministically: the pump drains the queue serially, so queueing a
+  // "wallet" probe behind the market request and waiting for its answer guarantees the
+  // market case ran to completion — only then is "no reply" meaningful.
+  const silentAfter = async (fromUI: any, transport: any, req: any, replyType: string) => {
+    fromUI(req);
+    fromUI({ type: "wallet" });
+    await waitForType(transport, "wallet");
+    expect(transport.send.mock.calls.some((c: any[]) => c[0]?.type === replyType)).toBe(false);
+  };
+
+  it("searchSkills: no searchResults reply without env.searchSkills", async () => {
+    const { fromUI, transport } = harness();
+    await silentAfter(fromUI, transport, { type: "searchSkills", query: "solana" }, "searchResults");
+    expect(transport.send.mock.calls.some((c: any[]) => c[0]?.type === "searchError")).toBe(false);
+  });
+
+  it("searchSkills: still answers when env.searchSkills exists", async () => {
+    const card = { id: "m1", name: "clean-code" };
+    const { fromUI, transport } = harness({ env: { searchSkills: async () => [card] } });
+    fromUI({ type: "searchSkills", query: "clean" });
+    expect(await waitForType(transport, "searchResults")).toEqual({ type: "searchResults", results: [card] });
+  });
+
+  it("ownedSkills: no ownedSkills reply without env.ownedSkills/ownedNftSkills", async () => {
+    const { fromUI, transport } = harness();
+    await silentAfter(fromUI, transport, { type: "ownedSkills" }, "ownedSkills");
+  });
+
+  it("ownedSkills: still answers when the env exposes an owned view", async () => {
+    const { fromUI, transport } = harness({ ownedSkills: ["clean-code"] });
+    fromUI({ type: "ownedSkills" });
+    expect(await waitForType(transport, "ownedSkills")).toEqual(
+      expect.objectContaining({ type: "ownedSkills", names: ["clean-code"] }),
+    );
+  });
+
+  it("getBalance: no balance reply without env.solBalance", async () => {
+    const { fromUI, transport } = harness();
+    await silentAfter(fromUI, transport, { type: "getBalance" }, "balance");
+  });
+
+  it("getBalance: still answers when env.solBalance exists", async () => {
+    const { fromUI, transport } = harness({ env: { solBalance: async () => 42 } });
+    fromUI({ type: "getBalance" });
+    expect(await waitForType(transport, "balance")).toEqual({ type: "balance", lamports: 42 });
+  });
+
+  it("listAgents: no agents reply without env.listAgents", async () => {
+    const { fromUI, transport } = harness();
+    await silentAfter(fromUI, transport, { type: "listAgents" }, "agents");
+  });
+
+  it("listAgents: still answers when env.listAgents exists", async () => {
+    const agent = { wallet: "w1", name: "luna" };
+    const { fromUI, transport } = harness({ env: { listAgents: async () => [agent] } });
+    fromUI({ type: "listAgents" });
+    expect(await waitForType(transport, "agents")).toEqual({ type: "agents", agents: [agent] });
+  });
+
+  it("/skills: no ownedSkills reply on a surface whose env lacks the owned view", async () => {
+    const { fromUI, transport } = harness();
+    fromUI({ type: "slashCommand", command: "skills" });
+    fromUI({ type: "wallet" });
+    await waitForType(transport, "wallet");
+    expect(transport.send.mock.calls.some((c: any[]) => c[0]?.type === "ownedSkills")).toBe(false);
+  });
+});
+
 // A throwing handler used to escape the pump as an unhandled rejection and take the whole
 // host process down (issue #150 B1: connectCloud without Google creds). The dispatcher must
 // survive it, keep draining the queue, and tell the client its action failed.
