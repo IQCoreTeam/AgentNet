@@ -14,6 +14,7 @@ export function ChipCarousel<T>({
   title,
   hint,
   chipWidth = 24,
+  count = true,
 }: {
   items: T[];
   index: number;
@@ -22,6 +23,7 @@ export function ChipCarousel<T>({
   title?: string;
   hint?: string;
   chipWidth?: number;
+  count?: boolean; // false drops the "N / M" row when the parent's height budget is spent
 }) {
   // || not ??: a detached pty reports columns 0, which would window to a single chip
   const cols = useStdout().stdout?.columns || 80;
@@ -53,10 +55,12 @@ export function ChipCarousel<T>({
           </Text>
         </Box>
       </Box>
-      <Box>
-        <Text dimColor>{items.length > 0 ? `${index + 1} / ${items.length}` : ""}</Text>
-        {hint ? <Text dimColor>{items.length > 0 ? "   " : ""}{hint}</Text> : null}
-      </Box>
+      {count ? (
+        <Box>
+          <Text dimColor>{items.length > 0 ? `${index + 1} / ${items.length}` : ""}</Text>
+          {hint ? <Text dimColor>{items.length > 0 ? "   " : ""}{hint}</Text> : null}
+        </Box>
+      ) : null}
     </Box>
   );
 }

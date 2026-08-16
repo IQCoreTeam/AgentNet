@@ -99,12 +99,14 @@ function SkillChip({
       borderStyle="round"
       borderColor={focused ? colors.iqCyan : accent}
     >
-      {/* barcode glyph + category/type mark, the card's top strip */}
+      {/* barcode glyph + category/type mark, the card's top strip. truncate, never
+          wrap: when a narrow terminal squeezes the fixed-width chip, a wrapped strip
+          would grow the card a row and push the whole list frame past the screen. */}
       <Box justifyContent="space-between">
-        <Text color={accent}>▐▖▐</Text>
-        <Text dimColor>{cat} / {isWorkflow ? "FLOW" : "SKILL"}</Text>
+        <Text color={accent} wrap="truncate-end">▐▖▐</Text>
+        <Text dimColor wrap="truncate-end">{cat} / {isWorkflow ? "FLOW" : "SKILL"}</Text>
       </Box>
-      <Text color={focused ? colors.iqCyan : colors.bone} bold>
+      <Text color={focused ? colors.iqCyan : colors.bone} bold wrap="truncate-end">
         {card.name.slice(0, SKILL_CHIP_W - 4)}
       </Text>
       {/* the big supply number, like the design's card corner count */}
@@ -1193,6 +1195,23 @@ export function SkillMarket({
   const searchUsed = 9 + displayWidth(queryShown) + (typing ? 1 : 0);
   const showHideChip = searchUsed + displayWidth("   [h] hide owned ✓") <= innerW;
   const showSortChip = showHideChip && searchUsed + displayWidth(`   [h] hide owned ✓   [s] sort ${sortLabel}`) <= innerW;
+  // ── vertical budget ────────────────────────────────────────────────────────
+  // Chrome that always renders: border 2 + header 1 + tabs 1 + card 6 +
+  // footer 1 = 11 rows. Everything else re-enters as terminal rows allow;
+  // read as a drop ladder from the full frame: the blank spacer rows go
+  // first (search's, then tabs', then the band's, then the card's), then the
+  // buy band, then the carousel count row, then the search row. The shortcut
+  // strip shares the tabs row, so it costs no height and only drops by width.
+  // While typing, the search row is the interaction surface and never drops.
+  // A flash reserves two rows; when not even one spare row exists it takes
+  // the footer's hint slot instead of growing the frame.
+  const flashInFooter = flash != null && agentRows < 13;
+  const listSpare = Math.max(0, agentRows - 12 - (flash != null && !flashInFooter ? 2 : 0));
+  const showSearchRow = typing || listSpare >= 1;
+  const showCountRow = listSpare >= 2;
+  const showBand = listSpare >= 3;
+  const spacerRoom = Math.min(4, Math.max(0, listSpare - 3));
+  const hintRoom = Math.max(4, marketCols - 4 - displayWidth(sol(balance)) - 2);
   return (
     <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
       <Box justifyContent="space-between">
@@ -1203,7 +1222,7 @@ export function SkillMarket({
         </Box>
       </Box>
       {/* tabs; the shortcut strip truncates and disappears before the tabs ever wrap */}
-      <Box marginTop={1}>
+      <Box marginTop={spacerRoom >= 3 ? 1 : 0}>
         <Text color={kind === "skill" ? colors.iqCyan : colors.dim} bold={kind === "skill"}>skills</Text>
         <Text dimColor>  ·  </Text>
         <Text color={kind === "workflow" ? colors.iqCyan : colors.dim} bold={kind === "workflow"}>workflows</Text>
@@ -1215,26 +1234,28 @@ export function SkillMarket({
         ) : null}
       </Box>
       {/* search box + hide-owned filter; chips drop whole before they can interleave */}
-      <Box marginTop={1}>
-        <Text color={typing ? colors.iqCyan : colors.dim}>{typing ? "▸ " : "  "}</Text>
-        <Text dimColor>search </Text>
-        <Text>{queryShown}</Text>
-        {typing ? <Text inverse> </Text> : null}
-        {showHideChip ? (
-          <>
-            <Text dimColor>   [h] hide owned </Text>
-            <Text color={hideOwned ? colors.ok : colors.dim}>{hideOwned ? "✓" : "✗"}</Text>
-          </>
-        ) : null}
-        {showSortChip ? (
-          <>
-            <Text dimColor>   [s] sort </Text>
-            <Text color={marketSort === "stars" ? colors.warn : colors.dim}>{sortLabel}</Text>
-          </>
-        ) : null}
-      </Box>
+      {showSearchRow ? (
+        <Box marginTop={spacerRoom >= 4 ? 1 : 0}>
+          <Text color={typing ? colors.iqCyan : colors.dim}>{typing ? "▸ " : "  "}</Text>
+          <Text dimColor>search </Text>
+          <Text>{queryShown}</Text>
+          {typing ? <Text inverse> </Text> : null}
+          {showHideChip ? (
+            <>
+              <Text dimColor>   [h] hide owned </Text>
+              <Text color={hideOwned ? colors.ok : colors.dim}>{hideOwned ? "✓" : "✗"}</Text>
+            </>
+          ) : null}
+          {showSortChip ? (
+            <>
+              <Text dimColor>   [s] sort </Text>
+              <Text color={marketSort === "stars" ? colors.warn : colors.dim}>{sortLabel}</Text>
+            </>
+          ) : null}
+        </Box>
+      ) : null}
       {/* results - sd-card chip carousel, ←/→ rotates */}
-      <Box flexDirection="column" marginTop={1}>
+      <Box flexDirection="column" marginTop={spacerRoom >= 1 ? 1 : 0}>
         {loading ? (
           <Text dimColor>searching…</Text>
         ) : error ? (
@@ -1254,6 +1275,7 @@ export function SkillMarket({
             index={clamped}
             onIndex={setIdx}
             chipWidth={SKILL_CHIP_W}
+            count={showCountRow}
             renderChip={(c, focused) => (
               <SkillChip
                 card={c}
@@ -1265,24 +1287,30 @@ export function SkillMarket({
           />
         )}
       </Box>
-      {flash ? (
-        <Box marginTop={1}><Text color={colors.ok}>{glyph.sparkle} {flash}</Text></Box>
+      {flash && !flashInFooter ? (
+        <Box marginTop={spacerRoom >= 1 ? 1 : 0}><Text color={colors.ok}>{glyph.sparkle} {flash}</Text></Box>
       ) : null}
-      <Box marginTop={1}>
-        <Band label="buy" note="ONE TX: PAY, MINT YOUR COPY, EQUIP IT." inverted />
-      </Box>
+      {showBand ? (
+        <Box marginTop={spacerRoom >= 2 ? 1 : 0}>
+          <Band label="buy" note="ONE TX: PAY, MINT YOUR COPY, EQUIP IT." inverted />
+        </Box>
+      ) : null}
       <Box justifyContent="space-between">
         {/* the hint is budgeted against the balance and cut with an ellipsis: unbudgeted,
             the row fused them into one string ("[h] hid7.003 SOL", and at 30 cols
             "[b] 7.003" read like a price). border 2 + paddingX 2 + a 2-cell gap. */}
-        <Text dimColor>
-          {truncateEnd(
-            typing
-              ? "type to search · ↵ run · [tab] skills/workflows · ↓ results · esc close"
-              : "←/→ · ↵ open · [b] buy · [tab] switch · [/] search · [a] agents · [p] publish · [h] hide · [s] sort · esc",
-            Math.max(4, marketCols - 4 - displayWidth(sol(balance)) - 2),
-          )}
-        </Text>
+        {flashInFooter ? (
+          <Text color={colors.ok}>{glyph.sparkle} {truncateEnd(flash ?? "", hintRoom)}</Text>
+        ) : (
+          <Text dimColor>
+            {truncateEnd(
+              typing
+                ? "type to search · ↵ run · [tab] skills/workflows · ↓ results · esc close"
+                : "←/→ · ↵ open · [b] buy · [tab] switch · [/] search · [a] agents · [p] publish · [h] hide · [s] sort · esc",
+              hintRoom,
+            )}
+          </Text>
+        )}
         <Text dimColor>{sol(balance)}</Text>
       </Box>
     </Box>
