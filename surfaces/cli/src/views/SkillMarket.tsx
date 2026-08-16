@@ -1181,7 +1181,14 @@ export function SkillMarket({
         ) : error ? (
           <Text color={colors.err}>{error}</Text>
         ) : visibleResults.length === 0 ? (
-          <Text dimColor>no {kind === "skill" ? "skills" : "workflows"} found</Text>
+          // results can exist yet all be hidden by the owned filter (only that filter
+          // empties a non-empty result set). "no skills found" here contradicted the
+          // "N ON MAINNET" header; say what is hidden and name the key that shows it.
+          results.length > 0 ? (
+            <Text dimColor>all {results.length} owned, [h] shows them</Text>
+          ) : (
+            <Text dimColor>no {kind === "skill" ? "skills" : "workflows"} found</Text>
+          )
         ) : (
           <ChipCarousel
             items={visibleResults}
