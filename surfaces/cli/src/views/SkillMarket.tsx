@@ -12,7 +12,7 @@ import { Band } from "../components/Band.js";
 import { tierInfo, tierGauge } from "./market/tiers.js";
 import { AgentProfileView, type ProfileSub } from "./market/AgentProfileView.js";
 import { SkillDetailView, mainLines, mainViewportH, skillTextLines, commentLines, subViewportH, type DetailSub } from "./market/SkillDetailView.js";
-import { HeliusPanel, HeliusBadge, type RpcStatusLite } from "./market/HeliusPanel.js";
+import { HeliusPanel, HeliusBadge, heliusBadgeText, type RpcStatusLite } from "./market/HeliusPanel.js";
 import { GithubPanel, type GithubStatusLite, type GithubFocus } from "./market/GithubPanel.js";
 import { PublishProgressView, type PublishProgress } from "./market/PublishProgressView.js";
 
@@ -1183,7 +1183,7 @@ export function SkillMarket({
   // narrow widths ("MARKE5 SKILLS ON / T MAINNET" at 40 cols); each row now truncates or
   // drops its least important piece instead. innerW = frame border 2 + paddingX 2.
   const innerW = Math.max(12, marketCols - 4);
-  const badgePlain = !rpcStatus ? "" : rpcStatus.hasKey ? `● ${rpcStatus.network} · ${rpcStatus.masked}` : "add a Helius key for faster results";
+  const badgePlain = heliusBadgeText(rpcStatus);
   const noteRoom = Math.max(0, innerW - displayWidth("MARKET") - 2);
   const showBadge = badgePlain !== "" && displayWidth(onMainnet) + 3 + displayWidth(badgePlain) <= noteRoom;
   const shortcuts = "[a] agents  [p] publish  [r] rpc  [g] github";
