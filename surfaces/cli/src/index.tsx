@@ -102,7 +102,9 @@ program
   .description("resume a saved session by id")
   .action((sessionId, _opts, cmd) => {
     const g = cmd.parent.opts();
-    launch({ cli: g.cli, cwd: g.cwd, keypair: g.keypair, model: g.model, resume: sessionId }, g.calm);
+    // pass --effort through like --model: `agentnet --effort high resume <id>` used to
+    // silently drop it, so the flag could never override the session's saved effort.
+    launch({ cli: g.cli, cwd: g.cwd, keypair: g.keypair, model: g.model, effort: g.effort, resume: sessionId }, g.calm);
   });
 
 // agentnet doctor → quick non-TUI engine install/login report.

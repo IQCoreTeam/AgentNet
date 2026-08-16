@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Box, Text, useApp, useInput } from "ink";
-import type { AgentRuntime } from "@iqlabs-official/agent-sdk/runtime/contract";
+import type { AgentRuntime, SessionMeta } from "@iqlabs-official/agent-sdk/runtime/contract";
 import { autoApprove, type StorageConfig, type CliReport } from "@iqlabs-official/agent-sdk";
 import type { CloudStatus } from "@iqlabs-official/agent-sdk/account/storage/mirror";
 import { InkApprovalChannel } from "./InkApprovalChannel.js";
@@ -54,6 +54,9 @@ export function App({ options }: { options: AppOptions }) {
   // reported by mirrorStorage after each cloud write attempt — drives the StatusLine
   // sync chip so a dead/offline cloud is visible instead of silently drifting.
   const [cloudStatus, setCloudStatus] = useState<CloudStatus | null>(null);
+  // the saved meta of the session being resumed (looked up in go() before the chat
+  // renders), so the session comes back wearing ITS OWN model/effort.
+  const [resumed, setResumed] = useState<SessionMeta | null>(null);
 
   const { exit } = useApp();
   // Ctrl+C during boot/onboarding/error — nothing's running yet, so quit straight away.
@@ -75,6 +78,16 @@ export function App({ options }: { options: AppOptions }) {
     const rt = await buildRuntime(w, approval.current ?? autoApprove(), setCloudStatus);
     setRuntime(rt);
     setWallet(w);
+    // Resuming? Look up that session's saved meta BEFORE entering chat, so the first
+    // chat render already seeds useChat with the session's own model/effort (issue 167:
+    // a session created with --model haiku resumed showing and running the default
+    // model). Prefs are re-read here because the boot effect's setPrefs(savedPrefs)
+    // has not committed when go() runs in the same closure.
+    const resumeId = options.resume ?? (options.continue ? (await readPrefs()).lastSessionId : undefined);
+    if (resumeId) {
+      const meta = (await rt.listSessions().catch(() => [] as SessionMeta[])).find((s) => s.sessionId === resumeId);
+      if (meta) setResumed(meta);
+    }
     set(3, { status: "ok", label: "storage ready", detail: "READY" });
     // wipe the boot banner/checklist from the scrollback so the welcome panel lands on a
     // clean screen (Ink leaves prior static output in the terminal history otherwise),
@@ -202,16 +215,19 @@ export function App({ options }: { options: AppOptions }) {
     return <LoginGate report={report} prefer={loginPrefer} onDone={(rep, logged) => loginDone.current(rep, logged)} />;
   }
 
-  // chat — apply remembered prefs as defaults (explicit flags win); --continue resumes
-  // the most recent session. model comes from the resolved ENGINE's own remembered
-  // model — a claude model id (e.g. "sonnet") sent to codex's API is a 400, so the two
-  // must never share one field.
+  // chat precedence: explicit flag > the resumed session's own saved model/effort >
+  // remembered prefs. A resumed session must come back running what it ran (not the
+  // prefs default); an explicit flag is the user overriding that, so it still wins.
+  // model comes from the resolved ENGINE's own remembered model, a claude model id
+  // (e.g. "sonnet") sent to codex's API is a 400, so the two never share one field,
+  // and the session's saved model only applies when it reopens on the same engine.
   const effectiveCli = options.cli ?? prefs.lastCli ?? "claude";
+  const sessionModel = resumed && resumed.cli === effectiveCli ? resumed.model : undefined;
   const effective: AppOptions = {
     ...options,
     cli: effectiveCli,
-    model: options.model ?? (effectiveCli === "codex" ? prefs.lastModelCodex : prefs.lastModelClaude),
-    effort: options.effort ?? prefs.lastEffort,
+    model: options.model ?? sessionModel ?? (effectiveCli === "codex" ? prefs.lastModelCodex : prefs.lastModelClaude),
+    effort: options.effort ?? resumed?.effort ?? prefs.lastEffort,
     resume: options.resume ?? (options.continue ? prefs.lastSessionId : undefined),
   };
   return (
