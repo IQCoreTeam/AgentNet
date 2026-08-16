@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { Box, Text, Static, useApp, useInput } from "ink";
+import { Box, Text, Static, useApp, useInput, useStdout } from "ink";
 import type { AgentRuntime, Wallet, ChatMessage, SkillActivation } from "@iqlabs-official/agent-sdk/runtime/contract";
 import type { CliReport, StorageConfig } from "@iqlabs-official/agent-sdk";
 import type { CloudStatus } from "@iqlabs-official/agent-sdk/account/storage/mirror";
@@ -250,6 +250,7 @@ export function Chat({
   // live terminal size - the frame is sized to it so the bottom chrome (status +
   // composer section + footer) is structurally pinned to the bottom edge, and the
   // section rules span the full width.
+  const { write: inkWrite } = useStdout();
   const [rows, setRows] = useState(process.stdout.rows || 24);
   const [cols, setCols] = useState(process.stdout.columns || 80);
   const ruleW = Math.max(0, cols - 2); // frame paddingX(1) each side
@@ -275,7 +276,11 @@ export function Chat({
       lastSize.current = { rows: nr, cols: nc };
       setRows(nr);
       setCols(nc);
-      process.stdout.write("\u001b[2J\u001b[3J\u001b[H");
+      // The wipe goes THROUGH ink (useStdout().write), not behind its back: ink clears
+      // its frame, writes these bytes, then immediately repaints its last frame. A raw
+      // process.stdout.write here leaves ink believing its frame is still on screen, so
+      // nothing repaints and the terminal stays blank until the next real change.
+      inkWrite("\u001b[2J\u001b[3J\u001b[H");
       chat.redraw();
     };
     const onResize = () => {
@@ -287,7 +292,7 @@ export function Chat({
       if (t) clearTimeout(t);
       process.stdout.off("resize", onResize);
     };
-  }, [chat.redraw]);
+  }, [chat.redraw, inkWrite]);
 
   // local separators belong to the session they were typed in.
   useEffect(() => {
