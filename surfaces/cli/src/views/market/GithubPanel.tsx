@@ -57,6 +57,7 @@ export function GithubPanel({
   flash: string | null;
 }) {
   const hasToken = !!status?.hasToken;
+  const chosen = Object.values(selected).filter(Boolean).length;
   return (
     <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
       <Text bold color={colors.iqMagenta}>❖ GitHub verified work</Text>
@@ -124,10 +125,24 @@ export function GithubPanel({
               })
             )}
           </Box>
-          {blockReason ? <Box marginTop={1}><Text color={colors.warn}>{blockReason}</Text></Box> : null}
+          {/* one gate slot: the reason register can't fire yet, or - only when it
+              actually can - the explicit go signal naming the key and the field. */}
+          {blockReason ? (
+            <Box marginTop={1}><Text color={colors.warn}>{blockReason}</Text></Box>
+          ) : (
+            <Box marginTop={1}>
+              <Text color={colors.ok}>ready · ↵ on repo registers {chosen} skill{chosen === 1 ? "" : "s"}</Text>
+            </Box>
+          )}
           {flash ? <Box marginTop={1}><Text color={colors.ok}>{glyph.sparkle} {flash}</Text></Box> : null}
           <Box marginTop={1}>
-            <Text dimColor>[tab] field · [space] toggle skill · ↵ register · [x] remove token · esc back</Text>
+            <Text dimColor>
+              {focus === "token"
+                ? "↵/[x] remove token · [tab] field · esc back"
+                : focus === "repo"
+                  ? (blockReason ? "[tab] field · esc back" : "↵ register · [tab] field · esc back")
+                  : "↑/↓ move · ↵/[space] toggle · [tab] field · esc back"}
+            </Text>
           </Box>
         </Box>
       )}

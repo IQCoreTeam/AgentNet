@@ -584,16 +584,20 @@ export function SkillMarket({
       if (ghFocus === "skills") {
         if (key.upArrow) { setGhSkillIdx((i) => Math.max(0, i - 1)); return; }
         if (key.downArrow) { setGhSkillIdx((i) => Math.min(Math.max(0, ownedCollection.length - 1), i + 1)); return; }
-        if (input === " ") {
+        // Enter toggles the highlighted skill, same as space: with a list cursor on
+        // screen, Enter reads as "pick this one". Registering from here fired the gate
+        // flash instead ("pick at least one skill...") which read as a broken key.
+        if (input === " " || key.return) {
           const cur = ownedCollection[Math.min(ghSkillIdx, Math.max(0, ownedCollection.length - 1))];
           if (cur) setGhSelected((s) => ({ ...s, [cur.id]: !s[cur.id] }));
           return;
         }
-        if (key.return) { if (githubBlockReason) setGhFlash(githubBlockReason); else void doRegisterRepo(); return; }
         return;
       }
-      // ghFocus === "repo": text entry, enter submits (or shows why it can't).
-      if (key.return) { if (githubBlockReason) setGhFlash(githubBlockReason); else void doRegisterRepo(); return; }
+      // ghFocus === "repo": text entry, enter registers once the gate is clear. When it
+      // is not, do nothing: the standing blockReason row already says what is missing,
+      // and copying it into the flash printed the same message twice.
+      if (key.return) { if (!githubBlockReason) void doRegisterRepo(); return; }
       if (key.backspace || key.delete) { setGhRepoInput((v) => v.slice(0, -1)); return; }
       if (input && !key.ctrl && !key.meta) { setGhRepoInput((v) => v + input); return; }
       return;
