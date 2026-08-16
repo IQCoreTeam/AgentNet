@@ -37,7 +37,7 @@ function markerWallet(content: string): string | null {
 export function parseRepo(input: string): { owner: string; name: string } | null {
   let s = (input || "").trim();
   if (!s) return null;
-  s = s.replace(/^git@github\.com:/i, "").replace(/^https?:\/\/(www\.)?github\.com\//i, "");
+  s = s.replace(/^git@github\.com:/i, "").replace(/^(https?:\/\/)?(www\.)?github\.com\//i, "");
   s = s.replace(/\.git$/i, "").replace(/^\/+/, "").replace(/\/+$/, "");
   const [owner, name] = s.split("/").filter(Boolean);
   if (!owner || !name) return null;
