@@ -85,3 +85,12 @@ export function padCells(s: string, width: number): string {
   const pad = width - displayWidth(s);
   return pad > 0 ? s + " ".repeat(pad) : s;
 }
+
+// Fit to `width` cells keeping the TAIL: the part that identifies a path (its file name)
+// or the newest characters of typed input survives, behind a leading ellipsis.
+export function truncateStart(s: string, width: number): string {
+  if (displayWidth(s) <= width) return s;
+  let tail = s;
+  while (tail.length > 1 && displayWidth(`…${tail}`) > width) tail = tail.slice(1);
+  return `…${tail}`;
+}

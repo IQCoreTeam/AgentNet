@@ -6,7 +6,7 @@ import type { ToolAction } from "@iqlabs-official/agent-sdk/runtime/contract";
 import { glyph, toolTint, colors, surface } from "../theme.js";
 import { TodoPanel } from "./TodoPanel.js";
 import { DiffView } from "./DiffView.js";
-import { stripAnsi, clampLines, lineCount, wrapBlock, displayWidth } from "../format.js";
+import { stripAnsi, clampLines, lineCount, wrapBlock, displayWidth, truncateStart } from "../format.js";
 
 const MAX_OUTPUT_LINES = 12;
 
@@ -91,15 +91,6 @@ function CodeBox({
       </Box>
     </Box>
   );
-}
-
-// Title band segments: left label (truncated from the left, so the tail of a path — the
-// part that identifies the file — survives) padded against a right-aligned meta slot.
-function bandTitle(left: string, width: number): string {
-  if (displayWidth(left) <= width) return left;
-  let tail = left;
-  while (tail.length > 1 && displayWidth(`…${tail}`) > width) tail = tail.slice(1);
-  return `…${tail}`;
 }
 
 // Output block: syntax-highlighted when a language is known, else plain.
@@ -188,7 +179,7 @@ export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: str
     const adds = tool.diff.split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++")).length;
     const dels = tool.diff.split("\n").filter((l) => l.startsWith("-") && !l.startsWith("---")).length;
     const meta = `+${adds} −${dels}`;
-    const title = bandTitle(tool.file || "workspace", Math.max(4, bandW - displayWidth(meta) - 3));
+    const title = truncateStart(tool.file || "workspace", Math.max(4, bandW - displayWidth(meta) - 3));
     const gap = Math.max(1, bandW - displayWidth(title) - displayWidth(meta) - 2);
     // In the transcript there is no key handler, so a collapsed "press [d] to expand"
     // diff could never be opened — the edit's actual before/after was unreachable. Show

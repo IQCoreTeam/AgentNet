@@ -2,7 +2,7 @@ import React from "react";
 import { Box, Text, useInput } from "ink";
 import { HELIUS_QUICKSTART_URL } from "@iqlabs-official/agent-sdk";
 import { colors, glyph, rule, tag } from "../theme.js";
-import { displayWidth } from "../format.js";
+import { displayWidth, truncateStart } from "../format.js";
 
 // Focusable rows, in order: the four settings bands, then the skills band (enter = market).
 export type PanelField = "wallet" | "cloud" | "engine" | "helius";
@@ -185,6 +185,7 @@ export function WelcomePanel({
   // terminal the bands pack tight instead. Full height: 5 bands + 4 rules + hint + border.
   const withRules = (maxRows ?? 99) >= 12;
 
+  const keyLead = ` ${tag("helius")} `;
   const shortAddr = walletAddr
     ? `${walletAddr.slice(0, 4)}…${walletAddr.slice(-4)}`
     : "○ not connected";
@@ -226,9 +227,11 @@ export function WelcomePanel({
       focused={active && focus === 2}
     />,
     keyInput !== null ? (
+      // tail-fitted so a pasted key stays one row with its newest characters visible;
+      // the reserved cell keeps the cursor block inside the band.
       <Box key="helius">
-        <Text color={colors.iqCyan} bold>{` ${tag("helius")} `}</Text>
-        <Text>{keyInput}</Text>
+        <Text color={colors.iqCyan} bold>{keyLead}</Text>
+        <Text>{truncateStart(keyInput, Math.max(1, bandW - displayWidth(keyLead) - 1))}</Text>
         <Text inverse> </Text>
       </Box>
     ) : (
@@ -278,8 +281,10 @@ export function WelcomePanel({
         </Box>
       ) : null}
 
-      {/* stacked config bands */}
-      <Box flexDirection="column" justifyContent="center">
+      {/* stacked config bands; width-bound so the free text rows (key editor, its
+          instructions, the hint) wrap or stay fitted inside the band width instead of widening the
+          column and squeezing the logo cell beside it */}
+      <Box flexDirection="column" justifyContent="center" width={bandW}>
         {bands.map((band, i) => (
           <React.Fragment key={i}>
             {i > 0 && withRules ? <Text color={colors.bone}>{rule(bandW)}</Text> : null}
