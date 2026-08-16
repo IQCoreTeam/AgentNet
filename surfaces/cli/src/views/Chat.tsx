@@ -840,6 +840,14 @@ export function Chat({
     setPanelFocused(false);
   }
 
+  // /help and the footer's advertised "?" both land here: the composer routes a "?"
+  // pressed on an EMPTY buffer to onHelp (with text present, "?" just types), so the
+  // footer's "? /HELP" hint is a promise the keyboard actually keeps.
+  function openHelp() {
+    setHelpScroll(0); // each open starts at the top of the list
+    setShowHelp(true);
+  }
+
   function openMarket(stage: "list" | "agents" | "owned" | "github" = "list") {
     setPanelFocused(false);
     if (!market) {
@@ -1153,8 +1161,7 @@ export function Chat({
       case "help":
         // A dismissable overlay (not a one-line notice that vanishes on the next keystroke),
         // rendered straight from SLASH_COMMANDS so the list never drifts from the registry.
-        setHelpScroll(0); // each open starts at the top of the list
-        setShowHelp(true);
+        openHelp();
         return;
       case "keys":
         setShowKeys(true);
@@ -1668,6 +1675,7 @@ export function Chat({
         <Composer
           cwd={cwd}
           onSubmit={onSubmit}
+          onHelp={openHelp}
           disabled={showSessions || panelActive || !!pendingApproval}
           maxRows={composerMaxRows}
           history={chat.messages.filter((m) => m.role === "user").map((m) => m.text)}
