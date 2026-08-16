@@ -1473,23 +1473,70 @@ export function Chat({
     );
   }
 
+  // the last message is rendered LIVE (dynamic) only while it's a streaming assistant;
+  // everything else is committed to <Static>, which renders each line once and never
+  // re-renders — so Iggy/spinner ticks don't repaint the whole scrollback. `epoch` resets
+  // Static on wholesale changes (resume / new / scroll-back prepend).
+  const lastMsg = chat.messages[chat.messages.length - 1];
+  const streaming = chat.busy && lastMsg?.role === "assistant";
+  const baseCommitted = streaming ? chat.messages.slice(0, -1) : chat.messages;
+  // Weave local system messages (model-switch separators etc.) into the committed history.
+  const committed = interleaveByTs(baseCommitted, localLog);
+  // content width inside the frame's paddingX(1)
+  const staticW = Math.max(20, (process.stdout.columns || 80) - 2);
+  /* The settled transcript is printed ONCE into real terminal scrollback — never
+     re-rendered, never clipped, scrollable with the terminal's own scrollbar. Only
+     live/in-flight content lives in the dynamic frame below, which is what keeps the
+     composer at the bottom of the viewport without a fixed-height frame fighting it.
+     (A fixed frame with the transcript inside clipped long output and made the
+     conversation read as disconnected chunks.) */
+  /* The explicit width is load-bearing, not cosmetic: ink renders <Static> from a
+     position:absolute box, which sizes to its CONTENT rather than to the terminal.
+     One unbreakable token (a stack-trace path, a URL) therefore made the whole
+     static block wider than the screen, and the terminal wrapped the overflow back
+     to column 0 — which is how fragments ended up printed outside the card borders.
+     Pinning the width here bounds every transcript row; the components additionally
+     hard-wrap their own text so no single token can exceed it. */
+  const transcript = (
+    <Static key={chat.epoch} items={committed.map((m, i) => ({ m, i }))}>
+      {({ m, i }) => (
+        <Box key={`${m.ts}-${i}`} width={staticW} flexDirection="column">
+          <Message msg={m} />
+        </Box>
+      )}
+    </Static>
+  );
+
   // skill-market overlay — search/list/detail/buy over marketplaceEnv. Takes over input
   // while open; Esc backs out a level (or closes from the list), like the VSCode market.
+  // The transcript's <Static> MUST stay mounted above the overlay. Returning SkillMarket
+  // alone unmounted it, and ink (5.2.1) never clears rootNode.staticNode when a <Static>
+  // leaves the tree while removeChild frees its whole yoga subtree; every later market
+  // render then calls node.staticNode.yogaNode.getComputedWidth() on freed wasm memory
+  // (renderer.js:13). Once enough new yoga nodes recycle that block (showing owned cards
+  // at 100+ cols, or detail then esc), the read lands out of bounds and the process dies:
+  // issue #167's deterministic "memory access out of bounds" crash. Keeping the one real
+  // <Static> in this branch removes the dangling reference at its source. The other
+  // overlay early-returns share the latent unmount but re-render little while open;
+  // folding them into one persistent frame is a wider refactor left out of this fix.
   if (showMarket && market) {
     return (
-      <SkillMarket
-        api={market}
-        walletAddr={address}
-        ownedNames={installed}
-        initialStage={marketStage}
-        owned={skills ?? []}
-        onBought={() => {
-          // a buy installs the skill — refresh the badge source + the welcome panel list.
-          void market.ownedSkills().then(setInstalled).catch(() => {});
-          void ownedSkills(address).then(setSkills).catch(() => {});
-        }}
-        onClose={() => setShowMarket(false)}
-      />
+      <Box flexDirection="column">
+        {transcript}
+        <SkillMarket
+          api={market}
+          walletAddr={address}
+          ownedNames={installed}
+          initialStage={marketStage}
+          owned={skills ?? []}
+          onBought={() => {
+            // a buy installs the skill — refresh the badge source + the welcome panel list.
+            void market.ownedSkills().then(setInstalled).catch(() => {});
+            void ownedSkills(address).then(setSkills).catch(() => {});
+          }}
+          onClose={() => setShowMarket(false)}
+        />
+      </Box>
     );
   }
 
@@ -1528,15 +1575,6 @@ export function Chat({
     );
   }
 
-  // the last message is rendered LIVE (dynamic) only while it's a streaming assistant;
-  // everything else is committed to <Static>, which renders each line once and never
-  // re-renders — so Iggy/spinner ticks don't repaint the whole scrollback. `epoch` resets
-  // Static on wholesale changes (resume / new / scroll-back prepend).
-  const lastMsg = chat.messages[chat.messages.length - 1];
-  const streaming = chat.busy && lastMsg?.role === "assistant";
-  const baseCommitted = streaming ? chat.messages.slice(0, -1) : chat.messages;
-  // Weave local system messages (model-switch separators etc.) into the committed history.
-  const committed = interleaveByTs(baseCommitted, localLog);
   // ONE row budget for the whole dynamic frame. It used to be two independent guesses —
   // the streaming tail took `rows - 14` and the composer separately took `rows / 3` — and
   // on any normal terminal their sum plus the chrome is MORE rows than exist. ink cannot
@@ -1585,31 +1623,10 @@ export function Chat({
   // approval card, which takes the composer's band, gets a row budget: the rest of the
   // chrome (header 2 · rule/status/rule 3 · rule/footer 2) plus a little slack.
   const approvalMaxRows = Math.max(6, rows - 10);
-  // content width inside the frame's paddingX(1)
-  const staticW = Math.max(20, (process.stdout.columns || 80) - 2);
 
   return (
     <Box flexDirection="column" paddingX={1}>
-      {/* The settled transcript is printed ONCE into real terminal scrollback — never
-          re-rendered, never clipped, scrollable with the terminal's own scrollbar. Only
-          live/in-flight content lives in the dynamic frame below, which is what keeps the
-          composer at the bottom of the viewport without a fixed-height frame fighting it.
-          (A fixed frame with the transcript inside clipped long output and made the
-          conversation read as disconnected chunks.) */}
-      {/* The explicit width is load-bearing, not cosmetic: ink renders <Static> from a
-          position:absolute box, which sizes to its CONTENT rather than to the terminal.
-          One unbreakable token (a stack-trace path, a URL) therefore made the whole
-          static block wider than the screen, and the terminal wrapped the overflow back
-          to column 0 — which is how fragments ended up printed outside the card borders.
-          Pinning the width here bounds every transcript row; the components additionally
-          hard-wrap their own text so no single token can exceed it. */}
-      <Static key={chat.epoch} items={committed.map((m, i) => ({ m, i }))}>
-        {({ m, i }) => (
-          <Box key={`${m.ts}-${i}`} width={staticW} flexDirection="column">
-            <Message msg={m} />
-          </Box>
-        )}
-      </Static>
+      {transcript}
 
       <Box flexDirection="column">
         {/* startup welcome panel — shown only on empty session so it doesn't re-appear.
