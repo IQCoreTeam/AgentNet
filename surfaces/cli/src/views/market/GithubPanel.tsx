@@ -47,17 +47,16 @@ export function githubRowAt(idx: number, skillCount: number): GithubRow {
   return { kind: "register" };
 }
 
-// The focused row, drawn exactly like a focused welcome panel band: fully inverted,
-// ink on bone, edge to edge. `cursor` appends a block cursor for the text-input row.
+// The focused row, drawn the way this panel always marked focus: a cyan caret ahead of
+// the row, text bold cyan, no fill. `cursor` appends a block cursor for the text-input
+// row. The caret replaces the row's two leading spaces so nothing shifts on focus.
 function FocusBand({ width, text, cursor }: { width: number; text: string; cursor?: boolean }) {
-  const room = Math.max(4, width - (cursor ? 1 : 0));
-  const fitted = truncateEnd(text, room);
-  const pad = Math.max(0, width - displayWidth(fitted) - (cursor ? 1 : 0));
+  const body = truncateEnd(text.replace(/^  /, ""), Math.max(4, width - 2 - (cursor ? 1 : 0)));
   return (
-    <Text backgroundColor={colors.bone} color={colors.ink} bold>
-      {fitted}
-      {cursor ? <Text backgroundColor={colors.ink} color={colors.bone}> </Text> : null}
-      {" ".repeat(pad)}
+    <Text bold color={colors.iqCyan}>
+      {"\u25b8 "}
+      {body}
+      {cursor ? <Text inverse> </Text> : null}
     </Text>
   );
 }
