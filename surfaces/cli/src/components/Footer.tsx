@@ -19,9 +19,12 @@ export function Footer({
   const cols = process.stdout.columns || 80;
   // The design's footer names the panels that open (SESSIONS, MODEL) rather than raw
   // slash commands — /sessions and /model open exactly these, so the labels stay honest.
+  // The esc hint appears only while a turn is running: idle, esc does nothing at the top
+  // level, and a hint for a dead key teaches users to distrust the footer. Busy, esc
+  // interrupts the turn, so the label says INTERRUPT (same word the status row uses).
   const shortcuts =
     cols >= 90
-      ? ["? /HELP", "ESC CANCEL", "SESSIONS", "MODEL"]
+      ? ["? /HELP", ...(busy ? ["ESC INTERRUPT"] : []), "SESSIONS", "MODEL"]
       : cols >= 64
         ? ["? /HELP", "SESSIONS", "MODEL"]
         : ["? /HELP"];
