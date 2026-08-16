@@ -70,21 +70,39 @@ export function ApprovalCard({
   const cornerTop = " ".repeat(Math.max(0, cols - 5)) + (danger ? "══╗" : "──┐");
   const cornerBottom = danger ? "╚══" : "└──";
 
+  // Long commands/paths have no break opportunity, so ink cannot wrap them and they run
+  // past the frame. Wrap them ourselves; show the head and fold the rest.
+  const commandRows = req.command ? wrapHard(`$ ${req.command}`, innerW).slice(0, 3) : [];
+
+  // The typed reply is wrapped by US, not ink: handed a free-running string, ink wraps
+  // it at the frame edge and the card grows one silent row per line — at 30x24 a long
+  // deny reason was enough to push the frame past the terminal and resurrect the
+  // clear-and-repaint storm. Wrap at the inner width minus the prompt glyph (2) and
+  // one cell so the caret always fits on the last row, then show the TAIL rows: the
+  // caret end is what the typist needs to see, the head can scroll off. Two rows is
+  // room enough to read the sentence being finished.
+  const REPLY_INPUT_ROWS = 2;
+  const replyAllRows = reply ? wrapHard(replyText, Math.max(4, innerW - 3)) : [];
+  const replyShown = replyAllRows.slice(-REPLY_INPUT_ROWS);
+  const replyHeadHidden = replyAllRows.length > replyShown.length;
+
   // The inline card takes the composer's slot inside a FIXED-HEIGHT frame, so anything it
   // renders past `maxRows` is not scrolled — it is clipped away, bottom-first. The
   // bottom is where the keys live, so an unbounded card silently eats its own answer row
   // and the prompt reads as a truncated blob you can't act on. Budget the rows: the
-  // fixed chrome is counted, the diff/plan/options get whatever is left.
+  // fixed chrome is counted AT ITS RENDERED HEIGHT (wrapped command rows, shown reply
+  // rows — a band counted as 1 while painting 3 is the same storm by another door), and
+  // the diff/plan/options get whatever is left.
   const showCwd = req.kind === "bash" && Boolean(req.cwd);
   const fixedRows =
     1 + // marginTop
     1 + // corner top / border top
     1 + // //REQUEST_ band (or //ASK_ / //PLAN_)
     (question ? 1 : isPlan ? 0 : 1) + // title (permission) or question prompt line
-    (req.command ? 1 : 0) +
+    commandRows.length +
     (showCwd ? 1 : 0) +
     (req.file ? 1 : 0) +
-    (reply ? 4 : 3) + // reply editor (margin+label+input+hint) or margin+keys+hint
+    (reply ? 3 + replyShown.length : 3) + // reply editor (margin+label+input rows+hint) or margin+keys+hint
     1; // corner bottom / border bottom
   const budget = popup ? Math.max(6, (process.stdout.rows || 24) - 4) : maxRows;
   const bodyRows = Math.max(0, budget - fixedRows);
@@ -97,10 +115,6 @@ export function ApprovalCard({
   };
   const bandBg = danger ? colors.danger : colors.ok;
   const bandFg = danger ? colors.bone : colors.ink;
-
-  // Long commands/paths have no break opportunity, so ink cannot wrap them and they run
-  // past the frame. Wrap them ourselves; show the head and fold the rest.
-  const commandRows = req.command ? wrapHard(`$ ${req.command}`, innerW).slice(0, 3) : [];
 
   // The decision grid's row budget is ONE row (fixedRows counts it as one). Below the
   // width where every worded cell fits, the words shed and the bracketed letters
@@ -224,13 +238,16 @@ export function ApprovalCard({
             ? "type your own answer, then ↵:"
             : "edit command, then ↵ to run:"}
       </Text>
-      <Box>
-        <Text color={colors.ok}>❯ </Text>
-        <Text>
-          {replyText}
-          <Text inverse> </Text>
+      {/* pre-wrapped rows (each fits innerW with the prompt + caret), so ink never adds
+          a wrap of its own. When head rows scrolled off, the prompt glyph becomes … —
+          the same signal truncateStart gives — so the cut is never silent. */}
+      {replyShown.map((r, i) => (
+        <Text key={i}>
+          <Text color={colors.ok}>{i === 0 ? (replyHeadHidden ? "… " : "❯ ") : "  "}</Text>
+          {r}
+          {i === replyShown.length - 1 ? <Text inverse> </Text> : null}
         </Text>
-      </Box>
+      ))}
       <Text dimColor>↵ submit · esc back</Text>
     </Box>
   ) : question ? (
