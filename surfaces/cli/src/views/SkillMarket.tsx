@@ -1196,15 +1196,21 @@ export function SkillMarket({
   const showHideChip = searchUsed + displayWidth("   [h] hide owned ✓") <= innerW;
   const showSortChip = showHideChip && searchUsed + displayWidth(`   [h] hide owned ✓   [s] sort ${sortLabel}`) <= innerW;
   // ── vertical budget ────────────────────────────────────────────────────────
-  // Chrome that always renders: border 2 + header 1 + tabs 1 + card 6 +
-  // footer 1 = 11 rows. Everything else re-enters as terminal rows allow;
-  // read as a drop ladder from the full frame: the blank spacer rows go
-  // first (search's, then tabs', then the band's, then the card's), then the
-  // buy band, then the carousel count row, then the search row. The shortcut
-  // strip shares the tabs row, so it costs no height and only drops by width.
+  // Chrome that always renders: border 2 + header 1 + card 6 + footer 1 =
+  // 10 rows. Everything else re-enters as terminal rows allow; read as a
+  // drop ladder from the full frame: the blank spacer rows go first
+  // (search's, then tabs', then the band's, then the card's), then the buy
+  // band, then the carousel count row, then the search row, and LAST the
+  // tabs row itself below 12 terminal rows. The tabs row is the right final
+  // shed: its shortcut strip already drops piecewise by width, the header's
+  // "N SKILLS/WORKFLOWS ON MAINNET" still names the active tab, and the
+  // footer hint still carries [tab] switch, whose key keeps working with the
+  // row hidden. At 11 rows the old 11 row chrome EQUALLED the terminal,
+  // which is already ink's full clear-and-repaint path on every keystroke.
   // While typing, the search row is the interaction surface and never drops.
   // A flash reserves two rows; when not even one spare row exists it takes
   // the footer's hint slot instead of growing the frame.
+  const showTabsRow = agentRows >= 12;
   const flashInFooter = flash != null && agentRows < 13;
   const listSpare = Math.max(0, agentRows - 12 - (flash != null && !flashInFooter ? 2 : 0));
   const showSearchRow = typing || listSpare >= 1;
@@ -1222,17 +1228,19 @@ export function SkillMarket({
         </Box>
       </Box>
       {/* tabs; the shortcut strip truncates and disappears before the tabs ever wrap */}
-      <Box marginTop={spacerRoom >= 3 ? 1 : 0}>
-        <Text color={kind === "skill" ? colors.iqCyan : colors.dim} bold={kind === "skill"}>skills</Text>
-        <Text dimColor>  ·  </Text>
-        <Text color={kind === "workflow" ? colors.iqCyan : colors.dim} bold={kind === "workflow"}>workflows</Text>
-        {shortcutRoom >= 4 ? (
-          <>
-            <Text dimColor>  ·  </Text>
-            <Text color={colors.dim}>{truncateEnd(shortcuts, shortcutRoom)}</Text>
-          </>
-        ) : null}
-      </Box>
+      {showTabsRow ? (
+        <Box marginTop={spacerRoom >= 3 ? 1 : 0}>
+          <Text color={kind === "skill" ? colors.iqCyan : colors.dim} bold={kind === "skill"}>skills</Text>
+          <Text dimColor>  ·  </Text>
+          <Text color={kind === "workflow" ? colors.iqCyan : colors.dim} bold={kind === "workflow"}>workflows</Text>
+          {shortcutRoom >= 4 ? (
+            <>
+              <Text dimColor>  ·  </Text>
+              <Text color={colors.dim}>{truncateEnd(shortcuts, shortcutRoom)}</Text>
+            </>
+          ) : null}
+        </Box>
+      ) : null}
       {/* search box + hide-owned filter; chips drop whole before they can interleave */}
       {showSearchRow ? (
         <Box marginTop={spacerRoom >= 4 ? 1 : 0}>
