@@ -1240,12 +1240,17 @@ export function Chat({
   // /help overlay — the slash-command list, sourced from the shared registry so it stays
   // in lockstep with autocomplete instead of a hand-maintained string that drifts.
   if (showHelp) {
+    // Two honest columns: the widest "/name args" label sets the label column (the old
+    // fixed 24 was narrower than "/engine claude|codex" wants and glued long labels to
+    // their descriptions), and rows never wrap (truncate-end) so a long description
+    // cannot orphan half a sentence onto its own line.
+    const colW = Math.max(...SLASH_COMMANDS.map((c) => `/${c.name}${c.args ? ` ${c.args}` : ""}`.length)) + 2;
     return (
       <Box flexDirection="column" paddingX={1}>
         <Box borderStyle="round" borderColor={colors.bone} flexDirection="column" paddingX={2} paddingY={1}>
           <Text bold color={colors.iqCyan}>commands</Text>
           {SLASH_COMMANDS.map((c) => (
-            <Text key={c.name} dimColor>{`/${c.name}${c.args ? ` ${c.args}` : ""}`.padEnd(24)}{c.desc}</Text>
+            <Text key={c.name} dimColor wrap="truncate-end">{`/${c.name}${c.args ? ` ${c.args}` : ""}`.padEnd(colW)}{c.desc}</Text>
           ))}
           <Box marginTop={1}><Text dimColor>!cmd runs a shell command  ·  /keys for shortcuts</Text></Box>
           <Box marginTop={1}><Text dimColor>Esc / Enter  close</Text></Box>
@@ -1271,7 +1276,12 @@ export function Chat({
           <Text dimColor>{"Ctrl+V".padEnd(16)}paste an image from the clipboard</Text>
           <Text dimColor>{"\\ then Enter".padEnd(16)}insert a newline</Text>
           <Text dimColor>{"Ctrl+S".padEnd(16)}focus the welcome panel (Esc returns)</Text>
-          <Box marginTop={1}><Text dimColor>at an approval prompt:  y accept · a always · n deny · e edit · r reason · d diff</Text></Box>
+          {/* label and keys on separate rows: on one row the last key wrapped alone
+              ("· d diff" orphaned on its own line) at ordinary 80-col terminals */}
+          <Box marginTop={1} flexDirection="column">
+            <Text dimColor>at an approval prompt:</Text>
+            <Text dimColor>{"  y accept · a always · n deny · e edit · r reason · d diff"}</Text>
+          </Box>
           <Box marginTop={1}><Text dimColor>Esc / Enter  close</Text></Box>
         </Box>
       </Box>

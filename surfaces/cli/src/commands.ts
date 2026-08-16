@@ -22,13 +22,15 @@ export const SLASH_COMMANDS: SlashCmd[] = [
   { name: "engine", desc: "switch engine (carries session)", args: "claude|codex" },
   { name: "model", desc: "change model", args: "<model>" },
   { name: "models", desc: "pick a model from a menu" },
-  { name: "effort", desc: "set reasoning effort", args: "low|medium|high|xhigh|max" },
+  // levels live in the desc, not args: "/effort low|medium|high|xhigh|max" is wider than
+  // the /help label column can afford, and it glued itself to its own description there.
+  { name: "effort", desc: "set reasoning effort: low|medium|high|xhigh|max", args: "<level>" },
   { name: "efforts", desc: "pick effort from a menu" },
   { name: "account", desc: "show engine, auth method, ctx usage" },
   { name: "settings", desc: "show current engine/model/effort/cwd" },
   { name: "btw", desc: "side-channel question without interrupting session", args: "<question>" },
   { name: "wallet", desc: "show wallet address" },
-  { name: "storage", desc: "view/change where sessions save (connect or reconnect cloud)" },
+  { name: "storage", desc: "where sessions save (connect or reconnect cloud)" },
   { name: "logout", desc: "sign out of cloud storage (back to local-only)" },
   { name: "iq", desc: "a random IQ fact" },
   { name: "dance", desc: "Iggy dances" },
