@@ -5,7 +5,7 @@ import { SLASH_COMMANDS } from "../commands.js";
 import { indexFiles, filterFiles } from "../fileIndex.js";
 import { readImageFromClipboard, readImageFile, type ImageInput } from "../clipboardImage.js";
 import { pinCursor, unpinCursor, layoutBuffer } from "../cursorPin.js";
-import { displayWidth } from "../format.js";
+import { displayWidth, graphemes } from "../format.js";
 import { useDelight } from "./DelightProvider.js";
 
 const MENU_CHROME = 2; // the menu block's marginTop + its hint row
@@ -39,7 +39,7 @@ export function splitBand(maxRows: number, hasMenu: boolean): { buf: number; men
 function splitAtCell(row: string, cell: number): [string, string, string] {
   let head = "";
   let w = 0;
-  const chars = [...row];
+  const chars = graphemes(row);
   let i = 0;
   for (; i < chars.length && w < cell; i++) {
     head += chars[i];
