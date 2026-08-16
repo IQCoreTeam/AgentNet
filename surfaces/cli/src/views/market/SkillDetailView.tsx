@@ -114,7 +114,9 @@ export function mainLines(detail: SkillDetail, owned: Set<string>, cols: number)
 // exactly what left stale detail rows smeared behind short terminals. Never taller than
 // the content, so a short detail stays compact. Shared by the render and the key clamp.
 export function mainViewportH(rows: number, total: number): number {
-  return Math.min(Math.max(4, rows - 15), total);
+  // floor of 2: the chrome around the viewport is ~9 rows, so a floor of 4 pushed the
+  // frame to 13 rows and clipped the top border on a 12 row terminal.
+  return Math.min(Math.max(2, rows - 15), total);
 }
 
 // SKILL.md subview rows: the raw file lines hard-wrapped to the content width, so one
@@ -150,7 +152,7 @@ export function commentLines(notes: Note[], cols: number): React.ReactNode[] {
 // slack, for the same ink full-repaint reason as mainViewportH. Never taller than the
 // content. Shared by both subviews and the key clamp, replacing the constants 16 and 12.
 export function subViewportH(rows: number, total: number): number {
-  return Math.min(Math.max(4, rows - 9), total);
+  return Math.min(Math.max(2, rows - 9), total);
 }
 
 export function SkillDetailView({
@@ -241,7 +243,9 @@ export function SkillDetailView({
   // drops first (the viewport's own arrow row still shows scrollability), then the
   // row cuts with an ellipsis as the last resort.
   const hintLead = busy ? "working…" : isOwned ? (disposed ? "[e] re-equip · " : "[d] dispose · ") : "[b] buy · ";
-  const hintTail = `[c] comment · [v] SKILL.md · [k] comments (${notes.length}) · esc back`;
+  // the count leads the tail so a narrow cut takes [v] SKILL.md and esc back first;
+  // those keys still work, the count is the piece with nowhere else to live.
+  const hintTail = `[c] comment · [k] comments (${notes.length}) · [v] SKILL.md · esc back`;
   const hintFull = `${hintLead}${scrolls ? "↑/↓ scroll · " : ""}${hintTail}`;
   const hint = displayWidth(hintFull) <= innerW ? hintFull
     : displayWidth(`${hintLead}${hintTail}`) <= innerW ? `${hintLead}${hintTail}`
@@ -267,7 +271,10 @@ export function SkillDetailView({
           inverted
         />
       </Box>
-      <Box marginTop={1}>
+      {/* on a 12 row terminal every band above keeps its one row only because this
+          gap goes: the hint hugs the buy band instead of pushing the frame to the
+          exact terminal height, where the top border scrolls off. */}
+      <Box marginTop={rowsMain <= 12 ? 0 : 1}>
         <Text dimColor>{hint}</Text>
       </Box>
     </Box>
