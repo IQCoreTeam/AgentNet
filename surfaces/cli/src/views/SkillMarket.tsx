@@ -5,7 +5,7 @@ import type { Reputation, AgentProfile } from "@iqlabs-official/agent-sdk";
 import { maskedHeliusKey, hasDasRpc, saveHeliusKey, getNetwork } from "@iqlabs-official/agent-sdk";
 import { saveGithubToken, loadGithubToken, maskedGithubToken, registerVerifiedWork, parseGithubRepo } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../theme.js";
-import { displayWidth, truncateEnd } from "../format.js";
+import { displayWidth, truncateEnd, truncateStart } from "../format.js";
 import type { OwnedSkill } from "../components/WelcomePanel.js";
 import { ChipCarousel } from "../components/ChipCarousel.js";
 import { Band } from "../components/Band.js";
@@ -1149,33 +1149,59 @@ export function SkillMarket({
 
   // ── list ───────────────────────────────────────────────────────────────────
   const onMainnet = `${results.length} ${kind === "skill" ? "SKILL" : "WORKFLOW"}${results.length === 1 ? "" : "S"} ON MAINNET`;
+  // Width bounds for the chrome rows. Unbounded, their pieces wrapped INTO each other at
+  // narrow widths ("MARKE5 SKILLS ON / T MAINNET" at 40 cols); each row now truncates or
+  // drops its least important piece instead. innerW = frame border 2 + paddingX 2.
+  const innerW = Math.max(12, marketCols - 4);
+  const badgePlain = !rpcStatus ? "" : rpcStatus.hasKey ? `● ${rpcStatus.network} · ${rpcStatus.masked}` : "add a Helius key for faster results";
+  const noteRoom = Math.max(0, innerW - displayWidth("MARKET") - 2);
+  const showBadge = badgePlain !== "" && displayWidth(onMainnet) + 3 + displayWidth(badgePlain) <= noteRoom;
+  const shortcuts = "[a] agents  [p] publish  [r] rpc  [g] github";
+  const shortcutRoom = innerW - displayWidth("skills  ·  workflows  ·  ");
+  const sortLabel = marketSort === "stars" ? "★ stars" : "popular";
+  const queryShown = truncateStart(query, Math.max(1, innerW - 10));
+  const searchUsed = 9 + displayWidth(queryShown) + (typing ? 1 : 0);
+  const showHideChip = searchUsed + displayWidth("   [h] hide owned ✓") <= innerW;
+  const showSortChip = showHideChip && searchUsed + displayWidth(`   [h] hide owned ✓   [s] sort ${sortLabel}`) <= innerW;
   return (
     <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
       <Box justifyContent="space-between">
         <Text bold color={colors.bone}>MARKET</Text>
         <Box>
-          <Text dimColor>{onMainnet}   </Text>
-          <HeliusBadge status={rpcStatus} />
+          <Text dimColor>{truncateEnd(onMainnet, noteRoom)}{showBadge ? "   " : ""}</Text>
+          {showBadge ? <HeliusBadge status={rpcStatus} /> : null}
         </Box>
       </Box>
-      {/* tabs */}
+      {/* tabs; the shortcut strip truncates and disappears before the tabs ever wrap */}
       <Box marginTop={1}>
         <Text color={kind === "skill" ? colors.iqCyan : colors.dim} bold={kind === "skill"}>skills</Text>
         <Text dimColor>  ·  </Text>
         <Text color={kind === "workflow" ? colors.iqCyan : colors.dim} bold={kind === "workflow"}>workflows</Text>
-        <Text dimColor>  ·  </Text>
-        <Text color={colors.dim}>[a] agents  [p] publish  [r] rpc  [g] github</Text>
+        {shortcutRoom >= 4 ? (
+          <>
+            <Text dimColor>  ·  </Text>
+            <Text color={colors.dim}>{truncateEnd(shortcuts, shortcutRoom)}</Text>
+          </>
+        ) : null}
       </Box>
-      {/* search box + hide-owned filter */}
+      {/* search box + hide-owned filter; chips drop whole before they can interleave */}
       <Box marginTop={1}>
         <Text color={typing ? colors.iqCyan : colors.dim}>{typing ? "▸ " : "  "}</Text>
         <Text dimColor>search </Text>
-        <Text>{query}</Text>
+        <Text>{queryShown}</Text>
         {typing ? <Text inverse> </Text> : null}
-        <Text dimColor>   [h] hide owned </Text>
-        <Text color={hideOwned ? colors.ok : colors.dim}>{hideOwned ? "✓" : "✗"}</Text>
-        <Text dimColor>   [s] sort </Text>
-        <Text color={marketSort === "stars" ? colors.warn : colors.dim}>{marketSort === "stars" ? "★ stars" : "popular"}</Text>
+        {showHideChip ? (
+          <>
+            <Text dimColor>   [h] hide owned </Text>
+            <Text color={hideOwned ? colors.ok : colors.dim}>{hideOwned ? "✓" : "✗"}</Text>
+          </>
+        ) : null}
+        {showSortChip ? (
+          <>
+            <Text dimColor>   [s] sort </Text>
+            <Text color={marketSort === "stars" ? colors.warn : colors.dim}>{sortLabel}</Text>
+          </>
+        ) : null}
       </Box>
       {/* results - sd-card chip carousel, ←/→ rotates */}
       <Box flexDirection="column" marginTop={1}>
