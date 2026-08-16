@@ -5,6 +5,7 @@ import type { Reputation, AgentProfile } from "@iqlabs-official/agent-sdk";
 import { maskedHeliusKey, hasDasRpc, saveHeliusKey, getNetwork } from "@iqlabs-official/agent-sdk";
 import { saveGithubToken, loadGithubToken, maskedGithubToken, registerVerifiedWork, parseGithubRepo } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../theme.js";
+import { displayWidth, truncateEnd } from "../format.js";
 import type { OwnedSkill } from "../components/WelcomePanel.js";
 import { ChipCarousel } from "../components/ChipCarousel.js";
 import { Band } from "../components/Band.js";
@@ -221,7 +222,9 @@ export function SkillMarket({
   const [ghFlash, setGhFlash] = useState<string | null>(null);
 
   const owned = new Set(ownedNames);
-  const agentRows = useStdout().stdout?.rows || 24; // || not ??: detached pty reports 0
+  const marketStdout = useStdout().stdout; // || not ??: detached pty reports 0 rows/cols
+  const agentRows = marketStdout?.rows || 24;
+  const marketCols = marketStdout?.columns || 80;
   const visibleResults = results.filter((c) => !hideOwned || !owned.has(c.name));
   // index over the FILTERED list - what's on screen is what enter/buy act on
   const clamped = Math.min(idx, Math.max(0, visibleResults.length - 1));
@@ -1213,10 +1216,16 @@ export function SkillMarket({
         <Band label="buy" note="ONE TX: PAY, MINT YOUR COPY, EQUIP IT." inverted />
       </Box>
       <Box justifyContent="space-between">
-        <Text dimColor wrap="truncate-end">
-          {typing
-            ? "type to search · ↵ run · [tab] skills/workflows · ↓ results · esc close"
-            : "←/→ · ↵ open · [b] buy · [tab] switch · [/] search · [a] agents · [p] publish · [h] hide · [s] sort · esc"}
+        {/* the hint is budgeted against the balance and cut with an ellipsis: unbudgeted,
+            the row fused them into one string ("[h] hid7.003 SOL", and at 30 cols
+            "[b] 7.003" read like a price). border 2 + paddingX 2 + a 2-cell gap. */}
+        <Text dimColor>
+          {truncateEnd(
+            typing
+              ? "type to search · ↵ run · [tab] skills/workflows · ↓ results · esc close"
+              : "←/→ · ↵ open · [b] buy · [tab] switch · [/] search · [a] agents · [p] publish · [h] hide · [s] sort · esc",
+            Math.max(4, marketCols - 4 - displayWidth(sol(balance)) - 2),
+          )}
         </Text>
         <Text dimColor>{sol(balance)}</Text>
       </Box>

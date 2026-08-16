@@ -2,7 +2,7 @@ import React from "react";
 import { Box, Text, useInput } from "ink";
 import { HELIUS_QUICKSTART_URL } from "@iqlabs-official/agent-sdk";
 import { colors, glyph, rule, tag } from "../theme.js";
-import { displayWidth, truncateStart } from "../format.js";
+import { displayWidth, truncateStart, truncateEnd } from "../format.js";
 
 // Focusable rows, in order: the four settings bands, then the skills band (enter = market).
 export type PanelField = "wallet" | "cloud" | "engine" | "helius";
@@ -27,12 +27,6 @@ export interface OwnedSkill {
   name: string;
 }
 
-function truncate(s: string, w: number): string {
-  if (displayWidth(s) <= w) return s;
-  let head = s;
-  while (head.length > 1 && displayWidth(`${head}…`) > w) head = head.slice(0, -1);
-  return `${head}…`;
-}
 
 // One config band, the design's row silhouette (tab 03): `//TAG_` on the left, the value
 // on the right edge, and the focused band FULLY inverted (ink on bone, edge to edge) —
@@ -51,7 +45,7 @@ function Band({
   focused: boolean;
 }) {
   const left = ` ${tag(label)}`;
-  const fitted = truncate(value, Math.max(4, width - displayWidth(left) - 3));
+  const fitted = truncateEnd(value, Math.max(4, width - displayWidth(left) - 3));
   if (focused) {
     const gap = Math.max(1, width - displayWidth(left) - displayWidth(fitted) - 1);
     return (
