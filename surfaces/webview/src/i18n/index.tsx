@@ -4,11 +4,12 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from "re
 // add it here, extend LANGS, teach detectLang() its tag, and fill that key in the t({...})
 // calls that already carry en + ko. Missing keys fall back to English, so a partial locale
 // still renders.
-export type Lang = "en" | "ko";
+export type Lang = "en" | "ko" | "ru";
 
 export const LANGS: { code: Lang; label: string }[] = [
   { code: "en", label: "English" },
   { code: "ko", label: "한국어" },
+  { code: "ru", label: "Русский" },
 ];
 
 const STORE_KEY = "agentnet.lang";
@@ -19,13 +20,14 @@ const STORE_KEY = "agentnet.lang";
 function detectLang(): Lang {
   try {
     const saved = localStorage.getItem(STORE_KEY);
-    if (saved === "en" || saved === "ko") return saved;
+    if (saved === "en" || saved === "ko" || saved === "ru") return saved;
   } catch {
     /* localStorage may be unavailable; fall through to device detection */
   }
   try {
     const tags = [navigator.language, ...(navigator.languages ?? [])].filter(Boolean);
     if (tags.some((tag) => tag.toLowerCase().startsWith("ko"))) return "ko";
+    if (tags.some((tag) => tag.toLowerCase().startsWith("ru"))) return "ru";
   } catch {
     /* no navigator; default below */
   }
