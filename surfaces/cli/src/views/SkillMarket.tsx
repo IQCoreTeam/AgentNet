@@ -13,7 +13,7 @@ import { tierInfo, tierGauge } from "./market/tiers.js";
 import { AgentProfileView, type ProfileSub } from "./market/AgentProfileView.js";
 import { SkillDetailView, mainLines, mainViewportH, skillTextLines, commentLines, subViewportH, type DetailSub } from "./market/SkillDetailView.js";
 import { HeliusPanel, HeliusBadge, heliusBadgeText, type RpcStatusLite } from "./market/HeliusPanel.js";
-import { GithubPanel, type GithubStatusLite, type GithubFocus } from "./market/GithubPanel.js";
+import { GithubPanel, githubRowAt, githubRowCount, type GithubStatusLite } from "./market/GithubPanel.js";
 import { PublishProgressView, type PublishProgress } from "./market/PublishProgressView.js";
 
 export interface MarketApi {
@@ -219,8 +219,9 @@ export function SkillMarket({
   const [ghTokenInput, setGhTokenInput] = useState("");
   const [ghRepoInput, setGhRepoInput] = useState("");
   const [ghSelected, setGhSelected] = useState<Record<string, boolean>>({}); // mint -> chosen
-  const [ghFocus, setGhFocus] = useState<GithubFocus>("repo");
-  const [ghSkillIdx, setGhSkillIdx] = useState(0);
+  // ONE vertical focus list (order in githubRowAt): token, repo, each skill, register.
+  const [ghFocusIdx, setGhFocusIdx] = useState(0);
+  const [ghTokenEditing, setGhTokenEditing] = useState(false); // replacing a stored token
   const [ghFlash, setGhFlash] = useState<string | null>(null);
 
   const owned = new Set(ownedNames);
@@ -237,10 +238,11 @@ export function SkillMarket({
   // the client-side validity check so a bad repo is caught before any network call.
   // Single source: both the github useInput gate and GithubPanel read this.
   const ghChosen = Object.keys(ghSelected).filter((m) => ghSelected[m]);
+  const ghParsedRepo = parseGithubRepo(ghRepoInput);
   const githubBlockReason: string | null =
     !githubStatus?.hasToken ? "add a GitHub token above first."
     : ghRepoInput.trim().length === 0 ? "enter a repo first: owner/name or a github.com URL."
-    : parseGithubRepo(ghRepoInput) == null ? "that repo is not valid. use owner/name or a github.com URL."
+    : ghParsedRepo == null ? "that repo is not valid. use owner/name or a github.com URL."
     : ownedCollection.length === 0 ? "buy or mint a skill first, then link it here."
     : ghChosen.length === 0 ? "pick at least one skill this repo used."
     : null;
@@ -591,37 +593,63 @@ export function SkillMarket({
 
     // ── github verified work ──────────────────────────────────────────────
     if (stage === "github") {
-      if (key.escape) { setStage("list"); setGhFlash(null); return; }
-      // No token yet: one field to paste the Personal Access Token.
-      if (!githubStatus?.hasToken) {
-        if (key.return) { void doSaveGithubToken(ghTokenInput.trim()); return; }
+      // Token entry: first connect (no token yet) or replacing a stored one via
+      // enter on the token row. Enter saves; while a form exists behind it, esc
+      // cancels and up/down leave the field with the typed text kept.
+      if (!githubStatus?.hasToken || ghTokenEditing) {
+        if (key.escape) {
+          if (githubStatus?.hasToken) { setGhTokenEditing(false); return; }
+          setStage("list"); setGhFlash(null); return;
+        }
+        if (githubStatus?.hasToken && (key.upArrow || key.downArrow)) {
+          setGhTokenEditing(false);
+          setGhFocusIdx(key.downArrow ? 1 : 0);
+          return;
+        }
+        if (key.return) {
+          // replacing a stored token: an empty enter cancels instead of silently
+          // clearing the token ([x] on the token row is the remove).
+          if (ghTokenEditing && ghTokenInput.trim() === "") { setGhTokenEditing(false); return; }
+          setGhTokenEditing(false);
+          void doSaveGithubToken(ghTokenInput.trim());
+          return;
+        }
         if (key.backspace || key.delete) { setGhTokenInput((v) => v.slice(0, -1)); return; }
         if (input && !key.ctrl && !key.meta) { setGhTokenInput((v) => v + input); return; }
         return;
       }
-      // Token present: register-repo form. [tab] cycles token -> repo -> skills.
-      if (key.tab) { setGhFocus((f) => (f === "token" ? "repo" : f === "repo" ? "skills" : "token")); return; }
-      if (ghFocus === "token") {
-        if (input === "x" || key.return) { void doSaveGithubToken(""); return; } // remove token
+      if (key.escape) { setStage("list"); setGhFlash(null); return; }
+      // ONE vertical focus list (order lives in githubRowAt): up/down walk it from
+      // anywhere, including the repo input; tab and shift-tab cycle it as an alternate
+      // but are never required. Enter acts on whichever row holds focus.
+      const ghRows = githubRowCount(ownedCollection.length);
+      const ghIdx = Math.min(ghFocusIdx, ghRows - 1);
+      if (key.upArrow) { setGhFocusIdx(Math.max(0, ghIdx - 1)); return; }
+      if (key.downArrow) { setGhFocusIdx(Math.min(ghRows - 1, ghIdx + 1)); return; }
+      if (key.tab) { setGhFocusIdx(key.shift ? (ghIdx + ghRows - 1) % ghRows : (ghIdx + 1) % ghRows); return; }
+      const ghRow = githubRowAt(ghIdx, ownedCollection.length);
+      if (ghRow.kind === "token") {
+        if (input === "x") { void doSaveGithubToken(""); return; } // remove token
+        if (key.return) { setGhTokenInput(""); setGhTokenEditing(true); return; } // replace it
         return;
       }
-      if (ghFocus === "skills") {
-        if (key.upArrow) { setGhSkillIdx((i) => Math.max(0, i - 1)); return; }
-        if (key.downArrow) { setGhSkillIdx((i) => Math.min(Math.max(0, ownedCollection.length - 1), i + 1)); return; }
-        // Enter toggles the highlighted skill, same as space: with a list cursor on
-        // screen, Enter reads as "pick this one". Registering from here fired the gate
-        // flash instead ("pick at least one skill...") which read as a broken key.
+      if (ghRow.kind === "skill") {
         if (input === " " || key.return) {
-          const cur = ownedCollection[Math.min(ghSkillIdx, Math.max(0, ownedCollection.length - 1))];
+          const cur = ownedCollection[ghRow.skill];
           if (cur) setGhSelected((s) => ({ ...s, [cur.id]: !s[cur.id] }));
           return;
         }
         return;
       }
-      // ghFocus === "repo": text entry, enter registers once the gate is clear. When it
-      // is not, do nothing: the standing blockReason row already says what is missing,
-      // and copying it into the flash printed the same message twice.
-      if (key.return) { if (!githubBlockReason) void doRegisterRepo(); return; }
+      if (ghRow.kind === "register") {
+        // fires only when the gate is clear; a blocked enter stays silent because the
+        // register row itself already says why not, once, right under the cursor.
+        if (key.return && !githubBlockReason) { void doRegisterRepo(); return; }
+        return;
+      }
+      // repo input: printable characters land here ONLY while this row holds focus;
+      // enter moves on to the skills (fill repo, pick skills, register).
+      if (key.return) { setGhFocusIdx(2); return; }
       if (key.backspace || key.delete) { setGhRepoInput((v) => v.slice(0, -1)); return; }
       if (input && !key.ctrl && !key.meta) { setGhRepoInput((v) => v + input); return; }
       return;
@@ -826,7 +854,7 @@ export function SkillMarket({
     if (input === "a") { setStage("agents"); void loadAgents(); return; }
     if (input === "p") { setPubResult(null); setPubProgress(null); setPubField("kind"); setPubKind("skill"); setStage("publish"); return; }
     if (input === "r") { setHeliusFlash(null); setHeliusKeyInput(""); setStage("helius"); return; }
-    if (input === "g") { setGhFlash(null); setGhFocus("repo"); setStage("github"); return; }
+    if (input === "g") { setGhFlash(null); setGhFocusIdx(0); setGhTokenEditing(false); setStage("github"); return; }
     if (input === "h") { setHideOwned((v) => !v); setIdx(0); return; }
     if (input === "s") { const next = marketSort === "stars" ? "supply" : "stars"; setMarketSort(next); void search(query, kind, next); return; }
     if (key.tab) {
@@ -849,14 +877,16 @@ export function SkillMarket({
       <GithubPanel
         status={githubStatus}
         tokenInput={ghTokenInput}
+        tokenEditing={ghTokenEditing}
         repoInput={ghRepoInput}
+        repoLabel={ghParsedRepo ? `${ghParsedRepo.owner}/${ghParsedRepo.name}` : null}
         owned={ownedCollection}
         selected={ghSelected}
-        focus={ghFocus}
-        skillIdx={Math.min(ghSkillIdx, Math.max(0, ownedCollection.length - 1))}
+        focusIdx={Math.min(ghFocusIdx, githubRowCount(ownedCollection.length) - 1)}
         blockReason={githubBlockReason}
         busy={busy}
         flash={ghFlash}
+        width={Math.max(20, marketCols - 4)}
       />
     );
   }
