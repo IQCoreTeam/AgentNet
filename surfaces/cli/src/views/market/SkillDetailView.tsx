@@ -5,7 +5,7 @@ import React from "react";
 import { Box, Text, useStdout } from "ink";
 import type { SkillDetail, Note } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../../theme.js";
-import { displayWidth, truncateEnd, wrapBlock } from "../../format.js";
+import { displayWidth, truncateEnd, truncateStart, wrapBlock } from "../../format.js";
 import { ScrollView } from "./ScrollView.js";
 import { Band } from "../../components/Band.js";
 
@@ -219,16 +219,32 @@ export function SkillDetailView({
   const lines = mainLines(detail, owned, colsMain);
   const height = mainViewportH(rowsMain, lines.length);
   const scrolls = lines.length > height;
+  // the two chrome rows above the viewport, budgeted to ONE terminal row each:
+  // unbudgeted, the header (kind + mint + soulbound) wrapped into two fused rows at 30
+  // cols and a long name clipped with no ellipsis. The mint keeps its END visible
+  // (truncateStart): the tail is what identifies it. When everything fits, the shown
+  // strings are the originals, so wide terminals render byte identical.
+  const innerW = Math.max(12, colsMain - 4);
+  const bond = c.type === "workflow" ? " · soulbound token-2022" : " · soulbound";
+  const mintRoom = Math.max(4, innerW - displayWidth(kindWord) - 2);
+  const mintShown = truncateStart(shortMint(c.id), mintRoom);
+  const bondRoom = mintRoom - displayWidth(mintShown);
+  const bondShown = displayWidth(bond) <= bondRoom ? bond : bondRoom >= 4 ? truncateEnd(bond, bondRoom) : "";
+  const fireW = firing ? 2 : 0;
+  const statsTail = `  ×${c.supply ?? 0}${c.stars ? ` · ★${c.stars}` : ""}${isOwned ? (disposed ? " · disposed" : " · owned") : ""}`;
+  const statsRoom = Math.max(0, innerW - fireW - Math.min(displayWidth(c.name), 12));
+  const statsShown = displayWidth(statsTail) <= statsRoom ? statsTail : statsRoom >= 4 ? truncateEnd(statsTail, statsRoom) : "";
+  const nameShown = truncateEnd(c.name, Math.max(2, innerW - fireW - displayWidth(statsShown)));
   return (
     <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
       <Box justifyContent="space-between">
         <Text bold color={colors.bone}>{kindWord}</Text>
-        <Text dimColor>{shortMint(c.id)}{c.type === "workflow" ? " · soulbound token-2022" : " · soulbound"}</Text>
+        <Text dimColor>{mintShown}{bondShown}</Text>
       </Box>
       <Box marginTop={1}>
-        <Text bold color={colors.iqCyan}>{c.name}</Text>
+        <Text bold color={colors.iqCyan}>{nameShown}</Text>
         {firing ? <Text color={colors.iqMagenta}> ✦</Text> : null}
-        <Text dimColor>  ×{c.supply ?? 0}{c.stars ? ` · ★${c.stars}` : ""}{isOwned ? (disposed ? " · disposed" : " · owned") : ""}</Text>
+        <Text dimColor>{statsShown}</Text>
       </Box>
       <ScrollView lines={lines} height={height} offset={scrollOffset} />
 
