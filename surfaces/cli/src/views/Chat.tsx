@@ -453,11 +453,14 @@ export function Chat({
   // is running (or a second press within the window) actually leaves — so one stray Ctrl+C
   // never nukes an in-flight turn. Cleared after 1.5s so the "again to quit" arming lapses.
   const ctrlCArmed = useRef(false);
+  // A /compact turn in flight. The busy-transition effect below reports its outcome once
+  // the turn ends; interrupts clear it so an aborted compact is never reported as done.
+  const awaitingCompact = useRef(false);
 
   // celebration on turn completion: confetti if the last tool looks like a win, else a
   // quick sparkle. Disabled visually by Celebrate under --calm.
   useEffect(() => {
-    if (prevBusy.current && !chat.busy && chat.messages.length) {
+    if (prevBusy.current && !chat.busy) {
       const last = chat.messages[chat.messages.length - 1];
       // an engine error ends the turn too — don't celebrate it; show the calm error face.
       const errored =
@@ -466,25 +469,33 @@ export function Chat({
         (last.tool?.name === "Error" ||
           (last.tool?.exitCode !== undefined && last.tool.exitCode !== 0) ||
           /\b(engine\]|exited with code|error)/i.test(last.text));
-      if (errored) {
-        setEggMood("error");
-      } else {
-        const lastTool = [...chat.messages].reverse().find((m) => m.role === "tool");
-        const win =
-          !!lastTool &&
-          (lastTool.tool?.exitCode === 0 || /\b\d+\s+pass(ing|ed)\b/i.test(lastTool.tool?.output ?? ""));
-        setCelebrate(win ? "confetti" : "sparkle");
-        setEggMood("success");
+      // A /compact turn just ended: report what it actually did, the same after-the-fact
+      // honesty /more uses (announcing success at fire time was the bug this replaces).
+      if (awaitingCompact.current) {
+        awaitingCompact.current = false;
+        if (!chat.turnError) setNotice(errored ? "compact failed (see transcript)" : "context compacted");
       }
-      const t = setTimeout(() => {
-        setCelebrate(null);
-        setEggMood(null);
-      }, 1600);
-      prevBusy.current = chat.busy;
-      return () => clearTimeout(t);
+      if (chat.messages.length) {
+        if (errored) {
+          setEggMood("error");
+        } else {
+          const lastTool = [...chat.messages].reverse().find((m) => m.role === "tool");
+          const win =
+            !!lastTool &&
+            (lastTool.tool?.exitCode === 0 || /\b\d+\s+pass(ing|ed)\b/i.test(lastTool.tool?.output ?? ""));
+          setCelebrate(win ? "confetti" : "sparkle");
+          setEggMood("success");
+        }
+        const t = setTimeout(() => {
+          setCelebrate(null);
+          setEggMood(null);
+        }, 1600);
+        prevBusy.current = chat.busy;
+        return () => clearTimeout(t);
+      }
     }
     prevBusy.current = chat.busy;
-  }, [chat.busy, chat.messages]);
+  }, [chat.busy, chat.messages, chat.turnError]);
 
   // idle nudge: Iggy dozes off after a minute of no activity. Any input resets it.
   useEffect(() => {
@@ -501,6 +512,7 @@ export function Chat({
     if (!key.ctrl || input !== "c") return;
     if (chat.busy) {
       chat.interrupt();
+      awaitingCompact.current = false; // an interrupted /compact must not report as done
       ctrlCArmed.current = true;
       setNotice("interrupted. press Ctrl+C again to quit");
       setTimeout(() => { ctrlCArmed.current = false; }, 1500);
@@ -517,6 +529,7 @@ export function Chat({
     (_i, key) => {
       if (key.escape) {
         chat.interrupt();
+        awaitingCompact.current = false; // an interrupted /compact must not report as done
         setNotice("interrupted.");
       }
     },
@@ -1088,9 +1101,17 @@ export function Chat({
           .catch(() => setNotice("could not load older history"));
         return;
       case "compact":
-        // claude/codex honor their own /compact command; pass it through as a turn.
+        // claude/codex honor their own /compact command; pass it through as a turn. Like
+        // /more, the outcome is announced when it is KNOWN (the busy-transition effect
+        // above): the old fire-time "compacting context" notice claimed progress before
+        // the engine even accepted the turn, and stayed on screen forever, done or not.
+        // While it runs, the activity row's spinner is the honest signal.
+        if (!chat.pendingId) {
+          setNotice("nothing to compact yet - say something first");
+          return;
+        }
+        awaitingCompact.current = true;
         void chat.send("/compact");
-        setNotice("compacting context…");
         return;
       case "clear":
         chat.clearView();
