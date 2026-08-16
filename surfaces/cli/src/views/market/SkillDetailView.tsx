@@ -235,6 +235,17 @@ export function SkillDetailView({
   const statsRoom = Math.max(0, innerW - fireW - Math.min(displayWidth(c.name), 12));
   const statsShown = displayWidth(statsTail) <= statsRoom ? statsTail : statsRoom >= 4 ? truncateEnd(statsTail, statsRoom) : "";
   const nameShown = truncateEnd(c.name, Math.max(2, innerW - fireW - displayWidth(statsShown)));
+  // the FIXED hint row carries the live comment count: the body's counter line sits
+  // inside the scroll region, so on short terminals a fresh post's increment was
+  // invisible without scrolling down to it. Budgeted to one row: the scroll piece
+  // drops first (the viewport's own arrow row still shows scrollability), then the
+  // row cuts with an ellipsis as the last resort.
+  const hintLead = busy ? "working…" : isOwned ? (disposed ? "[e] re-equip · " : "[d] dispose · ") : "[b] buy · ";
+  const hintTail = `[c] comment · [v] SKILL.md · [k] comments (${notes.length}) · esc back`;
+  const hintFull = `${hintLead}${scrolls ? "↑/↓ scroll · " : ""}${hintTail}`;
+  const hint = displayWidth(hintFull) <= innerW ? hintFull
+    : displayWidth(`${hintLead}${hintTail}`) <= innerW ? `${hintLead}${hintTail}`
+    : truncateEnd(`${hintLead}${hintTail}`, innerW);
   return (
     <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
       <Box justifyContent="space-between">
@@ -257,14 +268,7 @@ export function SkillDetailView({
         />
       </Box>
       <Box marginTop={1}>
-        <Text dimColor>
-          {busy ? "working…" : isOwned
-            ? disposed
-              ? "[e] re-equip · "
-              : "[d] dispose · "
-            : "[b] buy · "}
-          {scrolls ? "↑/↓ scroll · " : ""}[c] comment · [v] SKILL.md · [k] comments · esc back
-        </Text>
+        <Text dimColor>{hint}</Text>
       </Box>
     </Box>
   );
