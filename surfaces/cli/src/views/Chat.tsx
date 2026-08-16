@@ -82,8 +82,11 @@ function ActivityRow({
   const cast = useFrameLoop(castingFrames.length, 8);
 
   // The calm face line always carries a word (design tab 28): a steady dim "ready" when
-  // nothing is happening, replaced by the live status the moment something does.
-  let body: React.ReactNode = <Text dimColor>ready</Text>;
+  // nothing is happening, replaced by the live status the moment something does. It
+  // truncates like every other branch: at 30 cols the context meter leaves this text a
+  // couple of cells, and an unmarked Text WRAPS there ("re"/"ad"), breaking the one-row
+  // contract the surrounding chrome math depends on.
+  let body: React.ReactNode = <Text dimColor wrap="truncate-end">ready</Text>;
   if (error) {
     body = (
       <>

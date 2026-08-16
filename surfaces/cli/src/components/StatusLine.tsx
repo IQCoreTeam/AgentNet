@@ -52,7 +52,13 @@ export function StatusLine({
 
   return (
     <Box width={Math.max(0, cols - 2)}>
-      <Iggy mood={mood} />
+      {/* The mascot is padded to the widest animation frame (see Iggy) so it never
+          RESIZES - but when the whole band is squeezed, those padding spaces WRAP,
+          hanging a phantom blank row under the band. Clamp the slot to one row and
+          clip the wrapped spaces: the same height={1} contract the status text keeps. */}
+      <Box height={1} overflow="hidden">
+        <Iggy mood={mood} />
+      </Box>
       <Box flexGrow={1} paddingLeft={2} overflow="hidden">
         {status}
       </Box>

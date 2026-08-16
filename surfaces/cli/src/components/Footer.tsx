@@ -31,8 +31,9 @@ export function Footer({
 
   return (
     <Box justifyContent="space-between">
-      {/* left: shortcuts */}
-      <Box>
+      {/* left: shortcuts - pinned (flexShrink 0): these are the advertised keys, so they
+          never shed characters; the pill on the right takes all the shrink */}
+      <Box flexShrink={0}>
         {shortcuts.map((s, i) => (
           <Text key={s} dimColor>
             {i > 0 ? " · " : ""}
@@ -41,11 +42,17 @@ export function Footer({
         ))}
       </Box>
 
-      {/* right: engine + model */}
-      <Box>
-        <Text color={busy ? colors.warn : colors.ok} bold>{"● "}</Text>
-        <Text color={colors.bone} bold>{cli.toUpperCase()}</Text>
-        <Text dimColor> · {modelLabel}</Text>
+      {/* right: engine + model. The glyph and engine name are pinned (flexShrink 0) and
+          the model label truncates, so when the pill outgrows a narrow terminal it
+          shrinks by shedding model characters instead of wrapping onto a second row -
+          the same one-line contract the shortcuts keep by shedding items. The paddingLeft
+          keeps one honest gap from the shortcuts when the row is completely full. */}
+      <Box paddingLeft={1}>
+        <Box flexShrink={0}>
+          <Text color={busy ? colors.warn : colors.ok} bold>{"● "}</Text>
+          <Text color={colors.bone} bold>{cli.toUpperCase()}</Text>
+        </Box>
+        <Text dimColor wrap="truncate-end"> · {modelLabel}</Text>
       </Box>
     </Box>
   );
