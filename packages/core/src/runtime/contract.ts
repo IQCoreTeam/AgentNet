@@ -106,6 +106,10 @@ export interface ToolAction {
   command?: string; // shell command (Bash / codex command_execution)
   output?: string; // command stdout/stderr or result text
   exitCode?: number; // process exit code, when known
+  // true = the approval gate refused this call (user deny / codex declined item). The
+  // tool never ran, so there is no exitCode; surfaces render this from the approval
+  // outcome instead of guessing success from a missing exit code.
+  denied?: boolean;
   file?: string; // target file (Edit / Write / Read)
   diff?: string; // unified-ish diff for edits ("-old" / "+new" lines)
 }
