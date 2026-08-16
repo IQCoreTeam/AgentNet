@@ -246,10 +246,14 @@ export function SkillDetailView({
   // the count leads the tail so a narrow cut takes [v] SKILL.md and esc back first;
   // those keys still work, the count is the piece with nowhere else to live.
   const hintTail = `[c] comment · [k] comments (${notes.length}) · [v] SKILL.md · esc back`;
+  // narrow fallback: the count is the piece this row exists to carry, so below the
+  // width where the long tail fits it shortens to [k] (N) instead of cutting it off.
+  const hintShort = `[c] comment · [k] (${notes.length}) · [v] SKILL.md · esc back`;
   const hintFull = `${hintLead}${scrolls ? "↑/↓ scroll · " : ""}${hintTail}`;
   const hint = displayWidth(hintFull) <= innerW ? hintFull
     : displayWidth(`${hintLead}${hintTail}`) <= innerW ? `${hintLead}${hintTail}`
-    : truncateEnd(`${hintLead}${hintTail}`, innerW);
+    : displayWidth(`${hintLead}${hintShort}`) <= innerW ? `${hintLead}${hintShort}`
+    : truncateEnd(`${hintLead}${hintShort}`, innerW);
   return (
     <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
       <Box justifyContent="space-between">
