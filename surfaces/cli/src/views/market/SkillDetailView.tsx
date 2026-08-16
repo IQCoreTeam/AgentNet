@@ -2,9 +2,10 @@
 // required-skills checkmarks + prices + "Collect all", full (scrollable) SKILL.md,
 // full comment stack, dispose/re-equip, firing pulse on owned/deployed.
 import React from "react";
-import { Box, Text } from "ink";
+import { Box, Text, useStdout } from "ink";
 import type { SkillDetail, Note } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../../theme.js";
+import { displayWidth, truncateEnd, wrapBlock } from "../../format.js";
 import { ScrollView } from "./ScrollView.js";
 import { Band } from "../../components/Band.js";
 
@@ -21,6 +22,99 @@ function priceLabel(price?: string | null): string {
 }
 function shortMint(m?: string): string {
   return m && m.length > 12 ? `${m.slice(0, 6)}…${m.slice(-4)}` : m ?? "";
+}
+
+// Every row of the main body, each pre-bounded to exactly ONE terminal row: the viewport
+// below slices this array by index, so a row that wrapped would break the scroll math
+// (and, before this, the hashtag chips and long names wrapped into fragments at narrow
+// widths). Exported so SkillMarket's input handler clamps the scroll against the same
+// list it renders. `cols` is the raw terminal width; the frame's border+padding come off
+// here so both callers agree.
+export function mainLines(detail: SkillDetail, owned: Set<string>, cols: number): React.ReactNode[] {
+  const w = Math.max(12, cols - 4);
+  const c = detail.card;
+  const requiredCards = detail.requiredCards ?? [];
+  const unownedRequired = requiredCards.filter((r) => !owned.has(r.name));
+  const totalSol = unownedRequired.reduce((sum, r) => sum + (r.price ? Number(r.price) / 1e9 : 0), 0);
+  const lines: React.ReactNode[] = [];
+  // one blank row before each block after the first, the same rhythm the unscrolled
+  // layout had from its marginTop gaps.
+  const gap = (k: string) => { if (lines.length) lines.push(<Text key={k}> </Text>); };
+
+  if (c.description) {
+    wrapBlock(c.description, w).forEach((l, i) => lines.push(<Text key={`d-${i}`}>{l}</Text>));
+  }
+
+  if (c.category || (c.hashtags && c.hashtags.length)) {
+    gap("g-chips");
+    const cat = c.category ? truncateEnd(c.category, w) : "";
+    const tagRoom = w - displayWidth(cat) - (cat ? 1 : 0);
+    const tags = tagRoom >= 2 ? truncateEnd((c.hashtags ?? []).map((h) => `#${h}`).join(" "), tagRoom) : "";
+    lines.push(
+      <Box key="chips">
+        {cat ? <Text color={colors.iqViolet}>{cat}{tags ? " " : ""}</Text> : null}
+        {tags ? <Text dimColor>{tags}</Text> : null}
+      </Box>,
+    );
+  }
+
+  if (requiredCards.length) {
+    gap("g-req");
+    lines.push(<Text key="req" dimColor>requires:</Text>);
+    for (const r of requiredCards) {
+      const reqOwned = owned.has(r.name);
+      const tail = reqOwned ? "owned" : r.price ? `${(Number(r.price) / 1e9).toFixed(3)} SOL` : "free";
+      lines.push(
+        <Box key={`r-${r.id}`}>
+          <Text color={reqOwned ? colors.ok : colors.warn}>{reqOwned ? glyph.ok : "○"} </Text>
+          <Text>{truncateEnd(r.name, Math.max(2, w - 2 - displayWidth(tail) - 2))}</Text>
+          <Text dimColor>  {tail}</Text>
+        </Box>,
+      );
+    }
+    if (unownedRequired.length > 0) {
+      lines.push(
+        <Text key="collect" color={colors.iqCyan}>
+          {truncateEnd(`[x] collect all ${unownedRequired.length}${totalSol ? ` · ${totalSol.toFixed(3)} SOL` : ""}`, w)}
+        </Text>,
+      );
+    }
+  }
+
+  if (detail.repos && detail.repos.length) {
+    gap("g-repos");
+    lines.push(<Box key="repos"><Band label="used by" note="VERIFIED REPOS · WHERE STARS COME FROM" /></Box>);
+    for (const r of detail.repos) {
+      const stars = `★${r.stars}`;
+      lines.push(
+        <Box key={`repo-${r.url}`}>
+          <Text color={colors.iqCyan}>  {truncateEnd(`${r.owner}/${r.name}`, Math.max(2, w - 4 - displayWidth(stars) - 2))}</Text>
+          <Text color={colors.warn}>  {stars}</Text>
+        </Box>,
+      );
+    }
+  }
+
+  if (detail.skillText) {
+    gap("g-md");
+    lines.push(<Text key="md" dimColor>{truncateEnd(`── SKILL.md (${detail.skillText.split("\n").length} lines) ──`, w)}</Text>);
+    const preview = detail.skillText.slice(0, 300) + (detail.skillText.length > 300 ? "…" : "");
+    wrapBlock(preview, w).forEach((l, i) => lines.push(<Text key={`md-${i}`}>{l}</Text>));
+    lines.push(<Text key="md-open" color={colors.iqCyan}>[v] view full</Text>);
+  }
+
+  gap("g-k");
+  lines.push(<Text key="k" dimColor>[k] comments ({(detail.notes ?? []).length})</Text>);
+  return lines;
+}
+
+// The main body's viewport height: what remains of the terminal after the fixed chrome
+// (borders, header, name row, gaps, flash, buy band, hints, scroll position row) plus one
+// row of slack - ink switches to its full-repaint path at outputHeight >= rows, which is
+// exactly what left stale detail rows smeared behind short terminals. Never taller than
+// the content, so a short detail stays compact. Shared by the render and the key clamp.
+export function mainViewportH(rows: number, total: number): number {
+  return Math.min(Math.max(4, rows - 15), total);
 }
 
 export function SkillDetailView({
@@ -46,9 +140,9 @@ export function SkillDetailView({
 }) {
   const c = detail.card;
   const notes = detail.notes ?? [];
-  const requiredCards = detail.requiredCards ?? [];
-  const unownedRequired = requiredCards.filter((r) => !owned.has(r.name));
-  const totalSol = unownedRequired.reduce((sum, r) => sum + (r.price ? Number(r.price) / 1e9 : 0), 0);
+  const stdoutMain = useStdout().stdout; // || not ??: detached pty reports 0 rows/cols
+  const colsMain = stdoutMain?.columns || 80;
+  const rowsMain = stdoutMain?.rows || 24;
 
   if (sub === "skillText") {
     const bodyLines = (detail.skillText ?? "").split("\n");
@@ -82,8 +176,13 @@ export function SkillDetailView({
     );
   }
 
-  // main
+  // main - fixed chrome (header, name, band, hints) around a line viewport, the same
+  // shape the skillText/comments subviews use, so a fat detail scrolls on a short
+  // terminal instead of emitting a 44+ row frame ink cannot erase.
   const kindWord = (c.type ?? "skill").toUpperCase();
+  const lines = mainLines(detail, owned, colsMain);
+  const height = mainViewportH(rowsMain, lines.length);
+  const scrolls = lines.length > height;
   return (
     <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
       <Box justifyContent="space-between">
@@ -95,59 +194,7 @@ export function SkillDetailView({
         {firing ? <Text color={colors.iqMagenta}> ✦</Text> : null}
         <Text dimColor>  ×{c.supply ?? 0}{c.stars ? ` · ★${c.stars}` : ""}{isOwned ? (disposed ? " · disposed" : " · owned") : ""}</Text>
       </Box>
-      {c.description ? <Text>{c.description}</Text> : null}
-      {c.category || (c.hashtags && c.hashtags.length) ? (
-        <Box marginTop={1}>
-          {c.category ? <Text color={colors.iqViolet}>{c.category} </Text> : null}
-          {(c.hashtags ?? []).map((h) => (
-            <Text key={h} dimColor>#{h} </Text>
-          ))}
-        </Box>
-      ) : null}
-
-      {requiredCards.length ? (
-        <Box flexDirection="column" marginTop={1}>
-          <Text dimColor>requires:</Text>
-          {requiredCards.map((r) => {
-            const reqOwned = owned.has(r.name);
-            const priceSol = r.price ? (Number(r.price) / 1e9).toFixed(3) : null;
-            return (
-              <Box key={r.id}>
-                <Text color={reqOwned ? colors.ok : colors.warn}>{reqOwned ? glyph.ok : "○"} </Text>
-                <Text>{r.name}</Text>
-                <Text dimColor>  {reqOwned ? "owned" : priceSol ? `${priceSol} SOL` : "free"}</Text>
-              </Box>
-            );
-          })}
-          {unownedRequired.length > 0 ? (
-            <Text color={colors.iqCyan}>[x] collect all {unownedRequired.length}{totalSol ? ` · ${totalSol.toFixed(3)} SOL` : ""}</Text>
-          ) : null}
-        </Box>
-      ) : null}
-
-      {detail.repos && detail.repos.length ? (
-        <Box flexDirection="column" marginTop={1}>
-          <Band label="used by" note="VERIFIED REPOS · WHERE STARS COME FROM" />
-          {detail.repos.map((r) => (
-            <Box key={r.url}>
-              <Text color={colors.iqCyan}>  {r.owner}/{r.name}</Text>
-              <Text color={colors.warn}>  ★{r.stars}</Text>
-            </Box>
-          ))}
-        </Box>
-      ) : null}
-
-      {detail.skillText ? (
-        <Box flexDirection="column" marginTop={1}>
-          <Text dimColor>── SKILL.md ({detail.skillText.split("\n").length} lines) ──</Text>
-          <Text>{detail.skillText.slice(0, 300)}{detail.skillText.length > 300 ? "…" : ""}</Text>
-          <Text color={colors.iqCyan}>[v] view full</Text>
-        </Box>
-      ) : null}
-
-      <Box marginTop={1}>
-        <Text dimColor>[k] comments ({notes.length})</Text>
-      </Box>
+      <ScrollView lines={lines} height={height} offset={scrollOffset} />
 
       {flash ? <Box marginTop={1}><Text color={colors.ok}>{glyph.sparkle} {flash}</Text></Box> : null}
       <Box marginTop={1}>
@@ -164,7 +211,7 @@ export function SkillDetailView({
               ? "[e] re-equip · "
               : "[d] dispose · "
             : "[b] buy · "}
-          [c] comment · [v] SKILL.md · [k] comments · esc back
+          {scrolls ? "↑/↓ scroll · " : ""}[c] comment · [v] SKILL.md · [k] comments · esc back
         </Text>
       </Box>
     </Box>

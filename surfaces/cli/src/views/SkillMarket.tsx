@@ -11,7 +11,7 @@ import { ChipCarousel } from "../components/ChipCarousel.js";
 import { Band } from "../components/Band.js";
 import { tierInfo, tierGauge } from "./market/tiers.js";
 import { AgentProfileView, type ProfileSub } from "./market/AgentProfileView.js";
-import { SkillDetailView, type DetailSub } from "./market/SkillDetailView.js";
+import { SkillDetailView, mainLines, mainViewportH, type DetailSub } from "./market/SkillDetailView.js";
 import { HeliusPanel, HeliusBadge, type RpcStatusLite } from "./market/HeliusPanel.js";
 import { GithubPanel, type GithubStatusLite, type GithubFocus } from "./market/GithubPanel.js";
 import { PublishProgressView, type PublishProgress } from "./market/PublishProgressView.js";
@@ -754,6 +754,14 @@ export function SkillMarket({
         if (key.pageUp) { setDetailScroll((o) => clampScroll(o - height, total, height)); return; }
         return;
       }
+      // main body scroll - same clamp the subviews use, against the same line list the
+      // view renders (mainLines/mainViewportH are the one source for both).
+      const mainTotal = mainLines(detail, owned, marketCols).length;
+      const mainH = mainViewportH(agentRows, mainTotal);
+      if (key.downArrow) { setDetailScroll((o) => clampScroll(o + 1, mainTotal, mainH)); return; }
+      if (key.upArrow) { setDetailScroll((o) => clampScroll(o - 1, mainTotal, mainH)); return; }
+      if (key.pageDown) { setDetailScroll((o) => clampScroll(o + mainH, mainTotal, mainH)); return; }
+      if (key.pageUp) { setDetailScroll((o) => clampScroll(o - mainH, mainTotal, mainH)); return; }
       if (key.escape) { setStage("list"); setDetail(null); return; }
       if (input === "b" && !isOwned) { setStage("confirm"); return; }
       if (input === "c") {
