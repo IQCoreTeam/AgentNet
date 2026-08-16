@@ -34,6 +34,7 @@ import {
 } from "../platform/agentService";
 import { LockedGate, useUnlock, LinkRow, FUND_GUIDE_URL, type UnlockReason } from "../unlock/UnlockProvider";
 import { useT, useLang, LANGS } from "../i18n";
+import { M } from "../i18n/messages";
 
 // Chat list drawer — the mobile answer to vscode's multi-panel "new tab": instead of
 // splitting the screen, the ☰ menu slides this in and you pick ONE chat to show. Telegram
@@ -184,7 +185,7 @@ export function Sessions({
       pressFired.current = true;
       pressTimer.current = null;
       haptics.press();
-      setMenuFor({ id: s.sessionId, title: s.title || t({ en: "(untitled)", ko: "(제목 없음)" }) });
+      setMenuFor({ id: s.sessionId, title: s.title || t(M.menu.untitled) });
     }, 480);
   }
   function movePress(e: ReactPointerEvent) {
@@ -277,16 +278,16 @@ export function Sessions({
             <div style={{ borderTop: "1px solid var(--an-term-line)" }}>
               {onOpenAgent && (
                 <MenuRow
-                  label={t({ en: "My Agent", ko: "내 에이전트" })}
-                  subtitle={t({ en: "Profile, skills, identity", ko: "프로필, 스킬, 아이덴티티" })}
+                  label={t(M.menu.myAgent)}
+                  subtitle={t(M.menu.myAgentSub)}
                   onClick={onOpenAgent}
                   icon={<AgentIcon className="h-[22px] w-[22px]" />}
                 />
               )}
               {state.walletAddress ? (
                 <MenuRow
-                  label={t({ en: "Settings", ko: "설정" })}
-                  subtitle={t({ en: "Storage, RPC, GitHub, wallet", ko: "저장소, RPC, GitHub, 지갑" })}
+                  label={t(M.menu.settings)}
+                  subtitle={t(M.menu.settingsSub)}
                   onClick={() => setSettingsMode("configure")}
                   icon={settingsIcon}
                 />
@@ -296,7 +297,7 @@ export function Sessions({
                 // once a wallet exists.
                 <div className="relative">
                   <div style={{ opacity: 0.35, filter: "grayscale(1)", pointerEvents: "none" }} aria-hidden="true">
-                    <MenuRow label={t({ en: "Settings", ko: "설정" })} subtitle={t({ en: "Storage, RPC, GitHub, wallet", ko: "저장소, RPC, GitHub, 지갑" })} onClick={() => {}} icon={settingsIcon} />
+                    <MenuRow label={t(M.menu.settings)} subtitle={t(M.menu.settingsSub)} onClick={() => {}} icon={settingsIcon} />
                   </div>
                   <button
                     type="button"
@@ -316,7 +317,7 @@ export function Sessions({
             <div className="mt-5 flex min-h-0 flex-1 flex-col">
               <div className="mb-1 flex items-center justify-between px-1">
                 <span className="an-term-mono text-[9px] font-bold uppercase" style={{ color: "var(--an-term-fg-6)", letterSpacing: "2px" }}>
-                  {t({ en: "Recents", ko: "최근 항목" })}
+                  {t(M.menu.recents)}
                 </span>
                 <span className="an-term-mono text-[9px] font-bold" style={{ color: "var(--an-term-fg-8)" }}>
                   {state.sessionsSynced ? `[ ${String(state.sessions.length).padStart(2, "0")} ]` : ""}
@@ -330,7 +331,7 @@ export function Sessions({
                     style={{ background: "var(--an-bg-2)", border: "1px solid var(--an-line)" }}
                   >
                     <WifiOffIcon className="h-4 w-4 shrink-0" />
-                    <span className="text-[0.78rem]" style={{ color: "var(--an-fg-dim)" }}>{t({ en: "Offline · showing saved chats", ko: "오프라인 · 저장된 채팅 표시" })}</span>
+                    <span className="text-[0.78rem]" style={{ color: "var(--an-fg-dim)" }}>{t(M.menu.offlineSaved)}</span>
                   </div>
                 )}
                 {/* Online but the cloud tier failed: this list is silently local-only.
@@ -343,8 +344,8 @@ export function Sessions({
                     <WifiOffIcon className="h-4 w-4 shrink-0" style={{ color: "var(--an-warn)" }} />
                     <span className="text-[0.78rem]" style={{ color: "var(--an-fg-dim)" }}>
                       {state.sessionsCloud === "reauth"
-                        ? t({ en: "Cloud sync signed out · showing this device only · reconnect in Storage", ko: "클라우드 동기화 로그아웃됨 · 이 기기만 표시 · 저장소에서 재연결" })
-                        : t({ en: "Cloud unreachable · showing this device only", ko: "클라우드 연결 불가 · 이 기기만 표시" })}
+                        ? t(M.menu.cloudSignedOut)
+                        : t(M.menu.cloudUnreachable)}
                     </span>
                   </div>
                 )}
@@ -353,17 +354,17 @@ export function Sessions({
                   <div className="flex flex-col items-center justify-center gap-3 px-4 py-12 text-center" style={{ color: "var(--an-fg-mute)" }}>
                     <WifiOffIcon className="h-8 w-8" style={{ opacity: 0.6 }} />
                     <div>
-                      <p className="text-[0.95rem]" style={{ color: "var(--an-fg-dim)" }}>{t({ en: "You're offline", ko: "오프라인 상태예요" })}</p>
-                      <p className="mt-1 text-[0.75rem]">{t({ en: "Recent chats sync when you reconnect.", ko: "다시 연결되면 최근 채팅이 동기화돼요." })}</p>
+                      <p className="text-[0.95rem]" style={{ color: "var(--an-fg-dim)" }}>{t(M.menu.youreOffline)}</p>
+                      <p className="mt-1 text-[0.75rem]">{t(M.menu.recentChatsSync)}</p>
                     </div>
                   </div>
                 ) : online && !state.sessionsSynced ? (
                   <p className="flex items-center gap-2 px-2 py-5 text-[0.95rem]" style={{ color: "var(--an-fg-mute)" }}>
                     <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                    {t({ en: "syncing…", ko: "동기화 중…" })}
+                    {t(M.menu.syncing)}
                   </p>
                 ) : online && state.sessionsSynced && state.sessions.length === 0 ? (
-                  <p className="px-2 py-5 text-[0.95rem]" style={{ color: "var(--an-fg-mute)" }}>{t({ en: "No chats yet.", ko: "아직 채팅이 없어요." })}</p>
+                  <p className="px-2 py-5 text-[0.95rem]" style={{ color: "var(--an-fg-mute)" }}>{t(M.menu.noChats)}</p>
                 ) : null}
                 {state.sessions.map((s) => {
                   const active = s.sessionId === state.activeSessionId;
@@ -384,7 +385,7 @@ export function Sessions({
                       style={active ? ({ "--tk": "var(--an-term-fg-5)", "--bk": "transparent", "--ts": "8px" } as CSSProperties) : undefined}
                     >
                       <span className="an-term-mono min-w-0 flex-1 truncate text-[15px] font-bold" style={{ color: running ? "var(--an-run-fg)" : active ? "var(--an-term-fg)" : "var(--an-term-fg-2)" }}>
-                        {s.title || t({ en: "(untitled)", ko: "(제목 없음)" })}
+                        {s.title || t(M.menu.untitled)}
                       </span>
                       {running && (
                         <span className="an-term-mono an-run ml-2 flex-none text-[11px] font-bold" style={{ color: "var(--an-run-accent)", letterSpacing: "0.5px" }}>
@@ -407,7 +408,7 @@ export function Sessions({
               }}
             >
               <svg width="16" height="16" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M11 4v14M4 11h14" /></svg>
-              {t({ en: "New chat", ko: "새 채팅" })}
+              {t(M.menu.newChat)}
             </button>
 
             {menuFor && (
@@ -422,7 +423,7 @@ export function Sessions({
                     }}
                   >
                     <svg width="18" height="18" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h14M9 6V4.5h4V6M6 6l.8 11a1.5 1.5 0 0 0 1.5 1.4h5.4a1.5 1.5 0 0 0 1.5-1.4L17 6" /></svg>
-                    {t({ en: "Delete chat", ko: "채팅 삭제" })}
+                    {t(M.menu.deleteChat)}
                   </button>
                 </div>
               </div>
@@ -431,8 +432,8 @@ export function Sessions({
         ) : settingsMode === "configure" ? (
           <div className="flex h-full flex-col">
             <div className="mb-3 flex items-center justify-between px-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{t({ en: "Settings", ko: "설정" })}</span>
-              {!settingsRoot && <button onClick={() => setSettingsMode("list")} className="text-xs text-zinc-400 hover:text-zinc-200">{t({ en: "Back", ko: "뒤로" })}</button>}
+              <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{t(M.menu.settings)}</span>
+              {!settingsRoot && <button onClick={() => setSettingsMode("list")} className="text-xs text-zinc-400 hover:text-zinc-200">{t(M.settings.back)}</button>}
             </div>
             <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
               {onOpenSkills && (
@@ -440,15 +441,15 @@ export function Sessions({
                   reason="skills"
                   unlocked={!!state.walletAddress}
                   onUnlocked={onOpenSkills}
-                  label={t({ en: "My Skills", ko: "내 스킬" })}
-                  subtitle={state.walletAddress ? `${state.marketOwned.length} ${t({ en: "owned", ko: "개 보유" })}` : t({ en: "Connect a wallet to equip skills", ko: "스킬을 장착하려면 지갑 연결" })}
+                  label={t(M.settings.mySkills)}
+                  subtitle={state.walletAddress ? `${state.marketOwned.length} ${t(M.settings.owned)}` : t(M.settings.connectWalletForSkills)}
                   icon={<SkillIcon className="h-[22px] w-[22px]" />}
                 />
               )}
               {state.walletAddress && (
                 <MenuRow
-                  label={t({ en: "My Wallet", ko: "내 지갑" })}
-                  subtitle={`${state.walletAddress.slice(0, 4)}…${state.walletAddress.slice(-4)} · ${t({ en: "add funds", ko: "충전" })}`}
+                  label={t(M.settings.myWallet)}
+                  subtitle={`${state.walletAddress.slice(0, 4)}…${state.walletAddress.slice(-4)} · ${t(M.settings.addFunds)}`}
                   onClick={() => { setConfirmDisc(false); setSettingsMode("wallet"); }}
                   icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="square"><path d="M4 7.5h15v12H4z" /><path d="M4 7.5V5.5h13v2" /><path d="M14 12.5h5v3h-5z" /></svg>}
                 />
@@ -457,8 +458,8 @@ export function Sessions({
                 reason="sync"
                 unlocked={!!state.walletAddress}
                 onUnlocked={() => setSettingsMode("connect")}
-                label={t({ en: "Storage", ko: "저장소" })}
-                subtitle={cloudConnected ? `${info?.account ?? (info?.kind === "gdrive" ? "Google Drive" : t({ en: "Custom Cloud", ko: "커스텀 클라우드" }))}${cloudSync ? ` · ${cloudSync.ok ? t({ en: "synced", ko: "동기화됨" }) : t({ en: "sync error", ko: "동기화 오류" })}` : ""}` : t({ en: "Local only", ko: "로컬 전용" })}
+                label={t(M.settings.storage)}
+                subtitle={cloudConnected ? `${info?.account ?? (info?.kind === "gdrive" ? "Google Drive" : t(M.settings.customCloud))}${cloudSync ? ` · ${cloudSync.ok ? t(M.settings.synced) : t(M.settings.syncError)}` : ""}` : t(M.settings.localOnly)}
                 icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7.5c0-1.4 3.1-2.5 7-2.5s7 1.1 7 2.5S14.9 10 11 10 4 8.9 4 7.5Z" /><path d="M4 7.5v7c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-7" /><path d="M4 11c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5" /></svg>}
               />
               {!state.walletAddress && (
@@ -467,28 +468,28 @@ export function Sessions({
                 // step instead of a wall of locked rows. Buying a skill opens the same unlock.
                 <MenuRow
                   accent
-                  label={t({ en: "Set up AgentNet", ko: "에이전트넷 세팅하기" })}
-                  subtitle={t({ en: "Wallet · cloud backup · market, one unlock", ko: "지갑 · 클라우드 백업 · 마켓, 한 번에 언락" })}
+                  label={t(M.settings.setUp)}
+                  subtitle={t(M.settings.setUpSub)}
                   onClick={() => requestUnlock("identity")}
                   icon={<IqLogo className="h-[22px] w-[22px]" />}
                 />
               )}
               {state.walletAddress && (<>
               <MenuRow
-                label={t({ en: "Market RPC", ko: "마켓 RPC" })}
-                subtitle={state.rpcStatus?.hasKey ? `${state.rpcStatus.network} · ${state.rpcStatus.masked}` : t({ en: "Helius key recommended", ko: "Helius 키 권장" })}
+                label={t(M.settings.marketRpc)}
+                subtitle={state.rpcStatus?.hasKey ? `${state.rpcStatus.network} · ${state.rpcStatus.masked}` : t(M.settings.heliusRecommended)}
                 onClick={() => setSettingsMode("helius")}
                 icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4v3M11 15v3M4 11h3M15 11h3" /><path d="m6.5 6.5 2.1 2.1M13.4 13.4l2.1 2.1M15.5 6.5l-2.1 2.1M8.6 13.4l-2.1 2.1" /><circle cx="11" cy="11" r="2.6" /></svg>}
               />
               <MenuRow
                 label="GitHub"
-                subtitle={state.githubStatus?.hasToken ? `${t({ en: "connected", ko: "연결됨" })} · ${state.githubStatus.masked ?? t({ en: "token set", ko: "토큰 설정됨" })}` : t({ en: "Private repo access", ko: "비공개 저장소 접근" })}
+                subtitle={state.githubStatus?.hasToken ? `${t(M.settings.githubConnected)} · ${state.githubStatus.masked ?? t(M.settings.githubTokenSet)}` : t(M.settings.githubPrivateRepo)}
                 onClick={() => { send({ type: "getGithubStatus" }); setSettingsMode("github"); }}
                 icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 16.5c-3 .9-3-1.5-4.2-1.8M15 19v-3.1c0-.8-.3-1.4-.8-1.8 2.6-.3 5.3-1.3 5.3-5.7 0-1.3-.4-2.3-1.2-3.2.1-.3.5-1.6-.1-3.1 0 0-1-.3-3.3 1.2a11.5 11.5 0 0 0-6 0C6.6 1.8 5.6 2.1 5.6 2.1c-.6 1.5-.2 2.8-.1 3.1-.8.9-1.2 2-1.2 3.2 0 4.4 2.7 5.4 5.3 5.7-.4.4-.7.9-.8 1.6V19" /></svg>}
               />
               <MenuRow
-                label={t({ en: "AI Connections", ko: "AI 연결" })}
-                subtitle={connectedEngines.length ? `${connectedEngines.join(" + ")} ${t({ en: "connected", ko: "연결됨" })}` : t({ en: "Not signed in", ko: "로그인 안 됨" })}
+                label={t(M.settings.aiConnections)}
+                subtitle={connectedEngines.length ? `${connectedEngines.join(" + ")} ${t(M.settings.githubConnected)}` : t(M.settings.notSignedIn)}
                 onClick={() => setSettingsMode("engines")}
                 icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M11 3v7" /><path d="M6.2 6.2a7 7 0 1 0 9.6 0" /></svg>}
               />
@@ -505,7 +506,7 @@ export function Sessions({
                       setBgExec(v);
                       if (!v) setScreenOffExec(false);
                       setBackgroundExecEnabled(v, state.typing || state.approvals.length > 0, getClientId());
-                      if (!v && state.typing) notify(t({ en: "Background off: task keeps running while the app is open.", ko: "백그라운드 꺼짐: 앱이 열려 있는 동안엔 작업이 계속 실행돼요." }));
+                      if (!v && state.typing) notify(t(M.settings.bgOffToast));
                     }}
                     role="switch"
                     aria-checked={bgExec}
@@ -515,14 +516,14 @@ export function Sessions({
                       <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="M11 7v4l2.5 2" /></svg>
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-fg)" }}>{t({ en: "Background run", ko: "백그라운드 실행" })}</span>
-                      <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>{bgExec ? t({ en: "Runs in the background only while a task is active", ko: "작업이 진행 중일 때만 백그라운드에서 실행돼요" }) : t({ en: "Agent stops when you leave the app", ko: "앱을 나가면 에이전트가 멈춰요" })}</span>
+                      <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-fg)" }}>{t(M.settings.bgRun)}</span>
+                      <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>{bgExec ? t(M.settings.bgRunOn) : t(M.settings.bgRunOff)}</span>
                     </span>
                     <Toggle on={bgExec} />
                   </button>
                   {bgExec && (
                     <p className="px-2.5 pb-1 text-[0.68rem] leading-snug" style={{ color: "var(--an-fg-mute)" }}>
-                      {t({ en: "Uses more battery while a task runs in the background. No task = nothing runs.", ko: "백그라운드에서 작업이 돌 때 배터리를 더 써요. 작업이 없으면 아무것도 안 돌아요." })}
+                      {t(M.settings.bgRunNote)}
                     </p>
                   )}
                   <button
@@ -542,22 +543,22 @@ export function Sessions({
                       <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M16.8 14.6A7 7 0 0 1 7.4 5.2 7 7 0 1 0 16.8 14.6Z" /><path d="M14.8 5.2v2.6M13.5 6.5h2.6" /></svg>
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-fg)" }}>{t({ en: "Run while locked", ko: "잠금 상태에서 실행" })}</span>
+                      <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-fg)" }}>{t(M.settings.runWhileLocked)}</span>
                       <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-fg-mute)" }}>
-                        {!bgExec ? t({ en: "Turn on background execution first", ko: "먼저 백그라운드 실행을 켜세요" }) : screenOffExec ? t({ en: "Keeps active tasks running with the screen off", ko: "화면이 꺼져도 진행 중인 작업을 계속 실행해요" }) : t({ en: "Pauses may occur after the screen turns off", ko: "화면이 꺼진 뒤 멈출 수 있어요" })}
+                        {!bgExec ? t(M.settings.runWhileLockedNeedBg) : screenOffExec ? t(M.settings.runWhileLockedOn) : t(M.settings.runWhileLockedOff)}
                       </span>
                     </span>
                     <Toggle on={screenOffExec} />
                   </button>
                   <p id="screen-off-exec-note" className="px-2.5 pb-1 text-[0.68rem] leading-snug" style={{ color: "var(--an-fg-mute)" }}>
-                    {t({ en: "Uses more battery during active tasks. Approval requests and completed turns vibrate on the lock screen.", ko: "작업 중에는 배터리를 더 써요. 승인 요청과 완료된 턴은 잠금화면에서 진동으로 알려줘요." })}
+                    {t(M.settings.runWhileLockedNote)}
                   </p>
                 </>
               )}
               </>)}
               {/* Language lives outside the guest/setup split: a device preference, always shown. */}
               <MenuRow
-                label={t({ en: "Language", ko: "언어" })}
+                label={t(M.settings.language)}
                 subtitle={LANGS.find((l) => l.code === lang)?.label ?? "English"}
                 onClick={() => setSettingsMode("language")}
                 icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="M3 11h16" /><path d="M11 3c2.2 2.1 3.4 5 3.4 8s-1.2 5.9-3.4 8c-2.2-2.1-3.4-5-3.4-8s1.2-5.9 3.4-8Z" /></svg>}
@@ -567,31 +568,31 @@ export function Sessions({
               // Non-destructive status only. Disconnect moved into My Wallet (a deliberate
               // destination) so it can't be fat-fingered from the panel's bottom edge.
               <div className="mt-2">
-                <p className="an-sfcap">&gt;{t({ en: "CONNECTED", ko: "연결됨" })} · <span style={{ background: "var(--an-bg-2)", color: "var(--an-fg-dim)", padding: "2px 6px" }}>{`${state.walletAddress.slice(0, 4)}…${state.walletAddress.slice(-4)}`}</span> · <span style={{ color: "var(--an-green)" }}>{t({ en: "ONLINE", ko: "온라인" })}</span></p>
+                <p className="an-sfcap">&gt;{t(M.settings.connectedCap)} · <span style={{ background: "var(--an-bg-2)", color: "var(--an-fg-dim)", padding: "2px 6px" }}>{`${state.walletAddress.slice(0, 4)}…${state.walletAddress.slice(-4)}`}</span> · <span style={{ color: "var(--an-green)" }}>{t(M.settings.online)}</span></p>
               </div>
             ) : (
               // Set up AgentNet now carries the unlock action as a menu row above, so the guest
               // footer is a calm status line, matching the connected case (no thumb-line CTA).
               <div className="mt-2">
-                <p className="an-sfcap">&gt;{t({ en: "NOT_SET_UP", ko: "미설정" })} · <span style={{ background: "var(--an-bg-2)", color: "var(--an-fg-dim)", padding: "2px 6px" }}>GUEST</span><span className="unlock-cursor">_</span></p>
+                <p className="an-sfcap">&gt;{t(M.settings.notSetUp)} · <span style={{ background: "var(--an-bg-2)", color: "var(--an-fg-dim)", padding: "2px 6px" }}>GUEST</span><span className="unlock-cursor">_</span></p>
               </div>
             )}
           </div>
         ) : settingsMode === "wallet" ? (
           <div className="flex h-full flex-col">
-            <SettingsSubHeader title={t({ en: "My Wallet", ko: "내 지갑" })} onBack={() => { setConfirmDisc(false); setSettingsMode("configure"); }} />
+            <SettingsSubHeader title={t(M.settings.myWallet)} onBack={() => { setConfirmDisc(false); setSettingsMode("configure"); }} />
             <div className="min-h-0 flex-1 overflow-y-auto">
               <div className="relative border px-3 py-3" style={{ borderColor: "var(--an-green-line)", background: "var(--an-green-dim)" }}>
-                <p className="an-term-mono text-[9px] font-bold uppercase tracking-[0.12em]" style={{ color: "var(--an-green)" }}>&gt;{t({ en: "YOUR_WALLET_ADDRESS", ko: "내_지갑_주소" })}</p>
-                <button type="button" onClick={copyWalletAddress} className="an-term-mono absolute right-2 top-2 border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.1em] active:opacity-70" style={{ borderColor: "var(--an-term-line-2)", color: "var(--an-fg-mute)" }}>{copied ? t({ en: "[copied]", ko: "[복사됨]" }) : t({ en: "[copy]", ko: "[복사]" })}</button>
+                <p className="an-term-mono text-[9px] font-bold uppercase tracking-[0.12em]" style={{ color: "var(--an-green)" }}>&gt;{t(M.wallet.addressLabel)}</p>
+                <button type="button" onClick={copyWalletAddress} className="an-term-mono absolute right-2 top-2 border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.1em] active:opacity-70" style={{ borderColor: "var(--an-term-line-2)", color: "var(--an-fg-mute)" }}>{copied ? t(M.wallet.copied) : t(M.wallet.copy)}</button>
                 <p className="an-term-mono mt-2 break-all pr-12 text-[12px] leading-relaxed" style={{ color: "var(--an-term-fg)" }}>{state.walletAddress}</p>
               </div>
               <div className="mt-3 flex flex-col gap-2">
-                <LinkRow label={t({ en: "ADD_FUNDS", ko: "충전하기" })} sub={t({ en: "Buy SOL and send it here · phantom guide", ko: "SOL을 구매해 이 주소로 전송 · phantom 가이드" })} href={FUND_GUIDE_URL} />
-                <LinkRow label={t({ en: "VIEW_ON_EXPLORER", ko: "익스플로러에서_보기" })} sub={t({ en: "solscan.io/account · opens in browser", ko: "solscan.io/account · 브라우저에서 열림" })} href={`https://solscan.io/account/${state.walletAddress}`} />
+                <LinkRow label={t(M.wallet.addFundsLabel)} sub={t(M.wallet.addFundsSub)} href={FUND_GUIDE_URL} />
+                <LinkRow label={t(M.wallet.explorerLabel)} sub={t(M.wallet.explorerSub)} href={`https://solscan.io/account/${state.walletAddress}`} />
               </div>
               <div className="an-term-mono mt-3 flex justify-between border-t pt-3 text-[10px] uppercase tracking-[0.08em]" style={{ borderColor: "var(--an-term-line)", color: "var(--an-fg-mute)" }}>
-                <span>{t({ en: "Network", ko: "네트워크" })}</span><span style={{ color: "var(--an-term-fg-2)" }}>Solana Mainnet</span>
+                <span>{t(M.wallet.network)}</span><span style={{ color: "var(--an-term-fg-2)" }}>Solana Mainnet</span>
               </div>
             </div>
             {!confirmDisc ? (
@@ -600,19 +601,19 @@ export function Sessions({
                   <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="square"><path d="M8.5 4.5H4v13h4.5" /><path d="M14 15l3-4-3-4M17 11H8.5" /></svg>
                 </span>
                 <span className="grow">
-                  <span className="ttl">{t({ en: "Disconnect_Wallet", ko: "지갑_연결해제" })}</span>
-                  <span className="sub">{t({ en: "Clears the saved session on this device", ko: "이 기기에 저장된 세션을 지웁니다" })}</span>
+                  <span className="ttl">{t(M.wallet.disconnect)}</span>
+                  <span className="sub">{t(M.wallet.disconnectSub)}</span>
                 </span>
                 <span className="xmk">[x]</span>
               </button>
             ) : (
               <div className="mt-3">
                 <div className="border p-3" style={{ borderColor: "var(--an-red)", background: "rgba(229,72,77,0.08)" }}>
-                  <p className="an-term-mono text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: "var(--an-red)" }}>&gt;{t({ en: "CONFIRM_DISCONNECT", ko: "연결해제_확인" })}</p>
-                  <p className="mt-2 text-[11px] leading-relaxed" style={{ color: "var(--an-fg-dim)" }}>{t({ en: "Make sure you can recover this wallet first. This clears its key from this device, and there is no in-app backup. If you have not saved a way to restore it, you could lose access to this wallet and any funds in it.", ko: "먼저 이 지갑을 복구할 수 있는지 확인하세요. 이 기기에서 키가 지워지고, 앱 내 백업은 없어요. 복원할 방법을 저장해두지 않았다면 이 지갑과 그 안의 자금에 접근하지 못할 수 있어요." })}</p>
+                  <p className="an-term-mono text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: "var(--an-red)" }}>&gt;{t(M.wallet.confirmDisconnect)}</p>
+                  <p className="mt-2 text-[11px] leading-relaxed" style={{ color: "var(--an-fg-dim)" }}>{t(M.wallet.confirmWarning)}</p>
                 </div>
                 <div className="mt-2 flex gap-2">
-                  <button onClick={() => setConfirmDisc(false)} className="an-btn an-btn-outline flex-1">{t({ en: "Keep wallet", ko: "지갑 유지" })}</button>
+                  <button onClick={() => setConfirmDisc(false)} className="an-btn an-btn-outline flex-1">{t(M.wallet.keepWallet)}</button>
                   <button
                     onClick={() => {
                       forgetAndroidWallet(); // clear the Keystore creds so we don't silently reconnect
@@ -621,7 +622,7 @@ export function Sessions({
                     }}
                     className="an-btn an-btn-danger flex-1"
                   >
-                    {t({ en: "Disconnect", ko: "연결해제" })}
+                    {t(M.wallet.disconnectAction)}
                   </button>
                 </div>
               </div>
@@ -629,7 +630,7 @@ export function Sessions({
           </div>
         ) : settingsMode === "helius" ? (
           <div className="flex flex-col h-full">
-            <SettingsSubHeader title={t({ en: "Market RPC", ko: "마켓 RPC" })} onBack={() => setSettingsMode("configure")} />
+            <SettingsSubHeader title={t(M.settings.marketRpc)} onBack={() => setSettingsMode("configure")} />
             <div className="flex-1 overflow-y-auto">
               <HeliusKeyForm onDone={() => setSettingsMode(rootMode)} />
             </div>
@@ -643,7 +644,7 @@ export function Sessions({
           </div>
         ) : settingsMode === "engines" ? (
           <div className="flex flex-col h-full">
-            <SettingsSubHeader title={t({ en: "AI Connections", ko: "AI 연결" })} onBack={() => setSettingsMode("configure")} />
+            <SettingsSubHeader title={t(M.settings.aiConnections)} onBack={() => setSettingsMode("configure")} />
             <div className="flex-1 space-y-0.5 overflow-y-auto">
               {(["claude", "codex"] as const).map((c) => {
                 const connected = state.cliReport?.[c] === "ok";
@@ -659,12 +660,12 @@ export function Sessions({
                     <span className="min-w-0 flex-1">
                       <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-fg)" }}>{c}</span>
                       <span className="block text-[0.72rem] leading-tight" style={{ color: connected ? accent : "var(--an-fg-mute)" }}>
-                        {connected ? t({ en: "Connected", ko: "연결됨" }) : t({ en: "Not signed in", ko: "로그인 안 됨" })}
+                        {connected ? t(M.storagePicker.connected) : t(M.settings.notSignedIn)}
                         {version?.installed ? ` · v${version.installed}` : ""}
                       </span>
                       {outdated && (
                         <span className="block text-[0.72rem] leading-tight" style={{ color: "var(--an-amber, #e90)" }}>
-                          {updating ? t({ en: "Updating, this can take a minute", ko: "업데이트 중, 1분 정도 걸릴 수 있어요" }) : `v${version?.latest} ${t({ en: "available", ko: "사용 가능" })}`}
+                          {updating ? t(M.engines.updatingLong) : `v${version?.latest} ${t(M.engines.available)}`}
                         </span>
                       )}
                     </span>
@@ -675,7 +676,7 @@ export function Sessions({
                         className="an-term-mono shrink-0 text-[11px] font-bold uppercase tracking-wide transition active:opacity-70 disabled:cursor-not-allowed disabled:opacity-40"
                         style={{ color: "var(--an-amber, #e90)", border: "1px solid color-mix(in srgb, var(--an-amber, #e90) 45%, var(--an-line))", padding: "8px 12px" }}
                       >
-                        {updating ? t({ en: "Updating", ko: "업데이트 중" }) : t({ en: "Update", ko: "업데이트" })}
+                        {updating ? t(M.engines.updating) : t(M.engines.update)}
                       </button>
                     )}
                     {connected ? (
@@ -684,7 +685,7 @@ export function Sessions({
                         className="an-term-mono shrink-0 text-[11px] font-bold uppercase tracking-wide transition active:opacity-70"
                         style={{ color: "var(--an-red, #e55)", border: "1px solid var(--an-line)", padding: "8px 12px" }}
                       >
-                        {t({ en: "Log out", ko: "로그아웃" })}
+                        {t(M.engines.logOut)}
                       </button>
                     ) : (
                       <button
@@ -692,20 +693,20 @@ export function Sessions({
                         className="an-term-mono shrink-0 text-[11px] font-bold uppercase tracking-wide transition active:opacity-70"
                         style={{ color: accent, border: `1px solid color-mix(in srgb, ${accent} 45%, var(--an-line))`, padding: "8px 12px" }}
                       >
-                        {t({ en: "Connect", ko: "연결" })}
+                        {t(M.engines.connect)}
                       </button>
                     )}
                   </div>
                 );
               })}
               <p className="px-2.5 pt-1 text-[0.68rem] leading-snug" style={{ color: "var(--an-fg-mute)" }}>
-                {t({ en: "Connect opens that engine's sign-in. Signing out removes its credentials from this device; chat locks until an engine is connected again. Updates install straight from the official npm registry.", ko: "연결을 누르면 해당 엔진의 로그인이 열려요. 로그아웃하면 이 기기에서 자격 증명이 제거되고, 엔진을 다시 연결할 때까지 채팅이 잠깁니다. 업데이트는 공식 npm 레지스트리에서 바로 설치돼요." })}
+                {t(M.engines.note)}
               </p>
             </div>
           </div>
         ) : settingsMode === "language" ? (
           <div className="flex flex-col h-full">
-            <SettingsSubHeader title={t({ en: "Language", ko: "언어" })} onBack={() => setSettingsMode(rootMode)} />
+            <SettingsSubHeader title={t(M.settings.language)} onBack={() => setSettingsMode(rootMode)} />
             <div className="flex flex-col gap-2.5">
               {LANGS.map((l) => {
                 const active = lang === l.code;
@@ -725,20 +726,20 @@ export function Sessions({
               })}
             </div>
             <p className="mt-3 px-1 text-[10px] leading-relaxed" style={{ color: "var(--an-fg-mute)" }}>
-              {t({ en: "Defaults to your device language. Applies across onboarding and settings.", ko: "기본값은 기기 언어를 따라가요. 온보딩과 설정 전반에 적용됩니다." })}
+              {t(M.settings.languageHint)}
             </p>
           </div>
         ) : settingsMode === "connect" ? (
           <div className="flex flex-col h-full justify-between">
             <div>
-              <SettingsSubHeader title={t({ en: "Storage", ko: "저장소" })} onBack={() => setSettingsMode("configure")} />
+              <SettingsSubHeader title={t(M.settings.storage)} onBack={() => setSettingsMode("configure")} />
               <div className="flex flex-col gap-2.5">
                 {/* Radio picker: the filled dot = the active backend. Local = disconnect any
                     cloud; gdrive/custom open their existing connect flow. */}
                 <StorageOption
                   active={!cloudConnected}
-                  title={t({ en: "This device only", ko: "이 기기만" })}
-                  subtitle={t({ en: "Sessions stay local. No cloud mirror.", ko: "세션이 로컬에만 저장됩니다. 클라우드 미러 없음." })}
+                  title={t(M.storagePicker.thisDevice)}
+                  subtitle={t(M.storagePicker.thisDeviceSub)}
                   onClick={() => {
                     if (cloudConnected) send({ type: "disconnectCloud" });
                     setSettingsMode("configure");
@@ -749,18 +750,18 @@ export function Sessions({
                   title="Google Drive"
                   subtitle={
                     info?.kind === "gdrive" && info?.connected
-                      ? `${t({ en: "Connected", ko: "연결됨" })}${info.account ? ` · ${info.account}` : ""}`
-                      : t({ en: "Mirror sessions to your own Google account", ko: "내 Google 계정으로 세션 미러링" })
+                      ? `${t(M.storagePicker.connected)}${info.account ? ` · ${info.account}` : ""}`
+                      : t(M.storagePicker.gdriveSub)
                   }
                   onClick={() => setSettingsMode("gdrive")}
                 />
                 <StorageOption
                   active={info?.kind === "custom" && !!info?.connected}
-                  title={t({ en: "Custom Storage", ko: "커스텀 저장소" })}
+                  title={t(M.storagePicker.customStorage)}
                   subtitle={
                     info?.kind === "custom" && info?.connected
-                      ? `${t({ en: "Connected", ko: "연결됨" })}${info.location ? ` · ${info.location}` : ""}`
-                      : t({ en: "Mirror to an S3 / WebDAV / HTTP endpoint", ko: "S3 / WebDAV / HTTP 엔드포인트로 미러링" })
+                      ? `${t(M.storagePicker.connected)}${info.location ? ` · ${info.location}` : ""}`
+                      : t(M.storagePicker.customStorageSub)
                   }
                   onClick={() => setSettingsMode("custom")}
                 />
@@ -770,17 +771,17 @@ export function Sessions({
               onClick={() => setSettingsMode("configure")}
               className="w-full rounded-lg bg-zinc-800 hover:bg-zinc-700 py-2.5 text-xs text-zinc-200"
             >
-              {t({ en: "Done", ko: "완료" })}
+              {t(M.storagePicker.done)}
             </button>
           </div>
         ) : settingsMode === "custom" ? (
           <div className="flex flex-col h-full justify-between">
             <div>
-              <SettingsSubHeader title={t({ en: "Custom Cloud", ko: "커스텀 클라우드" })} onBack={() => setSettingsMode("connect")} />
+              <SettingsSubHeader title={t(M.settings.customCloud)} onBack={() => setSettingsMode("connect")} />
               <div className="flex flex-col gap-3">
                 <div>
                   <label className="text-[10px] text-zinc-500 font-semibold uppercase block mb-1">
-                    {t({ en: "Endpoint URL", ko: "엔드포인트 URL" })}
+                    {t(M.custom.endpointUrl)}
                   </label>
                   <input
                     value={customUrl}
@@ -791,12 +792,12 @@ export function Sessions({
                 </div>
                 <div>
                   <label className="text-[10px] text-zinc-500 font-semibold uppercase block mb-1">
-                    {t({ en: "Auth Header (optional)", ko: "인증 헤더 (선택)" })}
+                    {t(M.custom.authHeader)}
                   </label>
                   <input
                     value={customAuth}
                     onChange={(e) => setCustomAuth(e.target.value)}
-                    placeholder={t({ en: "Bearer token...", ko: "Bearer 토큰..." })}
+                    placeholder={t(M.custom.bearerPlaceholder)}
                     className="w-full rounded-lg bg-zinc-900 border border-zinc-850 px-2.5 py-2 text-xs text-white outline-none focus:border-an-green/50"
                   />
                 </div>
@@ -813,7 +814,7 @@ export function Sessions({
                   }}
                   className="w-full rounded-lg bg-an-green hover:bg-[var(--an-green-hover)] text-xs font-semibold py-2.5 text-black mt-2 active:scale-95 transition disabled:opacity-40"
                 >
-                  {t({ en: "Connect Storage", ko: "저장소 연결" })}
+                  {t(M.custom.connectStorage)}
                 </button>
               </div>
             </div>
@@ -821,7 +822,7 @@ export function Sessions({
               onClick={() => setSettingsMode("connect")}
               className="w-full rounded-lg bg-zinc-800 hover:bg-zinc-700 py-2.5 text-xs text-zinc-200"
             >
-              {t({ en: "Cancel", ko: "취소" })}
+              {t(M.custom.cancel)}
             </button>
           </div>
         ) : (
@@ -842,7 +843,7 @@ export function Sessions({
                       }}
                       className="w-full rounded-lg bg-an-green hover:bg-[var(--an-green-hover)] text-xs font-semibold py-2.5 text-black mt-1 active:scale-95 transition disabled:opacity-40"
                     >
-                      {busy ? t({ en: "Starting Login…", ko: "로그인 시작 중…" }) : t({ en: "Sign in to Google Drive", ko: "Google Drive 로그인" })}
+                      {busy ? t(M.gdrive.startingLogin) : t(M.gdrive.signIn)}
                     </button>
                     {googleLoginError && (
                       <p className="text-center text-[10px] text-red-400">{googleLoginError}</p>
@@ -851,20 +852,20 @@ export function Sessions({
                 ) : (
                   <>
                     <p className="text-[10px] text-zinc-400 leading-relaxed text-center">
-                      {t({ en: "Google sign-in opened in your browser. Approve Drive access, then return to AgentNet.", ko: "브라우저에서 Google 로그인이 열렸어요. Drive 접근을 승인한 뒤 AgentNet으로 돌아오세요." })}
+                      {t(M.gdrive.instructions)}
                     </p>
                     <button
                       onClick={() => openExternalUrl(googleLoginUrl)}
                       className="w-full rounded-lg bg-zinc-900 border border-zinc-850 hover:bg-zinc-800 text-[10px] font-medium py-2 text-zinc-300 active:scale-95 transition"
                     >
-                      {t({ en: "Open Google Again", ko: "Google 다시 열기" })}
+                      {t(M.gdrive.openAgain)}
                     </button>
                     <button
                       type="button"
                       onClick={() => setShowManualCode((v) => !v)}
                       className="text-[10px] font-medium text-zinc-500 active:text-zinc-300"
                     >
-                      {showManualCode ? t({ en: "Hide manual code entry", ko: "수동 코드 입력 숨기기" }) : t({ en: "Having trouble? Use code manually", ko: "문제가 있나요? 코드를 직접 입력하세요" })}
+                      {showManualCode ? t(M.gdrive.hideManual) : t(M.gdrive.useManual)}
                     </button>
                     {showManualCode && (
                       <>
@@ -874,7 +875,7 @@ export function Sessions({
                           rel="noreferrer"
                           className="break-all rounded-lg bg-zinc-900 px-2.5 py-2 text-[10px] leading-relaxed text-an-green border border-zinc-850 block text-center"
                         >
-                          {t({ en: "Open Authorization URL", ko: "인증 URL 열기" })}
+                          {t(M.gdrive.openAuthUrl)}
                         </a>
                         <button
                           onClick={async () => {
@@ -893,12 +894,12 @@ export function Sessions({
                           }}
                           className="w-full rounded bg-zinc-900 border border-zinc-850 hover:bg-zinc-800 text-[10px] font-medium py-1.5 text-zinc-400 active:scale-95 transition"
                         >
-                          {copied ? t({ en: "Copied!", ko: "복사됨!" }) : t({ en: "Copy link", ko: "링크 복사" })}
+                          {copied ? t(M.gdrive.copied) : t(M.gdrive.copyLink)}
                         </button>
                         <input
                           value={code}
                           onChange={(e) => setCode(e.target.value)}
-                          placeholder={t({ en: "Paste URL or code here", ko: "URL이나 코드를 붙여넣으세요" })}
+                          placeholder={t(M.gdrive.pastePlaceholder)}
                           className="w-full rounded bg-zinc-900 border border-zinc-850 px-2.5 py-2 text-xs text-white outline-none focus:border-an-green/50"
                         />
                         <button
@@ -909,7 +910,7 @@ export function Sessions({
                           }}
                           className="w-full rounded-lg bg-an-green hover:bg-[var(--an-green-hover)] text-xs font-semibold py-2.5 text-black mt-1 active:scale-95 transition disabled:opacity-40"
                         >
-                          {t({ en: "Confirm", ko: "확인" })}
+                          {t(M.gdrive.confirm)}
                         </button>
                       </>
                     )}
@@ -926,7 +927,7 @@ export function Sessions({
               }}
               className="w-full rounded-lg bg-zinc-800 hover:bg-zinc-750 py-2.5 text-xs text-zinc-200"
             >
-              {t({ en: "Cancel", ko: "취소" })}
+              {t(M.custom.cancel)}
             </button>
           </div>
         )}

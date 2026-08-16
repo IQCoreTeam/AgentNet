@@ -3,7 +3,8 @@ import { useStore } from "../state/store";
 import { HeliusKeyForm } from "../settings/HeliusKeyForm";
 import { ConnectDriveForm } from "../settings/ConnectDriveForm";
 import { CheckIcon, LockIcon } from "../icons";
-import { useT, type Msg } from "../i18n";
+import { useT } from "../i18n";
+import { M } from "../i18n/messages";
 import { haptics } from "../haptics";
 
 export type UnlockReason = "skills" | "buy" | "publish" | "comment" | "identity" | "sync";
@@ -26,14 +27,8 @@ export const SCANLINES = "repeating-linear-gradient(0deg, rgba(0,0,0,0.11) 0, rg
 // Three steps: fund 01, cloud 02, rpc 03. `creating` is the pre-step wallet mint (no number).
 const SEQ: Record<UnlockScreen, string> = { creating: "00", fund: "01", cloud: "02", advanced: "03", done: "03" };
 
-const REASON_COPY: Record<UnlockReason, { title: Msg; returnLabel: Msg }> = {
-  skills: { title: { en: "Build your skill collection", ko: "내 스킬 컬렉션 만들기" }, returnLabel: { en: "Open my skills", ko: "내 스킬 열기" } },
-  buy: { title: { en: "Collect this skill", ko: "이 스킬 수집하기" }, returnLabel: { en: "Continue purchase", ko: "구매 계속하기" } },
-  publish: { title: { en: "Publish your work", ko: "내 작업 게시하기" }, returnLabel: { en: "Continue publishing", ko: "게시 계속하기" } },
-  comment: { title: { en: "Join the conversation", ko: "대화에 참여하기" }, returnLabel: { en: "Continue to comment", ko: "댓글 계속 작성" } },
-  identity: { title: { en: "Claim your agent identity", ko: "에이전트 정체성 만들기" }, returnLabel: { en: "Open my agent", ko: "내 에이전트 열기" } },
-  sync: { title: { en: "Take your sessions anywhere", ko: "세션을 어디서든 이어가기" }, returnLabel: { en: "Set up sync", ko: "동기화 설정" } },
-};
+// Per-reason unlock title + return-action label; copy lives in the central dictionary.
+const REASON_COPY = M.unlock.reason;
 
 const REVEAL_DELAY: Record<UnlockReason, number> = {
   identity: 0,
@@ -152,7 +147,7 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
                 <span>&gt;UNLOCK_SEQ {SEQ[screen]}/03</span><span>アクセス {screen === "done" ? "OK" : "******"}</span>
               </div>
               <div className="mx-3 mb-3 flex items-center justify-between gap-2" style={{ backgroundColor: "var(--an-green)", backgroundImage: SCANLINES, color: "var(--an-on-green)", padding: "9px 12px" }}>
-                <h2 className="an-term-mono truncate text-[13px] font-bold uppercase tracking-[0.14em]">{t({ en: "AgentNet Full Unlock", ko: "에이전트넷 풀 언락" })}</h2>
+                <h2 className="an-term-mono truncate text-[13px] font-bold uppercase tracking-[0.14em]">{t(M.unlock.titleBar)}</h2>
                 <button type="button" onClick={unlocked ? continueAction : dismiss} className="an-term-mono shrink-0 text-[13px] font-bold leading-none active:opacity-70" aria-label="Close">[x]</button>
               </div>
             </div>
@@ -161,19 +156,19 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
             <div key={screen} className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
               {screen === "creating" && <CreatingWallet />}
               {screen === "fund" && (
-                <StepScreen step={1} title={t({ en: "Fund_Wallet", ko: "지갑_충전" })} status={t({ en: "Optional", ko: "선택사항" })} detail={t({ en: "Your wallet was created to encrypt every chat session and to buy and sell skills. There is no need to add funds now.", ko: "당신의 모든 대화 세션을 암호화하고, 스킬을 사고팔 수 있게 지갑을 만들었어요. 이 지갑을 기억해 두세요." })} icon={ICON_FUND}>
+                <StepScreen step={1} title={t(M.unlock.fund.title)} status={t(M.unlock.fund.status)} detail={t(M.unlock.fund.detail)} icon={ICON_FUND}>
                   <FundControls address={state.walletAddress ?? ""} onDone={enterCloud} />
                 </StepScreen>
               )}
               {screen === "cloud" && (
-                <StepScreen step={2} title={t({ en: "Cloud_Backup", ko: "클라우드_백업" })} status={t({ en: "Needed_for_Sync", ko: "동기화_필수" })} detail={t({ en: "Back up encrypted sessions to your own Google Drive. This is what lets another device pick up your work. Your wallet key encrypts everything before upload; nobody else can read it.", ko: "암호화된 세션을 내 Google Drive에 백업합니다. 다른 기기가 작업을 이어받는 방법이에요. 업로드 전에 지갑 키로 모두 암호화되어 다른 누구도 읽을 수 없습니다." })} icon={ICON_CLOUD}>
-                  <ConnectDriveForm onDone={enterAdvanced} skipLabel={t({ en: "Skip for now", ko: "지금은 건너뛰기" })} />
-                  <p className="mt-3 text-center text-caption leading-relaxed text-[color:var(--an-fg-mute)]">{t({ en: "Sessions stay on this device until you connect. You can do this later in Settings.", ko: "연결 전까지 세션은 이 기기에만 저장됩니다. 나중에 설정에서 할 수 있어요." })}</p>
+                <StepScreen step={2} title={t(M.unlock.cloud.title)} status={t(M.unlock.cloud.status)} detail={t(M.unlock.cloud.detail)} icon={ICON_CLOUD}>
+                  <ConnectDriveForm onDone={enterAdvanced} skipLabel={t(M.unlock.skipForNow)} />
+                  <p className="mt-3 text-center text-caption leading-relaxed text-[color:var(--an-fg-mute)]">{t(M.unlock.cloud.note)}</p>
                 </StepScreen>
               )}
               {screen === "advanced" && (
-                <StepScreen step={3} title={t({ en: "Market_RPC", ko: "마켓_RPC" })} status={t({ en: "Optional_Module", ko: "선택_모듈" })} detail={t({ en: "Completely optional. The public RPC works by default. Paste a Helius key for faster market indexing.", ko: "완전 선택사항입니다. 기본은 퍼블릭 RPC로 그대로 동작해요. 더 빠른 마켓 인덱싱을 원하면 Helius 키를 붙여넣으세요." })} icon={ICON_RPC}>
-                  <div className="mt-6"><HeliusKeyForm onDone={enterGranted} skipLabel={t({ en: "Skip for now", ko: "지금은 건너뛰기" })} /></div>
+                <StepScreen step={3} title={t(M.unlock.rpc.title)} status={t(M.unlock.rpc.status)} detail={t(M.unlock.rpc.detail)} icon={ICON_RPC}>
+                  <div className="mt-6"><HeliusKeyForm onDone={enterGranted} skipLabel={t(M.unlock.skipForNow)} /></div>
                 </StepScreen>
               )}
               {screen === "done" && (
@@ -261,8 +256,8 @@ function CreatingWallet() {
     <div className="mx-auto max-w-sm py-8 text-center">
       <span className="an-term-mono mx-auto grid h-12 w-12 place-items-center border" style={{ borderColor: "var(--an-green)", background: "var(--an-green)", color: "var(--an-on-green)" }}>{ICON_FUND}</span>
       <p className="an-term-mono mt-4 text-[10px] uppercase tracking-[0.14em] text-[color:var(--an-fg-dim)]">&gt;CREATING_WALLET<span className="unlock-cursor">_</span></p>
-      <h3 className="an-term-mono mt-1.5 text-[19px] font-bold uppercase tracking-[0.06em] text-[color:var(--an-fg)]">{t({ en: "Setting up", ko: "준비 중" })}</h3>
-      <p className="mx-auto mt-2 max-w-xs text-body-dense leading-relaxed text-[color:var(--an-fg-dim)]">{t({ en: "Creating your wallet. No signature, no payment. This just takes a moment.", ko: "지갑을 만들고 있어요. 서명도, 결제도 없어요. 잠깐이면 됩니다." })}</p>
+      <h3 className="an-term-mono mt-1.5 text-[19px] font-bold uppercase tracking-[0.06em] text-[color:var(--an-fg)]">{t(M.unlock.creatingTitle)}</h3>
+      <p className="mx-auto mt-2 max-w-xs text-body-dense leading-relaxed text-[color:var(--an-fg-dim)]">{t(M.unlock.creatingBody)}</p>
       <span className="mx-auto mt-6 block h-5 w-5 animate-spin rounded-full border-2 border-t-transparent" style={{ borderColor: "var(--an-green)", borderTopColor: "transparent" }} />
     </div>
   );
@@ -273,7 +268,7 @@ function Progress({ value }: { value: 1 | 2 | 3 }) {
   const on = value * 3; // 9 segments, 3 lit per completed step (3 steps)
   return (
     <div aria-label={`Unlock progress ${value} of 3`}>
-      <div className="an-term-mono mb-1.5 flex justify-between text-[10px] uppercase tracking-[0.14em] text-[color:var(--an-fg-dim)]"><span>{t({ en: "Unlock_Progress", ko: "잠금해제_진행도" })}</span><span className="text-[color:var(--an-green)]">{value}/3</span></div>
+      <div className="an-term-mono mb-1.5 flex justify-between text-[10px] uppercase tracking-[0.14em] text-[color:var(--an-fg-dim)]"><span>{t(M.unlock.progress)}</span><span className="text-[color:var(--an-green)]">{value}/3</span></div>
       <div className="flex gap-[3px] border border-[color:var(--an-line)] p-1" style={{ background: "rgba(255,255,255,0.02)" }}>
         {Array.from({ length: 9 }).map((_, i) => (
           <span key={i} className="h-2.5 flex-1" style={{ background: i < on ? "var(--an-green)" : "var(--an-bg-2)" }} />
@@ -324,15 +319,15 @@ function FundControls({ address, onDone }: { address: string; onDone: () => void
   return (
     <div className="mt-6">
       <div className="relative border px-3 py-3 text-left" style={{ borderColor: "var(--an-green-line)", background: "var(--an-green-dim)" }}>
-        <p className="an-term-mono text-[9px] font-bold uppercase tracking-[0.12em] text-[color:var(--an-green)]">&gt;{t({ en: "YOUR_WALLET_ADDRESS", ko: "내_지갑_주소" })}</p>
-        <button type="button" onClick={copyAddress} className="an-term-mono absolute right-2 top-2 border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.1em] active:opacity-70" style={{ borderColor: "var(--an-line)", color: "var(--an-fg-mute)" }}>{copied ? t({ en: "[copied]", ko: "[복사됨]" }) : t({ en: "[copy]", ko: "[복사]" })}</button>
+        <p className="an-term-mono text-[9px] font-bold uppercase tracking-[0.12em] text-[color:var(--an-green)]">&gt;{t(M.unlock.fundControls.addressLabel)}</p>
+        <button type="button" onClick={copyAddress} className="an-term-mono absolute right-2 top-2 border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.1em] active:opacity-70" style={{ borderColor: "var(--an-line)", color: "var(--an-fg-mute)" }}>{copied ? t(M.unlock.fundControls.copied) : t(M.unlock.fundControls.copy)}</button>
         <p className="an-term-mono mt-2 break-all pr-12 text-[12px] leading-relaxed" style={{ color: "var(--an-term-fg)" }}>{address}</p>
       </div>
-      <p className="mt-2 text-left text-[10px] leading-relaxed text-[color:var(--an-fg-mute)]">{t({ en: "Also in the agent menu and Settings, any time.", ko: "에이전트 메뉴와 설정에서도 언제든 볼 수 있어요." })}</p>
-      <LinkRow className="mt-3" label={t({ en: "HOW_TO_ADD_FUNDS", ko: "충전_방법" })} sub={t({ en: "Buy SOL and send it here · phantom guide", ko: "SOL 구매 · phantom 가이드" })} href={FUND_GUIDE_URL} />
+      <p className="mt-2 text-left text-[10px] leading-relaxed text-[color:var(--an-fg-mute)]">{t(M.unlock.fundControls.alsoInMenu)}</p>
+      <LinkRow className="mt-3" label={t(M.unlock.fundControls.linkLabel)} sub={t(M.unlock.fundControls.linkSub)} href={FUND_GUIDE_URL} />
       <button type="button" onClick={onDone} className="an-btn an-btn-green mt-4 w-full">OK</button>
-      <button type="button" onClick={onDone} className="welcome-ghost mt-1">{t({ en: "I will fund later", ko: "나중에 충전할게요" })}</button>
-      <p className="mx-auto mt-2 max-w-xs text-center text-caption leading-relaxed text-[color:var(--an-fg-mute)]">{t({ en: "Your wallet is always in the agent menu and Settings.", ko: "지갑은 언제나 에이전트 메뉴와 설정에 있어요." })}</p>
+      <button type="button" onClick={onDone} className="welcome-ghost mt-1">{t(M.unlock.fundControls.fundLater)}</button>
+      <p className="mx-auto mt-2 max-w-xs text-center text-caption leading-relaxed text-[color:var(--an-fg-mute)]">{t(M.unlock.fundControls.caption)}</p>
     </div>
   );
 }
@@ -360,7 +355,7 @@ export function LockedGate({ reason, onUnlocked, children, className = "", badge
       onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); requestUnlock(reason, onUnlocked); } }}
       role="button"
       tabIndex={0}
-      aria-label={`${t({ en: "Locked", ko: "잠김" })}: ${t(REASON_COPY[reason].title)}`}
+      aria-label={`${t(M.unlock.locked)}: ${t(REASON_COPY[reason].title)}`}
     >
       {/* v2 lock indicators: content dims to 50% AND desaturates behind a corner LOCKED tag */}
       <div className="pointer-events-none opacity-50" style={{ filter: "saturate(0.4)" }}>{children}</div>

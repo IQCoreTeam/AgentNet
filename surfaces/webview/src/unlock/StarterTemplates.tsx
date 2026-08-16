@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useStore } from "../state/store";
 import { SCANLINES } from "./UnlockProvider";
-import { useT, useLang, type Msg } from "../i18n";
+import { useT, type Msg } from "../i18n";
+import { M } from "../i18n/messages";
 import { haptics } from "../haptics";
 
 // Shown once, right after a brand-new (wallet-less) user connects an engine in the Welcome
@@ -45,38 +46,16 @@ const TEMPLATES: StarterTemplate[] = [
   {
     id: "aboutme",
     seq: "01/02",
-    titleBar: { en: "About_Me_Page", ko: "자기소개 페이지" },
+    titleBar: M.templates.aboutme.titleBar,
     eyebrow: "ABOUT_ME",
-    title: { en: "A one-page site about you", ko: "나를 소개하는 원페이지 사이트" },
-    body: {
-      en: "All it takes: one public link the agent can read, plus a short intro.",
-      ko: "에이전트가 볼 수 있는 공개 링크 하나와 짧은 소개만 있으면 돼요.",
-    },
-    caption: {
-      en: "Confirm sends this into the chat, and the agent reads your link and starts building the page.",
-      ko: "확인을 누르면 이 내용이 채팅에 바로 전송되고, 에이전트가 링크를 읽고 페이지를 만들기 시작해요.",
-    },
-    menuLabel: { en: "01_ABOUT_ME_PAGE", ko: "01_자기소개_페이지" },
-    menuSub: { en: "A one-page site introducing you", ko: "나를 소개하는 원페이지 사이트" },
+    title: M.templates.aboutme.title,
+    body: M.templates.aboutme.body,
+    caption: M.templates.aboutme.caption,
+    menuLabel: M.templates.aboutme.menuLabel,
+    menuSub: M.templates.aboutme.menuSub,
     fields: [
-      {
-        key: "WORK_LINK",
-        label: { en: "YOUR_WORK_LINK", ko: "작업_링크" },
-        kind: "text",
-        placeholder: {
-          en: "https:// a public link to your work (drive, github, blog)",
-          ko: "https:// 공개 드라이브 · 깃허브 · 블로그 등 내 작업이 모인 링크 (에이전트가 확인할 수 있게)",
-        },
-      },
-      {
-        key: "ABOUT_YOU",
-        label: { en: "ABOUT_YOU", ko: "자기소개" },
-        kind: "textarea",
-        placeholder: {
-          en: "e.g. I love taking photos and live with two cats. Currently starting a cooking channel.",
-          ko: "예: 사진 찍는 걸 좋아하고, 고양이 두 마리와 삽니다. 지금은 요리 유튜브를 준비 중이에요.",
-        },
-      },
+      { key: "WORK_LINK", label: M.templates.aboutme.workLinkLabel, kind: "text", placeholder: M.templates.aboutme.workLinkPlaceholder },
+      { key: "ABOUT_YOU", label: M.templates.aboutme.aboutYouLabel, kind: "textarea", placeholder: M.templates.aboutme.aboutYouPlaceholder },
     ],
     buildPrompt: (v) => `Build a clean, single-page personal website about me, then run it locally and give me the preview link.
 
@@ -94,37 +73,26 @@ Only ask a question if something truly blocks you. Otherwise just build it.`,
   {
     id: "game",
     seq: "02/02",
-    titleBar: { en: "Mini_Game", ko: "미니 게임" },
+    titleBar: M.templates.game.titleBar,
     eyebrow: "MINI_GAME",
-    title: { en: "A mini game of your own", ko: "나만의 미니 게임" },
-    body: {
-      en: "Pick a type and name a hero. The agent handles the rest.",
-      ko: "종류 하나 고르고 주인공만 정하면 돼요. 나머지는 에이전트가 알아서 만들어요.",
-    },
-    caption: {
-      en: "Confirm sends this into the chat, and the agent starts building the game.",
-      ko: "확인을 누르면 이 내용이 채팅에 바로 전송되고, 에이전트가 게임을 만들기 시작해요.",
-    },
-    menuLabel: { en: "02_MINI_GAME", ko: "02_미니_게임" },
-    menuSub: { en: "A simple tap-to-play game of your own", ko: "탭해서 노는 나만의 심플 게임" },
+    title: M.templates.game.title,
+    body: M.templates.game.body,
+    caption: M.templates.game.caption,
+    menuLabel: M.templates.game.menuLabel,
+    menuSub: M.templates.game.menuSub,
     fields: [
       {
         key: "GAME_TYPE",
-        label: { en: "GAME_TYPE", ko: "게임_종류" },
+        label: M.templates.game.typeLabel,
         kind: "choice",
         placeholder: { en: "" },
         choices: [
-          { value: "tap", label: { en: "Tap game", ko: "탭 게임" }, hint: { en: "tap fast to score", ko: "빠르게 연타해 점수 올리기" } },
-          { value: "puzzle", label: { en: "Puzzle", ko: "퍼즐" }, hint: { en: "match blocks to clear", ko: "블록을 맞춰서 없애기" } },
-          { value: "reflex", label: { en: "Reflex", ko: "반응속도" }, hint: { en: "tap right on time", ko: "타이밍 맞춰 탭하기" } },
+          { value: "tap", label: M.templates.game.tap.label, hint: M.templates.game.tap.hint },
+          { value: "puzzle", label: M.templates.game.puzzle.label, hint: M.templates.game.puzzle.hint },
+          { value: "reflex", label: M.templates.game.reflex.label, hint: M.templates.game.reflex.hint },
         ],
       },
-      {
-        key: "HERO_OR_THEME",
-        label: { en: "HERO_OR_THEME", ko: "주인공_또는_테마" },
-        kind: "text",
-        placeholder: { en: "e.g. a cat running while eating kimbap", ko: "예: 김밥을 먹으며 달리는 고양이" },
-      },
+      { key: "HERO_OR_THEME", label: M.templates.game.heroLabel, kind: "text", placeholder: M.templates.game.heroPlaceholder },
     ],
     buildPrompt: (v) => {
       const type = v.GAME_TYPE || "tap";
@@ -145,7 +113,6 @@ Just build it. Only ask a question if something truly blocks you.`;
 export function StarterTemplates() {
   const { state, send } = useStore();
   const t = useT();
-  const { lang } = useLang();
   const [dismissed, setDismissed] = useState(false);
   const [pickId, setPickId] = useState<string | null>(null); // null = picker; else the input screen
   const [values, setValues] = useState<Record<string, string>>({});
@@ -172,9 +139,9 @@ export function StarterTemplates() {
   }
   function confirm() {
     if (!tpl) return;
-    // Prompt instructions stay English (the agent reads them); when the user is on Korean, ask
-    // the agent to write the resulting page/game text and its replies in Korean.
-    const prompt = tpl.buildPrompt(values) + (lang === "ko" ? "\n\nWrite the page's visible text and your replies to me in Korean." : "");
+    // Prompt instructions stay English (the agent reads them); the Korean locale appends a
+    // directive (empty for English) so the built page/game and replies come back in Korean.
+    const prompt = tpl.buildPrompt(values) + t(M.templates.promptLangDirective);
     haptics.step1();
     markTemplatesSeen();
     setDismissed(true);
@@ -193,7 +160,7 @@ export function StarterTemplates() {
             <span>&gt;{tpl ? `TEMPLATE ${tpl.seq}` : "ENGINE_CONNECTED"}</span><span>ようこそ {tpl ? "******" : "OK"}</span>
           </div>
           <div className="mx-3 mb-3 flex items-center justify-between gap-2" style={{ backgroundColor: "var(--an-green)", backgroundImage: SCANLINES, color: "var(--an-on-green)", padding: "9px 12px" }}>
-            <h2 className="truncate text-[13px] font-bold uppercase tracking-[0.14em]">{tpl ? t(tpl.titleBar) : t({ en: "Welcome_Aboard", ko: "환영합니다" })}</h2>
+            <h2 className="truncate text-[13px] font-bold uppercase tracking-[0.14em]">{tpl ? t(tpl.titleBar) : t(M.welcome.titleBar)}</h2>
             <button type="button" onClick={closeForNow} className="shrink-0 text-[13px] font-bold leading-none active:opacity-70" aria-label="Close">[x]</button>
           </div>
         </div>
@@ -203,8 +170,8 @@ export function StarterTemplates() {
             // ── Picker (Welcome 05): pick your first build ──
             <div className="mx-auto max-w-[340px] text-center">
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--an-green)]">&gt;READY<span className="unlock-cursor">_</span></p>
-              <h3 className="mt-3 text-[19px] font-bold uppercase leading-[1.3] tracking-[0.08em] text-[color:var(--an-fg)]">{t({ en: "Start from a template", ko: "탬플릿으로 바로 시작해요" })}</h3>
-              <p className="mx-auto mt-2 max-w-[280px] text-[13px] leading-[1.65] text-[color:var(--an-fg-dim)]">{t({ en: "Engine connected. Pick your first build.", ko: "엔진이 연결됐어요. 첫 작업을 골라볼까요?" })}</p>
+              <h3 className="mt-3 text-[19px] font-bold uppercase leading-[1.3] tracking-[0.08em] text-[color:var(--an-fg)]">{t(M.templates.picker.title)}</h3>
+              <p className="mx-auto mt-2 max-w-[280px] text-[13px] leading-[1.65] text-[color:var(--an-fg-dim)]">{t(M.templates.picker.body)}</p>
               <div className="mt-4 flex flex-col gap-2">
                 {TEMPLATES.map((item) => (
                   <button
@@ -222,7 +189,7 @@ export function StarterTemplates() {
                   </button>
                 ))}
               </div>
-              <button type="button" onClick={justStart} className="an-btn an-btn-outline mt-3 w-full">{t({ en: "Just start", ko: "그냥 시작하기" })}</button>
+              <button type="button" onClick={justStart} className="an-btn an-btn-outline mt-3 w-full">{t(M.templates.picker.justStart)}</button>
             </div>
           ) : (
             // ── Template input screen ──
@@ -277,8 +244,8 @@ export function StarterTemplates() {
                 ))}
               </div>
 
-              <button type="button" onClick={confirm} className="an-btn an-btn-green mt-5 w-full">{t({ en: "Confirm", ko: "확인" })}</button>
-              <button type="button" onClick={() => { haptics.tap(); setPickId(null); }} className="welcome-ghost mt-1">{t({ en: "Back", ko: "뒤로" })}</button>
+              <button type="button" onClick={confirm} className="an-btn an-btn-green mt-5 w-full">{t(M.templates.confirm)}</button>
+              <button type="button" onClick={() => { haptics.tap(); setPickId(null); }} className="welcome-ghost mt-1">{t(M.templates.back)}</button>
               <p className="mx-auto mt-2 max-w-[290px] text-center text-[11px] leading-[1.6] text-[color:var(--an-fg-mute)]">{t(tpl.caption)}</p>
             </div>
           )}
