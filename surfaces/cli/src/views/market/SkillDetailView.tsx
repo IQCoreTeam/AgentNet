@@ -117,6 +117,42 @@ export function mainViewportH(rows: number, total: number): number {
   return Math.min(Math.max(4, rows - 15), total);
 }
 
+// SKILL.md subview rows: the raw file lines hard-wrapped to the content width, so one
+// array entry is exactly one terminal row. The subview used to slice 16 RAW file lines,
+// and a line that wraps 2-3x at narrow columns pushed the frame past the terminal (top
+// border scrolled off, stale rows survived esc at 40x38). Exported so SkillMarket's key
+// handler clamps the scroll against the same rows the view renders.
+export function skillTextLines(detail: SkillDetail, cols: number): string[] {
+  const w = Math.max(12, cols - 4);
+  return wrapBlock(detail.skillText ?? "", w);
+}
+
+// Comments subview rows, one node per terminal row (date, wrapped quote rows, wrapped
+// git link rows), for the same reason as skillTextLines: slice math is only true when a
+// slice index equals a screen row, and a note used to be one multi-row node.
+export function commentLines(notes: Note[], cols: number): React.ReactNode[] {
+  const w = Math.max(12, cols - 4);
+  const lines: React.ReactNode[] = [];
+  for (const n of notes) {
+    lines.push(<Text key={`${n.id}-d`} dimColor>  {truncateEnd(noteDate(n.timestamp), Math.max(1, w - 2))}</Text>);
+    wrapBlock(`"${n.text}"`, Math.max(1, w - 2)).forEach((l, i) => lines.push(<Text key={`${n.id}-t${i}`}>  {l}</Text>));
+    if (n.gitLink) {
+      wrapBlock(`${glyph.sparkle} ${n.gitLink}`, Math.max(1, w - 4)).forEach((l, i) =>
+        lines.push(<Text key={`${n.id}-g${i}`} dimColor>    {l}</Text>),
+      );
+    }
+  }
+  return lines;
+}
+
+// Subview viewport height: what remains of the terminal after the subview chrome (two
+// border rows, title, two gaps, scroll position row, hint row = 7) plus one row of
+// slack, for the same ink full-repaint reason as mainViewportH. Never taller than the
+// content. Shared by both subviews and the key clamp, replacing the constants 16 and 12.
+export function subViewportH(rows: number, total: number): number {
+  return Math.min(Math.max(4, rows - 9), total);
+}
+
 export function SkillDetailView({
   detail,
   owned,
@@ -144,34 +180,34 @@ export function SkillDetailView({
   const colsMain = stdoutMain?.columns || 80;
   const rowsMain = stdoutMain?.rows || 24;
 
+  // both subviews: wrapped rows sized to the terminal, title and hint bounded to one
+  // row each, so the frame never outgrows the terminal at narrow widths.
+  const subInnerW = Math.max(12, colsMain - 4);
+
   if (sub === "skillText") {
-    const bodyLines = (detail.skillText ?? "").split("\n");
+    const bodyLines = skillTextLines(detail, colsMain);
+    const height = subViewportH(rowsMain, bodyLines.length);
     return (
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
-        <Text bold color={colors.iqMagenta}>❖ {c.name} · SKILL.md</Text>
+        <Text bold color={colors.iqMagenta}>{truncateEnd(`❖ ${c.name} · SKILL.md`, subInnerW)}</Text>
         <Box marginTop={1}>
-          <ScrollView lines={bodyLines} height={16} offset={scrollOffset} />
+          <ScrollView lines={bodyLines} height={height} offset={scrollOffset} />
         </Box>
-        <Box marginTop={1}><Text dimColor>↑/↓/PgUp/PgDn scroll · esc back</Text></Box>
+        <Box marginTop={1}><Text dimColor>{truncateEnd("↑/↓/PgUp/PgDn scroll · esc back", subInnerW)}</Text></Box>
       </Box>
     );
   }
 
   if (sub === "comments") {
-    const lines = notes.map((n: Note) => (
-      <Box key={n.id} flexDirection="column">
-        <Text dimColor>  {noteDate(n.timestamp)}</Text>
-        <Text>  "{n.text}"</Text>
-        {n.gitLink ? <Text dimColor>    {glyph.sparkle} {n.gitLink}</Text> : null}
-      </Box>
-    ));
+    const lines = commentLines(notes, colsMain);
+    const height = subViewportH(rowsMain, lines.length);
     return (
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
-        <Text bold color={colors.iqMagenta}>❖ {c.name} · comments ({notes.length})</Text>
+        <Text bold color={colors.iqMagenta}>{truncateEnd(`❖ ${c.name} · comments (${notes.length})`, subInnerW)}</Text>
         <Box marginTop={1}>
-          {notes.length === 0 ? <Text dimColor>no comments yet</Text> : <ScrollView lines={lines} height={12} offset={scrollOffset} />}
+          {notes.length === 0 ? <Text dimColor>no comments yet</Text> : <ScrollView lines={lines} height={height} offset={scrollOffset} />}
         </Box>
-        <Box marginTop={1}><Text dimColor>↑/↓/PgUp/PgDn scroll · esc back</Text></Box>
+        <Box marginTop={1}><Text dimColor>{truncateEnd("↑/↓/PgUp/PgDn scroll · esc back", subInnerW)}</Text></Box>
       </Box>
     );
   }

@@ -11,7 +11,7 @@ import { ChipCarousel } from "../components/ChipCarousel.js";
 import { Band } from "../components/Band.js";
 import { tierInfo, tierGauge } from "./market/tiers.js";
 import { AgentProfileView, type ProfileSub } from "./market/AgentProfileView.js";
-import { SkillDetailView, mainLines, mainViewportH, type DetailSub } from "./market/SkillDetailView.js";
+import { SkillDetailView, mainLines, mainViewportH, skillTextLines, commentLines, subViewportH, type DetailSub } from "./market/SkillDetailView.js";
 import { HeliusPanel, HeliusBadge, type RpcStatusLite } from "./market/HeliusPanel.js";
 import { GithubPanel, type GithubStatusLite, type GithubFocus } from "./market/GithubPanel.js";
 import { PublishProgressView, type PublishProgress } from "./market/PublishProgressView.js";
@@ -761,8 +761,14 @@ export function SkillMarket({
       const isOwned = owned.has(detail.card.name);
       const disposed = disposedNames.has(detail.card.name);
       if (detailSub !== "main") {
-        const total = detailSub === "skillText" ? (detail.skillText ?? "").split("\n").length : (detail.notes ?? []).length;
-        const height = detailSub === "skillText" ? 16 : 12;
+        // clamp against WRAPPED rows, the same lists the subviews render: raw file
+        // lines undercount whenever a line wraps at narrow widths, and the constant
+        // heights overran short terminals (skillTextLines/commentLines/subViewportH
+        // are the one source for both).
+        const total = detailSub === "skillText"
+          ? skillTextLines(detail, marketCols).length
+          : commentLines(detail.notes ?? [], marketCols).length;
+        const height = subViewportH(agentRows, total);
         if (key.escape) { setDetailSub("main"); setDetailScroll(0); return; }
         if (key.downArrow) { setDetailScroll((o) => clampScroll(o + 1, total, height)); return; }
         if (key.upArrow) { setDetailScroll((o) => clampScroll(o - 1, total, height)); return; }
