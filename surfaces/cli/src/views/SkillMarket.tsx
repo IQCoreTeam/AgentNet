@@ -374,6 +374,22 @@ export function SkillMarket({
     );
     setBusy(false);
     if (res.ok) {
+      // count the new comment immediately: postNote returns no payload, so prepend the
+      // note we just wrote (notes are newest-first) instead of waiting for a reload.
+      const now = Date.now();
+      setDetail((d) => d && {
+        ...d,
+        notes: [
+          {
+            id: `${walletAddr}-${now}`,
+            author: walletAddr,
+            text: commentText.trim(),
+            gitLink: commentGitLink.trim() || undefined,
+            timestamp: now,
+          },
+          ...(d.notes ?? []),
+        ],
+      });
       setFlash("comment posted");
       setCommentText("");
       setCommentGitLink("");
