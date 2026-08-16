@@ -15,6 +15,7 @@ export const SLASH_COMMANDS: SlashCmd[] = [
   { name: "skills", desc: "your owned skill collection" },
   { name: "github", desc: "connect GitHub and register verified work" },
   { name: "more", desc: "load older history (scroll-back)" },
+  { name: "context", desc: "show context window usage" },
   { name: "compact", desc: "compact the conversation context" },
   { name: "clear", desc: "clear the on-screen transcript" },
   { name: "copy", desc: "copy the last reply to the clipboard" },
