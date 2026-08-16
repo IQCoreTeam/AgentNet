@@ -9,8 +9,11 @@ import type { ChatMessage, CanonicalSession } from "../runtime/contract.js";
 import { encryptForWallet, decryptForWallet, type SessionKey } from "../core/crypto.js";
 
 // A log record: either session meta (first line) or one chat message.
+// A page may hold several meta records (settings/device updates append one);
+// decode is last-record-wins, and each meta is a FULL snapshot of the session's
+// current settings, so an absent model/effort means "engine default", not "unchanged".
 type LogRecord =
-  | { kind: "meta"; sessionId: string; cli: string; title: string; ts: number; lastDevice?: { id: string; label: string } }
+  | { kind: "meta"; sessionId: string; cli: string; title: string; ts: number; lastDevice?: { id: string; label: string }; model?: string; effort?: string }
   | { kind: "msg"; msg: ChatMessage };
 
 const NL = new TextEncoder().encode("\n");
@@ -27,7 +30,7 @@ export async function encodeRecord(key: SessionKey, rec: LogRecord): Promise<Uin
 
 // Convenience encoders for the two record kinds.
 export function metaRecord(s: Omit<CanonicalSession, "messages">): LogRecord {
-  return { kind: "meta", sessionId: s.sessionId, cli: s.cli, title: s.title, ts: s.ts, lastDevice: s.lastDevice };
+  return { kind: "meta", sessionId: s.sessionId, cli: s.cli, title: s.title, ts: s.ts, lastDevice: s.lastDevice, model: s.model, effort: s.effort };
 }
 export function msgRecord(msg: ChatMessage): LogRecord {
   return { kind: "msg", msg };
@@ -46,6 +49,8 @@ export async function decodeLog(
   let title = "";
   let ts = 0;
   let lastDevice: { id: string; label: string } | undefined = undefined;
+  let model: string | undefined = undefined;
+  let effort: CanonicalSession["effort"] = undefined;
   const messages: ChatMessage[] = [];
 
   for (const line of text.split("\n")) {
@@ -58,11 +63,13 @@ export async function decodeLog(
       title = rec.title;
       ts = rec.ts;
       lastDevice = rec.lastDevice;
+      model = rec.model;
+      effort = rec.effort as CanonicalSession["effort"];
     } else {
       messages.push(rec.msg);
     }
   }
 
   if (!sessionId) return null;
-  return { sessionId, cli, title, messages, ts, lastDevice };
+  return { sessionId, cli, title, messages, ts, lastDevice, model, effort };
 }

@@ -230,6 +230,10 @@ export interface SessionMeta {
   cli: "claude" | "codex";
   ts: number; // last updated
   lastDevice?: { id: string; label: string };
+  // the model/effort the session last ran with (absent = engine default), so a
+  // resume can restore them instead of silently switching to another model
+  model?: string;
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
 }
 
 // what gets encrypted to storage (CLI-neutral, so codex↔claude + cross-device)
@@ -240,4 +244,6 @@ export interface CanonicalSession {
   messages: ChatMessage[];
   ts: number;
   lastDevice?: { id: string; label: string };
+  model?: string;
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
 }
