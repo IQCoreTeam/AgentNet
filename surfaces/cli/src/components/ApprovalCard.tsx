@@ -2,7 +2,7 @@ import React from "react";
 import { Box, Text } from "ink";
 import type { ApprovalRequest } from "@iqlabs-official/agent-sdk/runtime/approval/channel";
 import { colors, glyph, tag } from "../theme.js";
-import { DiffView } from "./DiffView.js";
+import { DiffView, diffFileCount } from "./DiffView.js";
 import { wrapHard, wrapBlock, padCells, displayWidth } from "../format.js";
 
 // The decision ring. ONE list drives both the rendered buttons and the key handler in
@@ -213,10 +213,17 @@ export function ApprovalCard({
           </Text>
         ) : null}
         {req.diff && bodyRows >= 3 ? (
+          // bodyRows pays for the diff's own chrome before content: summary row (1),
+          // "+N more lines" fold (1), and — expanded multi-file only — the one-row
+          // Files strip. Uncounted, that strip was the row that tipped a 3 file diff
+          // past a 40x24 terminal into the repaint storm.
           <DiffView
             diff={req.diff}
             width={innerW}
-            maxLines={Math.max(1, bodyRows - 2)}
+            maxLines={Math.max(
+              1,
+              bodyRows - 2 - (diffExpanded && diffFileCount(req.diff) > 1 ? 1 : 0),
+            )}
             expanded={diffExpanded}
             activeFileIdx={activeDiffFileIdx}
           />
