@@ -102,6 +102,18 @@ export function ApprovalCard({
   // past the frame. Wrap them ourselves; show the head and fold the rest.
   const commandRows = req.command ? wrapHard(`$ ${req.command}`, innerW).slice(0, 3) : [];
 
+  // The decision grid's row budget is ONE row (fixedRows counts it as one). Below the
+  // width where every worded cell fits, the words shed and the bracketed letters
+  // survive - [Y] [A] [N] [R], plus [E]/[D] where they apply - because a wrapped grid
+  // silently makes the card taller than the budget Chat granted it, which at 30x24 was
+  // one of the rows that pushed the approval frame past the terminal into ink's
+  // clear-and-repaint path. The hint row underneath still spells out the highlighted
+  // choice, so no meaning is lost, only the redundant words.
+  const gridCells = APPROVAL_CHOICES.map((c) => ` [${c.key.toUpperCase()}] ${c.cell} `);
+  const gridW =
+    gridCells.reduce((n, s) => n + displayWidth(s), 0) + (req.diff ? displayWidth("  [D] DIFF") : 0);
+  const compactKeys = gridW > innerW;
+
   // ── PLAN (Kind B): the model wants to leave plan mode. ↵ runs it, esc keeps planning.
   const planBody = isPlan ? (
     <>
@@ -254,11 +266,12 @@ export function ApprovalCard({
               backgroundColor={on ? c.tint : undefined}
               bold={on}
             >
-              {` [${c.key.toUpperCase()}] ${c.cell} `}
+              {compactKeys ? ` [${c.key.toUpperCase()}] ` : gridCells[i]}
             </Text>
           );
         })}
-        {req.diff ? <Text dimColor>{"  [D] DIFF"}</Text> : null}
+        {compactKeys && canEdit ? <Text dimColor>{" [E]"}</Text> : null}
+        {req.diff ? <Text dimColor>{compactKeys ? " [D]" : "  [D] DIFF"}</Text> : null}
       </Box>
       <Text dimColor wrap="truncate-end">
         {"←/→ move · ↵ "}

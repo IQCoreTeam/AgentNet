@@ -155,10 +155,14 @@ export function DiffView({
   const contentTotal = numbered.filter((e) => !e.sep).length;
   const hidden = contentTotal - new Set(shownRows.filter((r) => r.idx >= 0).map((r) => r.idx)).size;
 
+  // The summary is ONE row by contract - the hosting card counts it as one when it
+  // budgets rows - but its full sentence is wider than a narrow terminal, and a wrap
+  // here silently makes the card 2 rows taller than the count. truncate-end keeps the
+  // row honest; the counts at the head are the part that must survive.
   if (!expanded) {
     return (
       <Box flexDirection="column" marginY={0}>
-        <Text>
+        <Text wrap="truncate-end">
           <Text color={colors.ok}>+{totalAdds}</Text> <Text color={colors.err}>−{totalDels}</Text>
           <Text dimColor> lines changed across </Text>
           <Text color={colors.iqCyan} bold>{files.length}</Text>
@@ -188,7 +192,8 @@ export function DiffView({
   return (
     <Box flexDirection="column">
       {summary ? (
-        <Text>
+        // same one-row contract as the collapsed summary above
+        <Text wrap="truncate-end">
           <Text color={colors.ok}>+{totalAdds}</Text> <Text color={colors.err}>−{totalDels}</Text>
           <Text dimColor> lines changed across </Text>
           <Text color={colors.iqCyan} bold>{files.length}</Text>

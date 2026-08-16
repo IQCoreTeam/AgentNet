@@ -34,7 +34,7 @@ import { Select, TextInput } from "@inkjs/ui";
 import open from "open";
 import { chooseStorage } from "../bootstrap.js";
 import { copyToClipboard } from "../clipboard.js";
-import { Message, TurnHeader } from "../components/Message.js";
+import { Message, TurnHeader, turnHeaderRows } from "../components/Message.js";
 import { StatusLine } from "../components/StatusLine.js";
 import { ApprovalCard, APPROVAL_CHOICES, type ApprovalChoiceKey } from "../components/ApprovalCard.js";
 import { Composer } from "../components/Composer.js";
@@ -1605,9 +1605,19 @@ export function Chat({
     return null;
   })();
 
-  const liveMsg = streaming
+  // While a tool approval is pinned the turn is PAUSED - the engine is blocked on the
+  // user - so the streaming tail collapses to ONE dim row: an ellipsis plus the last
+  // line so far. Honest (nothing is advancing) and load-bearing: the full tail was one
+  // of the three unbudgeted row sources that pushed the approval frame past the
+  // terminal at 30x24 (issue 167 round 2). The full text still lands in <Static> when
+  // the turn settles, and the live tail returns the moment the approval resolves.
+  const liveMsg = streaming && !pendingApproval
     ? clampLiveTail(lastMsg, liveRows, process.stdout.columns || 80)
     : null;
+  const pausedTail =
+    streaming && pendingApproval
+      ? (lastMsg.text.split("\n").filter((l) => l.trim()).pop() ?? "").trim()
+      : null;
 
   // the welcome control panel shows on an empty, idle session. Focus stays on the composer
   // by default; Ctrl+S moves focus INTO the panel (panelActive), which then owns
@@ -1622,10 +1632,24 @@ export function Chat({
   const panelMaxRows = Math.max(8, rows - CHROME_ROWS - 3);
 
   // The dynamic frame must FIT on screen — ink cannot erase lines that have scrolled off,
-  // and a frame taller than the terminal smears old paints into the scrollback. So the
-  // approval card, which takes the composer's band, gets a row budget: the rest of the
-  // chrome (header 2 · rule/status/rule 3 · rule/footer 2) plus a little slack.
-  const approvalMaxRows = Math.max(6, rows - 10);
+  // and at outputHeight >= rows it abandons in-place updates entirely for clearTerminal
+  // plus a full static rewrite on EVERY render. During an approval the elapsed ticker is
+  // still rendering ~10x a second, so an over-tall frame is not a smear but a clear-and-
+  // repaint STORM with no settled frame (issue 167 round 2: 59 clears in 16s at 30x24).
+  // Budgeting only the card was not enough: the pinned ask's TurnHeader (6 rows for a
+  // wrapped filename), the live tail, and a wrapped key grid overflowed around it. So
+  // while an approval is pinned, EVERY band is budgeted: the ask clamps to
+  // APPROVAL_ASK_ROWS (TurnHeader maxRows), the tail drops to the one-row pausedTail
+  // above, the grid sheds words (ApprovalCard), and the card gets exactly what remains.
+  // The counted chrome: history band, status, two rules, footer (one row each, the
+  // one-row contracts those bands now keep even squeezed), the clamped ask + its margin,
+  // and the paused tail row. The -1 keeps the frame strictly SHORTER than the terminal.
+  const APPROVAL_ASK_ROWS = 2;
+  const approvalChrome =
+    5 +
+    (pinnedAsk ? turnHeaderRows(pinnedAsk, APPROVAL_ASK_ROWS) + 1 : 0) +
+    (pausedTail !== null ? 1 : 0);
+  const approvalMaxRows = Math.max(6, rows - approvalChrome - 1);
 
   return (
     <Box flexDirection="column" paddingX={1}>
@@ -1663,9 +1687,19 @@ export function Chat({
 
         {/* the turn you are waiting on: your own message stays on screen above the reply
             while it streams, the way the vscode surface pins its turn header. It lives in
-            the CONTENT section (which is free to grow), never in the fixed-height chrome. */}
-        {pinnedAsk ? <TurnHeader text={pinnedAsk} /> : null}
+            the CONTENT section (which is free to grow), never in the fixed-height chrome.
+            The one exception: while an approval is pinned it clamps to the budgeted rows,
+            so the card below keeps its keys on screen. */}
+        {pinnedAsk ? (
+          <TurnHeader text={pinnedAsk} maxRows={pendingApproval ? APPROVAL_ASK_ROWS : undefined} />
+        ) : null}
 
+        {pausedTail !== null ? (
+          <Text dimColor wrap="truncate-end">
+            {"… "}
+            {pausedTail}
+          </Text>
+        ) : null}
         {liveMsg ? <Message msg={liveMsg} live /> : null}
       </Box>
 
