@@ -145,7 +145,10 @@ export function SkillMarket({
   const [kind, setKind] = useState<"skill" | "workflow">("skill");
   const [marketSort, setMarketSort] = useState<"supply" | "stars">("supply"); // GH #89 ranking
   const [query, setQuery] = useState("");
-  const [typing, setTyping] = useState(true);
+  // the list owns first focus: a fresh user's first keystroke means a command ([h], [a],
+  // [p], [b]...), matching the footer. Auto-focusing the search box swallowed it as
+  // query text instead. "/" or the up arrow still moves focus into the search box.
+  const [typing, setTyping] = useState(false);
   const [results, setResults] = useState<SkillCard[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
