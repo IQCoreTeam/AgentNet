@@ -426,6 +426,9 @@ export function Chat({
   const [accountLines, setAccountLines] = useState<string[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  // first visible row of the /help command list; the overlay windows the registry to the
+  // terminal height (a 24-row terminal cannot show all the commands at once).
+  const [helpScroll, setHelpScroll] = useState(0);
   const [showKeys, setShowKeys] = useState(false);
   // welcome control panel: focus stays on the composer by default; Ctrl+S moves focus into
   // the panel to edit settings. showCloud opens the storage picker from the panel's cloud row.
@@ -729,8 +732,18 @@ export function Chat({
     { isActive: showSettings && !pendingApproval },
   );
 
+  // Rows of the /help overlay available to the command list: everything else in the
+  // overlay is fixed chrome (border 2, padding 2, title 1, two hint rows with their
+  // margins 4) plus the one-row slack that keeps any frame strictly shorter than the
+  // terminal (ink repaints the whole screen once a frame reaches terminal height).
+  const helpRows = Math.max(4, rows - 10);
+
   useInput(
-    (_input, key) => { if (key.escape || key.return) setShowHelp(false); },
+    (_input, key) => {
+      if (key.escape || key.return) return setShowHelp(false);
+      if (key.upArrow) setHelpScroll((s) => Math.max(0, s - 1));
+      if (key.downArrow) setHelpScroll((s) => Math.min(Math.max(0, SLASH_COMMANDS.length - helpRows), s + 1));
+    },
     { isActive: showHelp && !pendingApproval },
   );
 
@@ -1140,6 +1153,7 @@ export function Chat({
       case "help":
         // A dismissable overlay (not a one-line notice that vanishes on the next keystroke),
         // rendered straight from SLASH_COMMANDS so the list never drifts from the registry.
+        setHelpScroll(0); // each open starts at the top of the list
         setShowHelp(true);
         return;
       case "keys":
@@ -1245,15 +1259,24 @@ export function Chat({
     // their descriptions), and rows never wrap (truncate-end) so a long description
     // cannot orphan half a sentence onto its own line.
     const colW = Math.max(...SLASH_COMMANDS.map((c) => `/${c.name}${c.args ? ` ${c.args}` : ""}`.length)) + 2;
+    // window the list to helpRows (same shape as the composer's menu window): clamp the
+    // start so a shrink can't leave the window past the end, and say what is hidden.
+    const start = Math.min(helpScroll, Math.max(0, SLASH_COMMANDS.length - helpRows));
+    const visible = SLASH_COMMANDS.slice(start, start + helpRows);
+    const below = SLASH_COMMANDS.length - start - visible.length;
     return (
       <Box flexDirection="column" paddingX={1}>
         <Box borderStyle="round" borderColor={colors.bone} flexDirection="column" paddingX={2} paddingY={1}>
           <Text bold color={colors.iqCyan}>commands</Text>
-          {SLASH_COMMANDS.map((c) => (
+          {visible.map((c) => (
             <Text key={c.name} dimColor wrap="truncate-end">{`/${c.name}${c.args ? ` ${c.args}` : ""}`.padEnd(colW)}{c.desc}</Text>
           ))}
           <Box marginTop={1}><Text dimColor>!cmd runs a shell command  ·  /keys for shortcuts</Text></Box>
-          <Box marginTop={1}><Text dimColor>Esc / Enter  close</Text></Box>
+          <Box marginTop={1}>
+            <Text dimColor>
+              {start > 0 || below > 0 ? `↑/↓ scroll (${start} above · ${below} below)  ·  ` : ""}Esc / Enter  close
+            </Text>
+          </Box>
         </Box>
       </Box>
     );
