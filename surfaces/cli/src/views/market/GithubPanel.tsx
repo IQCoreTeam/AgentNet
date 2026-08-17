@@ -62,7 +62,9 @@ function FocusBand({ width, text, cursor }: { width: number; text: string; curso
 }
 
 function GithubBadge({ status }: { status: GithubStatusLite | null }) {
-  if (!status) return null;
+  // null = the token file has not been read yet: say loading on the status row it
+  // already owns, never the settled "no token" claim for a check still in flight.
+  if (!status) return <Text dimColor>loading…</Text>;
   if (status.hasToken) {
     return <Text color={colors.ok}>{glyph.ok} connected · {status.masked}</Text>;
   }
@@ -88,7 +90,7 @@ export function GithubPanel({
   tokenEditing: boolean;
   repoInput: string;
   repoLabel: string | null; // parsed owner/name once the repo input is valid
-  owned: OwnedSkill[];
+  owned: OwnedSkill[] | null; // null = the host is still fetching the wallet's skills
   selected: Record<string, boolean>;
   focusIdx: number;
   blockReason: string | null;
@@ -98,7 +100,8 @@ export function GithubPanel({
 }) {
   const hasToken = !!status?.hasToken;
   const chosen = Object.values(selected).filter(Boolean).length;
-  const row = githubRowAt(focusIdx, owned.length);
+  const ownedList = owned ?? [];
+  const row = githubRowAt(focusIdx, ownedList.length);
   const bandW = Math.max(10, width);
   return (
     <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
@@ -108,7 +111,12 @@ export function GithubPanel({
         <GithubBadge status={status} />
       </Box>
 
-      {!hasToken || tokenEditing ? (
+      {!status ? (
+        // status pending: the badge above already says loading; rendering the token
+        // form here would claim "no token" and eat keystrokes for a check that has
+        // not settled. The body waits.
+        null
+      ) : !hasToken || tokenEditing ? (
         // Token entry: paste a Personal Access Token (first connect, or replacing a
         // stored token via enter on the token row).
         <Box flexDirection="column" marginTop={1}>
@@ -160,10 +168,15 @@ export function GithubPanel({
           )}
           <Box marginTop={1} flexDirection="column">
             <Text dimColor>  skills this repo used</Text>
-            {owned.length === 0 ? (
+            {/* three honest states on the one reserved row: null = the wallet's skills
+                are still being fetched, so say loading; "no owned skills yet" may only
+                follow a settled empty fetch. */}
+            {owned === null ? (
+              <Text dimColor>    loading…</Text>
+            ) : ownedList.length === 0 ? (
               <Text dimColor>    no owned skills yet</Text>
             ) : (
-              owned.map((s, i) => {
+              ownedList.map((s, i) => {
                 const on = !!selected[s.id];
                 if (row.kind === "skill" && row.skill === i) {
                   return <FocusBand key={s.id} width={bandW} text={`    ${on ? "[x]" : "[ ]"} ${s.name}`} />;

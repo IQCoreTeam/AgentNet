@@ -1533,7 +1533,9 @@ export function Chat({
           walletAddr={address}
           ownedNames={installed}
           initialStage={marketStage}
-          owned={skills ?? []}
+          // null passes through while ownedSkills is still fetching: the market's owned
+          // and github screens say loading instead of claiming "no skills owned yet".
+          owned={skills}
           onBought={() => {
             // a buy installs the skill — refresh the badge source + the welcome panel list.
             void market.ownedSkills().then(setInstalled).catch(() => {});

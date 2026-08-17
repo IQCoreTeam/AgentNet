@@ -142,7 +142,10 @@ export function SkillMarket({
   onBought: () => void;
   onClose: () => void;
   initialStage?: "list" | "agents" | "owned" | "github";
-  owned?: OwnedSkill[];
+  // null = the host is still fetching the wallet's skills (the WelcomePanel convention:
+  // skills === null means loading, [] means fetched and none owned). The owned stage and
+  // the github panel read the difference so neither claims "no skills" mid-fetch.
+  owned?: OwnedSkill[] | null;
 }) {
   const [stage, setStage] = useState<Stage>(initialStage ?? "list");
   // Esc unwinds to where the user actually came from. /github, /agents and /skills
@@ -162,7 +165,10 @@ export function SkillMarket({
   // [p], [b]...), matching the footer. Auto-focusing the search box swallowed it as
   // query text instead. "/" or the up arrow still moves focus into the search box.
   const [typing, setTyping] = useState(false);
-  const [results, setResults] = useState<SkillCard[]>([]);
+  // null = no search has settled yet (the WelcomePanel null-means-loading convention).
+  // The first frame renders before the mount effect fires its search; with [] here that
+  // frame claimed "no skills found" and "0 ON MAINNET" for a fetch that had not begun.
+  const [results, setResults] = useState<SkillCard[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [idx, setIdx] = useState(0);
@@ -199,8 +205,10 @@ export function SkillMarket({
   // owned collection stage
   const [ownedIdx, setOwnedIdx] = useState(0);
 
-  // agents stage
-  const [agents, setAgents] = useState<Reputation[]>([]);
+  // agents stage. null = the directory fetch has not settled (same null convention as
+  // results): /agents renders one frame before the mount effect calls loadAgents, and
+  // with [] that frame said "no agents found" while the fetch was still ahead of it.
+  const [agents, setAgents] = useState<Reputation[] | null>(null);
   const [agentIdx, setAgentIdx] = useState(0);
   const [agentQuery, setAgentQuery] = useState("");
   const [agentTyping, setAgentTyping] = useState(false);
@@ -235,10 +243,14 @@ export function SkillMarket({
   const [ghFlash, setGhFlash] = useState<string | null>(null);
 
   const owned = new Set(ownedNames);
+  // the mechanical views of the two nullable lists: mechanics (row math, selection,
+  // filters) treat pending as empty; only the render tells the two apart.
+  const ownedList = ownedCollection ?? [];
+  const ownedLoading = ownedCollection === null;
   const marketStdout = useStdout().stdout; // || not ??: detached pty reports 0 rows/cols
   const agentRows = marketStdout?.rows || 24;
   const marketCols = marketStdout?.columns || 80;
-  const visibleResults = results.filter((c) => !hideOwned || !owned.has(c.name));
+  const visibleResults = (results ?? []).filter((c) => !hideOwned || !owned.has(c.name));
   // index over the FILTERED list - what's on screen is what enter/buy act on
   const clamped = Math.min(idx, Math.max(0, visibleResults.length - 1));
   const selected = visibleResults[clamped];
@@ -253,7 +265,8 @@ export function SkillMarket({
     !githubStatus?.hasToken ? "add a GitHub token above first."
     : ghRepoInput.trim().length === 0 ? "enter a repo first: owner/name or a github.com URL."
     : ghParsedRepo == null ? "that repo is not valid. use owner/name or a github.com URL."
-    : ownedCollection.length === 0 ? "buy or mint a skill first, then link it here."
+    : ownedLoading ? "loading your skills…"
+    : ownedList.length === 0 ? "buy or mint a skill first, then link it here."
     : ghChosen.length === 0 ? "pick at least one skill this repo used."
     : null;
 
@@ -265,7 +278,9 @@ export function SkillMarket({
       setIdx(0);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
-      setResults([]);
+      // back to null, not []: a failed search settled NOTHING, so the header must not
+      // claim "0 ON MAINNET" and the body renders the error, never a fake empty.
+      setResults(null);
     } finally {
       setLoading(false);
     }
@@ -303,6 +318,7 @@ export function SkillMarket({
 
   async function openDetail(mint: string) {
     setLoading(true);
+    setError(null); // a stale error must not outlive the retry it prompted
     try {
       setDetail(await api.getSkillDetail(mint));
       setDetailSub("main");
@@ -466,6 +482,7 @@ export function SkillMarket({
 
   async function loadAgents() {
     setLoading(true);
+    setError(null); // the error branch must only ever show a failure of THIS fetch
     try {
       setAgents(await api.listAgents());
       setAgentIdx(0);
@@ -480,6 +497,7 @@ export function SkillMarket({
 
   async function openAgentProfile(wallet: string) {
     setLoading(true);
+    setError(null); // a stale error must not outlive the retry it prompted
     try {
       setAgentProfile(await api.getAgentProfile(wallet));
       setProfileSub("main");
@@ -603,10 +621,17 @@ export function SkillMarket({
 
     // ── github verified work ──────────────────────────────────────────────
     if (stage === "github") {
+      // Status still unread from disk: a token may exist, so neither the token form
+      // nor its capture may run yet. The panel shows its loading row; esc still backs
+      // out, everything else waits for the status to settle.
+      if (!githubStatus) {
+        if (key.escape) { setGhFlash(null); backOut("github"); }
+        return;
+      }
       // Token entry: first connect (no token yet) or replacing a stored one via
       // enter on the token row. Enter saves; while a form exists behind it, esc
       // cancels and up/down leave the field with the typed text kept.
-      if (!githubStatus?.hasToken || ghTokenEditing) {
+      if (!githubStatus.hasToken || ghTokenEditing) {
         if (key.escape) {
           if (githubStatus?.hasToken) { setGhTokenEditing(false); return; }
           setGhFlash(null); backOut("github"); return;
@@ -632,12 +657,12 @@ export function SkillMarket({
       // ONE vertical focus list (order lives in githubRowAt): up/down walk it from
       // anywhere, including the repo input; tab and shift-tab cycle it as an alternate
       // but are never required. Enter acts on whichever row holds focus.
-      const ghRows = githubRowCount(ownedCollection.length);
+      const ghRows = githubRowCount(ownedList.length);
       const ghIdx = Math.min(ghFocusIdx, ghRows - 1);
       if (key.upArrow) { setGhFocusIdx(Math.max(0, ghIdx - 1)); return; }
       if (key.downArrow) { setGhFocusIdx(Math.min(ghRows - 1, ghIdx + 1)); return; }
       if (key.tab) { setGhFocusIdx(key.shift ? (ghIdx + ghRows - 1) % ghRows : (ghIdx + 1) % ghRows); return; }
-      const ghRow = githubRowAt(ghIdx, ownedCollection.length);
+      const ghRow = githubRowAt(ghIdx, ownedList.length);
       if (ghRow.kind === "token") {
         if (input === "x") { void doSaveGithubToken(""); return; } // remove token
         if (key.return) { setGhTokenInput(""); setGhTokenEditing(true); return; } // replace it
@@ -645,7 +670,7 @@ export function SkillMarket({
       }
       if (ghRow.kind === "skill") {
         if (input === " " || key.return) {
-          const cur = ownedCollection[ghRow.skill];
+          const cur = ownedList[ghRow.skill];
           if (cur) setGhSelected((s) => ({ ...s, [cur.id]: !s[cur.id] }));
           return;
         }
@@ -720,15 +745,15 @@ export function SkillMarket({
 
     // ── agents list ────────────────────────────────────────────────────────
     if (stage === "agents") {
-      const filtered = agents.filter((a) => !agentQuery.trim() || a.wallet.toLowerCase().includes(agentQuery.toLowerCase()));
+      const filtered = (agents ?? []).filter((a) => !agentQuery.trim() || a.wallet.toLowerCase().includes(agentQuery.toLowerCase()));
       if (agentTyping) {
         if (key.return || key.downArrow) { setAgentTyping(false); setAgentIdx(0); return; }
         if (key.backspace || key.delete) { setAgentQuery((q) => q.slice(0, -1)); return; }
-        if (key.escape) { setAgents([]); setError(null); backOut("agents"); return; }
+        if (key.escape) { setAgents(null); setError(null); backOut("agents"); return; }
         if (input && !key.ctrl && !key.meta) { setAgentQuery((q) => q + input); return; }
         return;
       }
-      if (key.escape) { setAgents([]); setError(null); backOut("agents"); return; }
+      if (key.escape) { setAgents(null); setError(null); backOut("agents"); return; }
       if (input === "/") { setAgentTyping(true); return; }
       if (key.upArrow) { if (agentIdx === 0) { setAgentTyping(true); return; } return setAgentIdx((i) => Math.max(0, i - 1)); }
       if (key.downArrow) return setAgentIdx((i) => Math.min(filtered.length - 1, i + 1));
@@ -841,7 +866,7 @@ export function SkillMarket({
 
     // ── owned collection ───────────────────────────────────────────────────
     if (stage === "owned") {
-      const cur = ownedCollection[Math.min(ownedIdx, ownedCollection.length - 1)];
+      const cur = ownedList[Math.min(ownedIdx, ownedList.length - 1)];
       if (key.escape) { backOut("owned"); return; }
       if (key.return && cur) void openDetail(cur.id);
       return;
@@ -892,7 +917,7 @@ export function SkillMarket({
         repoLabel={ghParsedRepo ? `${ghParsedRepo.owner}/${ghParsedRepo.name}` : null}
         owned={ownedCollection}
         selected={ghSelected}
-        focusIdx={Math.min(ghFocusIdx, githubRowCount(ownedCollection.length) - 1)}
+        focusIdx={Math.min(ghFocusIdx, githubRowCount(ownedList.length) - 1)}
         blockReason={githubBlockReason}
         busy={busy}
         flash={ghFlash}
@@ -951,7 +976,7 @@ export function SkillMarket({
   // ── agents list ────────────────────────────────────────────────────────────
   if (stage === "agents") {
     const short = (w: string) => `${w.slice(0, 6)}…${w.slice(-4)}`;
-    const filtered = agents.filter((a) => !agentQuery.trim() || a.wallet.toLowerCase().includes(agentQuery.toLowerCase()));
+    const filtered = (agents ?? []).filter((a) => !agentQuery.trim() || a.wallet.toLowerCase().includes(agentQuery.toLowerCase()));
     // window to terminal height so every agent stays reachable. Each agent row is now two
     // lines (handle+tier, then stats) plus a gauge line on the selected one, so budget ~2
     // display lines per agent under the title/search/bands chrome.
@@ -970,8 +995,12 @@ export function SkillMarket({
           {agentTyping ? <Text inverse> </Text> : null}
         </Box>
         <Box flexDirection="column" marginTop={1}>
-          {loading ? (
-            <Text dimColor>loading agents…</Text>
+          {/* three honest states on the one reserved row: pending says loading (one dim
+              word, also true while a profile opens over this stage), a settled failure
+              says what failed, and "no agents found" may only follow a SETTLED empty
+              fetch. agents === null is the frame before the mount effect fires. */}
+          {loading || (agents === null && !error) ? (
+            <Text dimColor>loading…</Text>
           ) : error ? (
             <Text color={colors.err}>{error}</Text>
           ) : filtered.length === 0 ? (
@@ -1170,22 +1199,27 @@ export function SkillMarket({
 
   // ── owned collection ───────────────────────────────────────────────────────
   if (stage === "owned") {
-    const ownedClamped = Math.min(ownedIdx, Math.max(0, ownedCollection.length - 1));
+    const ownedClamped = Math.min(ownedIdx, Math.max(0, ownedList.length - 1));
     return (
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
         <Text bold color={colors.iqMagenta}>❖ my skills</Text>
-        {ownedCollection.length === 0 ? (
+        {/* the host is still fetching the wallet's skills (owned === null): say loading
+            on the row the empty copy uses, never "no skills owned yet" for an unsettled
+            fetch. The empty claim renders only once the fetch settled empty. */}
+        {ownedLoading ? (
+          <Box marginTop={1}><Text dimColor>loading…</Text></Box>
+        ) : ownedList.length === 0 ? (
           <Box marginTop={1}><Text dimColor>no skills owned yet · /market buys one</Text></Box>
         ) : (
           <Box marginTop={1}>
             <ChipCarousel
-              items={ownedCollection}
+              items={ownedList}
               index={ownedClamped}
               onIndex={setOwnedIdx}
               chipWidth={SKILL_CHIP_W}
               renderChip={(s, focused) => {
                 // tier is best-effort: stars live on the market card, not the owned entry
-                const stars = results.find((r) => r.id === s.id)?.stars ?? 0;
+                const stars = (results ?? []).find((r) => r.id === s.id)?.stars ?? 0;
                 const { cur } = tierInfo(stars);
                 const off = disposedNames.has(s.name);
                 return (
@@ -1211,6 +1245,9 @@ export function SkillMarket({
           </Box>
         )}
         {loading ? <Box marginTop={1}><Text dimColor>opening…</Text></Box> : null}
+        {/* a failed openDetail was silent here before: the error the api returned now
+            renders instead of leaving the user staring at a stalled carousel. */}
+        {error && !loading ? <Box marginTop={1}><Text color={colors.err}>{error}</Text></Box> : null}
         {flash ? <Box marginTop={1}><Text color={colors.ok}>{glyph.sparkle} {flash}</Text></Box> : null}
         <Box marginTop={1}>
           <Text dimColor>←/→ rotate · ↵ open detail · esc chat</Text>
@@ -1220,7 +1257,12 @@ export function SkillMarket({
   }
 
   // ── list ───────────────────────────────────────────────────────────────────
-  const onMainnet = `${results.length} ${kind === "skill" ? "SKILL" : "WORKFLOW"}${results.length === 1 ? "" : "S"} ON MAINNET`;
+  // the header count is a claim about a SETTLED fetch: before the first search lands
+  // (results === null) the number is unknown, so an ellipsis holds its place instead
+  // of a false "0 ON MAINNET".
+  const onMainnet = results === null
+    ? `… ${kind === "skill" ? "SKILLS" : "WORKFLOWS"} ON MAINNET`
+    : `${results.length} ${kind === "skill" ? "SKILL" : "WORKFLOW"}${results.length === 1 ? "" : "S"} ON MAINNET`;
   // Width bounds for the chrome rows. Unbounded, their pieces wrapped INTO each other at
   // narrow widths ("MARKE5 SKILLS ON / T MAINNET" at 40 cols); each row now truncates or
   // drops its least important piece instead. innerW = frame border 2 + paddingX 2.
@@ -1304,7 +1346,9 @@ export function SkillMarket({
       ) : null}
       {/* results - sd-card chip carousel, ←/→ rotates */}
       <Box flexDirection="column" marginTop={spacerRoom >= 1 ? 1 : 0}>
-        {loading ? (
+        {loading || (results === null && !error) ? (
+          // pending, including the entry frame before the mount effect fires its first
+          // search: the row says loading, never "no skills found" for an unsettled fetch.
           <Text dimColor>searching…</Text>
         ) : error ? (
           <Text color={colors.err}>{error}</Text>
@@ -1312,8 +1356,8 @@ export function SkillMarket({
           // results can exist yet all be hidden by the owned filter (only that filter
           // empties a non-empty result set). "no skills found" here contradicted the
           // "N ON MAINNET" header; say what is hidden and name the key that shows it.
-          results.length > 0 ? (
-            <Text dimColor>all {results.length} owned, [h] shows them</Text>
+          (results ?? []).length > 0 ? (
+            <Text dimColor>all {(results ?? []).length} owned, [h] shows them</Text>
           ) : (
             <Text dimColor>no {kind === "skill" ? "skills" : "workflows"} found</Text>
           )
