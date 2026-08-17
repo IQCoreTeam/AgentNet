@@ -83,7 +83,12 @@ function fitSkills(
     const reserve = left > 0 ? displayWidth(` · +${left}`) : 0;
     const cost = displayWidth(`${item.text} · `);
     if (used + cost + reserve > width) break;
-    pieces.push({ text: `${item.text} · `, dim: item.dim });
+    // The " · " separator is its own ALWAYS-DIM piece: an owned skill's green stops
+    // at its name, so every separator reads the same no matter which neighbor it
+    // trails. The budget above still counts name plus separator as one cost, so the
+    // fitted width is byte-identical to the joined-piece version.
+    pieces.push({ text: item.text, dim: item.dim });
+    pieces.push({ text: " · ", dim: true });
     used += cost;
     taken++;
   }
