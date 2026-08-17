@@ -1051,7 +1051,7 @@ export function Chat({
         openMarket("github");
         return;
       case "resume": {
-        const hit = chat.sessions.find((s) => s.sessionId.startsWith(arg));
+        const hit = (chat.sessions ?? []).find((s) => s.sessionId.startsWith(arg));
         if (arg && hit) {
           void chat.openSession(hit.sessionId);
           setNotice(`resumed ${hit.title || hit.sessionId.slice(0, 8)}`);
@@ -1458,6 +1458,7 @@ export function Chat({
     return (
       <SessionList
         sessions={chat.sessions}
+        error={chat.sessionsError}
         activeId={chat.pendingId}
         cloud={cloud && cloud.kind !== "local" ? cloud.kind : null}
         onResume={(id) => {

@@ -33,6 +33,7 @@ const footerKeysPlain = FOOTER_KEYS.map(([k, v]) => `${k} ${v}`).join("  ");
 // (the chat survives in terminal scrollback) instead of stacking under it.
 export function SessionList({
   sessions,
+  error,
   activeId,
   cloud,
   onResume,
@@ -40,7 +41,11 @@ export function SessionList({
   onFork,
   onClose,
 }: {
-  sessions: SessionMeta[];
+  // null = the first listSessions has not settled: the body says loading, never the
+  // "no sessions yet" empty copy, and the header count waits for a real number.
+  sessions: SessionMeta[] | null;
+  // a failed listSessions read (only shown when there is no settled list to render)
+  error?: string | null;
   activeId?: string;
   cloud: string | null;
   onResume: (id: string) => void;
@@ -48,8 +53,9 @@ export function SessionList({
   onFork: (id: string) => void;
   onClose: () => void;
 }) {
+  const list = sessions ?? []; // mechanics treat pending as empty; render tells them apart
   const [idx, setIdx] = useState(0);
-  const clamped = Math.min(idx, Math.max(0, sessions.length - 1));
+  const clamped = Math.min(idx, Math.max(0, list.length - 1));
   const cols = process.stdout.columns || 80;
   const rows = process.stdout.rows || 24;
   // A framed panel floating on a cleared screen, not a full-bleed sheet: the wrapper
@@ -73,14 +79,20 @@ export function SessionList({
   // note, then the count; the sync label), the keys collapse to a plain
   // ellipsized row only when even they alone cannot fit.
   const headTag = tag("sessions");
-  const countLabel = `${sessions.length} SESSION${sessions.length === 1 ? "" : "S"}`;
+  // the count is a claim about a settled list: while the fetch is pending the header
+  // keeps ENCRYPTED alone instead of asserting "0 SESSIONS".
+  const countLabel = sessions === null ? null : `${list.length} SESSION${list.length === 1 ? "" : "S"}`;
   const headRoom = w - displayWidth(headTag) - 2;
   const headNote =
-    displayWidth(`${countLabel} · ENCRYPTED`) <= headRoom
-      ? `${countLabel} · ENCRYPTED`
-      : displayWidth(countLabel) <= headRoom
-        ? countLabel
-        : "";
+    countLabel === null
+      ? displayWidth("ENCRYPTED") <= headRoom
+        ? "ENCRYPTED"
+        : ""
+      : displayWidth(`${countLabel} · ENCRYPTED`) <= headRoom
+        ? `${countLabel} · ENCRYPTED`
+        : displayWidth(countLabel) <= headRoom
+          ? countLabel
+          : "";
   const syncLabel = cloud ? `SYNC: ${cloud.toUpperCase()} ◉` : "LOCAL ONLY ○";
   const keysW = displayWidth(footerKeysPlain);
   const showSync = keysW + 2 + displayWidth(syncLabel) <= w;
@@ -88,14 +100,14 @@ export function SessionList({
 
   useInput((input, key) => {
     if (key.escape) return onClose();
-    if (sessions.length === 0) return;
+    if (list.length === 0) return;
     if (key.upArrow) return setIdx(() => Math.max(0, clamped - 1));
-    if (key.downArrow) return setIdx(() => Math.min(sessions.length - 1, clamped + 1));
-    if (key.return) onResume(sessions[clamped].sessionId);
-    else if (input === "f") onFork(sessions[clamped].sessionId);
+    if (key.downArrow) return setIdx(() => Math.min(list.length - 1, clamped + 1));
+    if (key.return) onResume(list[clamped].sessionId);
+    else if (input === "f") onFork(list[clamped].sessionId);
     else if (input === "d") {
-      onDelete(sessions[clamped].sessionId);
-      setIdx((i) => Math.max(0, Math.min(i, sessions.length - 2)));
+      onDelete(list[clamped].sessionId);
+      setIdx((i) => Math.max(0, Math.min(i, list.length - 2)));
     }
   });
 
@@ -103,10 +115,10 @@ export function SessionList({
   // rows + rule, the rest 1 + rule, plus the frame's chrome (border 2, paddingY 2,
   // header+rule 2, closing rule+footer 2, MORE indicators 2).
   const maxVisible = Math.max(3, Math.floor((rows - 13) / 2));
-  const start = Math.min(Math.max(0, clamped - Math.floor(maxVisible / 2)), Math.max(0, sessions.length - maxVisible));
-  const visible = sessions.slice(start, start + maxVisible);
+  const start = Math.min(Math.max(0, clamped - Math.floor(maxVisible / 2)), Math.max(0, list.length - maxVisible));
+  const visible = list.slice(start, start + maxVisible);
   const above = start;
-  const below = sessions.length - start - visible.length;
+  const below = list.length - start - visible.length;
 
   return (
     <Box height={Math.max(10, rows - 1)} width={cols} justifyContent="center" alignItems="center">
@@ -117,7 +129,14 @@ export function SessionList({
       </Box>
       <Text color={colors.bone}>{rule(w)}</Text>
 
-      {sessions.length === 0 ? (
+      {/* three honest states on the one reserved row: pending says loading, a read
+          that failed with nothing to show says what failed, and the empty copy may
+          only follow a SETTLED empty list. */}
+      {sessions === null && error ? (
+        <Text color={colors.err}>{truncateEnd(`could not load sessions · ${error}`, w)}</Text>
+      ) : sessions === null ? (
+        <Text dimColor>loading sessions…</Text>
+      ) : list.length === 0 ? (
         <Text dimColor>{copy.emptySessions}</Text>
       ) : (
         <>
