@@ -46,6 +46,7 @@ import { SkillMarket } from "./SkillMarket.js";
 import { ModelPicker } from "./ModelPicker.js";
 import { EffortPicker } from "./EffortPicker.js";
 import type { EffortLevel } from "../prefs.js";
+import { loadInputHistory, appendInputHistory, mergeHistory } from "../inputHistory.js";
 import { type Mood } from "../components/Iggy.js";
 import { Spinner } from "../components/Spinner.js";
 import { useDelight } from "../components/DelightProvider.js";
@@ -250,6 +251,12 @@ export function Chat({
   });
   const [notice, setNotice] = useState("");
   const [localLog, setLocalLog] = useState<ChatMessage[]>([]);
+  // Persistent composer history: everything sent from this composer, loaded once at
+  // boot (lazy initializer, same sync-read pattern prefs uses) and appended on every
+  // send - slash commands and ! bash lines included, which never reach chat.messages.
+  // The transcript-derived list keeps covering resumed sessions; mergeHistory folds
+  // the three sources for the Composer, whose histPos recall stays untouched.
+  const [typedHistory, setTypedHistory] = useState<string[]>(() => loadInputHistory());
   // live terminal size - the frame is sized to it so the bottom chrome (status +
   // composer section + footer) is structurally pinned to the bottom edge, and the
   // section rules span the full width.
@@ -1199,6 +1206,12 @@ export function Chat({
     const text = value.trim();
     if (!text && !images?.length) return;
     setNotice("");
+    if (text) {
+      // record BEFORE dispatch so slash commands and bash lines are recallable too;
+      // consecutive-dupe guard mirrors the store's, keeping state and file aligned.
+      setTypedHistory((prev) => (prev[prev.length - 1] === text ? prev : [...prev, text]));
+      void appendInputHistory(text);
+    }
     if (text.startsWith("/")) return runSlash(text);
     if (text.startsWith("!")) return chat.runBash(text.slice(1)); // quick local shell
     void chat.send(text, images);
@@ -1758,7 +1771,10 @@ export function Chat({
           onHelp={openHelp}
           disabled={showSessions || panelActive || !!pendingApproval}
           maxRows={composerMaxRows}
-          history={chat.messages.filter((m) => m.role === "user").map((m) => m.text)}
+          history={mergeHistory(
+            chat.messages.filter((m) => m.role === "user").map((m) => m.text),
+            typedHistory,
+          )}
         />
       </Box>
       <Text color={colors.bone}>{rule(ruleW)}</Text>
