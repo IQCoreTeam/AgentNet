@@ -34,8 +34,26 @@ function toSessionMeta(
   cli: "claude" | "codex",
   ts: number,
   lastDevice?: SessionMeta["lastDevice"],
+  model?: string,
+  effort?: SessionMeta["effort"],
 ): SessionMeta {
-  return { sessionId, title, cli, ts, ...(lastDevice ? { lastDevice } : {}) };
+  return {
+    sessionId,
+    title,
+    cli,
+    ts,
+    ...(lastDevice ? { lastDevice } : {}),
+    ...(model ? { model } : {}),
+    ...(effort ? { effort } : {}),
+  };
+}
+
+// Sort/display ts = LAST ACTIVITY: a page's meta ts is only rewritten on rollover
+// (every PAGE_SIZE messages), so a short session would keep its creation time forever
+// and sink in the list right after being used. The newest message's own ts is already
+// persisted and reflects the real last touch; meta ts covers an empty (meta-only) page.
+function lastActivityTs(s: CanonicalSession): number {
+  return s.messages.length ? s.messages[s.messages.length - 1].ts ?? s.ts : s.ts;
 }
 
 const pageKey = (sessionId: string, page: number) => `${sessionId}__p${page}`;
@@ -130,6 +148,12 @@ export class SessionStore {
     const blob = await this.storage.get(pageKey(sessionId, last));
     const decoded = blob ? await decodeLog(await this.getKey(), blob) : null;
     const state = { page: last, count: decoded?.messages.length ?? 0 };
+    // Seed the meta cache from the page we just decoded (first touch of this session in
+    // this process), so appendMessage's settings-change check below compares against what
+    // storage actually says - and a later listMine gets this meta without a re-decode.
+    if (decoded && !this.metaCache.has(sessionId)) {
+      this.cacheMeta(last, { ...decoded, ts: lastActivityTs(decoded) });
+    }
     this.cur.set(sessionId, state);
     return state;
   }
@@ -152,6 +176,15 @@ export class SessionStore {
     if (state.count === 0) {
       // new (empty) page -> write its meta line first
       await this.write(pk, await encodeRecord(key, metaRecord(meta)));
+    } else {
+      // Settings changed mid-page (a model/effort switch, or the session crossing to the
+      // other engine): the page's opening meta line is now stale, and resume restores
+      // whatever meta says. Append a refreshed meta record - decode is last-record-wins -
+      // so storage always names what the session is ACTUALLY running.
+      const prev = this.metaCache.get(meta.sessionId)?.meta;
+      if (prev && (prev.cli !== meta.cli || prev.model !== meta.model || prev.effort !== meta.effort)) {
+        await this.write(pk, await encodeRecord(key, metaRecord(meta)));
+      }
     }
     await this.write(pk, await encodeRecord(key, msgRecord(msg)));
     state.count += 1;
@@ -170,7 +203,7 @@ export class SessionStore {
   private cacheMeta(page: number, meta: Omit<CanonicalSession, "messages">): void {
     this.metaCache.set(meta.sessionId, {
       page,
-      meta: toSessionMeta(meta.sessionId, meta.title, meta.cli, meta.ts, meta.lastDevice),
+      meta: toSessionMeta(meta.sessionId, meta.title, meta.cli, meta.ts, meta.lastDevice, meta.model, meta.effort),
     });
   }
 
@@ -195,7 +228,9 @@ export class SessionStore {
     for (let p = 0; p <= last; p++) {
       const page = await this.loadPage(srcId, p);
       if (!page) continue;
-      if (!meta) meta = { sessionId: newId, cli: page.cli, title, ts: page.ts, lastDevice: page.lastDevice };
+      // Newest readable page wins: it carries the session's CURRENT settings (cli/model/
+      // effort), which is what the copy should wake up wearing.
+      meta = { sessionId: newId, cli: page.cli, title, ts: page.ts, lastDevice: page.lastDevice, model: page.model, effort: page.effort };
       messages.push(...page.messages);
     }
     if (!meta) throw new Error(`could not read session: ${srcId}`);
@@ -341,16 +376,8 @@ export class SessionStore {
           decoded++;
           const s = await this.loadPage(sessionId, page);
           if (!s) return null;
-          // Sort/display by LAST ACTIVITY, not creation. The page meta ts is only written
-          // when a page rolls over (every PAGE_SIZE messages), so a short session keeps its
-          // creation time forever and sinks in the list even right after you use it. The
-          // last message's own ts is already persisted and reflects the real last touch;
-          // fall back to the meta ts on an empty (meta-only) newest page. Read-side only —
-          // nothing is rewritten to disk.
-          const lastTs = s.messages.length
-            ? s.messages[s.messages.length - 1].ts ?? s.ts
-            : s.ts;
-          const meta = toSessionMeta(sessionId, s.title, s.cli, lastTs, s.lastDevice);
+          // Last-activity ts (see lastActivityTs): read-side only, nothing rewritten.
+          const meta = toSessionMeta(sessionId, s.title, s.cli, lastActivityTs(s), s.lastDevice, s.model, s.effort);
           this.metaCache.set(sessionId, { page, meta });
           return meta;
         } catch {

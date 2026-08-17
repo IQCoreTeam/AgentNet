@@ -162,7 +162,15 @@ export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: str
 
   const kind = kindOf(tool.name);
   const tint = toolTint[kind];
-  const okExit = tool.exitCode === undefined || tool.exitCode === 0;
+  // Evidence-based status marker. An exit code only exists for a call that actually ran;
+  // a tool_use card paints BEFORE its outcome (and <Static> never repaints it), so the
+  // old "undefined exitCode = ok" guess stamped a green check on calls whose outcome was
+  // unknown, including DENIED ones, which then read as completed forever (issue 167
+  // round 2). Three honest states: ran (check/cross from the real exit code), denied
+  // (the approval flow's deny color and word), no recorded outcome (dim dot, no claim).
+  const denied = tool.denied === true;
+  const ran = !denied && typeof tool.exitCode === "number";
+  const failed = denied || (ran && tool.exitCode !== 0);
   const outLines = tool.output ? lineCount(stripAnsi(tool.output)) : 0;
   const fileLang = langFor(tool.file);
   const { card, inner } = cardWidth();
@@ -226,7 +234,7 @@ export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: str
         {outputInBox ? (
           <>
             <Text color={surface.pastHeader}>{"─".repeat(boxInner)}</Text>
-            <Output text={tool.output!} failed={!okExit} lang={fileLang} width={boxInner} bare />
+            <Output text={tool.output!} failed={failed} lang={fileLang} width={boxInner} bare />
           </>
         ) : null}
       </CodeBox>
@@ -248,13 +256,16 @@ export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: str
       paddingLeft={1}
       marginTop={1}
     >
-      {/* header row - the design's turn node (tab 09): a green check (red cross on failure)
-          leads, then the tool in caps, then where it acted. The kind is carried by the
-          label's tint, so the old leading kind-glyph is gone and the exit marker moves up
-          front where the eye already scans for pass/fail. */}
+      {/* header row - the design's turn node (tab 09): the status marker leads (check /
+          cross / dim dot per the evidence rule above), then the tool in caps, then where
+          it acted. A refusal additionally wears the approval flow's DENY word in its err
+          tint, so "refused" never reads as "ran and failed". */}
       <Box>
-        <Text color={okExit ? colors.ok : colors.err} bold>{okExit ? glyph.ok : glyph.fail} </Text>
+        <Text color={failed ? colors.err : ran ? colors.ok : colors.dim} bold>
+          {failed ? glyph.fail : ran ? glyph.ok : glyph.other}{" "}
+        </Text>
         <Text color={tint} bold>{tool.name.toUpperCase()}</Text>
+        {denied ? <Text color={colors.err} bold>{"  DENIED"}</Text> : null}
         {/* When a diff box follows, its title band owns the (full) path — repeating a
             shortened copy up here just said the same thing twice in two spellings. */}
         {tool.file && !tool.diff ? (
@@ -268,7 +279,7 @@ export function ToolCard({ tool, fallback }: { tool?: ToolAction; fallback?: str
       </Box>
       {body}
       {tool.output && !outputInBox ? (
-        <Output text={tool.output} failed={!okExit} lang={fileLang} width={inner - 2} />
+        <Output text={tool.output} failed={failed} lang={fileLang} width={inner - 2} />
       ) : null}
     </Box>
   );

@@ -34,7 +34,7 @@ import { Select, TextInput } from "@inkjs/ui";
 import open from "open";
 import { chooseStorage } from "../bootstrap.js";
 import { copyToClipboard } from "../clipboard.js";
-import { Message, TurnHeader } from "../components/Message.js";
+import { Message, TurnHeader, turnHeaderRows } from "../components/Message.js";
 import { StatusLine } from "../components/StatusLine.js";
 import { ApprovalCard, APPROVAL_CHOICES, type ApprovalChoiceKey } from "../components/ApprovalCard.js";
 import { Composer } from "../components/Composer.js";
@@ -46,6 +46,7 @@ import { SkillMarket } from "./SkillMarket.js";
 import { ModelPicker } from "./ModelPicker.js";
 import { EffortPicker } from "./EffortPicker.js";
 import type { EffortLevel } from "../prefs.js";
+import { loadInputHistory, appendInputHistory, mergeHistory } from "../inputHistory.js";
 import { type Mood } from "../components/Iggy.js";
 import { Spinner } from "../components/Spinner.js";
 import { useDelight } from "../components/DelightProvider.js";
@@ -82,8 +83,11 @@ function ActivityRow({
   const cast = useFrameLoop(castingFrames.length, 8);
 
   // The calm face line always carries a word (design tab 28): a steady dim "ready" when
-  // nothing is happening, replaced by the live status the moment something does.
-  let body: React.ReactNode = <Text dimColor>ready</Text>;
+  // nothing is happening, replaced by the live status the moment something does. It
+  // truncates like every other branch: at 30 cols the context meter leaves this text a
+  // couple of cells, and an unmarked Text WRAPS there ("re"/"ad"), breaking the one-row
+  // contract the surrounding chrome math depends on.
+  let body: React.ReactNode = <Text dimColor wrap="truncate-end">ready</Text>;
   if (error) {
     body = (
       <>
@@ -247,6 +251,12 @@ export function Chat({
   });
   const [notice, setNotice] = useState("");
   const [localLog, setLocalLog] = useState<ChatMessage[]>([]);
+  // Persistent composer history: everything sent from this composer, loaded once at
+  // boot (lazy initializer, same sync-read pattern prefs uses) and appended on every
+  // send - slash commands and ! bash lines included, which never reach chat.messages.
+  // The transcript-derived list keeps covering resumed sessions; mergeHistory folds
+  // the three sources for the Composer, whose histPos recall stays untouched.
+  const [typedHistory, setTypedHistory] = useState<string[]>(() => loadInputHistory());
   // live terminal size - the frame is sized to it so the bottom chrome (status +
   // composer section + footer) is structurally pinned to the bottom edge, and the
   // section rules span the full width.
@@ -426,6 +436,9 @@ export function Chat({
   const [accountLines, setAccountLines] = useState<string[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  // first visible row of the /help command list; the overlay windows the registry to the
+  // terminal height (a 24-row terminal cannot show all the commands at once).
+  const [helpScroll, setHelpScroll] = useState(0);
   const [showKeys, setShowKeys] = useState(false);
   // welcome control panel: focus stays on the composer by default; Ctrl+S moves focus into
   // the panel to edit settings. showCloud opens the storage picker from the panel's cloud row.
@@ -450,11 +463,14 @@ export function Chat({
   // is running (or a second press within the window) actually leaves — so one stray Ctrl+C
   // never nukes an in-flight turn. Cleared after 1.5s so the "again to quit" arming lapses.
   const ctrlCArmed = useRef(false);
+  // A /compact turn in flight. The busy-transition effect below reports its outcome once
+  // the turn ends; interrupts clear it so an aborted compact is never reported as done.
+  const awaitingCompact = useRef(false);
 
   // celebration on turn completion: confetti if the last tool looks like a win, else a
   // quick sparkle. Disabled visually by Celebrate under --calm.
   useEffect(() => {
-    if (prevBusy.current && !chat.busy && chat.messages.length) {
+    if (prevBusy.current && !chat.busy) {
       const last = chat.messages[chat.messages.length - 1];
       // an engine error ends the turn too — don't celebrate it; show the calm error face.
       const errored =
@@ -463,25 +479,33 @@ export function Chat({
         (last.tool?.name === "Error" ||
           (last.tool?.exitCode !== undefined && last.tool.exitCode !== 0) ||
           /\b(engine\]|exited with code|error)/i.test(last.text));
-      if (errored) {
-        setEggMood("error");
-      } else {
-        const lastTool = [...chat.messages].reverse().find((m) => m.role === "tool");
-        const win =
-          !!lastTool &&
-          (lastTool.tool?.exitCode === 0 || /\b\d+\s+pass(ing|ed)\b/i.test(lastTool.tool?.output ?? ""));
-        setCelebrate(win ? "confetti" : "sparkle");
-        setEggMood("success");
+      // A /compact turn just ended: report what it actually did, the same after-the-fact
+      // honesty /more uses (announcing success at fire time was the bug this replaces).
+      if (awaitingCompact.current) {
+        awaitingCompact.current = false;
+        if (!chat.turnError) setNotice(errored ? "compact failed (see transcript)" : "context compacted");
       }
-      const t = setTimeout(() => {
-        setCelebrate(null);
-        setEggMood(null);
-      }, 1600);
-      prevBusy.current = chat.busy;
-      return () => clearTimeout(t);
+      if (chat.messages.length) {
+        if (errored) {
+          setEggMood("error");
+        } else {
+          const lastTool = [...chat.messages].reverse().find((m) => m.role === "tool");
+          const win =
+            !!lastTool &&
+            (lastTool.tool?.exitCode === 0 || /\b\d+\s+pass(ing|ed)\b/i.test(lastTool.tool?.output ?? ""));
+          setCelebrate(win ? "confetti" : "sparkle");
+          setEggMood("success");
+        }
+        const t = setTimeout(() => {
+          setCelebrate(null);
+          setEggMood(null);
+        }, 1600);
+        prevBusy.current = chat.busy;
+        return () => clearTimeout(t);
+      }
     }
     prevBusy.current = chat.busy;
-  }, [chat.busy, chat.messages]);
+  }, [chat.busy, chat.messages, chat.turnError]);
 
   // idle nudge: Iggy dozes off after a minute of no activity. Any input resets it.
   useEffect(() => {
@@ -498,6 +522,7 @@ export function Chat({
     if (!key.ctrl || input !== "c") return;
     if (chat.busy) {
       chat.interrupt();
+      awaitingCompact.current = false; // an interrupted /compact must not report as done
       ctrlCArmed.current = true;
       setNotice("interrupted. press Ctrl+C again to quit");
       setTimeout(() => { ctrlCArmed.current = false; }, 1500);
@@ -514,6 +539,7 @@ export function Chat({
     (_i, key) => {
       if (key.escape) {
         chat.interrupt();
+        awaitingCompact.current = false; // an interrupted /compact must not report as done
         setNotice("interrupted.");
       }
     },
@@ -729,8 +755,18 @@ export function Chat({
     { isActive: showSettings && !pendingApproval },
   );
 
+  // Rows of the /help overlay available to the command list: everything else in the
+  // overlay is fixed chrome (border 2, padding 2, title 1, two hint rows with their
+  // margins 4) plus the one-row slack that keeps any frame strictly shorter than the
+  // terminal (ink repaints the whole screen once a frame reaches terminal height).
+  const helpRows = Math.max(4, rows - 10);
+
   useInput(
-    (_input, key) => { if (key.escape || key.return) setShowHelp(false); },
+    (_input, key) => {
+      if (key.escape || key.return) return setShowHelp(false);
+      if (key.upArrow) setHelpScroll((s) => Math.max(0, s - 1));
+      if (key.downArrow) setHelpScroll((s) => Math.min(Math.max(0, SLASH_COMMANDS.length - helpRows), s + 1));
+    },
     { isActive: showHelp && !pendingApproval },
   );
 
@@ -825,6 +861,14 @@ export function Chat({
       setNotice(raw.trim() ? "helius key saved" : "helius key cleared, using default rpc");
     });
     setPanelFocused(false);
+  }
+
+  // /help and the footer's advertised "?" both land here: the composer routes a "?"
+  // pressed on an EMPTY buffer to onHelp (with text present, "?" just types), so the
+  // footer's "? /HELP" hint is a promise the keyboard actually keeps.
+  function openHelp() {
+    setHelpScroll(0); // each open starts at the top of the list
+    setShowHelp(true);
   }
 
   function openMarket(stage: "list" | "agents" | "owned" | "github" = "list") {
@@ -1014,7 +1058,7 @@ export function Chat({
         openMarket("github");
         return;
       case "resume": {
-        const hit = chat.sessions.find((s) => s.sessionId.startsWith(arg));
+        const hit = (chat.sessions ?? []).find((s) => s.sessionId.startsWith(arg));
         if (arg && hit) {
           void chat.openSession(hit.sessionId);
           setNotice(`resumed ${hit.title || hit.sessionId.slice(0, 8)}`);
@@ -1067,9 +1111,17 @@ export function Chat({
           .catch(() => setNotice("could not load older history"));
         return;
       case "compact":
-        // claude/codex honor their own /compact command; pass it through as a turn.
+        // claude/codex honor their own /compact command; pass it through as a turn. Like
+        // /more, the outcome is announced when it is KNOWN (the busy-transition effect
+        // above): the old fire-time "compacting context" notice claimed progress before
+        // the engine even accepted the turn, and stayed on screen forever, done or not.
+        // While it runs, the activity row's spinner is the honest signal.
+        if (!chat.pendingId) {
+          setNotice("nothing to compact yet - say something first");
+          return;
+        }
+        awaitingCompact.current = true;
         void chat.send("/compact");
-        setNotice("compacting context…");
         return;
       case "clear":
         chat.clearView();
@@ -1140,7 +1192,7 @@ export function Chat({
       case "help":
         // A dismissable overlay (not a one-line notice that vanishes on the next keystroke),
         // rendered straight from SLASH_COMMANDS so the list never drifts from the registry.
-        setShowHelp(true);
+        openHelp();
         return;
       case "keys":
         setShowKeys(true);
@@ -1154,6 +1206,12 @@ export function Chat({
     const text = value.trim();
     if (!text && !images?.length) return;
     setNotice("");
+    if (text) {
+      // record BEFORE dispatch so slash commands and bash lines are recallable too;
+      // consecutive-dupe guard mirrors the store's, keeping state and file aligned.
+      setTypedHistory((prev) => (prev[prev.length - 1] === text ? prev : [...prev, text]));
+      void appendInputHistory(text);
+    }
     if (text.startsWith("/")) return runSlash(text);
     if (text.startsWith("!")) return chat.runBash(text.slice(1)); // quick local shell
     void chat.send(text, images);
@@ -1240,15 +1298,29 @@ export function Chat({
   // /help overlay — the slash-command list, sourced from the shared registry so it stays
   // in lockstep with autocomplete instead of a hand-maintained string that drifts.
   if (showHelp) {
+    // Two honest columns: the widest "/name args" label sets the label column (the old
+    // fixed 24 was narrower than "/engine claude|codex" wants and glued long labels to
+    // their descriptions), and rows never wrap (truncate-end) so a long description
+    // cannot orphan half a sentence onto its own line.
+    const colW = Math.max(...SLASH_COMMANDS.map((c) => `/${c.name}${c.args ? ` ${c.args}` : ""}`.length)) + 2;
+    // window the list to helpRows (same shape as the composer's menu window): clamp the
+    // start so a shrink can't leave the window past the end, and say what is hidden.
+    const start = Math.min(helpScroll, Math.max(0, SLASH_COMMANDS.length - helpRows));
+    const visible = SLASH_COMMANDS.slice(start, start + helpRows);
+    const below = SLASH_COMMANDS.length - start - visible.length;
     return (
       <Box flexDirection="column" paddingX={1}>
         <Box borderStyle="round" borderColor={colors.bone} flexDirection="column" paddingX={2} paddingY={1}>
           <Text bold color={colors.iqCyan}>commands</Text>
-          {SLASH_COMMANDS.map((c) => (
-            <Text key={c.name} dimColor>{`/${c.name}${c.args ? ` ${c.args}` : ""}`.padEnd(24)}{c.desc}</Text>
+          {visible.map((c) => (
+            <Text key={c.name} dimColor wrap="truncate-end">{`/${c.name}${c.args ? ` ${c.args}` : ""}`.padEnd(colW)}{c.desc}</Text>
           ))}
           <Box marginTop={1}><Text dimColor>!cmd runs a shell command  ·  /keys for shortcuts</Text></Box>
-          <Box marginTop={1}><Text dimColor>Esc / Enter  close</Text></Box>
+          <Box marginTop={1}>
+            <Text dimColor>
+              {start > 0 || below > 0 ? `↑/↓ scroll (${start} above · ${below} below)  ·  ` : ""}Esc / Enter  close
+            </Text>
+          </Box>
         </Box>
       </Box>
     );
@@ -1271,7 +1343,12 @@ export function Chat({
           <Text dimColor>{"Ctrl+V".padEnd(16)}paste an image from the clipboard</Text>
           <Text dimColor>{"\\ then Enter".padEnd(16)}insert a newline</Text>
           <Text dimColor>{"Ctrl+S".padEnd(16)}focus the welcome panel (Esc returns)</Text>
-          <Box marginTop={1}><Text dimColor>at an approval prompt:  y accept · a always · n deny · e edit · r reason · d diff</Text></Box>
+          {/* label and keys on separate rows: on one row the last key wrapped alone
+              ("· d diff" orphaned on its own line) at ordinary 80-col terminals */}
+          <Box marginTop={1} flexDirection="column">
+            <Text dimColor>at an approval prompt:</Text>
+            <Text dimColor>{"  y accept · a always · n deny · e edit · r reason · d diff"}</Text>
+          </Box>
           <Box marginTop={1}><Text dimColor>Esc / Enter  close</Text></Box>
         </Box>
       </Box>
@@ -1394,6 +1471,7 @@ export function Chat({
     return (
       <SessionList
         sessions={chat.sessions}
+        error={chat.sessionsError}
         activeId={chat.pendingId}
         cloud={cloud && cloud.kind !== "local" ? cloud.kind : null}
         onResume={(id) => {
@@ -1412,23 +1490,74 @@ export function Chat({
     );
   }
 
+  // the last message is rendered LIVE (dynamic) only while it's a streaming assistant;
+  // everything else is committed to <Static>, which renders each line once and never
+  // re-renders — so Iggy/spinner ticks don't repaint the whole scrollback. `epoch` resets
+  // Static on wholesale changes (resume / new / scroll-back prepend).
+  const lastMsg = chat.messages[chat.messages.length - 1];
+  const streaming = chat.busy && lastMsg?.role === "assistant";
+  const baseCommitted = streaming ? chat.messages.slice(0, -1) : chat.messages;
+  // Weave local system messages (model-switch separators etc.) into the committed history.
+  const committed = interleaveByTs(baseCommitted, localLog);
+  // content width inside the frame's paddingX(1)
+  const staticW = Math.max(20, (process.stdout.columns || 80) - 2);
+  /* The settled transcript is printed ONCE into real terminal scrollback — never
+     re-rendered, never clipped, scrollable with the terminal's own scrollbar. Only
+     live/in-flight content lives in the dynamic frame below, which is what keeps the
+     composer at the bottom of the viewport without a fixed-height frame fighting it.
+     (A fixed frame with the transcript inside clipped long output and made the
+     conversation read as disconnected chunks.) */
+  /* The explicit width is load-bearing, not cosmetic: ink renders <Static> from a
+     position:absolute box, which sizes to its CONTENT rather than to the terminal.
+     One unbreakable token (a stack-trace path, a URL) therefore made the whole
+     static block wider than the screen, and the terminal wrapped the overflow back
+     to column 0 — which is how fragments ended up printed outside the card borders.
+     Pinning the width here bounds every transcript row; the components additionally
+     hard-wrap their own text so no single token can exceed it. */
+  const transcript = (
+    <Static key={chat.epoch} items={committed.map((m, i) => ({ m, i }))}>
+      {({ m, i }) => (
+        <Box key={`${m.ts}-${i}`} width={staticW} flexDirection="column">
+          <Message msg={m} />
+        </Box>
+      )}
+    </Static>
+  );
+
   // skill-market overlay — search/list/detail/buy over marketplaceEnv. Takes over input
-  // while open; Esc backs out a level (or closes from the list), like the VSCode market.
+  // while open; Esc backs out a level, and on the stage the user entered at (list for
+  // /market, github/agents/owned for /github, /agents, /skills via initialStage) it
+  // closes the market back to chat, never a list the user hasn't visited.
+  // The transcript's <Static> MUST stay mounted above the overlay. Returning SkillMarket
+  // alone unmounted it, and ink (5.2.1) never clears rootNode.staticNode when a <Static>
+  // leaves the tree while removeChild frees its whole yoga subtree; every later market
+  // render then calls node.staticNode.yogaNode.getComputedWidth() on freed wasm memory
+  // (renderer.js:13). Once enough new yoga nodes recycle that block (showing owned cards
+  // at 100+ cols, or detail then esc), the read lands out of bounds and the process dies:
+  // issue #167's deterministic "memory access out of bounds" crash. Keeping the one real
+  // <Static> in this branch removes the dangling reference at its source. The other
+  // overlay early-returns share the latent unmount but re-render little while open;
+  // folding them into one persistent frame is a wider refactor left out of this fix.
   if (showMarket && market) {
     return (
-      <SkillMarket
-        api={market}
-        walletAddr={address}
-        ownedNames={installed}
-        initialStage={marketStage}
-        owned={skills ?? []}
-        onBought={() => {
-          // a buy installs the skill — refresh the badge source + the welcome panel list.
-          void market.ownedSkills().then(setInstalled).catch(() => {});
-          void ownedSkills(address).then(setSkills).catch(() => {});
-        }}
-        onClose={() => setShowMarket(false)}
-      />
+      <Box flexDirection="column">
+        {transcript}
+        <SkillMarket
+          api={market}
+          walletAddr={address}
+          ownedNames={installed}
+          initialStage={marketStage}
+          // null passes through while ownedSkills is still fetching: the market's owned
+          // and github screens say loading instead of claiming "no skills owned yet".
+          owned={skills}
+          onBought={() => {
+            // a buy installs the skill — refresh the badge source + the welcome panel list.
+            void market.ownedSkills().then(setInstalled).catch(() => {});
+            void ownedSkills(address).then(setSkills).catch(() => {});
+          }}
+          onClose={() => setShowMarket(false)}
+        />
+      </Box>
     );
   }
 
@@ -1467,15 +1596,6 @@ export function Chat({
     );
   }
 
-  // the last message is rendered LIVE (dynamic) only while it's a streaming assistant;
-  // everything else is committed to <Static>, which renders each line once and never
-  // re-renders — so Iggy/spinner ticks don't repaint the whole scrollback. `epoch` resets
-  // Static on wholesale changes (resume / new / scroll-back prepend).
-  const lastMsg = chat.messages[chat.messages.length - 1];
-  const streaming = chat.busy && lastMsg?.role === "assistant";
-  const baseCommitted = streaming ? chat.messages.slice(0, -1) : chat.messages;
-  // Weave local system messages (model-switch separators etc.) into the committed history.
-  const committed = interleaveByTs(baseCommitted, localLog);
   // ONE row budget for the whole dynamic frame. It used to be two independent guesses —
   // the streaming tail took `rows - 14` and the composer separately took `rows / 3` — and
   // on any normal terminal their sum plus the chrome is MORE rows than exist. ink cannot
@@ -1503,9 +1623,19 @@ export function Chat({
     return null;
   })();
 
-  const liveMsg = streaming
+  // While a tool approval is pinned the turn is PAUSED - the engine is blocked on the
+  // user - so the streaming tail collapses to ONE dim row: an ellipsis plus the last
+  // line so far. Honest (nothing is advancing) and load-bearing: the full tail was one
+  // of the three unbudgeted row sources that pushed the approval frame past the
+  // terminal at 30x24 (issue 167 round 2). The full text still lands in <Static> when
+  // the turn settles, and the live tail returns the moment the approval resolves.
+  const liveMsg = streaming && !pendingApproval
     ? clampLiveTail(lastMsg, liveRows, process.stdout.columns || 80)
     : null;
+  const pausedTail =
+    streaming && pendingApproval
+      ? (lastMsg.text.split("\n").filter((l) => l.trim()).pop() ?? "").trim()
+      : null;
 
   // the welcome control panel shows on an empty, idle session. Focus stays on the composer
   // by default; Ctrl+S moves focus INTO the panel (panelActive), which then owns
@@ -1520,35 +1650,28 @@ export function Chat({
   const panelMaxRows = Math.max(8, rows - CHROME_ROWS - 3);
 
   // The dynamic frame must FIT on screen — ink cannot erase lines that have scrolled off,
-  // and a frame taller than the terminal smears old paints into the scrollback. So the
-  // approval card, which takes the composer's band, gets a row budget: the rest of the
-  // chrome (header 2 · rule/status/rule 3 · rule/footer 2) plus a little slack.
-  const approvalMaxRows = Math.max(6, rows - 10);
-  // content width inside the frame's paddingX(1)
-  const staticW = Math.max(20, (process.stdout.columns || 80) - 2);
+  // and at outputHeight >= rows it abandons in-place updates entirely for clearTerminal
+  // plus a full static rewrite on EVERY render. During an approval the elapsed ticker is
+  // still rendering ~10x a second, so an over-tall frame is not a smear but a clear-and-
+  // repaint STORM with no settled frame (issue 167 round 2: 59 clears in 16s at 30x24).
+  // Budgeting only the card was not enough: the pinned ask's TurnHeader (6 rows for a
+  // wrapped filename), the live tail, and a wrapped key grid overflowed around it. So
+  // while an approval is pinned, EVERY band is budgeted: the ask clamps to
+  // APPROVAL_ASK_ROWS (TurnHeader maxRows), the tail drops to the one-row pausedTail
+  // above, the grid sheds words (ApprovalCard), and the card gets exactly what remains.
+  // The counted chrome: history band, status, two rules, footer (one row each, the
+  // one-row contracts those bands now keep even squeezed), the clamped ask + its margin,
+  // and the paused tail row. The -1 keeps the frame strictly SHORTER than the terminal.
+  const APPROVAL_ASK_ROWS = 2;
+  const approvalChrome =
+    5 +
+    (pinnedAsk ? turnHeaderRows(pinnedAsk, APPROVAL_ASK_ROWS) + 1 : 0) +
+    (pausedTail !== null ? 1 : 0);
+  const approvalMaxRows = Math.max(6, rows - approvalChrome - 1);
 
   return (
     <Box flexDirection="column" paddingX={1}>
-      {/* The settled transcript is printed ONCE into real terminal scrollback — never
-          re-rendered, never clipped, scrollable with the terminal's own scrollbar. Only
-          live/in-flight content lives in the dynamic frame below, which is what keeps the
-          composer at the bottom of the viewport without a fixed-height frame fighting it.
-          (A fixed frame with the transcript inside clipped long output and made the
-          conversation read as disconnected chunks.) */}
-      {/* The explicit width is load-bearing, not cosmetic: ink renders <Static> from a
-          position:absolute box, which sizes to its CONTENT rather than to the terminal.
-          One unbreakable token (a stack-trace path, a URL) therefore made the whole
-          static block wider than the screen, and the terminal wrapped the overflow back
-          to column 0 — which is how fragments ended up printed outside the card borders.
-          Pinning the width here bounds every transcript row; the components additionally
-          hard-wrap their own text so no single token can exceed it. */}
-      <Static key={chat.epoch} items={committed.map((m, i) => ({ m, i }))}>
-        {({ m, i }) => (
-          <Box key={`${m.ts}-${i}`} width={staticW} flexDirection="column">
-            <Message msg={m} />
-          </Box>
-        )}
-      </Static>
+      {transcript}
 
       <Box flexDirection="column">
         {/* startup welcome panel — shown only on empty session so it doesn't re-appear.
@@ -1582,9 +1705,19 @@ export function Chat({
 
         {/* the turn you are waiting on: your own message stays on screen above the reply
             while it streams, the way the vscode surface pins its turn header. It lives in
-            the CONTENT section (which is free to grow), never in the fixed-height chrome. */}
-        {pinnedAsk ? <TurnHeader text={pinnedAsk} /> : null}
+            the CONTENT section (which is free to grow), never in the fixed-height chrome.
+            The one exception: while an approval is pinned it clamps to the budgeted rows,
+            so the card below keeps its keys on screen. */}
+        {pinnedAsk ? (
+          <TurnHeader text={pinnedAsk} maxRows={pendingApproval ? APPROVAL_ASK_ROWS : undefined} />
+        ) : null}
 
+        {pausedTail !== null ? (
+          <Text dimColor wrap="truncate-end">
+            {"… "}
+            {pausedTail}
+          </Text>
+        ) : null}
         {liveMsg ? <Message msg={liveMsg} live /> : null}
       </Box>
 
@@ -1635,9 +1768,13 @@ export function Chat({
         <Composer
           cwd={cwd}
           onSubmit={onSubmit}
+          onHelp={openHelp}
           disabled={showSessions || panelActive || !!pendingApproval}
           maxRows={composerMaxRows}
-          history={chat.messages.filter((m) => m.role === "user").map((m) => m.text)}
+          history={mergeHistory(
+            chat.messages.filter((m) => m.role === "user").map((m) => m.text),
+            typedHistory,
+          )}
         />
       </Box>
       <Text color={colors.bone}>{rule(ruleW)}</Text>

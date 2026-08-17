@@ -1,7 +1,15 @@
 import React from "react";
 import { Box, Text } from "ink";
 import { colors, diff as diffTheme } from "../theme.js";
-import { padCells, wrapHard } from "../format.js";
+import { padCells, wrapHard, displayWidth } from "../format.js";
+
+// How many files a diff carries — the ONE parse both this component and a hosting card's
+// row budget read, so "will the Files strip render?" can never disagree with whether it
+// does. A multi-file diff costs the strip's one row; the host subtracts it from the
+// content budget it passes as maxLines.
+export function diffFileCount(diff: string): number {
+  return parseMultiFileDiff(diff).length;
+}
 
 // Shaded diff — added lines on a dark-green band, removed on dark-red, hunks dim violet,
 // context dim. Lines are padded to a rectangle so the bands read as clean blocks; a header
@@ -155,10 +163,14 @@ export function DiffView({
   const contentTotal = numbered.filter((e) => !e.sep).length;
   const hidden = contentTotal - new Set(shownRows.filter((r) => r.idx >= 0).map((r) => r.idx)).size;
 
+  // The summary is ONE row by contract - the hosting card counts it as one when it
+  // budgets rows - but its full sentence is wider than a narrow terminal, and a wrap
+  // here silently makes the card 2 rows taller than the count. truncate-end keeps the
+  // row honest; the counts at the head are the part that must survive.
   if (!expanded) {
     return (
       <Box flexDirection="column" marginY={0}>
-        <Text>
+        <Text wrap="truncate-end">
           <Text color={colors.ok}>+{totalAdds}</Text> <Text color={colors.err}>−{totalDels}</Text>
           <Text dimColor> lines changed across </Text>
           <Text color={colors.iqCyan} bold>{files.length}</Text>
@@ -175,20 +187,30 @@ export function DiffView({
     );
   }
 
-  const tabs = files.map((f, idx) => {
-    const isActive = idx === activeFileIdx;
-    const label = `[${idx + 1}] ${f.path.split("/").pop() || f.path}`;
-    return (
-      <Text key={idx} color={isActive ? colors.iqCyan : colors.dim} bold={isActive}>
-        {isActive ? ` ${label} ` : ` ${label} `}
-      </Text>
-    );
-  });
+  // The Files strip is ONE row by contract — the same contract the summary row keeps —
+  // because the hosting card counts it as one when it budgets rows. It used to be a
+  // marginY={1} Box whose tabs wrapped at narrow widths: 3 uncounted rows (blank, wrap,
+  // blank) that pushed the approval frame past a 40x24 terminal into the repaint storm.
+  // Now: no margins, one Text with truncate-end. The window below slides the visible
+  // tabs so the ACTIVE one always fits (a leading … marks what slid off); tabs past the
+  // right edge are cut by the truncation. Switching keys live in the host and are
+  // untouched — every file still renders when picked, its tab is just guaranteed a seat.
+  const tabLabels = files.map((f, idx) => ` [${idx + 1}] ${f.path.split("/").pop() || f.path} `);
+  let tabStart = 0;
+  {
+    const avail = width - displayWidth("Files: ") - 1; // 1 for the leading … marker
+    while (
+      tabStart < activeFileIdx &&
+      tabLabels.slice(tabStart, activeFileIdx + 1).reduce((n, s) => n + displayWidth(s), 0) > avail
+    )
+      tabStart++;
+  }
 
   return (
     <Box flexDirection="column">
       {summary ? (
-        <Text>
+        // same one-row contract as the collapsed summary above
+        <Text wrap="truncate-end">
           <Text color={colors.ok}>+{totalAdds}</Text> <Text color={colors.err}>−{totalDels}</Text>
           <Text dimColor> lines changed across </Text>
           <Text color={colors.iqCyan} bold>{files.length}</Text>
@@ -204,9 +226,20 @@ export function DiffView({
       ) : null}
 
       {files.length > 1 ? (
-        <Box flexDirection="row" marginY={1}>
-          <Text dimColor>Files: </Text>
-          {tabs}
+        <Box>
+          <Text wrap="truncate-end">
+            <Text dimColor>Files: </Text>
+            {tabStart > 0 ? <Text dimColor>…</Text> : null}
+            {tabLabels.slice(tabStart).map((label, i) => {
+              const idx = tabStart + i;
+              const isActive = idx === activeFileIdx;
+              return (
+                <Text key={idx} color={isActive ? colors.iqCyan : colors.dim} bold={isActive}>
+                  {label}
+                </Text>
+              );
+            })}
+          </Text>
         </Box>
       ) : null}
 

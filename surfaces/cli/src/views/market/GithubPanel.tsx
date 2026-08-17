@@ -6,9 +6,15 @@
 // saveGithubToken/maskedGithubToken 0600 file, and registerVerifiedWork which
 // commits the public .agentnet marker then registers with the indexer); this file
 // is pure render, the same split the CLI's HeliusPanel uses for the RPC key.
+//
+// The register form is ONE vertical focus list walked with up/down: token row,
+// repo input, each owned skill, then a REGISTER action row. Enter acts on the
+// focused row; the focused row renders as the welcome panel's fully inverted
+// band (ink on bone, edge to edge), the design's strongest focus signature.
 import React from "react";
 import { Box, Text } from "ink";
 import { colors, glyph } from "../../theme.js";
+import { displayWidth, truncateEnd } from "../../format.js";
 import type { OwnedSkill } from "../../components/WelcomePanel.js";
 
 // Pre-fills GitHub's new-token page with the repo scope (write to your repos, needed
@@ -21,12 +27,44 @@ export interface GithubStatusLite {
   masked: string | null;
 }
 
-// Which sub-field of the register form has focus. Only meaningful once a token is
-// stored; without one the screen is a single token-entry field.
-export type GithubFocus = "token" | "repo" | "skills";
+// The ONE focus order of the register form, walked with up/down (tab cycles it as an
+// alternate): token, repo, each owned skill, register. Both the SkillMarket input
+// handler and the render below read it from here, so they can never disagree.
+export type GithubRow =
+  | { kind: "token" }
+  | { kind: "repo" }
+  | { kind: "skill"; skill: number }
+  | { kind: "register" };
+
+export function githubRowCount(skillCount: number): number {
+  return 3 + skillCount;
+}
+
+export function githubRowAt(idx: number, skillCount: number): GithubRow {
+  if (idx <= 0) return { kind: "token" };
+  if (idx === 1) return { kind: "repo" };
+  if (idx < 2 + skillCount) return { kind: "skill", skill: idx - 2 };
+  return { kind: "register" };
+}
+
+// The focused row, drawn the way this panel always marked focus: a cyan caret ahead of
+// the row, text bold cyan, no fill. `cursor` appends a block cursor for the text-input
+// row. The caret replaces the row's two leading spaces so nothing shifts on focus.
+function FocusBand({ width, text, cursor }: { width: number; text: string; cursor?: boolean }) {
+  const body = truncateEnd(text.replace(/^  /, ""), Math.max(4, width - 2 - (cursor ? 1 : 0)));
+  return (
+    <Text bold color={colors.iqCyan}>
+      {"\u25b8 "}
+      {body}
+      {cursor ? <Text inverse> </Text> : null}
+    </Text>
+  );
+}
 
 function GithubBadge({ status }: { status: GithubStatusLite | null }) {
-  if (!status) return null;
+  // null = the token file has not been read yet: say loading on the status row it
+  // already owns, never the settled "no token" claim for a check still in flight.
+  if (!status) return <Text dimColor>loading…</Text>;
   if (status.hasToken) {
     return <Text color={colors.ok}>{glyph.ok} connected · {status.masked}</Text>;
   }
@@ -36,27 +74,35 @@ function GithubBadge({ status }: { status: GithubStatusLite | null }) {
 export function GithubPanel({
   status,
   tokenInput,
+  tokenEditing,
   repoInput,
+  repoLabel,
   owned,
   selected,
-  focus,
-  skillIdx,
+  focusIdx,
   blockReason,
   busy,
   flash,
+  width,
 }: {
   status: GithubStatusLite | null;
   tokenInput: string;
+  tokenEditing: boolean;
   repoInput: string;
-  owned: OwnedSkill[];
+  repoLabel: string | null; // parsed owner/name once the repo input is valid
+  owned: OwnedSkill[] | null; // null = the host is still fetching the wallet's skills
   selected: Record<string, boolean>;
-  focus: GithubFocus;
-  skillIdx: number;
+  focusIdx: number;
   blockReason: string | null;
   busy: boolean;
   flash: string | null;
+  width: number; // inner row width (terminal cols minus border and padding)
 }) {
   const hasToken = !!status?.hasToken;
+  const chosen = Object.values(selected).filter(Boolean).length;
+  const ownedList = owned ?? [];
+  const row = githubRowAt(focusIdx, ownedList.length);
+  const bandW = Math.max(10, width);
   return (
     <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
       <Text bold color={colors.iqMagenta}>❖ GitHub verified work</Text>
@@ -65,8 +111,14 @@ export function GithubPanel({
         <GithubBadge status={status} />
       </Box>
 
-      {!hasToken ? (
-        // No token yet: one field to paste the Personal Access Token.
+      {!status ? (
+        // status pending: the badge above already says loading; rendering the token
+        // form here would claim "no token" and eat keystrokes for a check that has
+        // not settled. The body waits.
+        null
+      ) : !hasToken || tokenEditing ? (
+        // Token entry: paste a Personal Access Token (first connect, or replacing a
+        // stored token via enter on the token row).
         <Box flexDirection="column" marginTop={1}>
           <Box>
             <Text color={colors.iqCyan}>▸ </Text>
@@ -81,7 +133,11 @@ export function GithubPanel({
           {flash ? <Box marginTop={1}><Text color={colors.ok}>{flash}</Text></Box> : null}
           {busy ? <Text dimColor>saving...</Text> : null}
           <Box marginTop={1}>
-            <Text dimColor>paste a Personal Access Token · ↵ save · esc back</Text>
+            <Text dimColor>
+              {tokenEditing
+                ? "paste the new token · enter save · esc cancel"
+                : "paste a Personal Access Token · enter save · esc back"}
+            </Text>
           </Box>
         </Box>
       ) : busy ? (
@@ -92,42 +148,74 @@ export function GithubPanel({
           <Box marginTop={1}><Text dimColor>working...</Text></Box>
         </Box>
       ) : (
-        // Token present: register a repo as verified work for the skills it used.
+        // Token present: one vertical focus list, up/down walks it, enter acts.
         <Box flexDirection="column" marginTop={1}>
-          <Box>
-            <Text color={focus === "token" ? colors.iqCyan : colors.dim}>{focus === "token" ? "▸ " : "  "}</Text>
-            <Text dimColor>token </Text>
-            <Text>{status?.masked}</Text>
-            <Text dimColor>  [x] remove</Text>
-          </Box>
-          <Box>
-            <Text color={focus === "repo" ? colors.iqCyan : colors.dim}>{focus === "repo" ? "▸ " : "  "}</Text>
-            <Text dimColor>repo  </Text>
-            <Text dimColor={!repoInput}>{repoInput || "owner/name or github.com URL"}</Text>
-            {focus === "repo" ? <Text inverse> </Text> : null}
-          </Box>
+          {row.kind === "token" ? (
+            <FocusBand width={bandW} text={`  token ${status?.masked ?? ""}`} />
+          ) : (
+            <Box>
+              <Text dimColor>  token </Text>
+              <Text>{status?.masked}</Text>
+            </Box>
+          )}
+          {row.kind === "repo" ? (
+            <FocusBand width={bandW} text={`  repo  ${repoInput}`} cursor />
+          ) : (
+            <Box>
+              <Text dimColor>  repo  </Text>
+              <Text dimColor={!repoInput}>{repoInput || "owner/name or github.com URL"}</Text>
+            </Box>
+          )}
           <Box marginTop={1} flexDirection="column">
-            <Text color={focus === "skills" ? colors.iqCyan : colors.dim}>{focus === "skills" ? "▸ " : "  "}skills this repo used</Text>
-            {owned.length === 0 ? (
-              <Text dimColor>  no owned skills yet</Text>
+            <Text dimColor>  skills this repo used</Text>
+            {/* three honest states on the one reserved row: null = the wallet's skills
+                are still being fetched, so say loading; "no owned skills yet" may only
+                follow a settled empty fetch. */}
+            {owned === null ? (
+              <Text dimColor>    loading…</Text>
+            ) : ownedList.length === 0 ? (
+              <Text dimColor>    no owned skills yet</Text>
             ) : (
-              owned.map((s, i) => {
+              ownedList.map((s, i) => {
                 const on = !!selected[s.id];
-                const cursor = focus === "skills" && i === skillIdx;
+                if (row.kind === "skill" && row.skill === i) {
+                  return <FocusBand key={s.id} width={bandW} text={`    ${on ? "[x]" : "[ ]"} ${s.name}`} />;
+                }
                 return (
                   <Box key={s.id}>
-                    <Text color={cursor ? colors.iqCyan : colors.dim}>{cursor ? "  ▸ " : "    "}</Text>
-                    <Text color={on ? colors.ok : colors.dim}>{on ? "[x]" : "[ ]"} </Text>
+                    <Text color={on ? colors.ok : colors.dim}>{"    "}{on ? "[x]" : "[ ]"} </Text>
                     <Text color={on ? colors.bone : colors.dim}>{s.name}</Text>
                   </Box>
                 );
               })
             )}
           </Box>
-          {blockReason ? <Box marginTop={1}><Text color={colors.warn}>{blockReason}</Text></Box> : null}
+          {/* The REGISTER action row, always visible and honest: the go text when it
+              can fire, otherwise the ONE gate reason, rendered here and only here. */}
+          <Box marginTop={1}>
+            {(() => {
+              const label = blockReason
+                ? ` ${blockReason}`
+                : ` register ${chosen} skill${chosen === 1 ? "" : "s"} to ${repoLabel}`;
+              if (row.kind === "register") return <FocusBand width={bandW} text={label} />;
+              return blockReason
+                ? <Text dimColor>{label}</Text>
+                : <Text bold color={colors.ok}>{label}</Text>;
+            })()}
+          </Box>
           {flash ? <Box marginTop={1}><Text color={colors.ok}>{glyph.sparkle} {flash}</Text></Box> : null}
           <Box marginTop={1}>
-            <Text dimColor>[tab] field · [space] toggle skill · ↵ register · [x] remove token · esc back</Text>
+            <Text dimColor>
+              {row.kind === "token"
+                ? "up/down move · enter edit token · [x] remove · esc back"
+                : row.kind === "repo"
+                  ? "type the repo · up/down move · enter next · esc back"
+                  : row.kind === "skill"
+                    ? "up/down move · enter toggle · esc back"
+                    : blockReason
+                      ? "up/down move · esc back"
+                      : "enter register · esc back"}
+            </Text>
           </Box>
         </Box>
       )}

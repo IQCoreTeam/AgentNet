@@ -43,7 +43,12 @@ export function useChat(
   opts: { cli: Engine; model?: string; effort?: EffortLevel; cwd: string; resume?: string; approval?: ApprovalChannel },
 ) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [sessions, setSessions] = useState<SessionMeta[]>([]);
+  // null = the first listSessions has not settled (the WelcomePanel null-means-loading
+  // convention): the session picker says loading instead of "no sessions yet" while the
+  // list is still being read. sessionsError carries a failed read's message (cleared on
+  // the next successful refresh), mirroring loadSessionError below.
+  const [sessions, setSessions] = useState<SessionMeta[] | null>(null);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [cli, setCli] = useState<Engine>(opts.cli);
   const [model, setModel] = useState<string | undefined>(opts.model);
@@ -113,7 +118,15 @@ export function useChat(
   const backfillToken = useRef(0);
 
   const refreshSessions = useCallback(async () => {
-    setSessions(await runtime.listSessions());
+    // never throws: several callers fire-and-forget this (turn end, /sessions), so a
+    // failed read lands in sessionsError for the picker to show instead of rejecting
+    // into the void. A failure keeps any previously loaded list (settled data).
+    try {
+      setSessions(await runtime.listSessions());
+      setSessionsError(null);
+    } catch (e) {
+      setSessionsError(e instanceof Error ? e.message : String(e));
+    }
   }, [runtime]);
 
   // turn timer: tick elapsed while busy.
@@ -478,6 +491,7 @@ export function useChat(
   return {
     messages,
     sessions,
+    sessionsError,
     busy,
     cli,
     model,

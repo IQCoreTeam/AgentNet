@@ -22,6 +22,23 @@ export const colors = {
   danger: "#ff3b30", // hard danger (destructive command / gated), distinct from err text
 } as const;
 
+// Reputation metals: the tier ladder's visual identity (design tab 20's rank column).
+// Each rank owns one truecolor tone that reads distinctly on the near-black ground:
+// bronze is a copper, silver a cool grey-white (cooler than bone so the two never blur),
+// gold the warm gold the palette already knows, legendary the signal green the ladder
+// legend teaches. Every screen that shows a rank routes through tierColor so a badge,
+// a ladder rung, and the legend can never disagree about what a tier looks like.
+export const tierColors: Record<string, string> = {
+  bronze: "#cd7f32",
+  silver: "#c8ccd4",
+  gold: "#e3b341",
+  legendary: "#3fd96f",
+};
+
+// tierColor("Gold") → that rank's tone; unranked/unknown falls back to structural grey.
+export const tierColor = (name?: string | null): string =>
+  (name && tierColors[name.toLowerCase()]) || colors.dim;
+
 // Structural surfaces from the design that are NOT brand colors: the panel backgrounds,
 // rails, and separators used to LAYER a panel above the chat (the design's overlays rise
 // out of the footer instead of replacing the frame). Kept apart from `colors` so the brand

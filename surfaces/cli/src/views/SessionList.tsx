@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
 import type { SessionMeta } from "@iqlabs-official/agent-sdk/runtime/contract";
 import { colors, copy, glyph, rule, tag } from "../theme.js";
-import { displayWidth, graphemes } from "../format.js";
+import { displayWidth, padCells, truncateEnd } from "../format.js";
 
 // Compact uppercase age, design-project style: 12S / 5M / 2H / 3D.
 function age(ts: number): string {
@@ -13,19 +13,16 @@ function age(ts: number): string {
   return `${Math.floor(s / 86400)}D`;
 }
 
-// Pad/trim a string to an exact CELL width (Hangul/CJK count 2) so the inverted
-// rows form a solid rectangle.
-function cell(s: string, w: number): string {
-  let out = "";
-  let used = 0;
-  for (const ch of graphemes(s)) {
-    const cw = displayWidth(ch);
-    if (used + cw > w) break;
-    out += ch;
-    used += cw;
-  }
-  return out + " ".repeat(Math.max(0, w - used));
-}
+// One source for the footer keys: the styled row and its width budget both read
+// this list, so the hint can never advertise a key the row does not draw.
+const FOOTER_KEYS: Array<[string, string]> = [
+  ["↑↓", "MOVE"],
+  ["↵", "RESUME"],
+  ["F", "FORK"],
+  ["D", "DELETE"],
+  ["ESC", "BACK"],
+];
+const footerKeysPlain = FOOTER_KEYS.map(([k, v]) => `${k} ${v}`).join("  ");
 
 // Session picker, tab 07 of the design: sessions STACK VERTICALLY, one row each behind
 // bone rules. The selected row inverts edge to edge and grows a meta sub-line (age,
@@ -36,6 +33,7 @@ function cell(s: string, w: number): string {
 // (the chat survives in terminal scrollback) instead of stacking under it.
 export function SessionList({
   sessions,
+  error,
   activeId,
   cloud,
   onResume,
@@ -43,7 +41,11 @@ export function SessionList({
   onFork,
   onClose,
 }: {
-  sessions: SessionMeta[];
+  // null = the first listSessions has not settled: the body says loading, never the
+  // "no sessions yet" empty copy, and the header count waits for a real number.
+  sessions: SessionMeta[] | null;
+  // a failed listSessions read (only shown when there is no settled list to render)
+  error?: string | null;
   activeId?: string;
   cloud: string | null;
   onResume: (id: string) => void;
@@ -51,26 +53,61 @@ export function SessionList({
   onFork: (id: string) => void;
   onClose: () => void;
 }) {
+  const list = sessions ?? []; // mechanics treat pending as empty; render tells them apart
   const [idx, setIdx] = useState(0);
-  const clamped = Math.min(idx, Math.max(0, sessions.length - 1));
+  const clamped = Math.min(idx, Math.max(0, list.length - 1));
   const cols = process.stdout.columns || 80;
   const rows = process.stdout.rows || 24;
   // A framed panel floating on a cleared screen, not a full-bleed sheet: the wrapper
   // below fills the whole terminal, which pushes the chat into the terminal's own
   // scrollback (scroll up and it's all still there) and gives the picker real margins.
-  const totalW = Math.max(44, Math.min(cols - 8, 84));
+  // Never wider than the terminal: below 52 cols the old 44 floor pushed rows
+  // past the frame and ate the right border.
+  const totalW = Math.min(cols, Math.max(44, Math.min(cols - 8, 84)));
   const w = totalW - 4; // bold border (2) + paddingX(1) each side
+
+  // Column budgets from the frame width. Meta drops whole before the title ever
+  // starves - the title is the row's identity, so it keeps at least TITLE_MIN
+  // cells and cuts with an ellipsis; the age column goes first, the live tag
+  // only under ~25 cols. List-wide flags, so columns stay aligned across rows.
+  const TITLE_MIN = 12;
+  const liveW = displayWidth("● LIVE");
+  const showAge = w - 8 - liveW - 1 >= TITLE_MIN; // 8 = "  " + age slot (4) + "  "
+  const showLive = w - 2 - liveW - 1 >= TITLE_MIN;
+
+  // Header and footer shrink the same way: the meta side goes first (encrypted
+  // note, then the count; the sync label), the keys collapse to a plain
+  // ellipsized row only when even they alone cannot fit.
+  const headTag = tag("sessions");
+  // the count is a claim about a settled list: while the fetch is pending the header
+  // keeps ENCRYPTED alone instead of asserting "0 SESSIONS".
+  const countLabel = sessions === null ? null : `${list.length} SESSION${list.length === 1 ? "" : "S"}`;
+  const headRoom = w - displayWidth(headTag) - 2;
+  const headNote =
+    countLabel === null
+      ? displayWidth("ENCRYPTED") <= headRoom
+        ? "ENCRYPTED"
+        : ""
+      : displayWidth(`${countLabel} · ENCRYPTED`) <= headRoom
+        ? `${countLabel} · ENCRYPTED`
+        : displayWidth(countLabel) <= headRoom
+          ? countLabel
+          : "";
+  const syncLabel = cloud ? `SYNC: ${cloud.toUpperCase()} ◉` : "LOCAL ONLY ○";
+  const keysW = displayWidth(footerKeysPlain);
+  const showSync = keysW + 2 + displayWidth(syncLabel) <= w;
+  const styledKeys = keysW <= w;
 
   useInput((input, key) => {
     if (key.escape) return onClose();
-    if (sessions.length === 0) return;
+    if (list.length === 0) return;
     if (key.upArrow) return setIdx(() => Math.max(0, clamped - 1));
-    if (key.downArrow) return setIdx(() => Math.min(sessions.length - 1, clamped + 1));
-    if (key.return) onResume(sessions[clamped].sessionId);
-    else if (input === "f") onFork(sessions[clamped].sessionId);
+    if (key.downArrow) return setIdx(() => Math.min(list.length - 1, clamped + 1));
+    if (key.return) onResume(list[clamped].sessionId);
+    else if (input === "f") onFork(list[clamped].sessionId);
     else if (input === "d") {
-      onDelete(sessions[clamped].sessionId);
-      setIdx((i) => Math.max(0, Math.min(i, sessions.length - 2)));
+      onDelete(list[clamped].sessionId);
+      setIdx((i) => Math.max(0, Math.min(i, list.length - 2)));
     }
   });
 
@@ -78,21 +115,28 @@ export function SessionList({
   // rows + rule, the rest 1 + rule, plus the frame's chrome (border 2, paddingY 2,
   // header+rule 2, closing rule+footer 2, MORE indicators 2).
   const maxVisible = Math.max(3, Math.floor((rows - 13) / 2));
-  const start = Math.min(Math.max(0, clamped - Math.floor(maxVisible / 2)), Math.max(0, sessions.length - maxVisible));
-  const visible = sessions.slice(start, start + maxVisible);
+  const start = Math.min(Math.max(0, clamped - Math.floor(maxVisible / 2)), Math.max(0, list.length - maxVisible));
+  const visible = list.slice(start, start + maxVisible);
   const above = start;
-  const below = sessions.length - start - visible.length;
+  const below = list.length - start - visible.length;
 
   return (
     <Box height={Math.max(10, rows - 1)} width={cols} justifyContent="center" alignItems="center">
       <Box flexDirection="column" width={totalW} borderStyle="bold" borderColor={colors.bone} paddingX={1} paddingY={1}>
       <Box justifyContent="space-between">
-        <Text color={colors.bone} bold>{tag("sessions")}</Text>
-        <Text dimColor>{sessions.length} SESSION{sessions.length === 1 ? "" : "S"} · ENCRYPTED</Text>
+        <Text color={colors.bone} bold>{headTag}</Text>
+        {headNote ? <Text dimColor>{headNote}</Text> : null}
       </Box>
       <Text color={colors.bone}>{rule(w)}</Text>
 
-      {sessions.length === 0 ? (
+      {/* three honest states on the one reserved row: pending says loading, a read
+          that failed with nothing to show says what failed, and the empty copy may
+          only follow a SETTLED empty list. */}
+      {sessions === null && error ? (
+        <Text color={colors.err}>{truncateEnd(`could not load sessions · ${error}`, w)}</Text>
+      ) : sessions === null ? (
+        <Text dimColor>loading sessions…</Text>
+      ) : list.length === 0 ? (
         <Text dimColor>{copy.emptySessions}</Text>
       ) : (
         <>
@@ -106,10 +150,10 @@ export function SessionList({
             // fixed column now carries the AGE instead (right-aligned so the titles line up);
             // the live session still gets ● LIVE on the right edge.
             const ageSlot = age(s.ts).padStart(4);
-            const liveTag = live ? "● LIVE" : "";
+            const liveTag = live && showLive ? "● LIVE" : "";
 
             if (!focused) {
-              const prefix = `  ${ageSlot}  `;
+              const prefix = showAge ? `  ${ageSlot}  ` : "  ";
               // Trim the title to ONE line. An untruncated long title wraps to 2-3 rows,
               // and enough wrapped rows push the windowed box past the terminal height,
               // which trips ink's full-repaint and smears the whole list into scrollback -
@@ -122,7 +166,7 @@ export function SessionList({
                   <Box width={w} justifyContent="space-between">
                     <Text wrap="truncate-end">
                       <Text dimColor>{prefix}</Text>
-                      <Text color={colors.bone}>{cell(s.title || "untitled", titleMax)}</Text>
+                      <Text color={colors.bone}>{padCells(truncateEnd(s.title || "untitled", titleMax), titleMax)}</Text>
                     </Text>
                     {liveTag ? <Text color={colors.ok}>{liveTag}</Text> : null}
                   </Box>
@@ -132,16 +176,19 @@ export function SessionList({
 
             // Age already shows in the left slot, so the meta line carries engine + device.
             const meta = [`${engine} ${s.cli}`, s.lastDevice?.label].filter(Boolean).join(" · ");
+            const agePart = showAge ? `${ageSlot}  ` : "";
+            const bodyW = Math.max(0, w - 3 - displayWidth(liveTag) - 1);
+            const titleRoom = Math.max(1, bodyW - displayWidth(agePart));
             return (
               <React.Fragment key={s.sessionId}>
                 {vi > 0 ? <Text color={colors.bone}>{rule(w)}</Text> : null}
                 <Text backgroundColor={colors.bone} bold>
                   <Text color={colors.ok}> ❯ </Text>
-                  <Text color={colors.ink}>{cell(`${ageSlot}  ${s.title || "untitled"}`, Math.max(0, w - 3 - displayWidth(liveTag) - 1))}</Text>
+                  <Text color={colors.ink}>{padCells(agePart + truncateEnd(s.title || "untitled", titleRoom), bodyW)}</Text>
                   <Text color={live ? colors.ok : colors.ink}>{liveTag ? `${liveTag} ` : ""}</Text>
                 </Text>
                 <Text backgroundColor={colors.bone} color={colors.ink}>
-                  {cell(`        ${meta}`, w)}
+                  {padCells(truncateEnd(`${showAge ? "        " : "   "}${meta}`, w), w)}
                 </Text>
               </React.Fragment>
             );
@@ -154,14 +201,19 @@ export function SessionList({
       {/* The how-to row: keys read at full strength, verbs stay dim — the guidance has
           to survive next to the inverted selection without shouting over it. */}
       <Box justifyContent="space-between">
-        <Text>
-          <Text color={colors.bone} bold>↑↓</Text><Text dimColor> MOVE  </Text>
-          <Text color={colors.ok} bold>↵</Text><Text dimColor> RESUME  </Text>
-          <Text color={colors.bone} bold>F</Text><Text dimColor> FORK  </Text>
-          <Text color={colors.bone} bold>D</Text><Text dimColor> DELETE  </Text>
-          <Text color={colors.bone} bold>ESC</Text><Text dimColor> BACK</Text>
-        </Text>
-        <Text dimColor>{cloud ? `SYNC: ${cloud.toUpperCase()} ◉` : "LOCAL ONLY ○"}</Text>
+        {styledKeys ? (
+          <Text>
+            {FOOTER_KEYS.map(([k, v], i) => (
+              <React.Fragment key={k}>
+                <Text color={k === "↵" ? colors.ok : colors.bone} bold>{k}</Text>
+                <Text dimColor> {v}{i < FOOTER_KEYS.length - 1 ? "  " : ""}</Text>
+              </React.Fragment>
+            ))}
+          </Text>
+        ) : (
+          <Text dimColor>{truncateEnd(footerKeysPlain, w)}</Text>
+        )}
+        {showSync ? <Text dimColor>{syncLabel}</Text> : null}
       </Box>
       </Box>
     </Box>

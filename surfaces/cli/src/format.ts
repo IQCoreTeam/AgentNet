@@ -190,3 +190,19 @@ export function truncateStart(s: string, width: number): string {
   while (tail.length > 1 && displayWidth(`…${tail}`) > width) tail = tail.slice(1);
   return `…${tail}`;
 }
+
+// Fit to `width` cells keeping the HEAD, with a trailing ellipsis when cut. Cell-aware
+// (wide glyphs count 2) and cluster-aware: the cut lands between grapheme clusters, so
+// an emoji or a composed glyph is dropped whole, never split into a broken surrogate.
+export function truncateEnd(s: string, width: number): string {
+  if (displayWidth(s) <= width) return s;
+  let head = "";
+  let used = 0;
+  for (const g of graphemes(s)) {
+    const cw = displayWidth(g);
+    if (used + cw + 1 > width) break; // reserve the ellipsis cell
+    head += g;
+    used += cw;
+  }
+  return `${head}…`;
+}

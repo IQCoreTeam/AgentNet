@@ -106,6 +106,10 @@ export interface ToolAction {
   command?: string; // shell command (Bash / codex command_execution)
   output?: string; // command stdout/stderr or result text
   exitCode?: number; // process exit code, when known
+  // true = the approval gate refused this call (user deny / codex declined item). The
+  // tool never ran, so there is no exitCode; surfaces render this from the approval
+  // outcome instead of guessing success from a missing exit code.
+  denied?: boolean;
   file?: string; // target file (Edit / Write / Read)
   diff?: string; // unified-ish diff for edits ("-old" / "+new" lines)
 }
@@ -226,6 +230,10 @@ export interface SessionMeta {
   cli: "claude" | "codex";
   ts: number; // last updated
   lastDevice?: { id: string; label: string };
+  // the model/effort the session last ran with (absent = engine default), so a
+  // resume can restore them instead of silently switching to another model
+  model?: string;
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
 }
 
 // what gets encrypted to storage (CLI-neutral, so codex↔claude + cross-device)
@@ -236,4 +244,6 @@ export interface CanonicalSession {
   messages: ChatMessage[];
   ts: number;
   lastDevice?: { id: string; label: string };
+  model?: string;
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
 }

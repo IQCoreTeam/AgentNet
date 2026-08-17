@@ -4,19 +4,45 @@ import type { ChatMessage } from "@iqlabs-official/agent-sdk/runtime/contract";
 import { glyph, colors, tag, surface } from "../theme.js";
 import { ToolCard } from "./ToolCard.js";
 import { Markdown } from "./Markdown.js";
-import { wrapBlock, padCells } from "../format.js";
+import { wrapBlock, padCells, truncateEnd } from "../format.js";
+
+// Inner width of a full-width turn band: the frame's paddingX (2) plus the band's own
+// "❯ " prefix (2). ONE function, read at render time (a module const would freeze the
+// width at import and miss resizes), shared by the row counter and both band renderers
+// so a budget can never count a different wrap than the one that paints.
+function bandInnerW(): number {
+  return Math.max(10, (process.stdout.columns || 80) - 4);
+}
+
+// Painted text rows of the pinned TurnHeader for `text` at the current terminal width -
+// the same wrap the component renders, so a frame budget can count exactly what will
+// paint (the detail views' mainLines/mainViewportH pattern: one source for the row
+// count and the render). Excludes the component's marginTop; the caller counts that.
+export function turnHeaderRows(text: string, maxRows?: number): number {
+  const n = wrapBlock(text, bandInnerW()).length;
+  return maxRows !== undefined ? Math.min(n, Math.max(1, maxRows)) : n;
+}
 
 // The ONE inverted band on screen: the turn currently running, pinned above its streaming
 // reply so you can still read what you asked (the design's tab 09 "PINNED" header, and the
 // terminal's stand-in for the webview's scroll-pinned header). Settled turns in scrollback
 // do NOT use this - they render calm via <UserLine> - so the transcript is never a wall of
 // inverted bars. Reserving the invert for the live turn is what keeps a long chat scannable.
-export function TurnHeader({ text }: { text: string }) {
-  const inner = Math.max(10, (process.stdout.columns || 80) - 4); // frame paddingX + "> "
+//
+// `maxRows` clamps the band to a budgeted row count (Chat passes it while a tool approval
+// is pinned, where every band shares one terminal-height budget): the head rows survive -
+// the ask's opening words are what identify it - and the cut is marked with an ellipsis.
+export function TurnHeader({ text, maxRows }: { text: string; maxRows?: number }) {
+  const inner = bandInnerW();
   const lines = wrapBlock(text, inner);
+  const budget = maxRows !== undefined ? Math.max(1, maxRows) : lines.length;
+  const shown =
+    lines.length > budget
+      ? [...lines.slice(0, budget - 1), truncateEnd(lines.slice(budget - 1).join(" "), inner)]
+      : lines;
   return (
     <Box flexDirection="column" marginTop={1}>
-      {lines.map((l, i) => (
+      {shown.map((l, i) => (
         <Text key={i} backgroundColor={colors.bone} color={colors.ink} bold>
           {i === 0 ? "❯ " : "  "}
           {padCells(l, inner)}
@@ -31,7 +57,7 @@ export function TurnHeader({ text }: { text: string }) {
 // So a long scrollback reads as a ladder of subtle grey bars you can scan for your own
 // words, while the bright bone invert is reserved for the single live turn (TurnHeader).
 function UserLine({ text }: { text: string }) {
-  const inner = Math.max(10, (process.stdout.columns || 80) - 4);
+  const inner = bandInnerW();
   const lines = wrapBlock(text, inner);
   return (
     <Box flexDirection="column" marginTop={1}>

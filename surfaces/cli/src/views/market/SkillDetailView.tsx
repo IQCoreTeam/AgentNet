@@ -2,11 +2,14 @@
 // required-skills checkmarks + prices + "Collect all", full (scrollable) SKILL.md,
 // full comment stack, dispose/re-equip, firing pulse on owned/deployed.
 import React from "react";
-import { Box, Text } from "ink";
+import { Box, Text, useStdout } from "ink";
 import type { SkillDetail, Note } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../../theme.js";
+import { displayWidth, truncateEnd, truncateStart, wrapBlock } from "../../format.js";
 import { ScrollView } from "./ScrollView.js";
 import { Band } from "../../components/Band.js";
+import { walletColor, walletFace } from "./avatar.js";
+import { mintArt } from "./cardart.js";
 
 export type DetailSub = "main" | "skillText" | "comments";
 
@@ -23,6 +26,186 @@ function shortMint(m?: string): string {
   return m && m.length > 12 ? `${m.slice(0, 6)}…${m.slice(-4)}` : m ?? "";
 }
 
+// Every row of the main body, each pre-bounded to exactly ONE terminal row: the viewport
+// below slices this array by index, so a row that wrapped would break the scroll math
+// (and, before this, the hashtag chips and long names wrapped into fragments at narrow
+// widths). Exported so SkillMarket's input handler clamps the scroll against the same
+// list it renders. `cols` is the raw terminal width; the frame's border+padding come off
+// here so both callers agree.
+export function mainLines(detail: SkillDetail, owned: Set<string>, cols: number): React.ReactNode[] {
+  const w = Math.max(12, cols - 4);
+  const c = detail.card;
+  const requiredCards = detail.requiredCards ?? [];
+  const unownedRequired = requiredCards.filter((r) => !owned.has(r.name));
+  const totalSol = unownedRequired.reduce((sum, r) => sum + (r.price ? Number(r.price) / 1e9 : 0), 0);
+  const lines: React.ReactNode[] = [];
+  // one blank row before each block after the first, the same rhythm the unscrolled
+  // layout had from its marginTop gaps.
+  const gap = (k: string) => { if (lines.length) lines.push(<Text key={k}> </Text>); };
+
+  // design 08/24: the card leads with its art ("THE CARD IS THE PRODUCT"). This is
+  // the deterministic offline layer design 10 names for terminals without an image
+  // protocol: 3 cell rows of mint-hash half-block pixels in the mint's own hue, the
+  // same art for the same mint on every open. Each art row is exactly one line node
+  // so the viewport slice math holds; runs of identical colors collapse into one
+  // span per stretch to keep the frame lean.
+  for (const [ri, row] of mintArt(c.id, Math.min(24, w), 3).entries()) {
+    const spans: React.ReactNode[] = [];
+    let start = 0;
+    for (let x = 1; x <= row.length; x++) {
+      if (x === row.length || row[x].fg !== row[start].fg || row[x].bg !== row[start].bg) {
+        spans.push(
+          <Text key={start} color={row[start].fg} backgroundColor={row[start].bg}>
+            {"▀".repeat(x - start)}
+          </Text>,
+        );
+        start = x;
+      }
+    }
+    lines.push(<Box key={`art-${ri}`}>{spans}</Box>);
+  }
+
+  if (c.description) {
+    gap("g-desc");
+    wrapBlock(c.description, w).forEach((l, i) => lines.push(<Text key={`d-${i}`}>{l}</Text>));
+  }
+
+  if (c.category || (c.hashtags && c.hashtags.length)) {
+    gap("g-chips");
+    const cat = c.category ? truncateEnd(c.category, w) : "";
+    const tagRoom = w - displayWidth(cat) - (cat ? 1 : 0);
+    const tags = tagRoom >= 2 ? truncateEnd((c.hashtags ?? []).map((h) => `#${h}`).join(" "), tagRoom) : "";
+    lines.push(
+      <Box key="chips">
+        {cat ? <Text color={colors.iqViolet}>{cat}{tags ? " " : ""}</Text> : null}
+        {tags ? <Text dimColor>{tags}</Text> : null}
+      </Box>,
+    );
+  }
+
+  if (requiredCards.length) {
+    gap("g-req");
+    lines.push(<Text key="req" dimColor>requires:</Text>);
+    for (const r of requiredCards) {
+      const reqOwned = owned.has(r.name);
+      const tail = reqOwned ? "owned" : r.price ? `${(Number(r.price) / 1e9).toFixed(3)} SOL` : "free";
+      lines.push(
+        <Box key={`r-${r.id}`}>
+          <Text color={reqOwned ? colors.ok : colors.warn}>{reqOwned ? glyph.ok : "○"} </Text>
+          <Text>{truncateEnd(r.name, Math.max(2, w - 2 - displayWidth(tail) - 2))}</Text>
+          <Text dimColor>  {tail}</Text>
+        </Box>,
+      );
+    }
+    if (unownedRequired.length > 0) {
+      lines.push(
+        <Text key="collect" color={colors.iqCyan}>
+          {truncateEnd(`[x] collect all ${unownedRequired.length}${totalSol ? ` · ${totalSol.toFixed(3)} SOL` : ""}`, w)}
+        </Text>,
+      );
+    }
+  }
+
+  if (detail.repos && detail.repos.length) {
+    gap("g-repos");
+    lines.push(<Box key="repos"><Band label="used by" note="VERIFIED REPOS · WHERE STARS COME FROM" /></Box>);
+    for (const r of detail.repos) {
+      const stars = `★${r.stars}`;
+      lines.push(
+        // repo ★ counts are dim metadata, matching the profile's verified-repo rows:
+        // the same datum rendered amber here and dim there taught two codes for one
+        // thing (and amber is reserved for caution on this surface).
+        <Box key={`repo-${r.url}`}>
+          <Text color={colors.iqCyan}>  {truncateEnd(`${r.owner}/${r.name}`, Math.max(2, w - 4 - displayWidth(stars) - 2))}</Text>
+          <Text dimColor>  {stars}</Text>
+        </Box>,
+      );
+    }
+  }
+
+  if (detail.skillText) {
+    gap("g-md");
+    lines.push(<Text key="md" dimColor>{truncateEnd(`── SKILL.md (${detail.skillText.split("\n").length} lines) ──`, w)}</Text>);
+    const preview = detail.skillText.slice(0, 300) + (detail.skillText.length > 300 ? "…" : "");
+    wrapBlock(preview, w).forEach((l, i) => lines.push(<Text key={`md-${i}`}>{l}</Text>));
+    lines.push(<Text key="md-open" color={colors.iqCyan}>[v] view full</Text>);
+  }
+
+  gap("g-k");
+  lines.push(<Text key="k" dimColor>[k] comments ({(detail.notes ?? []).length})</Text>);
+  return lines;
+}
+
+// The main body's viewport height: what remains of the terminal after the fixed chrome
+// (borders, header, name row, gaps, flash, buy band, hints, scroll position row) plus one
+// row of slack - ink switches to its full-repaint path at outputHeight >= rows, which is
+// exactly what left stale detail rows smeared behind short terminals. Never taller than
+// the content, so a short detail stays compact. Shared by the render and the key clamp.
+export function mainViewportH(rows: number, total: number): number {
+  // floor of 2: the chrome around the viewport is ~9 rows, so a floor of 4 pushed the
+  // frame to 13 rows and clipped the top border on a 12 row terminal.
+  return Math.min(Math.max(2, rows - 15), total);
+}
+
+// SKILL.md subview rows: the raw file lines hard-wrapped to the content width, so one
+// array entry is exactly one terminal row. The subview used to slice 16 RAW file lines,
+// and a line that wraps 2-3x at narrow columns pushed the frame past the terminal (top
+// border scrolled off, stale rows survived esc at 40x38). Exported so SkillMarket's key
+// handler clamps the scroll against the same rows the view renders.
+export function skillTextLines(detail: SkillDetail, cols: number): string[] {
+  const w = Math.max(12, cols - 4);
+  return wrapBlock(detail.skillText ?? "", w);
+}
+
+// Comments subview rows, one node per terminal row (author row, wrapped quote rows,
+// wrapped git link rows), for the same reason as skillTextLines: slice math is only true
+// when a slice index equals a screen row, and a note used to be one multi-row node.
+export function commentLines(notes: Note[], cols: number, selfWallet?: string): React.ReactNode[] {
+  const w = Math.max(12, cols - 4);
+  // wallet-face identity sheds first at narrow widths, same rule as the directory rows
+  const showFace = w >= 24;
+  const shortA = (a: string) => (a.length > 9 ? `${a.slice(0, 4)}…${a.slice(-4)}` : a);
+  const lines: React.ReactNode[] = [];
+  for (const n of notes) {
+    // each note now leads with WHO wrote it (design tab 22: identity is the thread's
+    // whole language; the comment stream here was anonymous): wallet face + short
+    // wallet, the viewer's own notes marked // YOU in green, the date as a dim tail.
+    // Still exactly ONE terminal row: the tail pieces shed (date first, then the YOU
+    // tag) and the author truncates before the row could ever wrap.
+    const room = Math.max(1, w - 2 - (showFace ? 4 : 0));
+    const authorShown = truncateEnd(shortA(n.author ?? "?"), room);
+    const you = selfWallet && n.author === selfWallet ? " // YOU" : "";
+    const dateTail = `  ${noteDate(n.timestamp)}`;
+    const youShown = displayWidth(authorShown) + displayWidth(you) <= room ? you : "";
+    const tailShown =
+      displayWidth(authorShown) + displayWidth(youShown) + displayWidth(dateTail) <= room ? dateTail : "";
+    lines.push(
+      <Text key={`${n.id}-d`}>
+        {"  "}
+        {showFace ? <Text color={walletColor(n.author ?? "?")}>{walletFace(n.author ?? "?")} </Text> : null}
+        <Text color={colors.iqCyan}>{authorShown}</Text>
+        {youShown ? <Text color={colors.ok}>{youShown}</Text> : null}
+        {tailShown ? <Text dimColor>{tailShown}</Text> : null}
+      </Text>,
+    );
+    wrapBlock(`"${n.text}"`, Math.max(1, w - 2)).forEach((l, i) => lines.push(<Text key={`${n.id}-t${i}`}>  {l}</Text>));
+    if (n.gitLink) {
+      wrapBlock(`${glyph.sparkle} ${n.gitLink}`, Math.max(1, w - 4)).forEach((l, i) =>
+        lines.push(<Text key={`${n.id}-g${i}`} dimColor>    {l}</Text>),
+      );
+    }
+  }
+  return lines;
+}
+
+// Subview viewport height: what remains of the terminal after the subview chrome (two
+// border rows, title, two gaps, scroll position row, hint row = 7) plus one row of
+// slack, for the same ink full-repaint reason as mainViewportH. Never taller than the
+// content. Shared by both subviews and the key clamp, replacing the constants 16 and 12.
+export function subViewportH(rows: number, total: number): number {
+  return Math.min(Math.max(2, rows - 9), total);
+}
+
 export function SkillDetailView({
   detail,
   owned,
@@ -33,6 +216,7 @@ export function SkillDetailView({
   firing,
   flash,
   busy,
+  walletAddr,
 }: {
   detail: SkillDetail;
   owned: Set<string>;
@@ -43,111 +227,109 @@ export function SkillDetailView({
   firing: boolean;
   flash: string | null;
   busy: boolean;
+  // the viewer's wallet: commentLines marks their own notes // YOU
+  walletAddr?: string;
 }) {
   const c = detail.card;
   const notes = detail.notes ?? [];
-  const requiredCards = detail.requiredCards ?? [];
-  const unownedRequired = requiredCards.filter((r) => !owned.has(r.name));
-  const totalSol = unownedRequired.reduce((sum, r) => sum + (r.price ? Number(r.price) / 1e9 : 0), 0);
+  const stdoutMain = useStdout().stdout; // || not ??: detached pty reports 0 rows/cols
+  const colsMain = stdoutMain?.columns || 80;
+  const rowsMain = stdoutMain?.rows || 24;
+
+  // both subviews: wrapped rows sized to the terminal, title and hint bounded to one
+  // row each, so the frame never outgrows the terminal at narrow widths.
+  const subInnerW = Math.max(12, colsMain - 4);
 
   if (sub === "skillText") {
-    const bodyLines = (detail.skillText ?? "").split("\n");
+    const bodyLines = skillTextLines(detail, colsMain);
+    const height = subViewportH(rowsMain, bodyLines.length);
     return (
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
-        <Text bold color={colors.iqMagenta}>❖ {c.name} · SKILL.md</Text>
+        <Text bold color={colors.iqMagenta}>{truncateEnd(`❖ ${c.name} · SKILL.md`, subInnerW)}</Text>
         <Box marginTop={1}>
-          <ScrollView lines={bodyLines} height={16} offset={scrollOffset} />
+          <ScrollView lines={bodyLines} height={height} offset={scrollOffset} />
         </Box>
-        <Box marginTop={1}><Text dimColor>↑/↓/PgUp/PgDn scroll · esc back</Text></Box>
+        <Box marginTop={1}><Text dimColor>{truncateEnd("↑/↓/PgUp/PgDn scroll · esc back", subInnerW)}</Text></Box>
       </Box>
     );
   }
 
   if (sub === "comments") {
-    const lines = notes.map((n: Note) => (
-      <Box key={n.id} flexDirection="column">
-        <Text dimColor>  {noteDate(n.timestamp)}</Text>
-        <Text>  "{n.text}"</Text>
-        {n.gitLink ? <Text dimColor>    {glyph.sparkle} {n.gitLink}</Text> : null}
-      </Box>
-    ));
+    const lines = commentLines(notes, colsMain, walletAddr);
+    const height = subViewportH(rowsMain, lines.length);
     return (
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
-        <Text bold color={colors.iqMagenta}>❖ {c.name} · comments ({notes.length})</Text>
+        <Text bold color={colors.iqMagenta}>{truncateEnd(`❖ ${c.name} · comments (${notes.length})`, subInnerW)}</Text>
         <Box marginTop={1}>
-          {notes.length === 0 ? <Text dimColor>no comments yet</Text> : <ScrollView lines={lines} height={12} offset={scrollOffset} />}
+          {notes.length === 0 ? <Text dimColor>no comments yet</Text> : <ScrollView lines={lines} height={height} offset={scrollOffset} />}
         </Box>
-        <Box marginTop={1}><Text dimColor>↑/↓/PgUp/PgDn scroll · esc back</Text></Box>
+        <Box marginTop={1}><Text dimColor>{truncateEnd("↑/↓/PgUp/PgDn scroll · esc back", subInnerW)}</Text></Box>
       </Box>
     );
   }
 
-  // main
+  // main - fixed chrome (header, name, band, hints) around a line viewport, the same
+  // shape the skillText/comments subviews use, so a fat detail scrolls on a short
+  // terminal instead of emitting a 44+ row frame ink cannot erase.
   const kindWord = (c.type ?? "skill").toUpperCase();
+  const lines = mainLines(detail, owned, colsMain);
+  const height = mainViewportH(rowsMain, lines.length);
+  const scrolls = lines.length > height;
+  // the two chrome rows above the viewport, budgeted to ONE terminal row each:
+  // unbudgeted, the header (kind + mint + soulbound) wrapped into two fused rows at 30
+  // cols and a long name clipped with no ellipsis. The mint keeps its END visible
+  // (truncateStart): the tail is what identifies it. When everything fits, the shown
+  // strings are the originals, so wide terminals render byte identical.
+  const innerW = Math.max(12, colsMain - 4);
+  const bond = c.type === "workflow" ? " · soulbound token-2022" : " · soulbound";
+  const mintRoom = Math.max(4, innerW - displayWidth(kindWord) - 2);
+  const mintShown = truncateStart(shortMint(c.id), mintRoom);
+  const bondRoom = mintRoom - displayWidth(mintShown);
+  const bondShown = displayWidth(bond) <= bondRoom ? bond : bondRoom >= 4 ? truncateEnd(bond, bondRoom) : "";
+  const fireW = firing ? 2 : 0;
+  const statsTail = `  ×${c.supply ?? 0}${c.stars ? ` · ★${c.stars}` : ""}${isOwned ? (disposed ? " · disposed" : " · owned") : ""}`;
+  const statsRoom = Math.max(0, innerW - fireW - Math.min(displayWidth(c.name), 12));
+  const statsShown = displayWidth(statsTail) <= statsRoom ? statsTail : statsRoom >= 4 ? truncateEnd(statsTail, statsRoom) : "";
+  const nameShown = truncateEnd(c.name, Math.max(2, innerW - fireW - displayWidth(statsShown)));
+  // the FIXED hint row carries the live comment count: the body's counter line sits
+  // inside the scroll region, so on short terminals a fresh post's increment was
+  // invisible without scrolling down to it. Budgeted to one row: the scroll piece
+  // drops first (the viewport's own arrow row still shows scrollability), then the
+  // row cuts with an ellipsis as the last resort.
+  const hintLead = busy ? "working…" : isOwned ? (disposed ? "[e] re-equip · " : "[d] dispose · ") : "[b] buy · ";
+  // the count leads the tail so a narrow cut takes [v] SKILL.md and esc back first;
+  // those keys still work, the count is the piece with nowhere else to live.
+  const hintTail = `[c] comment · [k] comments (${notes.length}) · [v] SKILL.md · esc back`;
+  // narrow fallback: the count is the piece this row exists to carry, so below the
+  // width where the long tail fits it shortens to [k] (N) instead of cutting it off.
+  const hintShort = `[c] comment · [k] (${notes.length}) · [v] SKILL.md · esc back`;
+  const hintFull = `${hintLead}${scrolls ? "↑/↓ scroll · " : ""}${hintTail}`;
+  const hint = displayWidth(hintFull) <= innerW ? hintFull
+    : displayWidth(`${hintLead}${hintTail}`) <= innerW ? `${hintLead}${hintTail}`
+    : displayWidth(`${hintLead}${hintShort}`) <= innerW ? `${hintLead}${hintShort}`
+    : truncateEnd(`${hintLead}${hintShort}`, innerW);
   return (
     <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
       <Box justifyContent="space-between">
         <Text bold color={colors.bone}>{kindWord}</Text>
-        <Text dimColor>{shortMint(c.id)}{c.type === "workflow" ? " · soulbound token-2022" : " · soulbound"}</Text>
+        <Text dimColor>{mintShown}{bondShown}</Text>
       </Box>
       <Box marginTop={1}>
-        <Text bold color={colors.iqCyan}>{c.name}</Text>
+        <Text bold color={colors.iqCyan}>{nameShown}</Text>
         {firing ? <Text color={colors.iqMagenta}> ✦</Text> : null}
-        <Text dimColor>  ×{c.supply ?? 0}{c.stars ? ` · ★${c.stars}` : ""}{isOwned ? (disposed ? " · disposed" : " · owned") : ""}</Text>
+        {/* green asserts ownership everywhere it appears (list chip OWNED, profile
+            skill rows); this " · owned" tail was the one dim outlier. The word turns
+            green only when the width budget kept it whole; a cut tail stays dim. */}
+        {isOwned && !disposed && statsShown.endsWith(" · owned") ? (
+          <>
+            <Text dimColor>{statsShown.slice(0, -"owned".length)}</Text>
+            <Text color={colors.ok}>owned</Text>
+          </>
+        ) : (
+          <Text dimColor>{statsShown}</Text>
+        )}
       </Box>
-      {c.description ? <Text>{c.description}</Text> : null}
-      {c.category || (c.hashtags && c.hashtags.length) ? (
-        <Box marginTop={1}>
-          {c.category ? <Text color={colors.iqViolet}>{c.category} </Text> : null}
-          {(c.hashtags ?? []).map((h) => (
-            <Text key={h} dimColor>#{h} </Text>
-          ))}
-        </Box>
-      ) : null}
-
-      {requiredCards.length ? (
-        <Box flexDirection="column" marginTop={1}>
-          <Text dimColor>requires:</Text>
-          {requiredCards.map((r) => {
-            const reqOwned = owned.has(r.name);
-            const priceSol = r.price ? (Number(r.price) / 1e9).toFixed(3) : null;
-            return (
-              <Box key={r.id}>
-                <Text color={reqOwned ? colors.ok : colors.warn}>{reqOwned ? glyph.ok : "○"} </Text>
-                <Text>{r.name}</Text>
-                <Text dimColor>  {reqOwned ? "owned" : priceSol ? `${priceSol} SOL` : "free"}</Text>
-              </Box>
-            );
-          })}
-          {unownedRequired.length > 0 ? (
-            <Text color={colors.iqCyan}>[x] collect all {unownedRequired.length}{totalSol ? ` · ${totalSol.toFixed(3)} SOL` : ""}</Text>
-          ) : null}
-        </Box>
-      ) : null}
-
-      {detail.repos && detail.repos.length ? (
-        <Box flexDirection="column" marginTop={1}>
-          <Band label="used by" note="VERIFIED REPOS · WHERE STARS COME FROM" />
-          {detail.repos.map((r) => (
-            <Box key={r.url}>
-              <Text color={colors.iqCyan}>  {r.owner}/{r.name}</Text>
-              <Text color={colors.warn}>  ★{r.stars}</Text>
-            </Box>
-          ))}
-        </Box>
-      ) : null}
-
-      {detail.skillText ? (
-        <Box flexDirection="column" marginTop={1}>
-          <Text dimColor>── SKILL.md ({detail.skillText.split("\n").length} lines) ──</Text>
-          <Text>{detail.skillText.slice(0, 300)}{detail.skillText.length > 300 ? "…" : ""}</Text>
-          <Text color={colors.iqCyan}>[v] view full</Text>
-        </Box>
-      ) : null}
-
-      <Box marginTop={1}>
-        <Text dimColor>[k] comments ({notes.length})</Text>
-      </Box>
+      <ScrollView lines={lines} height={height} offset={scrollOffset} />
 
       {flash ? <Box marginTop={1}><Text color={colors.ok}>{glyph.sparkle} {flash}</Text></Box> : null}
       <Box marginTop={1}>
@@ -157,15 +339,11 @@ export function SkillDetailView({
           inverted
         />
       </Box>
-      <Box marginTop={1}>
-        <Text dimColor>
-          {busy ? "working…" : isOwned
-            ? disposed
-              ? "[e] re-equip · "
-              : "[d] dispose · "
-            : "[b] buy · "}
-          [c] comment · [v] SKILL.md · [k] comments · esc back
-        </Text>
+      {/* on a 12 row terminal every band above keeps its one row only because this
+          gap goes: the hint hugs the buy band instead of pushing the frame to the
+          exact terminal height, where the top border scrolls off. */}
+      <Box marginTop={rowsMain <= 12 ? 0 : 1}>
+        <Text dimColor>{hint}</Text>
       </Box>
     </Box>
   );

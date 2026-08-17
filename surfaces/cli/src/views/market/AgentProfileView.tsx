@@ -2,10 +2,12 @@
 // tier tag + gauge + ladder, earned SOL, verified GitHub repos, blog carousel, full
 // comment stack, buy-all with count feedback, self-only "write a blog post" entry.
 import React from "react";
-import { Box, Text } from "ink";
+import { Box, Text, useStdout } from "ink";
 import type { AgentProfile, SkillCard, Note } from "@iqlabs-official/agent-sdk";
-import { colors, glyph } from "../../theme.js";
-import { tierInfo, tierGauge, repoGauge, STAR_TIERS } from "./tiers.js";
+import { colors, glyph, tierColor } from "../../theme.js";
+import { displayWidth } from "../../format.js";
+import { tierInfo, tierGauge, TierGauge, repoGauge, STAR_TIERS } from "./tiers.js";
+import { walletColor, walletFace } from "./avatar.js";
 import { ScrollView } from "./ScrollView.js";
 import { Band } from "../../components/Band.js";
 
@@ -31,6 +33,7 @@ export function AgentProfileView({
   sub,
   scrollOffset,
   self,
+  walletAddr,
 }: {
   profile: AgentProfile;
   owned: Set<string>;
@@ -39,8 +42,15 @@ export function AgentProfileView({
   sub: ProfileSub;
   scrollOffset: number;
   self: boolean;
+  // the VIEWER's wallet: marks their own comments "// YOU" in the threads
+  // (design tab 22); `self` above is about the profile's subject, not the viewer.
+  walletAddr?: string;
 }) {
   const r = profile.reputation;
+  // wallet-face identity (design tab 20 //AVATAR_): same wallet, same face on the
+  // hero and on every comment author. Sheds below 40 cols like the directory rows.
+  const cols = useStdout().stdout?.columns || 80;
+  const showFace = cols >= 40;
   const stars = r.stars ?? 0;
   const { cur, next } = tierInfo(stars);
   // Threads arrive pre-grouped from the host (GH #101). Blog = the agent's own posts;
@@ -79,10 +89,19 @@ export function AgentProfileView({
   if (sub === "comments") {
     // Each thread: the top-level comment, then its replies indented with an ↳ and
     // (when the reply answered a deeper comment) a → to whom.
+    // every author carries their wallet face, and the viewer's own comments say
+    // // YOU in green (design tab 22's thread identity language).
+    const author = (wallet: string) => (
+      <>
+        {showFace ? <Text color={walletColor(wallet)}>{walletFace(wallet)} </Text> : null}
+        <Text color={colors.iqCyan}>{short(wallet)}</Text>
+        {walletAddr && wallet === walletAddr ? <Text color={colors.ok}> // YOU</Text> : null}
+      </>
+    );
     const lines = commentThreads.flatMap((t) => [
       <Box key={t.note.id} flexDirection="column">
         <Text>
-          <Text color={colors.iqCyan}>{short(t.note.author)}</Text>
+          {author(t.note.author)}
           <Text dimColor>  {noteDate(t.note.timestamp)}</Text>
         </Text>
         {t.note.title ? <Text bold>{t.note.title}</Text> : null}
@@ -93,7 +112,7 @@ export function AgentProfileView({
         <Box key={rep.id} flexDirection="column" marginLeft={2}>
           <Text>
             <Text dimColor>↳ </Text>
-            <Text color={colors.iqCyan}>{short(rep.author)}</Text>
+            {author(rep.author)}
             <Text dimColor>  {noteDate(rep.timestamp)}{rep.parentAuthor ? ` → ${short(rep.parentAuthor)}` : ""}</Text>
           </Text>
           {rep.title ? <Text bold>{rep.title}</Text> : null}
@@ -161,14 +180,34 @@ export function AgentProfileView({
 
   // main
   const held = self ? profile.createdSkills?.length ?? 0 : heldFromAgent;
+  // The tier row and the ladder are measured against the frame's inner width
+  // (cols minus border 2 and paddingX 2) so a narrow terminal sheds whole
+  // pieces instead of letting ink wrap them mid-word into a two-line jumble.
+  const innerW = Math.max(12, cols - 4);
+  // "  to Silver" is an appendix on the gauge row; it sheds whole when the row
+  // cannot seat it (the gauge's own "74/250" count still names the progress).
+  const showTo = next != null && displayWidth(`tier  ${tierGauge(stars)}  to ${next.name}`) <= innerW;
+  // Ladder rungs shed right to left below the ladder's natural width, the same
+  // idiom the directory row and the hero use for the wallet face: a rung renders
+  // whole (name, count, decorations) or not at all, never as a wrapped fragment.
+  let ladderUsed = displayWidth("ladder");
+  const rungs: typeof STAR_TIERS = [];
+  for (const t of STAR_TIERS) {
+    const w = 1 + displayWidth(`${t.name}(${t.min})`);
+    if (ladderUsed + w > innerW) break;
+    rungs.push(t);
+    ladderUsed += w;
+  }
   return (
     <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
       <Box justifyContent="space-between">
         <Text bold color={colors.bone}>
-          AGENT  <Text color={colors.iqCyan}>{short(r.wallet)}</Text>
+          AGENT  {showFace ? <Text color={walletColor(r.wallet)}>{walletFace(r.wallet)} </Text> : null}
+          <Text color={colors.iqCyan}>{short(r.wallet)}</Text>
           {self ? <Text color={colors.ok}> // YOU</Text> : null}
         </Text>
-        <Text color={cur ? colors.warn : colors.dim}>{cur ? cur.name.toUpperCase() : "UNRANKED"}</Text>
+        {/* the hero badge wears its metal, the same tierColor the directory row uses */}
+        <Text color={cur ? tierColor(cur.name) : colors.dim}>{cur ? cur.name.toUpperCase() : "UNRANKED"}</Text>
       </Box>
       {/* big-number stat row, like the design's profile hero */}
       <Box marginTop={1}>
@@ -176,14 +215,27 @@ export function AgentProfileView({
         <Box width={16}><Text><Text bold color={colors.bone}>{r.totalSupply}</Text><Text dimColor> COPIES</Text></Text></Box>
         <Box width={16}><Text><Text bold color={colors.bone}>{held}</Text><Text dimColor> OWNED</Text></Text></Box>
       </Box>
+      {/* the single MAX on this row belongs to the gauge itself (tiers.tsx paints
+          it green); appending another word here is what printed "MAX  MAX" */}
       <Box marginTop={1}>
-        <Text dimColor>tier  </Text><Text>{tierGauge(stars)}</Text>
-        {next ? <Text dimColor>  to {next.name}</Text> : <Text color={colors.ok}>  MAX</Text>}
+        <Text dimColor>tier  </Text><TierGauge stars={stars} />
+        {next && showTo ? <Text dimColor>  to {next.name}</Text> : null}
       </Box>
+      {/* each rung wears its own metal once reached; the rung you stand on is inverted
+          so CURRENT pops out of the flood of rungs passed long ago. Unreached = dim. */}
       <Box>
         <Text dimColor>ladder</Text>
-        {STAR_TIERS.map((t) => (
-          <Text key={t.name} color={stars >= t.min ? colors.ok : colors.dim}> {t.name}({t.min})</Text>
+        {rungs.map((t) => (
+          <Text key={t.name}>
+            {" "}
+            <Text
+              color={stars >= t.min ? tierColor(t.name) : colors.dim}
+              bold={cur?.name === t.name}
+              inverse={cur?.name === t.name}
+            >
+              {t.name}({t.min})
+            </Text>
+          </Text>
         ))}
       </Box>
       <Box marginTop={1}>

@@ -13,12 +13,17 @@ export interface RpcStatusLite {
   network: "devnet" | "mainnet";
 }
 
+// The badge's copy as plain text: HeliusBadge renders exactly this string, and
+// SkillMarket measures displayWidth of it to decide whether the badge fits the header
+// row. One source of truth, so the measurement can never drift from the render.
+export function heliusBadgeText(status: RpcStatusLite | null): string {
+  if (!status) return "";
+  return status.hasKey ? `● ${status.network} · ${status.masked}` : "add a Helius key for faster results";
+}
+
 export function HeliusBadge({ status }: { status: RpcStatusLite | null }) {
   if (!status) return null;
-  if (status.hasKey) {
-    return <Text color={colors.ok}>● {status.network} · {status.masked}</Text>;
-  }
-  return <Text color={colors.warn}>add a Helius key for faster results</Text>;
+  return <Text color={status.hasKey ? colors.ok : colors.warn}>{heliusBadgeText(status)}</Text>;
 }
 
 export function HeliusPanel({

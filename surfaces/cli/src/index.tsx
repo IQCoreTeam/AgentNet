@@ -18,6 +18,10 @@ import { installStdoutFilter } from "./cursorPin.js";
 // to a log file instead (same content, just not in front of the user), unless the user asked
 // for exactly this kind of visibility (AGENTNET_DEBUG, or AGENTNET_PERF for the traffic-audit
 // [perf] lines) — then leave the real console methods alone.
+// Process-level warnings (the punycode DeprecationWarning class) get the same treatment but
+// must be caught earlier: they fire while the dependency chunks evaluate, before any code in
+// this module runs, so that capture lives in the tsup banner (see tsup.config.ts). It logs
+// them to the same file below.
 function quietDiagnosticsToFile() {
   if (process.env.AGENTNET_DEBUG || process.env.AGENTNET_PERF) return;
   const logFile = join(homedir(), ".agentnet", "cli-debug.log");
@@ -98,7 +102,9 @@ program
   .description("resume a saved session by id")
   .action((sessionId, _opts, cmd) => {
     const g = cmd.parent.opts();
-    launch({ cli: g.cli, cwd: g.cwd, keypair: g.keypair, model: g.model, resume: sessionId }, g.calm);
+    // pass --effort through like --model: `agentnet --effort high resume <id>` used to
+    // silently drop it, so the flag could never override the session's saved effort.
+    launch({ cli: g.cli, cwd: g.cwd, keypair: g.keypair, model: g.model, effort: g.effort, resume: sessionId }, g.calm);
   });
 
 // agentnet doctor → quick non-TUI engine install/login report.

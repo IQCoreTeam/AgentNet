@@ -136,6 +136,8 @@ export function createRuntime(
             title: resumeResult.title ?? "",
             ts: Date.now(),
             lastDevice: device,
+            model: opts.model,
+            effort: opts.effort,
           });
         }
       }
@@ -191,7 +193,9 @@ export function createRuntime(
       const compactCbs: Array<() => void> = [];
       const pending: ChatMessage[] = []; // messages awaiting a known sessionId
 
-      const meta = () => ({ sessionId, cli: opts.cli, title, ts: Date.now(), lastDevice: device });
+      // Meta snapshots stamp the session's CURRENT settings (model/effort) so a later
+      // resume can restore them instead of silently switching to the default model.
+      const meta = () => ({ sessionId, cli: opts.cli, title, ts: Date.now(), lastDevice: device, model: opts.model, effort: opts.effort });
 
       // Show the message to the UI, then append it to the encrypted log. Stamp the
       // producing CLI on every message so the UI badges each turn with the right

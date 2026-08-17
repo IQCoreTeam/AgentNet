@@ -56,12 +56,16 @@ function splitAtCell(row: string, cell: number): [string, string, string] {
 export function Composer({
   cwd,
   onSubmit,
+  onHelp,
   disabled,
   maxRows,
   history = [],
 }: {
   cwd: string;
   onSubmit: (text: string, images?: ImageInput[]) => void;
+  // "?" pressed on an empty buffer (the footer advertises "? /HELP"). Only the composer
+  // knows the buffer is empty, so the routing decision has to live here.
+  onHelp: () => void;
   disabled?: boolean;
   // Rows this band may occupy. Chat owns it: it is the only place that knows what the
   // rest of the frame already costs, so the composer must not guess its own share.
@@ -272,6 +276,9 @@ export function Composer({
       }
       if (key.leftArrow) return setCursor((c) => Math.max(0, c - 1));
       if (key.rightArrow) return setCursor((c) => Math.min(value.length, c + 1));
+      // "?" on an EMPTY composer opens help, keeping the footer's "? /HELP" promise.
+      // With anything typed (or an image awaiting a caption), "?" is just a character.
+      if (input === "?" && value.length === 0 && attached.length === 0) return onHelp();
       if (input && !key.ctrl && !key.meta) insertAt(input); // printable / paste (may include \n)
     },
     { isActive: !disabled },

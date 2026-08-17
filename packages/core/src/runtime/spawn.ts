@@ -337,6 +337,20 @@ function claudeEngine(opts: SpawnOpts): Engine {
   const actionKey = (req: ApprovalRequest) =>
     req.kind === "bash" ? `bash:${req.command}` : `${req.tool}:${req.file || ""}`;
 
+  // A canUseTool deny reaches the output stream only as an is_error tool_result whose
+  // content is the deny message we returned, which used to render as a FAILED RUN of a
+  // command that never ran (and left the tool_use card reading as success; issue 167).
+  // Remember each interactive deny here so the echo can be recognized (exact message
+  // match) and surfaced as an explicit denial record instead. Cleared on turn end.
+  const pendingDenials: { name: string; message: string }[] = [];
+  function markIfDenied(cm: ChatMessage): ChatMessage {
+    if (cm.role !== "tool" || cm.tool?.exitCode !== 1) return cm;
+    const i = pendingDenials.findIndex((p) => p.message === (cm.tool?.output ?? "").trim());
+    if (i === -1) return cm;
+    const { name, message } = pendingDenials.splice(i, 1)[0];
+    return { ...cm, text: `${name} denied`, tool: { name, denied: true, output: message } };
+  }
+
   // canUseTool: claude calls this BEFORE each tool; we translate to a neutral
   // ApprovalRequest, await the channel, and map the decision back to the SDK shape.
   const canUseTool = async (toolName: string, input: Record<string, unknown>) => {
@@ -356,7 +370,9 @@ function claudeEngine(opts: SpawnOpts): Engine {
     if (allowed.has(key)) return { behavior: "allow" as const, updatedInput: input };
     const decision = await approval.request(req);
     if (decision.outcome === "deny") {
-      return { behavior: "deny" as const, message: decision.reason ?? "Denied by user" };
+      const message = decision.reason ?? "Denied by user";
+      pendingDenials.push({ name: toolName, message });
+      return { behavior: "deny" as const, message };
     }
     if (decision.outcome === "always") {
       allowed.add(key); // remember for the rest of the session
@@ -462,14 +478,14 @@ function claudeEngine(opts: SpawnOpts): Engine {
             cb.emitPartial({ ...cm, text: streamBuf });
           } else {
             if (cm.role === "assistant" && !cm.partial) streamBuf = ""; // final block arrived
-            cb.emitMsg(cm);
+            cb.emitMsg(markIfDenied(cm));
           }
         }
         if (r.contextTokens !== undefined) cb.emitUsage(r.contextTokens, defaultWindow("claude", opts.model));
         // claude surfaces a compaction as a "summary" record (compact_boundary); mirror it
         // as the explicit compaction cue so the UI behaves the same as it does for codex.
         if (r.messages.some((cm) => cm.role === "summary")) cb.emitCompact();
-        if (r.turnEnded) { streamBuf = ""; cb.emitTurn(); }
+        if (r.turnEnded) { streamBuf = ""; pendingDenials.length = 0; cb.emitTurn(); }
       }
     } catch (e) {
       cb.emitErr(`[claude engine] ${e instanceof Error ? e.message : String(e)}`);
@@ -685,7 +701,11 @@ function codexEngine(opts: SpawnOpts): Engine {
           role: "tool",
           text: it.command.split("\n")[0]?.slice(0, 80) || "bash",
           ts: Date.now(),
-          tool: { name: "Bash", command: it.command, output: (aggregatedOutput ?? "").slice(0, 4000), exitCode },
+          // a declined approval completes the item with status "declined" and no exit
+          // code; record the refusal instead of a run that never happened.
+          tool: it.status === "declined"
+            ? { name: "Bash", command: it.command, denied: true }
+            : { name: "Bash", command: it.command, output: (aggregatedOutput ?? "").slice(0, 4000), exitCode },
         });
       } else if ((it.type === "fileChange" || it.type === "file_change") && Array.isArray(it.changes)) {
         for (const c of it.changes) {
