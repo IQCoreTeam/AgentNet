@@ -512,6 +512,7 @@ interface Props {
 
 export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   const { state, send } = useStore();
+  const t = useT();
   const [tab, setTab] = useState<"agent" | "community">("agent");
   const [buyingAll, setBuyingAll] = useState(false);
   // Tap vs drag on the blog carousel: `down` tracks any in-progress gesture (mouse or touch),
@@ -522,6 +523,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   // (Pointer Events level 3), so the card's own click handler would never see a mouse tap.
   const blogDrag = useRef({ down: false, active: false, moved: false, captured: false, startX: 0, startY: 0, startLeft: 0 });
   const [openPost, setOpenPost] = useState<BlogNote | null>(null);
+  const [showAllPosts, setShowAllPosts] = useState(false);
   const [copied, setCopied] = useState(false);
   const avatar = useMemo(() => walletAvatarSvg(profile.wallet), [profile.wallet]);
   const [fabOpen, setFabOpen] = useState(false);
@@ -821,7 +823,14 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
               {/* BLOG — 90/10 peek carousel (one big card + a sliver of the next) */}
               {blogNotes.length > 0 && (
                 <div>
-                  <p className="mb-2 text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>Blog</p>
+                  <div className="mb-2 flex items-baseline justify-between">
+                    <p className="text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>Blog</p>
+                    {blogNotes.length > 1 && (
+                      <button onClick={() => setShowAllPosts(true)} className="text-[11px] lowercase active:opacity-70" style={{ color: "var(--an-fg-mute)" }}>
+                        {t(M.agentProfile.blog.viewAll)} ({blogNotes.length}) &gt;
+                      </button>
+                    )}
+                  </div>
                   <div
                     className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-2 outline-none [-webkit-overflow-scrolling:touch]"
                     tabIndex={0}
@@ -1072,6 +1081,29 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
       {composeMode === "repo" && (
         <Modal title="Register GitHub work" onClose={() => setComposeMode(null)}>
           {state.githubStatus?.hasToken ? <RegisterWorkRepo /> : <GithubTokenForm />}
+        </Modal>
+      )}
+
+      {/* All-posts list: the carousel stays the section's peek face; the full list rides the
+          same Modal + row idiom as the Verified work list. Tapping a row opens the reader. */}
+      {showAllPosts && (
+        <Modal title={t(M.agentProfile.blog.listTitle)} onClose={() => setShowAllPosts(false)}>
+          <div className="space-y-2">
+            {blogNotes.map((n) => (
+              <button
+                key={n.id}
+                onClick={() => { haptics.tick(); setShowAllPosts(false); setOpenPost(n); }}
+                className="flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left active:opacity-80"
+                style={{ background: "var(--an-bg-1)", borderColor: "var(--an-line)" }}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-xs font-semibold" style={{ color: "var(--an-fg)" }}>{n.title || t(M.menu.untitled)}</span>
+                  {n.text && <span className="mt-0.5 block truncate text-[10px]" style={{ color: "var(--an-fg-mute)" }}>{n.text}</span>}
+                </span>
+                {noteDate(n.timestamp) && <span className="ml-2 shrink-0 text-[11px]" style={{ color: "var(--an-fg-dim)" }}>{noteDate(n.timestamp)}</span>}
+              </button>
+            ))}
+          </div>
         </Modal>
       )}
 

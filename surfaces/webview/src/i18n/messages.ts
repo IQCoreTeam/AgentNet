@@ -192,6 +192,8 @@ export const M = {
   agentProfile: {
     blog: {
       postTitle: m("Blog Post", "블로그 글", "Пост блога"),
+      viewAll: m("view all", "전체 보기", "все записи"),
+      listTitle: m("All posts", "전체 글", "Все записи"),
     },
   },
 
