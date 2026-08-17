@@ -1028,9 +1028,15 @@ export function SkillMarket({
                         {cur ? cur.name.toUpperCase() : "UNRANKED"}
                       </Text>
                     </Box>
-                    <Text dimColor>
-                      {"    CREATED "}{a.skillsPublished}{" · COPIES "}{a.totalSupply}
-                      {" · ★"}{a.stars ?? 0}{earned ? ` · EARNED ${earned}` : ""}
+                    {/* earned SOL is green on the profile ("earned 0.70◎"); the same
+                        datum was dim here. One rule per datum: earned money is green
+                        on both reputation screens. The label stays dim metadata. */}
+                    <Text>
+                      <Text dimColor>
+                        {"    CREATED "}{a.skillsPublished}{" · COPIES "}{a.totalSupply}
+                        {" · ★"}{a.stars ?? 0}{earned ? " · EARNED " : ""}
+                      </Text>
+                      {earned ? <Text color={colors.ok}>{earned}</Text> : null}
                     </Text>
                     {on ? <Text>{"    "}<TierGauge stars={a.stars ?? 0} /></Text> : null}
                   </Box>
@@ -1243,7 +1249,14 @@ export function SkillMarket({
                     borderStyle="round"
                     borderColor={focused ? colors.iqCyan : colors.dim}
                   >
-                    <Text dimColor>[ {(off ? "off" : "owned").toUpperCase()} / SKILL ]</Text>
+                    {/* OWNED asserts ownership, so it is green here like everywhere
+                        else (list chip, profile rows); OFF stays dim, it asserts
+                        the opposite. The brackets stay structural dim. */}
+                    <Text>
+                      <Text dimColor>[ </Text>
+                      <Text color={off ? colors.dim : colors.ok}>{(off ? "off" : "owned").toUpperCase()}</Text>
+                      <Text dimColor> / SKILL ]</Text>
+                    </Text>
                     <Text color={focused ? colors.iqCyan : undefined} bold={focused}>
                       {s.name.slice(0, SKILL_CHIP_W - 4)}
                     </Text>

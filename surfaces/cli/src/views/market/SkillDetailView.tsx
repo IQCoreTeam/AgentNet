@@ -266,7 +266,17 @@ export function SkillDetailView({
       <Box marginTop={1}>
         <Text bold color={colors.iqCyan}>{nameShown}</Text>
         {firing ? <Text color={colors.iqMagenta}> ✦</Text> : null}
-        <Text dimColor>{statsShown}</Text>
+        {/* green asserts ownership everywhere it appears (list chip OWNED, profile
+            skill rows); this " · owned" tail was the one dim outlier. The word turns
+            green only when the width budget kept it whole; a cut tail stays dim. */}
+        {isOwned && !disposed && statsShown.endsWith(" · owned") ? (
+          <>
+            <Text dimColor>{statsShown.slice(0, -"owned".length)}</Text>
+            <Text color={colors.ok}>owned</Text>
+          </>
+        ) : (
+          <Text dimColor>{statsShown}</Text>
+        )}
       </Box>
       <ScrollView lines={lines} height={height} offset={scrollOffset} />
 

@@ -244,8 +244,11 @@ export function WelcomePanel({
       <Box key="skills" width={bandW}>
         <Text bold color={colors.bone}>{` ${tag("skills")}  `}</Text>
         <Text>
+          {/* non-dim pieces are exactly the wallet's OWNED skills (built-ins and the
+              market link are dim); green asserts ownership here the same way the
+              market chip's OWNED and the profile's owned rows do. */}
           {skillsValue.pieces.map((p, i) => (
-            <Text key={i} color={p.dim ? colors.dim : undefined}>{p.text}</Text>
+            <Text key={i} color={p.dim ? colors.dim : colors.ok}>{p.text}</Text>
           ))}
         </Text>
       </Box>
