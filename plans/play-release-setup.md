@@ -194,3 +194,22 @@ and that claude/codex reply. Any failure -> `adb logcat | grep -iE "avc|AgentNet
 - The AAB is never posted to the public `android-latest` release — that stays the sideload APK.
 - Do NOT enable minify/R8 shrink (kept off): the WebView + native bridge doesn't benefit and
   shrinking risks breaking reflection into the native/proot layer.
+- Signing lineage is per physical device. The Play build is signed with the Play App Signing key
+  (Google-managed); the sideload debug APK is signed with the shared debug keystore (SHA-1
+  353d80a2 is the UPLOAD key; the installed sideload cert is the debug key 4add0aec). Those are
+  different keys, so neither can update the other in place: `adb install -r` across lineages fails
+  with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. The only way across is uninstall + reinstall, which
+  WIPES app data (the on-device rootfs AND the local wallet key). The Play build is not debuggable,
+  so you cannot `run-as` to back its wallet up first. Rule: keep a dogfood device on ONE lineage
+  (if you sideload it, never also install the Play build on it), and back up the wallet (seed or
+  Drive) BEFORE any cross-lineage switch. Check the installed signer first with
+  `adb shell dumpsys package com.iqlabs.agentnet | grep -i signatures`.
+- Push-triggered CI gives the two channels DIFFERENT versionCodes (each workflow uses its own run
+  number: the AAB from android-release, the sideload APK from android-apk), so they will not share
+  one sequence unless you pass `-f version_code=<n>` on a manual dispatch. Harmless because the two
+  lineages are separate installs anyway, but do not expect the sideload number to match Play's.
+- Sideload smoke-test on a real device: `adb install -r` (or uninstall + install across lineages),
+  then wake and UNLOCK the screen (a secure keyguard blocks foreground launch and makes screencap
+  come back black), `adb shell svc power stayon true` so it does not re-lock mid-test, then
+  `adb shell am start -n com.iqlabs.agentnet/.MainActivity`. First run shows the reworked onboarding
+  while the rootfs extracts; confirm the welcome tutorial renders in the device language.
