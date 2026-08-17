@@ -145,6 +145,16 @@ export function SkillMarket({
   owned?: OwnedSkill[];
 }) {
   const [stage, setStage] = useState<Stage>(initialStage ?? "list");
+  // Esc unwinds to where the user actually came from. /github, /agents and /skills
+  // open the market already jumped to an inner stage, so the user arrived from CHAT
+  // and never saw the list; esc on that entry stage closes the market (onClose)
+  // instead of stranding them on the list. Entered from the list ([g], [a]), the
+  // same esc returns to the list exactly as before. Deeper stages are untouched.
+  const entryStage: Stage = initialStage ?? "list";
+  function backOut(from: Stage) {
+    if (from === entryStage) onClose();
+    else setStage("list");
+  }
   const [kind, setKind] = useState<"skill" | "workflow">("skill");
   const [marketSort, setMarketSort] = useState<"supply" | "stars">("supply"); // GH #89 ranking
   const [query, setQuery] = useState("");
@@ -599,7 +609,7 @@ export function SkillMarket({
       if (!githubStatus?.hasToken || ghTokenEditing) {
         if (key.escape) {
           if (githubStatus?.hasToken) { setGhTokenEditing(false); return; }
-          setStage("list"); setGhFlash(null); return;
+          setGhFlash(null); backOut("github"); return;
         }
         if (githubStatus?.hasToken && (key.upArrow || key.downArrow)) {
           setGhTokenEditing(false);
@@ -618,7 +628,7 @@ export function SkillMarket({
         if (input && !key.ctrl && !key.meta) { setGhTokenInput((v) => v + input); return; }
         return;
       }
-      if (key.escape) { setStage("list"); setGhFlash(null); return; }
+      if (key.escape) { setGhFlash(null); backOut("github"); return; }
       // ONE vertical focus list (order lives in githubRowAt): up/down walk it from
       // anywhere, including the repo input; tab and shift-tab cycle it as an alternate
       // but are never required. Enter acts on whichever row holds focus.
@@ -714,11 +724,11 @@ export function SkillMarket({
       if (agentTyping) {
         if (key.return || key.downArrow) { setAgentTyping(false); setAgentIdx(0); return; }
         if (key.backspace || key.delete) { setAgentQuery((q) => q.slice(0, -1)); return; }
-        if (key.escape) { setStage("list"); setAgents([]); setError(null); return; }
+        if (key.escape) { setAgents([]); setError(null); backOut("agents"); return; }
         if (input && !key.ctrl && !key.meta) { setAgentQuery((q) => q + input); return; }
         return;
       }
-      if (key.escape) { setStage("list"); setAgents([]); setError(null); return; }
+      if (key.escape) { setAgents([]); setError(null); backOut("agents"); return; }
       if (input === "/") { setAgentTyping(true); return; }
       if (key.upArrow) { if (agentIdx === 0) { setAgentTyping(true); return; } return setAgentIdx((i) => Math.max(0, i - 1)); }
       if (key.downArrow) return setAgentIdx((i) => Math.min(filtered.length - 1, i + 1));
@@ -832,7 +842,7 @@ export function SkillMarket({
     // ── owned collection ───────────────────────────────────────────────────
     if (stage === "owned") {
       const cur = ownedCollection[Math.min(ownedIdx, ownedCollection.length - 1)];
-      if (key.escape) { setStage("list"); return; }
+      if (key.escape) { backOut("owned"); return; }
       if (key.return && cur) void openDetail(cur.id);
       return;
     }
@@ -1165,7 +1175,7 @@ export function SkillMarket({
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
         <Text bold color={colors.iqMagenta}>❖ my skills</Text>
         {ownedCollection.length === 0 ? (
-          <Box marginTop={1}><Text dimColor>no skills owned yet · buy one in the market (esc)</Text></Box>
+          <Box marginTop={1}><Text dimColor>no skills owned yet · /market buys one</Text></Box>
         ) : (
           <Box marginTop={1}>
             <ChipCarousel
@@ -1203,7 +1213,7 @@ export function SkillMarket({
         {loading ? <Box marginTop={1}><Text dimColor>opening…</Text></Box> : null}
         {flash ? <Box marginTop={1}><Text color={colors.ok}>{glyph.sparkle} {flash}</Text></Box> : null}
         <Box marginTop={1}>
-          <Text dimColor>←/→ rotate · ↵ open detail · esc market</Text>
+          <Text dimColor>←/→ rotate · ↵ open detail · esc chat</Text>
         </Box>
       </Box>
     );

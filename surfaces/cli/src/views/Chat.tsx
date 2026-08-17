@@ -1511,7 +1511,9 @@ export function Chat({
   );
 
   // skill-market overlay — search/list/detail/buy over marketplaceEnv. Takes over input
-  // while open; Esc backs out a level (or closes from the list), like the VSCode market.
+  // while open; Esc backs out a level, and on the stage the user entered at (list for
+  // /market, github/agents/owned for /github, /agents, /skills via initialStage) it
+  // closes the market back to chat, never a list the user hasn't visited.
   // The transcript's <Static> MUST stay mounted above the overlay. Returning SkillMarket
   // alone unmounted it, and ink (5.2.1) never clears rootNode.staticNode when a <Static>
   // leaves the tree while removeChild frees its whole yoga subtree; every later market
