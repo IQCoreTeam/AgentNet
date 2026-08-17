@@ -51,11 +51,15 @@ export function tierGauge(stars: number, segments = 15): string {
 // (they shipped amber-vs-bone). Lit segments signal green, the rest and the count dim.
 export function TierGauge({ stars, segments = 15 }: { stars: number; segments?: number }) {
   const p = tierGaugeParts(stars, segments);
+  // The gauge owns its ONE terminal label: at MAX the word wears the same green as
+  // the lit segments (an achieved state, like owned and earned), while a progress
+  // count ("74/250") stays dim metadata. Render sites must never append their own
+  // MAX beside this component; the profile hero once did and printed "MAX  MAX".
   return (
     <Text>
       <Text color={colors.ok}>{p.lit}</Text>
       <Text dimColor>{p.unlit}</Text>
-      <Text dimColor>{p.label}</Text>
+      {p.label === " MAX" ? <Text color={colors.ok}>{p.label}</Text> : <Text dimColor>{p.label}</Text>}
     </Text>
   );
 }

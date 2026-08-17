@@ -990,6 +990,13 @@ export function SkillMarket({
     // display lines per agent under the title/search/bands chrome.
     const vis = Math.max(2, Math.min(filtered.length, Math.floor((agentRows - 11) / 2)));
     const aStart = Math.max(0, Math.min(agentIdx - Math.floor(vis / 2), Math.max(0, filtered.length - vis)));
+    // Footer budget: the tier legend sheds WHOLE below the width where the full hint
+    // and the full legend both fit (the sort chip and the wallet face shed the same
+    // way); the hint truncates only once the legend is gone. Unmeasured, the two
+    // fused into one wrapped run at 40 cols ("↵ profiBRONZE 3 · SILVER").
+    const agentHint = agentTyping ? "type to filter · ↵/↓ browse · esc close" : "↑/↓ move · ↵ profile · [/] search · esc back";
+    const legendPlain = "BRONZE 3 · SILVER 15 · GOLD 60 · LEGENDARY 250";
+    const showLegend = displayWidth(agentHint) + 2 + displayWidth(legendPlain) <= Math.max(12, marketCols - 4);
     return (
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
         <Box justifyContent="space-between">
@@ -1062,17 +1069,19 @@ export function SkillMarket({
           <Band label="rank" note="ONLY VERIFIED GITHUB STARS MOVE THE TIER. COPIES CANNOT BUY IT." inverted />
         </Box>
         <Box justifyContent="space-between">
-          <Text dimColor wrap="truncate-end">{agentTyping ? "type to filter · ↵/↓ browse · esc close" : "↑/↓ move · ↵ profile · [/] search · esc back"}</Text>
+          <Text dimColor wrap="truncate-end">{agentHint}</Text>
           {/* the legend is the color key the rows obey: every rung in its own metal */}
-          <Text>
-            <Text color={tierColors.bronze}>BRONZE 3</Text>
-            <Text dimColor> · </Text>
-            <Text color={tierColors.silver}>SILVER 15</Text>
-            <Text dimColor> · </Text>
-            <Text color={tierColors.gold}>GOLD 60</Text>
-            <Text dimColor> · </Text>
-            <Text color={tierColors.legendary}>LEGENDARY 250</Text>
-          </Text>
+          {showLegend ? (
+            <Text>
+              <Text color={tierColors.bronze}>BRONZE 3</Text>
+              <Text dimColor> · </Text>
+              <Text color={tierColors.silver}>SILVER 15</Text>
+              <Text dimColor> · </Text>
+              <Text color={tierColors.gold}>GOLD 60</Text>
+              <Text dimColor> · </Text>
+              <Text color={tierColors.legendary}>LEGENDARY 250</Text>
+            </Text>
+          ) : null}
         </Box>
       </Box>
     );

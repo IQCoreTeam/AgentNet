@@ -5,7 +5,8 @@ import React from "react";
 import { Box, Text, useStdout } from "ink";
 import type { AgentProfile, SkillCard, Note } from "@iqlabs-official/agent-sdk";
 import { colors, glyph, tierColor } from "../../theme.js";
-import { tierInfo, TierGauge, repoGauge, STAR_TIERS } from "./tiers.js";
+import { displayWidth } from "../../format.js";
+import { tierInfo, tierGauge, TierGauge, repoGauge, STAR_TIERS } from "./tiers.js";
 import { walletColor, walletFace } from "./avatar.js";
 import { ScrollView } from "./ScrollView.js";
 import { Band } from "../../components/Band.js";
@@ -48,7 +49,8 @@ export function AgentProfileView({
   const r = profile.reputation;
   // wallet-face identity (design tab 20 //AVATAR_): same wallet, same face on the
   // hero and on every comment author. Sheds below 40 cols like the directory rows.
-  const showFace = (useStdout().stdout?.columns || 80) >= 40;
+  const cols = useStdout().stdout?.columns || 80;
+  const showFace = cols >= 40;
   const stars = r.stars ?? 0;
   const { cur, next } = tierInfo(stars);
   // Threads arrive pre-grouped from the host (GH #101). Blog = the agent's own posts;
@@ -178,6 +180,24 @@ export function AgentProfileView({
 
   // main
   const held = self ? profile.createdSkills?.length ?? 0 : heldFromAgent;
+  // The tier row and the ladder are measured against the frame's inner width
+  // (cols minus border 2 and paddingX 2) so a narrow terminal sheds whole
+  // pieces instead of letting ink wrap them mid-word into a two-line jumble.
+  const innerW = Math.max(12, cols - 4);
+  // "  to Silver" is an appendix on the gauge row; it sheds whole when the row
+  // cannot seat it (the gauge's own "74/250" count still names the progress).
+  const showTo = next != null && displayWidth(`tier  ${tierGauge(stars)}  to ${next.name}`) <= innerW;
+  // Ladder rungs shed right to left below the ladder's natural width, the same
+  // idiom the directory row and the hero use for the wallet face: a rung renders
+  // whole (name, count, decorations) or not at all, never as a wrapped fragment.
+  let ladderUsed = displayWidth("ladder");
+  const rungs: typeof STAR_TIERS = [];
+  for (const t of STAR_TIERS) {
+    const w = 1 + displayWidth(`${t.name}(${t.min})`);
+    if (ladderUsed + w > innerW) break;
+    rungs.push(t);
+    ladderUsed += w;
+  }
   return (
     <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
       <Box justifyContent="space-between">
@@ -195,15 +215,17 @@ export function AgentProfileView({
         <Box width={16}><Text><Text bold color={colors.bone}>{r.totalSupply}</Text><Text dimColor> COPIES</Text></Text></Box>
         <Box width={16}><Text><Text bold color={colors.bone}>{held}</Text><Text dimColor> OWNED</Text></Text></Box>
       </Box>
+      {/* the single MAX on this row belongs to the gauge itself (tiers.tsx paints
+          it green); appending another word here is what printed "MAX  MAX" */}
       <Box marginTop={1}>
         <Text dimColor>tier  </Text><TierGauge stars={stars} />
-        {next ? <Text dimColor>  to {next.name}</Text> : <Text color={colors.ok}>  MAX</Text>}
+        {next && showTo ? <Text dimColor>  to {next.name}</Text> : null}
       </Box>
       {/* each rung wears its own metal once reached; the rung you stand on is inverted
           so CURRENT pops out of the flood of rungs passed long ago. Unreached = dim. */}
       <Box>
         <Text dimColor>ladder</Text>
-        {STAR_TIERS.map((t) => (
+        {rungs.map((t) => (
           <Text key={t.name}>
             {" "}
             <Text
