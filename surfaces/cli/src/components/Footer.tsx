@@ -49,7 +49,11 @@ export function Footer({
           keeps one honest gap from the shortcuts when the row is completely full. */}
       <Box paddingLeft={1}>
         <Box flexShrink={0}>
-          <Text color={busy ? colors.warn : colors.ok} bold>{"● "}</Text>
+          {/* green = a turn is running, same encoding the status row teaches one band
+              up (its busy label is signal green). The dot used to flip amber on busy
+              while the status row went green, two colors for one state on one screen.
+              Idle dims: nothing is happening, nothing asks for the eye. */}
+          <Text color={busy ? colors.ok : colors.dim} bold>{"● "}</Text>
           <Text color={colors.bone} bold>{cli.toUpperCase()}</Text>
         </Box>
         <Text dimColor wrap="truncate-end"> · {modelLabel}</Text>
