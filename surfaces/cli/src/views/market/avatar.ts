@@ -4,7 +4,8 @@
 // wallet: no storage, no network, and deterministic forever. One wallet, one face.
 
 // FNV-1a 32-bit: tiny, dependency-free, well distributed for short strings.
-function fnv1a(s: string): number {
+// Exported: cardart.ts seeds the mint art from the same hash primitive.
+export function fnv1a(s: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < s.length; i++) {
     h ^= s.charCodeAt(i);
@@ -15,7 +16,8 @@ function fnv1a(s: string): number {
 
 // hsl -> hex with saturation/lightness pinned where EVERY hue stays readable on the
 // near-black ground: dark hues would vanish into the ink, neon would fight the bone.
-function hslHex(h: number, s: number, l: number): string {
+// Exported: cardart.ts builds its duotone ramp from the same converter.
+export function hslHex(h: number, s: number, l: number): string {
   const sN = s / 100;
   const lN = l / 100;
   const a = sN * Math.min(lN, 1 - lN);

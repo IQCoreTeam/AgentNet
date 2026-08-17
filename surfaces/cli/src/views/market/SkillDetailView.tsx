@@ -9,6 +9,7 @@ import { displayWidth, truncateEnd, truncateStart, wrapBlock } from "../../forma
 import { ScrollView } from "./ScrollView.js";
 import { Band } from "../../components/Band.js";
 import { walletColor, walletFace } from "./avatar.js";
+import { mintArt } from "./cardart.js";
 
 export type DetailSub = "main" | "skillText" | "comments";
 
@@ -42,7 +43,30 @@ export function mainLines(detail: SkillDetail, owned: Set<string>, cols: number)
   // layout had from its marginTop gaps.
   const gap = (k: string) => { if (lines.length) lines.push(<Text key={k}> </Text>); };
 
+  // design 08/24: the card leads with its art ("THE CARD IS THE PRODUCT"). This is
+  // the deterministic offline layer design 10 names for terminals without an image
+  // protocol: 3 cell rows of mint-hash half-block pixels in the mint's own hue, the
+  // same art for the same mint on every open. Each art row is exactly one line node
+  // so the viewport slice math holds; runs of identical colors collapse into one
+  // span per stretch to keep the frame lean.
+  for (const [ri, row] of mintArt(c.id, Math.min(24, w), 3).entries()) {
+    const spans: React.ReactNode[] = [];
+    let start = 0;
+    for (let x = 1; x <= row.length; x++) {
+      if (x === row.length || row[x].fg !== row[start].fg || row[x].bg !== row[start].bg) {
+        spans.push(
+          <Text key={start} color={row[start].fg} backgroundColor={row[start].bg}>
+            {"▀".repeat(x - start)}
+          </Text>,
+        );
+        start = x;
+      }
+    }
+    lines.push(<Box key={`art-${ri}`}>{spans}</Box>);
+  }
+
   if (c.description) {
+    gap("g-desc");
     wrapBlock(c.description, w).forEach((l, i) => lines.push(<Text key={`d-${i}`}>{l}</Text>));
   }
 
