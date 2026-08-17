@@ -87,9 +87,12 @@ export function mainLines(detail: SkillDetail, owned: Set<string>, cols: number)
     for (const r of detail.repos) {
       const stars = `★${r.stars}`;
       lines.push(
+        // repo ★ counts are dim metadata, matching the profile's verified-repo rows:
+        // the same datum rendered amber here and dim there taught two codes for one
+        // thing (and amber is reserved for caution on this surface).
         <Box key={`repo-${r.url}`}>
           <Text color={colors.iqCyan}>  {truncateEnd(`${r.owner}/${r.name}`, Math.max(2, w - 4 - displayWidth(stars) - 2))}</Text>
-          <Text color={colors.warn}>  {stars}</Text>
+          <Text dimColor>  {stars}</Text>
         </Box>,
       );
     }

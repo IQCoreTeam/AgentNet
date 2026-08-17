@@ -1352,7 +1352,10 @@ export function SkillMarket({
           {showSortChip ? (
             <>
               <Text dimColor>   [s] sort </Text>
-              <Text color={marketSort === "stars" ? colors.warn : colors.dim}>{sortLabel}</Text>
+              {/* the non-default mode reads at full strength, not amber: amber is a
+                  caution color here (confirm, missing key), and a sort mode is not
+                  a warning. Bold bone = "this is the live mode", no hue claim. */}
+              <Text color={marketSort === "stars" ? colors.bone : colors.dim} bold={marketSort === "stars"}>{sortLabel}</Text>
             </>
           ) : null}
         </Box>
