@@ -4,12 +4,12 @@ import type { SkillCard, SkillDetail } from "@iqlabs-official/agent-sdk";
 import type { Reputation, AgentProfile } from "@iqlabs-official/agent-sdk";
 import { maskedHeliusKey, hasDasRpc, saveHeliusKey, getNetwork } from "@iqlabs-official/agent-sdk";
 import { saveGithubToken, loadGithubToken, maskedGithubToken, registerVerifiedWork, parseGithubRepo } from "@iqlabs-official/agent-sdk";
-import { colors, glyph } from "../theme.js";
+import { colors, glyph, tierColor, tierColors } from "../theme.js";
 import { displayWidth, truncateEnd, truncateStart } from "../format.js";
 import type { OwnedSkill } from "../components/WelcomePanel.js";
 import { ChipCarousel } from "../components/ChipCarousel.js";
 import { Band } from "../components/Band.js";
-import { tierInfo, tierGauge } from "./market/tiers.js";
+import { tierInfo, TierGauge } from "./market/tiers.js";
 import { AgentProfileView, type ProfileSub } from "./market/AgentProfileView.js";
 import { SkillDetailView, mainLines, mainViewportH, skillTextLines, commentLines, subViewportH, type DetailSub } from "./market/SkillDetailView.js";
 import { HeliusPanel, HeliusBadge, heliusBadgeText, type RpcStatusLite } from "./market/HeliusPanel.js";
@@ -112,9 +112,11 @@ function SkillChip({
       {/* the big supply number, like the design's card corner count */}
       <Box justifyContent="space-between">
         <Text bold color={colors.bone}>×{card.supply ?? 0}</Text>
+        {/* the grade wears its metal (tierColor), and the ★ count rides the same tint:
+            amber here made a Bronze chip indistinguishable from a Gold one. */}
         <Text>
-          {card.stars ? <Text color={colors.warn}>★{card.stars} </Text> : null}
-          {cur ? <Text color={colors.warn}>[{cur.name}]</Text> : null}
+          {card.stars ? <Text color={tierColor(cur?.name)}>★{card.stars} </Text> : null}
+          {cur ? <Text color={tierColor(cur.name)}>[{cur.name}]</Text> : null}
         </Text>
       </Box>
       <Box justifyContent="space-between">
@@ -1020,7 +1022,9 @@ export function SkillMarket({
                       <Text color={on ? colors.iqCyan : colors.bone} bold={on || you}>
                         {on ? "› " : "  "}{short(a.wallet)}{you ? " // YOU" : ""}
                       </Text>
-                      <Text color={cur ? colors.warn : colors.dim}>
+                      {/* the rank label wears its metal, so a Legendary row finally
+                          matches the green the footer legend promises */}
+                      <Text color={cur ? tierColor(cur.name) : colors.dim}>
                         {cur ? cur.name.toUpperCase() : "UNRANKED"}
                       </Text>
                     </Box>
@@ -1028,7 +1032,7 @@ export function SkillMarket({
                       {"    CREATED "}{a.skillsPublished}{" · COPIES "}{a.totalSupply}
                       {" · ★"}{a.stars ?? 0}{earned ? ` · EARNED ${earned}` : ""}
                     </Text>
-                    {on ? <Text color={colors.warn}>{"    "}{tierGauge(a.stars ?? 0)}</Text> : null}
+                    {on ? <Text>{"    "}<TierGauge stars={a.stars ?? 0} /></Text> : null}
                   </Box>
                 );
               })}
@@ -1041,7 +1045,16 @@ export function SkillMarket({
         </Box>
         <Box justifyContent="space-between">
           <Text dimColor wrap="truncate-end">{agentTyping ? "type to filter · ↵/↓ browse · esc close" : "↑/↓ move · ↵ profile · [/] search · esc back"}</Text>
-          <Text dimColor>BRONZE 3 · SILVER 15 · GOLD 60 · <Text color={colors.ok}>LEGENDARY 250</Text></Text>
+          {/* the legend is the color key the rows obey: every rung in its own metal */}
+          <Text>
+            <Text color={tierColors.bronze}>BRONZE 3</Text>
+            <Text dimColor> · </Text>
+            <Text color={tierColors.silver}>SILVER 15</Text>
+            <Text dimColor> · </Text>
+            <Text color={tierColors.gold}>GOLD 60</Text>
+            <Text dimColor> · </Text>
+            <Text color={tierColors.legendary}>LEGENDARY 250</Text>
+          </Text>
         </Box>
       </Box>
     );
@@ -1235,8 +1248,8 @@ export function SkillMarket({
                       {s.name.slice(0, SKILL_CHIP_W - 4)}
                     </Text>
                     <Box>
-                      {stars ? <Text color={colors.warn}>★{stars} </Text> : null}
-                      {cur ? <Text color={colors.warn}>[{cur.name}]</Text> : <Text dimColor>{stars ? "" : "no grade yet"}</Text>}
+                      {stars ? <Text color={tierColor(cur?.name)}>★{stars} </Text> : null}
+                      {cur ? <Text color={tierColor(cur.name)}>[{cur.name}]</Text> : <Text dimColor>{stars ? "" : "no grade yet"}</Text>}
                     </Box>
                   </Box>
                 );

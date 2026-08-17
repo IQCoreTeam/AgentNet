@@ -4,8 +4,8 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { AgentProfile, SkillCard, Note } from "@iqlabs-official/agent-sdk";
-import { colors, glyph } from "../../theme.js";
-import { tierInfo, tierGauge, repoGauge, STAR_TIERS } from "./tiers.js";
+import { colors, glyph, tierColor } from "../../theme.js";
+import { tierInfo, TierGauge, repoGauge, STAR_TIERS } from "./tiers.js";
 import { ScrollView } from "./ScrollView.js";
 import { Band } from "../../components/Band.js";
 
@@ -168,7 +168,8 @@ export function AgentProfileView({
           AGENT  <Text color={colors.iqCyan}>{short(r.wallet)}</Text>
           {self ? <Text color={colors.ok}> // YOU</Text> : null}
         </Text>
-        <Text color={cur ? colors.warn : colors.dim}>{cur ? cur.name.toUpperCase() : "UNRANKED"}</Text>
+        {/* the hero badge wears its metal, the same tierColor the directory row uses */}
+        <Text color={cur ? tierColor(cur.name) : colors.dim}>{cur ? cur.name.toUpperCase() : "UNRANKED"}</Text>
       </Box>
       {/* big-number stat row, like the design's profile hero */}
       <Box marginTop={1}>
@@ -177,13 +178,24 @@ export function AgentProfileView({
         <Box width={16}><Text><Text bold color={colors.bone}>{held}</Text><Text dimColor> OWNED</Text></Text></Box>
       </Box>
       <Box marginTop={1}>
-        <Text dimColor>tier  </Text><Text>{tierGauge(stars)}</Text>
+        <Text dimColor>tier  </Text><TierGauge stars={stars} />
         {next ? <Text dimColor>  to {next.name}</Text> : <Text color={colors.ok}>  MAX</Text>}
       </Box>
+      {/* each rung wears its own metal once reached; the rung you stand on is inverted
+          so CURRENT pops out of the flood of rungs passed long ago. Unreached = dim. */}
       <Box>
         <Text dimColor>ladder</Text>
         {STAR_TIERS.map((t) => (
-          <Text key={t.name} color={stars >= t.min ? colors.ok : colors.dim}> {t.name}({t.min})</Text>
+          <Text key={t.name}>
+            {" "}
+            <Text
+              color={stars >= t.min ? tierColor(t.name) : colors.dim}
+              bold={cur?.name === t.name}
+              inverse={cur?.name === t.name}
+            >
+              {t.name}({t.min})
+            </Text>
+          </Text>
         ))}
       </Box>
       <Box marginTop={1}>
