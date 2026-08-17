@@ -13,6 +13,12 @@ import { CompleteCelebration } from "./CompleteCelebration";
 import { SkillSdCard } from "./SkillSdCard";
 import { RegisterWorkRepo } from "../onboarding/RegisterWorkRepo";
 import { LockedGate } from "../unlock/UnlockProvider";
+import { useT } from "../i18n";
+import { M } from "../i18n/messages";
+import { haptics } from "../haptics";
+
+// Blog note = a self thread's top-level note (the agent's own post).
+type BlogNote = NonNullable<AgentProfile["threads"]>[number]["note"];
 
 function PenIcon({ className }: { className?: string }) {
   return (
@@ -159,6 +165,15 @@ function shortWallet(wallet?: string) {
   return wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : "?";
 }
 
+function noteDate(timestamp?: number) {
+  if (!timestamp) return "";
+  try {
+    return new Date(timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  } catch {
+    return "";
+  }
+}
+
 // One verified-work repo row (used in the "show all" modal): owner/name, linked-skill count,
 // cached star count, opens the repo.
 function VerifiedRepoRow({ repo }: { repo: VRepo }) {
@@ -190,7 +205,7 @@ function GithubCard({ url, className = "mt-2" }: { url: string; className?: stri
   if (!info) {
     const safe = safeExternalUrl(url);
     return safe ? (
-      <a href={safe} target="_blank" rel="noreferrer" className={`block truncate text-[10px] text-blue-400 ${className}`}>{safe}</a>
+      <a href={safe} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className={`block truncate text-[10px] text-blue-400 ${className}`}>{safe}</a>
     ) : null;
   }
   const kind = info.kind === "pull" ? "PR" : info.kind === "blob" ? "File" : info.kind === "commit" ? "Commit" : "Repo";
@@ -199,6 +214,7 @@ function GithubCard({ url, className = "mt-2" }: { url: string; className?: stri
       href={info.href}
       target="_blank"
       rel="noreferrer"
+      onClick={(e) => e.stopPropagation()}
       className={`flex items-center gap-2.5 rounded-md border px-2.5 py-2 active:opacity-80 ${className}`}
       style={{ background: "var(--an-bg-2)", borderColor: "var(--an-line)" }}
     >
@@ -209,6 +225,50 @@ function GithubCard({ url, className = "mt-2" }: { url: string; className?: stri
         <span className="mt-0.5 block truncate text-[10px]" style={{ color: "var(--an-fg-mute)" }}>{info.meta}</span>
       </span>
     </a>
+  );
+}
+
+// Full blog post reader (issue #183): an in-view overlay over the profile, so the profile
+// keeps its scroll position and the tab bar stays put. Same top-bar chrome as the profile
+// header (bracket back + mono title + kana sub); the body scrolls and shows the whole post:
+// image, title, author identity row (the comment-card avatar + short wallet + date idiom),
+// full text, and the GithubCard embed for the git link.
+function BlogPostView({ post, wallet, onClose }: { post: BlogNote; wallet: string; onClose: () => void }) {
+  const t = useT();
+  const author = post.author || wallet;
+  return (
+    <div className="absolute inset-0 z-30 flex flex-col" style={{ background: "var(--an-bg-0)" }}>
+      <header
+        className="flex items-center gap-2.5 border-b px-3.5 shrink-0"
+        style={{ borderColor: "var(--an-term-line)", paddingTop: "max(0.5rem, env(safe-area-inset-top))", paddingBottom: "0.7rem" }}
+      >
+        <button
+          onClick={onClose}
+          aria-label="Back"
+          className="an-bracket flex shrink-0 items-center justify-center"
+          style={{ width: "38px", height: "38px", border: "1px solid var(--an-term-line)", color: "var(--an-term-fg-2)", "--ts": "8px", "--bk": "var(--an-term-bg)", "--tk": "var(--an-term-fg-6)" } as CSSProperties}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 6l-6 6 6 6" /></svg>
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className="an-term-title text-[18px] leading-none">{t(M.agentProfile.blog.postTitle)}</div>
+          <div className="an-term-sub leading-none"><span style={{ fontFamily: "'Noto Sans JP', sans-serif" }}>ブログ</span></div>
+        </div>
+      </header>
+      <div className="flex-1 overflow-y-auto px-3.5 pt-4 an-tabbar-inset">
+        {mediaUrl(post.image) && (
+          <img src={mediaUrl(post.image)} alt="" referrerPolicy="no-referrer" className="mb-3 max-h-64 w-full rounded-xl object-cover" style={{ border: "1px solid var(--an-line)" }} />
+        )}
+        {post.title && <h1 className="text-base font-bold leading-snug" style={{ color: "var(--an-fg)" }}>{post.title}</h1>}
+        <div className="mt-2.5 flex items-center gap-2.5">
+          <div className="h-8 w-8 shrink-0 overflow-hidden rounded-full" style={{ background: "var(--an-bg-2)", border: "1px solid var(--an-line)" }} aria-hidden="true" dangerouslySetInnerHTML={{ __html: walletAvatarSvg(author) }} />
+          <span className="font-mono text-xs" style={{ color: "var(--an-fg-dim)" }}>{shortWallet(author)}</span>
+          {noteDate(post.timestamp) && <span className="ml-auto text-[11px]" style={{ color: "var(--an-fg-mute)" }}>{noteDate(post.timestamp)}</span>}
+        </div>
+        {post.text && <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-relaxed" style={{ color: "var(--an-fg-dim)" }}>{post.text}</p>}
+        {post.gitLink && <GithubCard url={post.gitLink} className="mt-3" />}
+      </div>
+    </div>
   );
 }
 
@@ -454,7 +514,14 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   const { state, send } = useStore();
   const [tab, setTab] = useState<"agent" | "community">("agent");
   const [buyingAll, setBuyingAll] = useState(false);
-  const blogDrag = useRef({ active: false, moved: false, startX: 0, startLeft: 0 });
+  // Tap vs drag on the blog carousel: `down` tracks any in-progress gesture (mouse or touch),
+  // `active` only the mouse drag-to-scroll mode, `moved` flips once the gesture passes the
+  // shared 8px slop and marks the following click as a drag remnant, not a tap. `captured`
+  // notes whether the strip took pointer capture, which happens only after `moved` flips:
+  // capture taken at pointerdown would retarget the whole tap's click to the strip itself
+  // (Pointer Events level 3), so the card's own click handler would never see a mouse tap.
+  const blogDrag = useRef({ down: false, active: false, moved: false, captured: false, startX: 0, startY: 0, startLeft: 0 });
+  const [openPost, setOpenPost] = useState<BlogNote | null>(null);
   const [copied, setCopied] = useState(false);
   const avatar = useMemo(() => walletAvatarSvg(profile.wallet), [profile.wallet]);
   const [fabOpen, setFabOpen] = useState(false);
@@ -581,15 +648,6 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   const starsFrac = nextTier ? `${repoStars}/${nextTier.min}` : "MAX";
   const STAR_SEG = 15;
   const litSegs = Math.round((tierBandPct / 100) * STAR_SEG);
-
-  function noteDate(timestamp?: number) {
-    if (!timestamp) return "";
-    try {
-      return new Date(timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-    } catch {
-      return "";
-    }
-  }
 
   function onBlogKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
@@ -774,24 +832,50 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                       e.currentTarget.scrollLeft += e.deltaY;
                     }}
                     onPointerDown={(e) => {
-                      if (e.pointerType !== "mouse" || e.button !== 0) return;
-                      blogDrag.current = { active: true, moved: false, startX: e.clientX, startLeft: e.currentTarget.scrollLeft };
-                      e.currentTarget.setPointerCapture(e.pointerId);
+                      // Every new gesture resets moved: a touch scroll ends in pointercancel
+                      // with no click, so a stale moved=true must not swallow the next tap.
+                      // No capture here: that waits for the slop check in pointermove.
+                      blogDrag.current = {
+                        down: true,
+                        active: e.pointerType === "mouse" && e.button === 0,
+                        moved: false,
+                        captured: false,
+                        startX: e.clientX,
+                        startY: e.clientY,
+                        startLeft: e.currentTarget.scrollLeft,
+                      };
                     }}
                     onPointerMove={(e) => {
                       const drag = blogDrag.current;
+                      if (!drag.down) return;
+                      // 8px slop on either axis before the gesture counts as a drag, the same
+                      // threshold the app pager lock and the session long-press cancel use.
+                      if (Math.abs(e.clientX - drag.startX) > 8 || Math.abs(e.clientY - drag.startY) > 8) drag.moved = true;
                       if (!drag.active) return;
-                      const dx = e.clientX - drag.startX;
-                      if (Math.abs(dx) > 3) drag.moved = true;
-                      e.currentTarget.scrollLeft = drag.startLeft - dx;
+                      // Capture only once the drag is real (the app pager idiom: the movement
+                      // lock keeps taps tapping). Under the slop there may still be a tap in
+                      // flight, and capture would retarget its click to the strip; past the
+                      // slop the click is a drag remnant anyway, and capture keeps the scroll
+                      // tracking the pointer even after it leaves the strip.
+                      if (drag.moved && !drag.captured) {
+                        try { e.currentTarget.setPointerCapture(e.pointerId); drag.captured = true; } catch { /* some WebViews can't capture here */ }
+                      }
+                      e.currentTarget.scrollLeft = drag.startLeft - (e.clientX - drag.startX);
                     }}
                     onPointerUp={(e) => {
-                      if (!blogDrag.current.active) return;
-                      blogDrag.current.active = false;
-                      e.currentTarget.releasePointerCapture(e.pointerId);
+                      const drag = blogDrag.current;
+                      drag.down = false;
+                      if (!drag.active) return;
+                      drag.active = false;
+                      if (drag.captured) {
+                        drag.captured = false;
+                        e.currentTarget.releasePointerCapture(e.pointerId);
+                      }
                     }}
                     onPointerCancel={() => {
+                      blogDrag.current.down = false;
                       blogDrag.current.active = false;
+                      blogDrag.current.captured = false;
                     }}
                     onClickCapture={(e) => {
                       if (!blogDrag.current.moved) return;
@@ -801,9 +885,10 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                     }}
                   >
                     {blogNotes.map((n) => (
-                      <article
+                      <button
                         key={n.id}
-                        className="flex h-64 flex-[0_0_88%] snap-start flex-col rounded-xl border p-3.5 text-xs"
+                        onClick={() => { haptics.tick(); setOpenPost(n); }}
+                        className="flex h-64 flex-[0_0_88%] cursor-pointer snap-start flex-col rounded-xl border p-3.5 text-left text-xs active:opacity-80"
                         style={{ background: "var(--an-bg-1)", borderColor: "var(--an-line)", color: "var(--an-fg-dim)" }}
                       >
                         {mediaUrl(n.image) && <img src={mediaUrl(n.image)} alt="" referrerPolicy="no-referrer" className="mb-2 h-28 w-full shrink-0 rounded-lg object-cover" />}
@@ -813,7 +898,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                           {n.gitLink && <GithubCard url={n.gitLink} className="mt-2" />}
                         </div>
                         {noteDate(n.timestamp) && <p className="mt-2 shrink-0 text-[10px]" style={{ color: "var(--an-fg-mute)" }}>{noteDate(n.timestamp)}</p>}
-                      </article>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -924,7 +1009,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
           body so it floats ABOVE the shell's bottom fade (it lives in the pager's transformed
           stacking context otherwise, which the fade overlay dims). Safe to portal because this
           view only mounts while the Agent page is active. */}
-      {profile.self && createPortal(
+      {profile.self && !openPost && createPortal(
         <>
           {fabOpen && (
             <button className="fixed inset-0 z-[49] cursor-default" aria-label="Close menu" onClick={() => setFabOpen(false)} />
@@ -975,6 +1060,8 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
         </>,
         document.body,
       )}
+
+      {openPost && <BlogPostView post={openPost} wallet={profile.wallet} onClose={() => setOpenPost(null)} />}
 
       {composeMode === "blog" && (
         <Modal title="Write a blog post" onClose={() => setComposeMode(null)}>

@@ -189,6 +189,12 @@ export const M = {
     ),
   },
 
+  agentProfile: {
+    blog: {
+      postTitle: m("Blog Post", "블로그 글", "Пост блога"),
+    },
+  },
+
   menu: {
     myAgent: m("My Agent", "내 에이전트", "Мой Агент"),
     myAgentSub: m("Profile, skills, identity", "프로필, 스킬, 아이덴티티", "Профиль, скиллы, айдентика"),
