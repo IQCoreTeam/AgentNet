@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
 import type { SessionMeta } from "@iqlabs-official/agent-sdk/runtime/contract";
 import { colors, copy, glyph, rule, tag } from "../theme.js";
-import { displayWidth } from "../format.js";
+import { displayWidth, graphemes } from "../format.js";
 
 // Compact uppercase age, design-project style: 12S / 5M / 2H / 3D.
 function age(ts: number): string {
@@ -18,7 +18,7 @@ function age(ts: number): string {
 function cell(s: string, w: number): string {
   let out = "";
   let used = 0;
-  for (const ch of s) {
+  for (const ch of graphemes(s)) {
     const cw = displayWidth(ch);
     if (used + cw > w) break;
     out += ch;
