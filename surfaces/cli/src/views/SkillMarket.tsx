@@ -10,6 +10,7 @@ import type { OwnedSkill } from "../components/WelcomePanel.js";
 import { ChipCarousel } from "../components/ChipCarousel.js";
 import { Band } from "../components/Band.js";
 import { tierInfo, TierGauge } from "./market/tiers.js";
+import { walletColor, walletFace } from "./market/avatar.js";
 import { AgentProfileView, type ProfileSub } from "./market/AgentProfileView.js";
 import { SkillDetailView, mainLines, mainViewportH, skillTextLines, commentLines, subViewportH, type DetailSub } from "./market/SkillDetailView.js";
 import { HeliusPanel, HeliusBadge, heliusBadgeText, type RpcStatusLite } from "./market/HeliusPanel.js";
@@ -834,7 +835,7 @@ export function SkillMarket({
         // are the one source for both).
         const total = detailSub === "skillText"
           ? skillTextLines(detail, marketCols).length
-          : commentLines(detail.notes ?? [], marketCols).length;
+          : commentLines(detail.notes ?? [], marketCols, walletAddr).length;
         const height = subViewportH(agentRows, total);
         if (key.escape) { setDetailSub("main"); setDetailScroll(0); return; }
         if (key.downArrow) { setDetailScroll((o) => clampScroll(o + 1, total, height)); return; }
@@ -971,6 +972,7 @@ export function SkillMarket({
         sub={profileSub}
         scrollOffset={profileScroll}
         self={agentProfile.self}
+        walletAddr={walletAddr}
       />
     );
   }
@@ -978,6 +980,10 @@ export function SkillMarket({
   // ── agents list ────────────────────────────────────────────────────────────
   if (stage === "agents") {
     const short = (w: string) => `${w.slice(0, 6)}…${w.slice(-4)}`;
+    // wallet-face identity (design tab 20 //AVATAR_): same wallet, same face, every
+    // screen. The face sheds below 40 cols, where the row's width budget is already
+    // spent on the wallet and the rank label.
+    const showFace = marketCols >= 40;
     const filtered = (agents ?? []).filter((a) => !agentQuery.trim() || a.wallet.toLowerCase().includes(agentQuery.toLowerCase()));
     // window to terminal height so every agent stays reachable. Each agent row is now two
     // lines (handle+tier, then stats) plus a gauge line on the selected one, so budget ~2
@@ -1019,8 +1025,14 @@ export function SkillMarket({
                 return (
                   <Box key={a.wallet} flexDirection="column">
                     <Box justifyContent="space-between">
-                      <Text color={on ? colors.iqCyan : colors.bone} bold={on || you}>
-                        {on ? "› " : "  "}{short(a.wallet)}{you ? " // YOU" : ""}
+                      <Text>
+                        <Text color={on ? colors.iqCyan : colors.bone} bold={on || you}>
+                          {on ? "› " : "  "}
+                        </Text>
+                        {showFace ? <Text color={walletColor(a.wallet)}>{walletFace(a.wallet)} </Text> : null}
+                        <Text color={on ? colors.iqCyan : colors.bone} bold={on || you}>
+                          {short(a.wallet)}{you ? " // YOU" : ""}
+                        </Text>
                       </Text>
                       {/* the rank label wears its metal, so a Legendary row finally
                           matches the green the footer legend promises */}
@@ -1212,6 +1224,7 @@ export function SkillMarket({
         firing={firingIds.has(detail.card.id)}
         flash={flash}
         busy={busy}
+        walletAddr={walletAddr}
       />
     );
   }

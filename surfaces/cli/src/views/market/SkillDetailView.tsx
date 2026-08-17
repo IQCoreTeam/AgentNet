@@ -8,6 +8,7 @@ import { colors, glyph } from "../../theme.js";
 import { displayWidth, truncateEnd, truncateStart, wrapBlock } from "../../format.js";
 import { ScrollView } from "./ScrollView.js";
 import { Band } from "../../components/Band.js";
+import { walletColor, walletFace } from "./avatar.js";
 
 export type DetailSub = "main" | "skillText" | "comments";
 
@@ -132,14 +133,37 @@ export function skillTextLines(detail: SkillDetail, cols: number): string[] {
   return wrapBlock(detail.skillText ?? "", w);
 }
 
-// Comments subview rows, one node per terminal row (date, wrapped quote rows, wrapped
-// git link rows), for the same reason as skillTextLines: slice math is only true when a
-// slice index equals a screen row, and a note used to be one multi-row node.
-export function commentLines(notes: Note[], cols: number): React.ReactNode[] {
+// Comments subview rows, one node per terminal row (author row, wrapped quote rows,
+// wrapped git link rows), for the same reason as skillTextLines: slice math is only true
+// when a slice index equals a screen row, and a note used to be one multi-row node.
+export function commentLines(notes: Note[], cols: number, selfWallet?: string): React.ReactNode[] {
   const w = Math.max(12, cols - 4);
+  // wallet-face identity sheds first at narrow widths, same rule as the directory rows
+  const showFace = w >= 24;
+  const shortA = (a: string) => (a.length > 9 ? `${a.slice(0, 4)}…${a.slice(-4)}` : a);
   const lines: React.ReactNode[] = [];
   for (const n of notes) {
-    lines.push(<Text key={`${n.id}-d`} dimColor>  {truncateEnd(noteDate(n.timestamp), Math.max(1, w - 2))}</Text>);
+    // each note now leads with WHO wrote it (design tab 22: identity is the thread's
+    // whole language; the comment stream here was anonymous): wallet face + short
+    // wallet, the viewer's own notes marked // YOU in green, the date as a dim tail.
+    // Still exactly ONE terminal row: the tail pieces shed (date first, then the YOU
+    // tag) and the author truncates before the row could ever wrap.
+    const room = Math.max(1, w - 2 - (showFace ? 4 : 0));
+    const authorShown = truncateEnd(shortA(n.author ?? "?"), room);
+    const you = selfWallet && n.author === selfWallet ? " // YOU" : "";
+    const dateTail = `  ${noteDate(n.timestamp)}`;
+    const youShown = displayWidth(authorShown) + displayWidth(you) <= room ? you : "";
+    const tailShown =
+      displayWidth(authorShown) + displayWidth(youShown) + displayWidth(dateTail) <= room ? dateTail : "";
+    lines.push(
+      <Text key={`${n.id}-d`}>
+        {"  "}
+        {showFace ? <Text color={walletColor(n.author ?? "?")}>{walletFace(n.author ?? "?")} </Text> : null}
+        <Text color={colors.iqCyan}>{authorShown}</Text>
+        {youShown ? <Text color={colors.ok}>{youShown}</Text> : null}
+        {tailShown ? <Text dimColor>{tailShown}</Text> : null}
+      </Text>,
+    );
     wrapBlock(`"${n.text}"`, Math.max(1, w - 2)).forEach((l, i) => lines.push(<Text key={`${n.id}-t${i}`}>  {l}</Text>));
     if (n.gitLink) {
       wrapBlock(`${glyph.sparkle} ${n.gitLink}`, Math.max(1, w - 4)).forEach((l, i) =>
@@ -168,6 +192,7 @@ export function SkillDetailView({
   firing,
   flash,
   busy,
+  walletAddr,
 }: {
   detail: SkillDetail;
   owned: Set<string>;
@@ -178,6 +203,8 @@ export function SkillDetailView({
   firing: boolean;
   flash: string | null;
   busy: boolean;
+  // the viewer's wallet: commentLines marks their own notes // YOU
+  walletAddr?: string;
 }) {
   const c = detail.card;
   const notes = detail.notes ?? [];
@@ -204,7 +231,7 @@ export function SkillDetailView({
   }
 
   if (sub === "comments") {
-    const lines = commentLines(notes, colsMain);
+    const lines = commentLines(notes, colsMain, walletAddr);
     const height = subViewportH(rowsMain, lines.length);
     return (
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>

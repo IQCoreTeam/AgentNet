@@ -2,10 +2,11 @@
 // tier tag + gauge + ladder, earned SOL, verified GitHub repos, blog carousel, full
 // comment stack, buy-all with count feedback, self-only "write a blog post" entry.
 import React from "react";
-import { Box, Text } from "ink";
+import { Box, Text, useStdout } from "ink";
 import type { AgentProfile, SkillCard, Note } from "@iqlabs-official/agent-sdk";
 import { colors, glyph, tierColor } from "../../theme.js";
 import { tierInfo, TierGauge, repoGauge, STAR_TIERS } from "./tiers.js";
+import { walletColor, walletFace } from "./avatar.js";
 import { ScrollView } from "./ScrollView.js";
 import { Band } from "../../components/Band.js";
 
@@ -31,6 +32,7 @@ export function AgentProfileView({
   sub,
   scrollOffset,
   self,
+  walletAddr,
 }: {
   profile: AgentProfile;
   owned: Set<string>;
@@ -39,8 +41,14 @@ export function AgentProfileView({
   sub: ProfileSub;
   scrollOffset: number;
   self: boolean;
+  // the VIEWER's wallet: marks their own comments "// YOU" in the threads
+  // (design tab 22); `self` above is about the profile's subject, not the viewer.
+  walletAddr?: string;
 }) {
   const r = profile.reputation;
+  // wallet-face identity (design tab 20 //AVATAR_): same wallet, same face on the
+  // hero and on every comment author. Sheds below 40 cols like the directory rows.
+  const showFace = (useStdout().stdout?.columns || 80) >= 40;
   const stars = r.stars ?? 0;
   const { cur, next } = tierInfo(stars);
   // Threads arrive pre-grouped from the host (GH #101). Blog = the agent's own posts;
@@ -79,10 +87,19 @@ export function AgentProfileView({
   if (sub === "comments") {
     // Each thread: the top-level comment, then its replies indented with an ↳ and
     // (when the reply answered a deeper comment) a → to whom.
+    // every author carries their wallet face, and the viewer's own comments say
+    // // YOU in green (design tab 22's thread identity language).
+    const author = (wallet: string) => (
+      <>
+        {showFace ? <Text color={walletColor(wallet)}>{walletFace(wallet)} </Text> : null}
+        <Text color={colors.iqCyan}>{short(wallet)}</Text>
+        {walletAddr && wallet === walletAddr ? <Text color={colors.ok}> // YOU</Text> : null}
+      </>
+    );
     const lines = commentThreads.flatMap((t) => [
       <Box key={t.note.id} flexDirection="column">
         <Text>
-          <Text color={colors.iqCyan}>{short(t.note.author)}</Text>
+          {author(t.note.author)}
           <Text dimColor>  {noteDate(t.note.timestamp)}</Text>
         </Text>
         {t.note.title ? <Text bold>{t.note.title}</Text> : null}
@@ -93,7 +110,7 @@ export function AgentProfileView({
         <Box key={rep.id} flexDirection="column" marginLeft={2}>
           <Text>
             <Text dimColor>↳ </Text>
-            <Text color={colors.iqCyan}>{short(rep.author)}</Text>
+            {author(rep.author)}
             <Text dimColor>  {noteDate(rep.timestamp)}{rep.parentAuthor ? ` → ${short(rep.parentAuthor)}` : ""}</Text>
           </Text>
           {rep.title ? <Text bold>{rep.title}</Text> : null}
@@ -165,7 +182,8 @@ export function AgentProfileView({
     <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
       <Box justifyContent="space-between">
         <Text bold color={colors.bone}>
-          AGENT  <Text color={colors.iqCyan}>{short(r.wallet)}</Text>
+          AGENT  {showFace ? <Text color={walletColor(r.wallet)}>{walletFace(r.wallet)} </Text> : null}
+          <Text color={colors.iqCyan}>{short(r.wallet)}</Text>
           {self ? <Text color={colors.ok}> // YOU</Text> : null}
         </Text>
         {/* the hero badge wears its metal, the same tierColor the directory row uses */}
