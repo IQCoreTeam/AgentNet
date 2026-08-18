@@ -26,6 +26,11 @@
 // IMPORTANT: stdout is the JSON-RPC channel — never write to it. All diagnostics go
 // to stderr (console.error).
 
+// FIRST import, above the solana deps: hooks console.warn so bigint-buffer's
+// always-firing "Failed to load bindings" line (no native addon in the bundle, the
+// pure JS fallback is expected) stops fronting every spawn's stderr. One line only;
+// real warnings pass through. See core/quietBigintWarning.ts (issue #187 F2).
+import "./core/quietBigintWarning.js";
 import { Connection } from "@solana/web3.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { resolveRpcUrl } from "./core/rpc.js";
