@@ -30,7 +30,7 @@ import { readSkillText } from "../nft/token2022.js";
 import { SkillSync } from "./ingest/index.js";
 import { postNote, postAgentNote } from "../notes/notes.js";
 import { homedir } from "node:os";
-import { getSkillsCollectionMint, getWorkflowsCollectionMint, getIndexerUrl } from "../core/seed.js";
+import { collectionFor, getIndexerUrl } from "../core/seed.js";
 import { indexerSource, ownedSkillMints } from "../core/skillSource.js";
 import { loadHeliusKey } from "../core/rpc.js";
 import { signerAddress } from "../core/chain.js";
@@ -209,7 +209,7 @@ export const SKILL_TOOLS: { name: string; description: string; schema: z.ZodRawS
     description: "Post a comment/review on a skill. You must hold ≥1 of the skill's token to comment.",
     schema: {
       skillId: z.string().describe("The base58 mint address of the skill to comment on."),
-      collectionId: z.string().optional().describe("The collection mint address the skill belongs to (skills or workflows collection). Omit to use the default skills collection."),
+      collectionId: z.string().optional().describe("The collection mint address the item belongs to (skills or workflows collection). Omit to resolve it from the marketplace catalog: skills file under the skills collection, workflows under the workflows collection."),
       text: z.string().describe("The comment text (markdown supported)."),
       gitLink: z.string().optional().describe("Optional GitHub or on-chain git URL to attach to the comment."),
     },
@@ -264,19 +264,21 @@ export function getAgentNetTools() {
 export type MarketEmit = (e: import("../chat/marketMessages.js").MarketEvent) => void;
 
 /**
- * The wallet that published `skillId`, read from the same catalog `search_skills` serves
- * (indexer when there's no DAS key, DAS otherwise). buy_item needs it for the program's
- * has_one on config.creator, and it is NOT in the mint metadata — the catalog is where a
- * caller would have gotten it anyway. Returns null when the skill isn't in the catalog,
- * so the caller can refuse instead of sending a transaction that cannot succeed.
+ * The catalog row for `skillId`, read from the same catalog `search_skills` serves
+ * (indexer when there's no DAS key, DAS otherwise). Two handlers need it: buy_skill
+ * takes `creator` (the program's has_one on config.creator, and it is NOT in the mint
+ * metadata), post_skill_comment takes `type` (skill vs workflow decides which
+ * collection the note is filed under). Neither is in the arguments a caller reliably
+ * has, and the catalog is where they would have gotten either anyway. Returns null
+ * when the skill isn't listed, so the caller can refuse instead of guessing.
  */
-async function skillCreator(conn: Connection, skillId: string): Promise<string | null> {
+async function catalogItem(conn: Connection, skillId: string) {
   let source;
   if (!(await loadHeliusKey())) {
     try { source = indexerSource(getIndexerUrl()); } catch { source = undefined; }
   }
   const skills = await searchSkills(conn, { source }).catch(() => [] as Awaited<ReturnType<typeof searchSkills>>);
-  return skills.find((s) => s.id === skillId)?.creator ?? null;
+  return skills.find((s) => s.id === skillId) ?? null;
 }
 
 export async function handleToolCall(
@@ -346,7 +348,7 @@ export async function handleToolCall(
     // reads, and refuse rather than send a transaction that cannot succeed.
     let creatorWallet = (args?.creatorWallet as string) || "";
     if (!creatorWallet) {
-      creatorWallet = (await skillCreator(conn, skillId)) ?? "";
+      creatorWallet = (await catalogItem(conn, skillId))?.creator ?? "";
       if (!creatorWallet) {
         return {
           isError: true,
@@ -426,12 +428,26 @@ export async function handleToolCall(
 
   if (name === "post_skill_comment") {
     const skillId = args?.skillId as string;
-    const collectionId = (args?.collectionId as string) ||
-      getSkillsCollectionMint() || "";
     const text = args?.text as string;
     const gitLink = args?.gitLink as string | undefined;
     if (!skillId || !text) throw new Error("Missing required argument: skillId and text");
-    if (!collectionId) throw new Error("collectionId is required (skills collection not configured)");
+    // The two collections are distinct mints and reviewsHint keys the review table by
+    // collection, so an omitted collectionId must resolve to the ITEM's collection, not
+    // default to skills: that filed workflow comments where no workflow reader looks
+    // (issue #187 F4). Read the item's type from the same catalog buy_skill resolves the
+    // creator from, and refuse rather than guess when the item isn't listed there.
+    let collectionId = (args?.collectionId as string) || "";
+    if (!collectionId) {
+      const listed = await catalogItem(conn, skillId);
+      if (!listed) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Could not find ${skillId} in the marketplace catalog to resolve its collection. Run search_skills to confirm the id, or pass collectionId explicitly.` }],
+        };
+      }
+      collectionId = collectionFor(listed.type);
+    }
+    if (!collectionId) throw new Error("collectionId is required (the item's collection is not configured)");
     try {
       const noteId = await postNote(conn, signer, { collectionId, skillId, text, gitLink });
       return { content: [{ type: "text", text: `Comment posted (id: ${noteId})` }] };
