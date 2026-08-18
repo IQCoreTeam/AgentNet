@@ -14,6 +14,10 @@
 //   AGENTNET_WALLET_KEYFILE  path to a Solana keypair JSON. Absent → the Solana CLI
 //                            default (~/.config/solana/id.json). Missing file → a new
 //                            keypair is generated there (never overwrites a valid one).
+//   AGENTNET_WALLET_REMOTE   URL of a remote signer endpoint (account/remoteWallet.ts).
+//                            When set, that endpoint holds the key and signs; the
+//                            keyfile is never read or created. Unset keeps the
+//                            keyfile path exactly as before.
 //   AGENTNET_MCP_READONLY    "0" | "false" turns WRITE/SPEND tools on (buy/publish/
 //                            comment/unequip/install). Anything else — including unset —
 //                            stays READ-ONLY (search/verify only), so the safe mode is
@@ -31,7 +35,9 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { resolveRpcUrl } from "./core/rpc.js";
 import { init as initChain } from "./core/chain.js";
 import { localWallet } from "./account/localWallet.js";
+import { remoteWallet } from "./account/remoteWallet.js";
 import { login } from "./account/login.js";
+import type { Wallet } from "./runtime/contract.js";
 import { createAgentMcpServer, newVerifyGuard } from "./skill-market/index.js";
 import type { VaultDeps } from "./vault/tools.js";
 import { injectExternalHosts } from "./vault/inject.js";
@@ -42,9 +48,19 @@ function readOnlyFromEnv(): boolean {
 }
 
 async function main(): Promise<void> {
+  const remote = process.env.AGENTNET_WALLET_REMOTE?.trim() || undefined;
   const keyfile = process.env.AGENTNET_WALLET_KEYFILE?.trim() || undefined;
-  const { wallet, address, created } = await localWallet(keyfile);
-  if (created) console.error(`[agentnet-mcp] generated a new wallet keypair at ${keyfile ?? "the default path"}`);
+  let wallet: Wallet;
+  let address: string;
+  if (remote) {
+    ({ wallet, address } = await remoteWallet(remote));
+    console.error(`[agentnet-mcp] signing through the remote signer at ${remote}`);
+  } else {
+    const loaded = await localWallet(keyfile);
+    wallet = loaded.wallet;
+    address = loaded.address;
+    if (loaded.created) console.error(`[agentnet-mcp] generated a new wallet keypair at ${keyfile ?? "the default path"}`);
+  }
   const conn = new Connection(await resolveRpcUrl(), "confirmed");
   initChain(conn); // writes go through chain.ts's singleton; idempotent
   const readOnly = readOnlyFromEnv();
