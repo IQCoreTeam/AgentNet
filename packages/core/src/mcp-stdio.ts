@@ -57,9 +57,23 @@ async function main(): Promise<void> {
   const keyfile = process.env.AGENTNET_WALLET_KEYFILE?.trim() || undefined;
   let wallet: Wallet;
   let address: string;
+  // AGENTNET_WALLET_REMOTE opts into the out-of-process signer. If it is set but the
+  // signer never answers the /pubkey handshake (down, wrong URL, or an env left on by
+  // accident), fall back to the local keyfile path rather than failing the spawn. The
+  // fallback is loud on stderr so an intentional vault setup is never silently bypassed.
+  let signer: { wallet: Wallet; address: string } | undefined;
   if (remote) {
-    ({ wallet, address } = await remoteWallet(remote));
-    console.error(`[agentnet-mcp] signing through the remote signer at ${remote}`);
+    try {
+      signer = await remoteWallet(remote);
+      console.error(`[agentnet-mcp] signing through the remote signer at ${remote}`);
+    } catch (err) {
+      console.error(
+        `[agentnet-mcp] remote signer at ${remote} unreachable (${err instanceof Error ? err.message : String(err)}); falling back to the local keyfile`,
+      );
+    }
+  }
+  if (signer) {
+    ({ wallet, address } = signer);
   } else {
     const loaded = await localWallet(keyfile);
     wallet = loaded.wallet;
