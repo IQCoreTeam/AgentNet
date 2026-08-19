@@ -10,6 +10,11 @@
 //   POST {url}/sign-message      { "message": "<base64>" }
 //                                -> { "signature": "<base64>" }   (optional)
 //
+// Auth: when the signer requires a shared secret (a token-guarded loopback
+// bridge), AGENTNET_WALLET_REMOTE_TOKEN is sent as a standard
+// `Authorization: Bearer <token>` header on every call. Unset means no header,
+// for signers that bind an unguarded loopback port.
+//
 // sign-transaction serializes with requireAllSignatures:false so partial
 // signatures already added by mint/minter keypairs survive the round trip,
 // the same rule webWallet's provider path follows. sign-message is optional
@@ -27,10 +32,14 @@ import type { Wallet } from "../runtime/contract.js";
 // answer with a refusal; holding the socket open is not a protocol state.
 const SIGNER_TIMEOUT_MS = 30_000;
 
-async function postJson(url: string, body: object): Promise<Record<string, unknown>> {
+function authHeaders(token?: string): Record<string, string> {
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function postJson(url: string, body: object, token?: string): Promise<Record<string, unknown>> {
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders(token) },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(SIGNER_TIMEOUT_MS),
   });
@@ -48,9 +57,12 @@ async function postJson(url: string, body: object): Promise<Record<string, unkno
   return JSON.parse(text) as Record<string, unknown>;
 }
 
-export async function remoteWallet(url: string): Promise<{ wallet: Wallet; address: string }> {
+export async function remoteWallet(url: string, token?: string): Promise<{ wallet: Wallet; address: string }> {
   const base = url.replace(/\/+$/, "");
-  const res = await fetch(`${base}/pubkey`, { signal: AbortSignal.timeout(SIGNER_TIMEOUT_MS) });
+  const res = await fetch(`${base}/pubkey`, {
+    headers: authHeaders(token),
+    signal: AbortSignal.timeout(SIGNER_TIMEOUT_MS),
+  });
   if (!res.ok) throw new Error(`remote signer at ${base} did not answer /pubkey (${res.status})`);
   const { address } = (await res.json()) as { address?: string };
   if (!address) throw new Error(`remote signer at ${base} returned no address`);
@@ -63,7 +75,7 @@ export async function remoteWallet(url: string): Promise<{ wallet: Wallet; addre
       : (tx as Transaction).serialize({ requireAllSignatures: false, verifySignatures: false });
     const out = await postJson(`${base}/sign-transaction`, {
       transaction: Buffer.from(bytes).toString("base64"),
-    });
+    }, token);
     const signed = Buffer.from(String(out.transaction ?? ""), "base64");
     if (signed.length === 0) throw new Error("remote signer returned no transaction");
     // Copy signatures back onto the caller's object, the way keypairWallet
@@ -82,7 +94,7 @@ export async function remoteWallet(url: string): Promise<{ wallet: Wallet; addre
     async signMessage(msg) {
       const out = await postJson(`${base}/sign-message`, {
         message: Buffer.from(msg).toString("base64"),
-      });
+      }, token);
       const signature = Buffer.from(String(out.signature ?? ""), "base64");
       if (signature.length === 0) throw new Error("remote signer returned no signature");
       return Uint8Array.from(signature);
