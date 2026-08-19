@@ -966,6 +966,25 @@ function attachMarketHandlers(c: Client) {
         }
         return;
       }
+      case "getBlogComments": {
+        try {
+          const threads = await mkt.getBlogComments(m.postId);
+          c.send({ type: "blogComments", postId: m.postId, threads });
+        } catch {
+          c.send({ type: "blogComments", postId: m.postId, threads: [] });
+        }
+        return;
+      }
+      case "postBlogComment": {
+        try {
+          const r = await mkt.postBlogComment(m.postId, m.agentWallet, m.text, m.gitLink, m.parentId);
+          c.send({ type: "blogCommentResult", postId: m.postId, ok: r.ok, error: r.ok ? undefined : r.error });
+          if (r.ok) c.send({ type: "blogComments", postId: m.postId, threads: r.threads ?? [] });
+        } catch (e) {
+          c.send({ type: "blogCommentResult", postId: m.postId, ok: false, error: (e as Error).message });
+        }
+        return;
+      }
     }
   });
 }

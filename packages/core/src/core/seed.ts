@@ -41,6 +41,17 @@ export function reviewsAgentHint(agentWallet: string): string {
   return `reviews:agent:${agentWallet}`;
 }
 
+/**
+ * Comments on ONE blog post (a self-note), keyed by that post's id.
+ * output: "comment:blog:<postId>"
+ * A per-post table, created lazily by the first commenter, so a hot post's
+ * comments live in their own account instead of bloating the agent's
+ * reviews:agent table (tables.md §0). Read on tap-open of the post only.
+ */
+export function blogCommentsHint(postId: string): string {
+  return `comment:blog:${postId}`;
+}
+
 // ===== On-chain program / collection ids (one place — easy to swap) =====
 //
 // Current values are the MAINNET deployment. Override any of them with the

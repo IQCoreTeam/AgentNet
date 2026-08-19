@@ -83,6 +83,8 @@ export interface ChatEnv {
   getAgentProfile?(wallet: string): Promise<import("./marketMessages.js").AgentProfile>;
   buyAllSkills?(wallet: string): Promise<{ ok: boolean; bought: number; failed: number; error?: string }>;
   postAgentNote?(agentWallet: string, text: string, gitLink?: string, title?: string, image?: string, parentId?: string): Promise<{ ok: boolean; notes?: import("./marketMessages.js").Note[]; error?: string }>;
+  getBlogComments?(postId: string): Promise<import("./marketMessages.js").ThreadNode[]>;
+  postBlogComment?(postId: string, agentWallet: string, text: string, gitLink?: string, parentId?: string): Promise<{ ok: boolean; threads?: import("./marketMessages.js").ThreadNode[]; error?: string }>;
   solBalance?(): Promise<number | null>; // wallet's native SOL balance (lamports), for the UI funds display
   // devnet-only: fund the wallet from the faucet (manual "Get devnet SOL" on an insufficient-
   // funds buy). Returns the new balance so the UI refreshes and lets the buyer retry.
@@ -930,6 +932,23 @@ export function createChatSession(
           const profile = await env.getAgentProfile(req.agentWallet).catch(() => null);
           if (profile) sendMarket({ type: "agentProfile", profile });
         }
+        break;
+      }
+      // per-post blog comments: lazy-load one post's thread on tap-open
+      case "getBlogComments": {
+        const req = m as Extract<MarketRequest, { type: "getBlogComments" }>;
+        if (!env.getBlogComments) break;
+        const threads = await env.getBlogComments(req.postId);
+        sendMarket({ type: "blogComments", postId: req.postId, threads });
+        break;
+      }
+      // post a comment onto one blog post, then re-push that post's refreshed thread
+      case "postBlogComment": {
+        const req = m as Extract<MarketRequest, { type: "postBlogComment" }>;
+        if (!env.postBlogComment) break;
+        const res = await env.postBlogComment(req.postId, req.agentWallet, req.text, req.gitLink, req.parentId);
+        sendMarket({ type: "blogCommentResult", postId: req.postId, ok: res.ok, error: res.ok ? undefined : (res as { ok: false; error?: string }).error });
+        if (res.ok) sendMarket({ type: "blogComments", postId: req.postId, threads: res.threads ?? [] });
         break;
       }
       // make-skill: publish a new skill from the UI

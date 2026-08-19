@@ -142,6 +142,7 @@ export interface State {
   agents: Reputation[];
   agentProfile: AgentProfile | null;
   agentProfileLoading: boolean;
+  blogComments: Record<string, AgentProfile["threads"]>; // per-post comment threads, keyed by postId
   agentsLoading: boolean;
   githubStatus: { hasToken: boolean; masked?: string } | null;
   workRepoResult: { ok: boolean; count?: number; repo?: string; error?: string; at: number } | null;
@@ -213,6 +214,7 @@ const initialState: State = {
   agents: [],
   agentProfile: null,
   agentProfileLoading: false,
+  blogComments: {},
   agentsLoading: false,
   githubStatus: null,
   workRepoResult: null,
@@ -631,6 +633,10 @@ function reducer(state: State, ev: Action): State {
       return { ...state, toast: ev.ok ? "Note posted." : `Note failed: ${ev.error ?? "unknown"}` };
     case "notes":
       return state;
+    case "blogComments":
+      return { ...state, blogComments: { ...state.blogComments, [ev.postId]: ev.threads } };
+    case "blogCommentResult":
+      return { ...state, toast: ev.ok ? "Comment posted." : `Comment failed: ${ev.error ?? "unknown"}` };
     case "githubStatus":
       return { ...state, githubStatus: { hasToken: ev.hasToken, masked: ev.masked } };
     case "__loadingAgents":

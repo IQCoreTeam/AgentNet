@@ -115,6 +115,11 @@ export type MarketRequest =
   // buy a specific set of skills in one go (e.g. a workflow's required skills)
   | { type: "buyRequiredSkills"; items: { skillId: string; creatorWallet?: string }[] }
   | { type: "postAgentNote"; agentWallet: string; text: string; gitLink?: string; title?: string; image?: string; parentId?: string }
+  // per-post blog replies (comment:blog:<postId>): lazily load ONE post's thread on tap-open,
+  // and reply to that post. Replies are OPEN to any wallet (issue #183), UNLIKE the holder-gated
+  // agent comment wall (postAgentNote). agentWallet is context only. parentId replies to a reply.
+  | { type: "getBlogComments"; postId: string; agentWallet: string }
+  | { type: "postBlogComment"; postId: string; agentWallet: string; text: string; gitLink?: string; parentId?: string }
   // publish a skill from the UI (make-skill). priceSol is the human SOL amount as a
   // string ("0.1"); the host converts to lamports. image is optional — an http URL
   // or a base58 on-chain txid/PDA (the UI badges on-chain values), see skill-nft-json §3.
@@ -162,6 +167,9 @@ export type MarketEvent =
   | { type: "agentProfile"; profile: AgentProfile }
   | { type: "buyAllResult"; wallet: string; ok: boolean; bought: number; failed: number; error?: string }
   | { type: "agentNoteResult"; agentWallet: string; ok: boolean; error?: string }
+  // per-post blog comments: the refreshed thread for one post, and a write result
+  | { type: "blogComments"; postId: string; threads: ThreadNode[] }
+  | { type: "blogCommentResult"; postId: string; ok: boolean; error?: string }
   // make-skill: result of a UI publish. mint = the new skill's mint address on success.
   | { type: "publishResult"; ok: boolean; mint?: string; error?: string }
   // live publish progress (per wallet signature) while a chat/agent publish runs.

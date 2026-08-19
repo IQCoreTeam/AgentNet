@@ -39,8 +39,8 @@ importers:
         version: 4.4.3
     devDependencies:
       '@iqlabs-official/solana-sdk':
-        specifier: ^0.1.27
-        version: 0.1.27(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
+        specifier: ^0.1.28
+        version: 0.1.28(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
       '@solana/web3.js':
         specifier: ^1.98.0
         version: 1.98.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
@@ -69,8 +69,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@iqlabs-official/solana-sdk':
-        specifier: ^0.1.27
-        version: 0.1.27(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
+        specifier: ^0.1.28
+        version: 0.1.28(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
       '@solana/web3.js':
         specifier: ^1.98.0
         version: 1.98.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
@@ -696,8 +696,8 @@ packages:
     peerDependencies:
       ink: '>=5'
 
-  '@iqlabs-official/solana-sdk@0.1.27':
-    resolution: {integrity: sha512-A+//KL2IQe8aCjGZM6sNOnah4srPWWlh/o13INWkmomyvHP3Oa+IbIPgjzync7RbL4Qi46mNK3xAmNC+bjSCVg==}
+  '@iqlabs-official/solana-sdk@0.1.28':
+    resolution: {integrity: sha512-hcnPf3B6crBP1cSB77mtq0LujKvYpiEfqtPcmtMM0GdlpNETmE6fToKhH4Me+24aTBarmSPTaTnZ/n1RbjJBgw==}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -3001,7 +3001,7 @@ snapshots:
       figures: 6.1.0
       ink: 5.2.1(@types/react@18.3.31)(bufferutil@4.1.0)(react@18.3.1)(utf-8-validate@6.0.6)
 
-  '@iqlabs-official/solana-sdk@0.1.27(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)':
+  '@iqlabs-official/solana-sdk@0.1.28(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)':
     dependencies:
       '@coral-xyz/anchor': 0.32.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
       '@noble/curves': 2.2.0

@@ -235,7 +235,24 @@ function GithubCard({ url, className = "mt-2" }: { url: string; className?: stri
 // full text, and the GithubCard embed for the git link.
 function BlogPostView({ post, wallet, onClose }: { post: BlogNote; wallet: string; onClose: () => void }) {
   const t = useT();
+  const { state, send } = useStore();
   const author = post.author || wallet;
+  const threads = state.blogComments[post.id];
+  // Post replies are OPEN (issue #183): anyone with a wallet may reply, UNLIKE the agent
+  // reputation comment wall, which is holder-gated. So the gate here is just "has a wallet".
+  const canReply = !!state.walletAddress;
+  const [posting, setPosting] = useState(false);
+  const [replyTo, setReplyTo] = useState<string | null>(null);
+  // Lazy-load this post's own reply thread when it opens (comment:blog:<postId>).
+  useEffect(() => { send({ type: "getBlogComments", postId: post.id, agentWallet: wallet }); }, [post.id, wallet, send]);
+  // A refreshed thread (a reply landed) clears the pending + reply-composer UI.
+  useEffect(() => { setPosting(false); setReplyTo(null); }, [threads]);
+  function submitComment(f: NoteFields, parentId?: string) {
+    const text = f.text.trim();
+    if (!text || !canReply) return;
+    setPosting(true);
+    send({ type: "postBlogComment", postId: post.id, agentWallet: wallet, text, gitLink: f.gitLink, parentId });
+  }
   return (
     <div className="absolute inset-0 z-30 flex flex-col" style={{ background: "var(--an-bg-0)" }}>
       <header
@@ -267,6 +284,30 @@ function BlogPostView({ post, wallet, onClose }: { post: BlogNote; wallet: strin
         </div>
         {post.text && <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-relaxed" style={{ color: "var(--an-fg-dim)" }}>{post.text}</p>}
         {post.gitLink && <GithubCard url={post.gitLink} className="mt-3" />}
+
+        {/* This post's OPEN reply thread (comment:blog:<postId>) — anyone with a wallet (issue #183).
+            Same renderer as the agent wall, but the wall is holder-gated; these replies are not. */}
+        <div className="mt-6 border-t pt-4" style={{ borderColor: "var(--an-line)" }}>
+          <p className="mb-2 text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>
+            Replies{threads?.length ? ` (${threads.length})` : ""}
+          </p>
+          {threads === undefined ? (
+            <p className="py-4 text-center text-xs" style={{ color: "var(--an-fg-mute)" }}>Loading replies…</p>
+          ) : threads.length === 0 ? (
+            <p className="py-2 text-xs" style={{ color: "var(--an-fg-mute)" }}>No replies yet. Be the first.</p>
+          ) : (
+            <CommentThreadList threads={threads} canPost={canReply} posting={posting} replyTo={replyTo} setReplyTo={setReplyTo} onReply={submitComment} />
+          )}
+          <div className="mt-3">
+            {canReply ? (
+              <NoteComposer placeholder="Write a reply..." submitLabel="Reply" posting={posting} onSubmit={submitComment} />
+            ) : (
+              <p className="rounded-xl px-2.5 py-2 text-[11px]" style={{ background: "var(--an-bg-1)", border: "1px solid var(--an-line)", color: "var(--an-fg-mute)" }}>
+                Connect a wallet to reply.
+              </p>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -504,6 +545,65 @@ function ChangeProfileImage() {
   );
 }
 
+type CommentThread = NonNullable<AgentProfile["threads"]>[number];
+type CommentReply = CommentThread["replies"][number];
+
+// Threaded comment list (GH #101): top-level comments, each with its replies collapsed to one
+// indented level; Reply opens an inline composer. Shared by the agent-profile comment wall and
+// a blog post's own comment thread (comment:blog:<postId>), so both render identically.
+function CommentThreadList({ threads, canPost, posting, replyTo, setReplyTo, onReply }: {
+  threads: CommentThread[];
+  canPost: boolean;
+  posting: boolean;
+  replyTo: string | null;
+  setReplyTo: (id: string | null) => void;
+  onReply: (f: NoteFields, parentId: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      {threads.map(({ note: n, replies }) => {
+        const replyingHere = replyTo === n.id || replies.some((r) => r.id === replyTo);
+        const card = (nn: CommentReply, compact: boolean) => (
+          <div className={`rounded-xl border ${compact ? "p-3" : "p-3.5"} text-sm`} style={{ background: "var(--an-bg-1)", borderColor: "var(--an-line)", color: "var(--an-fg-dim)" }}>
+            <div className="mb-2 flex items-center gap-2.5">
+              <div className="h-8 w-8 shrink-0 overflow-hidden rounded-full" style={{ background: "var(--an-bg-2)", border: "1px solid var(--an-line)" }} aria-hidden="true" dangerouslySetInnerHTML={{ __html: walletAvatarSvg(nn.author) }} />
+              <span className="font-mono text-xs" style={{ color: "var(--an-fg-dim)" }}>{shortWallet(nn.author)}</span>
+              {noteDate(nn.timestamp) && <span className="ml-auto text-[11px]" style={{ color: "var(--an-fg-mute)" }}>{noteDate(nn.timestamp)}</span>}
+            </div>
+            {nn.parentAuthor && nn.parentAuthor !== n.author && (
+              <p className="mb-1 text-[11px]" style={{ color: "var(--an-fg-mute)" }}>↳ replying to {shortWallet(nn.parentAuthor)}</p>
+            )}
+            {mediaUrl(nn.image) && <img src={mediaUrl(nn.image)} alt="" referrerPolicy="no-referrer" className="mb-2 max-h-32 w-full rounded-lg object-cover" />}
+            {nn.title && <p className="mb-0.5 text-sm font-bold" style={{ color: "var(--an-fg)" }}>{nn.title}</p>}
+            {nn.text && <p className="whitespace-pre-wrap break-words leading-relaxed">{nn.text}</p>}
+            {nn.gitLink && <GithubCard url={nn.gitLink} />}
+            {canPost && (
+              <button onClick={() => setReplyTo(replyTo === nn.id ? null : nn.id)} className="mt-2 text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>
+                {replyTo === nn.id ? "Cancel" : "Reply"}
+              </button>
+            )}
+          </div>
+        );
+        return (
+          <div key={n.id} className="space-y-2">
+            {card(n, false)}
+            {replies.length > 0 && (
+              <div className="ml-4 space-y-2 border-l pl-3" style={{ borderColor: "var(--an-line)" }}>
+                {replies.map((r) => card(r, true))}
+              </div>
+            )}
+            {replyingHere && canPost && (
+              <div className="ml-4">
+                <NoteComposer placeholder="Write a reply..." submitLabel="Reply" posting={posting} onSubmit={(f) => onReply(f, replyTo ?? n.id)} />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 interface Props {
   profile: AgentProfile;
   onBack: () => void;
@@ -627,7 +727,6 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
   // this view only renders. Blog = the agent's own top-level posts; comments = holder
   // threads. Each is a ThreadNode { note, replies } with replies already flattened to
   // the 2-level cap and carrying parentAuthor for the @author ref.
-  type ThreadReply = NonNullable<typeof profile.threads>[number]["replies"][number];
   const blogNotes = (profile.threads ?? []).filter((t) => t.note.isSelfNote).map((t) => t.note);
   const commentThreads = (profile.threads ?? []).filter((t) => !t.note.isSelfNote);
 
@@ -918,47 +1017,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
               {commentThreads.length > 0 && (
                 <div>
                   <p className="mb-2 text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>Comments</p>
-                  <div className="space-y-2">
-                    {commentThreads.map(({ note: n, replies }) => {
-                      const replyingHere = replyTo === n.id || replies.some((r) => r.id === replyTo);
-                      const card = (nn: ThreadReply, compact: boolean) => (
-                        <div className={`rounded-xl border ${compact ? "p-3" : "p-3.5"} text-sm`} style={{ background: "var(--an-bg-1)", borderColor: "var(--an-line)", color: "var(--an-fg-dim)" }}>
-                          <div className="mb-2 flex items-center gap-2.5">
-                            <div className="h-8 w-8 shrink-0 overflow-hidden rounded-full" style={{ background: "var(--an-bg-2)", border: "1px solid var(--an-line)" }} aria-hidden="true" dangerouslySetInnerHTML={{ __html: walletAvatarSvg(nn.author) }} />
-                            <span className="font-mono text-xs" style={{ color: "var(--an-fg-dim)" }}>{shortWallet(nn.author)}</span>
-                            {noteDate(nn.timestamp) && <span className="ml-auto text-[11px]" style={{ color: "var(--an-fg-mute)" }}>{noteDate(nn.timestamp)}</span>}
-                          </div>
-                          {nn.parentAuthor && nn.parentAuthor !== n.author && (
-                            <p className="mb-1 text-[11px]" style={{ color: "var(--an-fg-mute)" }}>↳ replying to {shortWallet(nn.parentAuthor)}</p>
-                          )}
-                          {mediaUrl(nn.image) && <img src={mediaUrl(nn.image)} alt="" referrerPolicy="no-referrer" className="mb-2 max-h-32 w-full rounded-lg object-cover" />}
-                          {nn.title && <p className="mb-0.5 text-sm font-bold" style={{ color: "var(--an-fg)" }}>{nn.title}</p>}
-                          {nn.text && <p className="whitespace-pre-wrap break-words leading-relaxed">{nn.text}</p>}
-                          {nn.gitLink && <GithubCard url={nn.gitLink} />}
-                          {canPost && (
-                            <button onClick={() => setReplyTo(replyTo === nn.id ? null : nn.id)} className="mt-2 text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>
-                              {replyTo === nn.id ? "Cancel" : "Reply"}
-                            </button>
-                          )}
-                        </div>
-                      );
-                      return (
-                        <div key={n.id} className="space-y-2">
-                          {card(n, false)}
-                          {replies.length > 0 && (
-                            <div className="ml-4 space-y-2 border-l pl-3" style={{ borderColor: "var(--an-line)" }}>
-                              {replies.map((r) => card(r, true))}
-                            </div>
-                          )}
-                          {replyingHere && canPost && (
-                            <div className="ml-4">
-                              <NoteComposer placeholder="Write a reply..." submitLabel="Reply" posting={posting} onSubmit={(f) => submitNote(f, replyTo ?? n.id)} />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <CommentThreadList threads={commentThreads} canPost={canPost} posting={posting} replyTo={replyTo} setReplyTo={setReplyTo} onReply={submitNote} />
                 </div>
               )}
 
@@ -981,9 +1040,9 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                       </button>
                     </LockedGate>
                   ) : (
-                    <p className="rounded-xl px-2.5 py-2 text-[11px]" style={{ background: "var(--an-bg-1)", border: "1px solid var(--an-line)", color: "var(--an-fg-mute)" }}>
-                      Hold a skill to comment.
-                    </p>
+                    <button onClick={() => setTab("agent")} className="w-full rounded-xl px-2.5 py-2 text-left text-[11px]" style={{ background: "var(--an-bg-1)", border: "1px solid var(--an-line)", color: "var(--an-fg-dim)" }}>
+                      Buy one of this agent's skills to comment &gt;
+                    </button>
                   )}
                 </div>
               )}

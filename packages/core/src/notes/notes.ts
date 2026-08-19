@@ -20,7 +20,7 @@ import {
   ensureTable,
   signerAddress,
 } from "../core/chain.js";
-import { reviewsHint, reviewsAgentHint, REVIEW_COLUMNS } from "../core/seed.js";
+import { reviewsHint, reviewsAgentHint, blogCommentsHint, REVIEW_COLUMNS } from "../core/seed.js";
 import { type SkillSource } from "../core/skillSource.js";
 import type { Note, Row, ThreadNode, ThreadedReply } from "../core/types.js";
 import { heldSkillMints, heldSkillCreators } from "./holdings.js";
@@ -117,16 +117,11 @@ export async function postNote(
   // is the SAME source as the owned-skills list, so "UI shows it owned" and "gate
   // accepts it" can never disagree.
   //
-  // ⚠️ Enforced CLIENT-SIDE only. coding-info §B3 assumed the IQ contract's
-  // native `gate_opt` would enforce this on-chain for free, but that path is
-  // structurally incompatible with Token-2022: the SDK derives the gate ATA with
-  // the LEGACY token program id in the seeds (utils/ata.js), while skill mints
-  // live under the Token-2022 program. The holder's real (2022) ATA address
-  // never matches → resolveSignerAta throws "missing signer_ata" on EVERY write,
-  // even for legit holders, making a natively-gated table unusable. Until the
-  // SDK/contract resolves a Token-2022 ATA (or gates by collection metadata),
-  // the table is open and this check is the guard. An attacker calling writeRow
-  // directly bypasses it — real enforcement needs SDK Token-2022 support.
+  // Real enforcement is the table's ON-CHAIN Token gate (set at create, below): the IQ
+  // contract checks the holder's Token-2022 ATA on every write (SDK >= 0.1.28 derives the
+  // 2022 ATA, so the gate is usable for our mints). This heldSkillMints check is a fast-fail
+  // pre-check so a non-holder never sends a doomed tx. Tables created before the gate landed
+  // stay open; new ones (first comment on a skill) are gated going forward.
   const held = await heldSkillMints(author);
   if (!held.has(input.skillId)) {
     throw new Error(`Must own ≥1 skill token to post note`);
@@ -135,8 +130,9 @@ export async function postNote(
   const hint = reviewsHint(input.collectionId, input.skillId);
   const note = buildNote(author, input.text, input.gitLink, input.meta, input.title, input.image, input.parentId);
 
-  // Open table (no native gate — see the Token-2022 incompatibility above).
-  await ensureTable(signer, hint, REVIEW_COLUMNS, "id");
+  // Create the table gated by the item mint (Token gate); the first commenter creates it,
+  // and the IQ contract then checks the holder's Token-2022 ATA on every write.
+  await ensureTable(signer, hint, REVIEW_COLUMNS, "id", { gate: { mint: input.skillId } });
   await writeRow(signer, hint, JSON.stringify(note));
   return note.id;
 }
@@ -335,6 +331,80 @@ export async function readAgentThreads(
     return nodes;
   } catch {
     const notes = await readAgentNotes(agentWallet, { limit });
+    return threadReplies(notes);
+  }
+}
+
+// ===== Blog-post comments (comment:blog:[postId]) — one thread per post =====
+// A blog post is a self-note living in reviews:agent:[agentWallet]; its comments
+// live in their OWN per-post table keyed by the post's id (tables.md §0). The
+// first commenter creates the table (ensureTable), the rest just writeRow.
+
+export interface PostBlogCommentInput {
+  postId: string; // the blog post's note id — the comment:blog:[postId] table subject
+  agentWallet: string; // the post's author/agent — context only (replies are open, no gate)
+  text: string;
+  gitLink?: string;
+  parentId?: string; // GH #101: id of the comment this replies to; omit for top-level
+  meta?: Record<string, unknown>;
+}
+
+/**
+ * Write a reply onto ONE blog post's table (comment:blog:[postId]).
+ *
+ * OPEN to anyone with a wallet (issue #183 post-discussion model). This is
+ * deliberately DIFFERENT from agent REPUTATION comments (reviews:agent:<wallet>
+ * via postAgentNote), which stay holder-gated because they shape the agent's
+ * standing — a post reply does not, so it needs no skill. The first replier
+ * creates the per-post table. Returns the note id.
+ */
+export async function postBlogComment(
+  conn: Connection,
+  signer: SignerInput,
+  input: PostBlogCommentInput,
+): Promise<string> {
+  const author = await signerAddress(signer);
+  // No holder gate: any connected wallet may reply. input.agentWallet is kept only
+  // as context (which agent's post this is), not as a permission check.
+
+  const hint = blogCommentsHint(input.postId);
+  // Blog comments carry no title/image (those are the post's, in reviews:agent).
+  const note = buildNote(author, input.text, input.gitLink, input.meta, undefined, undefined, input.parentId);
+
+  await ensureTable(signer, hint, REVIEW_COLUMNS, "id");
+  await writeRow(signer, hint, JSON.stringify(note));
+  return note.id;
+}
+
+/**
+ * Read ONE blog post's comments, grouped into threads (GH #101). Gateway-first
+ * (server-side parentId grouping), falling back to a flat read + threadReplies.
+ * Subject is the postId, so hydrateNotes' isSelfNote is always false here — a
+ * post's table holds only comments, never the post itself.
+ */
+export async function readBlogCommentThreads(
+  postId: string,
+  options?: { limit?: number },
+): Promise<ThreadNode[]> {
+  const limit = options?.limit ?? 100;
+  const hint = blogCommentsHint(postId);
+  try {
+    const threads = await readThreads(hint, limit);
+    const nodes: ThreadNode[] = [];
+    for (const t of threads) {
+      const note = hydrateNotes([t.op], postId)[0];
+      if (!note) continue; // op row missing an id (metadata shape) — skip
+      const replies: ThreadedReply[] = [];
+      for (const r of t.replies) {
+        const reply = hydrateNotes([r], postId)[0];
+        if (reply) replies.push({ ...reply, parentAuthor: (r as { parentAuthor?: string }).parentAuthor });
+      }
+      nodes.push({ note, replies });
+    }
+    return nodes;
+  } catch {
+    const rows = await readRows(hint, { limit });
+    const notes = hydrateNotes(rows, postId).sort((a, b) => b.timestamp - a.timestamp);
     return threadReplies(notes);
   }
 }

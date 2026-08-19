@@ -25,10 +25,20 @@ mints themselves are NOT tables (the Token-2022 collection IS the registry; see
 | `mysessions:{wallet}` | wallet | session **pointer** list (sessionId), not the blob | owner only |
 | `reviews:{collectionId}:{nft}` | collection mint + item mint | comments on a skill/workflow item | (gate §3) |
 | `reviews:agent:{wallet}` | agent wallet | comments on an agent + the owner's self-notes (blog) | (gate §3) |
+| `comment:blog:{postId}` | a blog post's note id | comments on ONE blog post (per-post thread) | (gate §3) |
 
-That's the entire table surface. The hint strings are produced by functions in
-`seed.ts`: `mysessionsHint(wallet)`, `reviewsHint(collectionId, nft)`,
-`reviewsAgentHint(wallet)`.
+The hint strings are produced by functions in `seed.ts`: `mysessionsHint(wallet)`,
+`reviewsHint(collectionId, nft)`, `reviewsAgentHint(wallet)`, `blogCommentsHint(postId)`.
+
+> Added 2026-08-17: `comment:blog:{postId}`. A blog post is a self-note in
+> `reviews:agent:{wallet}`; its comments live in their OWN per-post table (created
+> lazily by the first commenter) so a hot post never bloats the agent's
+> `reviews:agent` read, and the post view fetches exactly one table on tap-open.
+> This intentionally extends the "mysessions + reviews:*" surface of §6.1. `postId`
+> is the post's note id for now, to be hardened to the write tx signature later.
+> GATE (decided 2026-08-19): post replies are OPEN to anyone with a wallet, on purpose
+> DIFFERENT from `reviews:agent` comments — a reputation comment shapes the agent's
+> standing so it needs holder skin-in-the-game, but a post reply is just discussion.
 
 > No `audit` table. Skill safety is **not** an admin/QAgent eval written on-chain
 > — it's enforced **reader-side**: before buying, the buyer's own agent runs a
@@ -90,16 +100,19 @@ timestamp · meta?). `REPUTATION_COLUMNS` / `SKILLS_INDEX_COLUMNS` deleted.
 
 ## 3. Write gates (reviews)
 
-Reviews are gated CLIENT-SIDE (the deployed IQ contract's native gate can't verify
-a Token-2022 mint — its ATA derivation uses the legacy token program id, so a
-natively-gated table rejects even legit Token-2022 holders). The functions enforce
-it before `writeRow`:
+Write gates differ per review kind. Item comments are enforced ON-CHAIN by the table's
+Token gate: SDK 0.1.28+ derives the Token-2022 ATA, so the IQ contract's native gate now
+works for our mints (it checks the holder's ATA on every write). Agent comments stay a
+client holder check ("any of an agent's skills" is multi-mint, which a single-mint Token
+gate cannot express), and blog-post replies are open. The client functions also run a
+fast-fail pre-check before `writeRow`:
 
 | Review kind | Table | Who may write |
 |---|---|---|
-| comment on an item | `reviews:{collectionId}:{nft}` | holders of that item's soulbound token (`getBalance ≥ 1`) |
+| comment on an item | `reviews:{collectionId}:{nft}` | holders of that item's token, ON-CHAIN Token gate (gate.mint = the item mint) + client pre-check |
 | comment on an agent | `reviews:agent:{wallet}` | holders of ≥1 of that agent's skills |
 | self-note (blog) | `reviews:agent:{wallet}` | the wallet owner only (author == subject) |
+| reply to a blog post | `comment:blog:{postId}` | ANYONE with a wallet — OPEN (issue #183 post discussion). NOT holder-gated, deliberately unlike the agent comment wall above |
 
 self-note vs comment is **derived from `author == subject`**, not a stored flag
 (notes.md §3). An attacker calling `writeRow` directly bypasses the client gate —

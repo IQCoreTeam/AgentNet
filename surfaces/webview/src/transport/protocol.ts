@@ -157,6 +157,8 @@ export type ClientMessage =
   | { type: "buyRequiredSkills"; items: { skillId: string; creatorWallet?: string }[] }
   | { type: "postNote"; skillId: string; skillType?: "skill" | "workflow"; text: string; gitLink?: string }
   | { type: "postAgentNote"; agentWallet: string; text: string; gitLink?: string; title?: string; image?: string; parentId?: string }
+  | { type: "getBlogComments"; postId: string; agentWallet: string }
+  | { type: "postBlogComment"; postId: string; agentWallet: string; text: string; gitLink?: string; parentId?: string }
   | {
       type: "publishSkill";
       name: string;
@@ -252,6 +254,8 @@ export type ServerMessage =
   | { type: "agentProfile"; profile: import("@iqlabs-official/agent-sdk").AgentProfile }
   | { type: "buyAllResult"; wallet: string; ok: boolean; bought: number; failed: number; error?: string }
   | { type: "agentNoteResult"; agentWallet: string; ok: boolean; error?: string }
+  | { type: "blogComments"; postId: string; threads: import("@iqlabs-official/agent-sdk").AgentProfile["threads"] }
+  | { type: "blogCommentResult"; postId: string; ok: boolean; error?: string }
   | { type: "publishResult"; ok: boolean; mint?: string; error?: string }
   | { type: "publishProgress"; phase: "store" | "mint" | "list"; signed: number; total?: number; percent?: number; kind: "skill" | "workflow" }
   | { type: "githubStatus"; hasToken: boolean; masked?: string }
