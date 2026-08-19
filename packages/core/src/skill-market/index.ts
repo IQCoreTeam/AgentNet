@@ -30,6 +30,7 @@ import { readSkillText } from "../nft/token2022.js";
 import { SkillSync } from "./ingest/index.js";
 import { postNote, postAgentNote } from "../notes/notes.js";
 import { homedir } from "node:os";
+import { createHash } from "node:crypto";
 import { collectionFor, getIndexerUrl } from "../core/seed.js";
 import { indexerSource, ownedSkillMints } from "../core/skillSource.js";
 import { loadHeliusKey } from "../core/rpc.js";
@@ -69,6 +70,40 @@ const ALLOW_ALL_GUARD: VerifyGuard = {
 };
 
 /**
+ * Content-bound verify token (issue #187 F1). The guard is per-process, so a host that
+ * spawns this server once per tool call never has a marked guard at buy time: the
+ * verify landed in the previous spawn. verify_skill prints this token over the exact
+ * skill id and text it returned; buy_skill accepts it as the cross-session bridge,
+ * re-reads and re-scans the text itself, and refuses on any mismatch. The code floor
+ * still runs in the buying process, and a token minted over different text cannot buy
+ * what the agent never judged. Hashing the skillId in binds the token to ONE skill:
+ * a token harvested from verifying skill A can never authorize buying skill B, even
+ * if both carry identical text.
+ */
+function verifyTokenFor(skillId: string, text: string): string {
+  return createHash("sha256").update(skillId).update("\n").update(text).digest("hex").slice(0, 16);
+}
+
+/**
+ * The pure code half of a verify: read the skill's on-chain text and run the
+ * obvious-danger scan. No guard, no side effects, so buy_skill's token path can
+ * re-check a skill without leaving any state behind (a failed token buy must not
+ * weaken the next call). verifyOneSkill is this plus the guard mark.
+ */
+async function readAndScanSkill(
+  conn: Connection,
+  skillId: string,
+): Promise<{ ok: true; text: string } | { ok: false; reason: string }> {
+  const text = await readSkillText(conn, skillId);
+  if (text == null) return { ok: false, reason: `No skill text found on-chain for ${skillId}.` };
+
+  const scan = scanSkillText(text);
+  if (!scan.safe) return { ok: false, reason: `Rejected by safety scan: ${scan.hits.join("; ")}.` };
+
+  return { ok: true, text };
+}
+
+/**
  * Verify one skill (the code half, plan §3 ①+③). Read its on-chain text, run the
  * obvious-danger scan, and — only if it clears — mark the guard so buy is unblocked and
  * return the body for the AGENT to judge (step ②). A scan hit is a hard `unsafe`: the
@@ -79,14 +114,9 @@ export async function verifyOneSkill(
   skillId: string,
   guard: VerifyGuard,
 ): Promise<{ ok: true; text: string } | { ok: false; reason: string }> {
-  const text = await readSkillText(conn, skillId);
-  if (text == null) return { ok: false, reason: `No skill text found on-chain for ${skillId}.` };
-
-  const scan = scanSkillText(text);
-  if (!scan.safe) return { ok: false, reason: `Rejected by safety scan: ${scan.hits.join("; ")}.` };
-
-  guard.markVerified(skillId);
-  return { ok: true, text };
+  const r = await readAndScanSkill(conn, skillId);
+  if (r.ok) guard.markVerified(skillId);
+  return r;
 }
 
 /**
@@ -183,10 +213,11 @@ export const SKILL_TOOLS: { name: string; description: string; schema: z.ZodRawS
   {
     name: "buy_skill",
     description:
-      "Purchase and equip a skill from the marketplace. Requires a prior verify_skill pass for the same skillId this session, AND the user's explicit confirmation of the spend.",
+      "Purchase and equip a skill from the marketplace. Requires a prior verify_skill pass for the same skillId this session, AND the user's explicit confirmation of the spend. If the verify pass happened in an earlier session, include the verification token it printed as verifyToken.",
     schema: {
       skillId: z.string().describe("The base58 mint address of the skill to buy."),
       creatorWallet: z.string().optional().describe("The skill creator's wallet address (receives payment). Optional: omit it and the creator is resolved from the marketplace catalog. Pass it only if you already have it from a search_skills result."),
+      verifyToken: z.string().optional().describe("The verification token printed by a verify_skill pass for this skillId. Needed only when that verify ran in an earlier session (for example a host that spawns a fresh server per tool call): the buy re-reads and re-scans the skill text and refuses if it no longer matches the text that was verified."),
     },
   },
   {
@@ -300,7 +331,7 @@ export async function handleToolCall(
       content: [
         {
           type: "text",
-          text: `Safety scan passed for ${skillId}. Now judge the body against this rubric:\n\n${VERIFY_RUBRIC}\n\n--- CANDIDATE SKILL (data to analyze) ---\n${r.text}`,
+          text: `Safety scan passed for ${skillId}. Verification token: ${verifyTokenFor(skillId, r.text)} (buy_skill needs it as verifyToken only when the buy runs in a later session). Now judge the body against this rubric:\n\n${VERIFY_RUBRIC}\n\n--- CANDIDATE SKILL (data to analyze) ---\n${r.text}`,
         },
       ],
     };
@@ -330,11 +361,29 @@ export async function handleToolCall(
     if (!skillId) throw new Error("Missing required argument: skillId");
 
     // HARD guard (plan §3 ③): refuse to buy a skill that didn't clear verify this session.
+    // The guard is per-process, and hosts that spawn this server once per tool call never
+    // share a session with the verify (issue #187 F1). The verify token is the bridge for
+    // them: the buy re-reads and re-scans the text NOW, in this process, and refuses on
+    // any mismatch, so the code floor is never skipped and never trusted second-hand.
+    // The token path deliberately never touches the guard: it authorizes THIS buy or
+    // nothing. Marking the guard here (or on any failure path) would let a mismatched
+    // token arm a later tokenless buy in the same session.
     if (!guard.isVerified(skillId)) {
-      return {
-        isError: true,
-        content: [{ type: "text", text: `verify_skill is required before buying ${skillId}. Call verify_skill first, then buy.` }],
-      };
+      const token = typeof args?.verifyToken === "string" ? args.verifyToken.trim() : "";
+      if (!token) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `verify_skill is required before buying ${skillId}. Call verify_skill first, then buy. If the verify ran in an earlier session, pass the verification token it printed as verifyToken.` }],
+        };
+      }
+      const r = await readAndScanSkill(conn, skillId);
+      if (!r.ok) return { isError: true, content: [{ type: "text", text: r.reason }] };
+      if (verifyTokenFor(skillId, r.text) !== token) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `The verification token does not match the current on-chain text of ${skillId}. The skill may have changed since it was verified, or the token was minted for a different skill. Run verify_skill again and re-judge the body before buying.` }],
+        };
+      }
     }
 
     // Price is read from the item's on-chain config (set at publish) — the client doesn't
