@@ -15,6 +15,8 @@
 //                            default (~/.config/solana/id.json). Missing file → a new
 //                            keypair is generated there (never overwrites a valid one).
 //   AGENTNET_WALLET_REMOTE   URL of a remote signer endpoint (account/remoteWallet.ts).
+//   AGENTNET_WALLET_REMOTE_TOKEN   optional shared secret for that endpoint, sent
+//                            as an Authorization Bearer header on every call.
 //                            When set, that endpoint holds the key and signs; the
 //                            keyfile is never read or created. Unset keeps the
 //                            keyfile path exactly as before.
@@ -54,6 +56,7 @@ function readOnlyFromEnv(): boolean {
 
 async function main(): Promise<void> {
   const remote = process.env.AGENTNET_WALLET_REMOTE?.trim() || undefined;
+  const remoteToken = process.env.AGENTNET_WALLET_REMOTE_TOKEN?.trim() || undefined;
   const keyfile = process.env.AGENTNET_WALLET_KEYFILE?.trim() || undefined;
   let wallet: Wallet;
   let address: string;
@@ -64,7 +67,7 @@ async function main(): Promise<void> {
   let signer: { wallet: Wallet; address: string } | undefined;
   if (remote) {
     try {
-      signer = await remoteWallet(remote);
+      signer = await remoteWallet(remote, remoteToken);
       console.error(`[agentnet-mcp] signing through the remote signer at ${remote}`);
     } catch (err) {
       console.error(
