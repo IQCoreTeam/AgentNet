@@ -35,6 +35,7 @@ vi.mock("../core/chain.js", () => ({
 vi.mock("../core/seed.js", () => ({
   getSkillsCollectionMint: vi.fn().mockReturnValue("skillsCollection111"),
   getWorkflowsCollectionMint: vi.fn().mockReturnValue("workflowsCollection111"),
+  collectionFor: vi.fn((type?: "skill" | "workflow") => (type === "workflow" ? "workflowsCollection111" : "skillsCollection111")),
   getIndexerUrl: vi.fn().mockReturnValue("https://nft-index.example"),
   getNetwork: vi.fn().mockReturnValue("devnet"),
 }));
@@ -215,6 +216,51 @@ describe("skill-market", () => {
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("Must own");
+  });
+
+  // ── omitted collectionId resolves the ITEM's collection, not a skills default (#187 F4) ──
+  it("post_skill_comment on a workflow files under the WORKFLOWS collection when collectionId is omitted", async () => {
+    vi.mocked(searchSkills).mockResolvedValue([{ id: "wf1", creator: "wfCreator111", type: "workflow" }] as any);
+    vi.mocked(postNote).mockResolvedValue("note:wf:123:xyz");
+    const result = await handleToolCall(mockConn, signer, "defaultCreator", "post_skill_comment", {
+      skillId: "wf1",
+      text: "Solid workflow.",
+    });
+    expect(result.isError).toBeUndefined();
+    expect(postNote).toHaveBeenCalledWith(mockConn, signer, {
+      collectionId: "workflowsCollection111",
+      skillId: "wf1",
+      text: "Solid workflow.",
+      gitLink: undefined,
+    });
+  });
+
+  it("post_skill_comment on a skill still files under the skills collection when collectionId is omitted", async () => {
+    // the beforeEach catalog entry for skill1 has no type field: no type is treated as a
+    // skill, the same reading search_skills applies
+    vi.mocked(postNote).mockResolvedValue("note:sk:123:xyz");
+    const result = await handleToolCall(mockConn, signer, "defaultCreator", "post_skill_comment", {
+      skillId: "skill1",
+      text: "Great skill!",
+    });
+    expect(result.isError).toBeUndefined();
+    expect(postNote).toHaveBeenCalledWith(mockConn, signer, {
+      collectionId: "skillsCollection111",
+      skillId: "skill1",
+      text: "Great skill!",
+      gitLink: undefined,
+    });
+  });
+
+  it("post_skill_comment refuses to guess the collection for an item missing from the catalog", async () => {
+    vi.mocked(searchSkills).mockResolvedValue([] as any);
+    const result = await handleToolCall(mockConn, signer, "defaultCreator", "post_skill_comment", {
+      skillId: "ghost1",
+      text: "hello",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("pass collectionId");
+    expect(postNote).not.toHaveBeenCalled();
   });
 
   it("should handle post_agent_comment tool call", async () => {
