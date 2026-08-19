@@ -42,7 +42,7 @@ describe("core/seed", () => {
     });
 
     it("matches the gateway to the RPC's network", () => {
-      // a mainnet RPC must map to the mainnet gateway even though the static NETWORK is devnet
+      // a devnet RPC must map to the devnet gateway even though the static NETWORK is mainnet
       expect(getGatewayUrl(networkFromRpcUrl("https://api.mainnet-beta.solana.com"))).toBe(
         ENDPOINTS.mainnet.gateway
       );
@@ -52,8 +52,8 @@ describe("core/seed", () => {
     });
 
     it("falls back to the static network for an unrecognized host", () => {
-      // no network token in the host -> static switch (devnet in this build)
-      expect(networkFromRpcUrl("https://my-private-node.example.com/rpc")).toBe("devnet");
+      // no network token in the host -> static switch (mainnet in this build)
+      expect(networkFromRpcUrl("https://my-private-node.example.com/rpc")).toBe("mainnet");
     });
   });
 });
