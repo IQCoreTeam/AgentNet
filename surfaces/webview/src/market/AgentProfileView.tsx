@@ -234,7 +234,6 @@ function GithubCard({ url, className = "mt-2" }: { url: string; className?: stri
 // image, title, author identity row (the comment-card avatar + short wallet + date idiom),
 // full text, and the GithubCard embed for the git link.
 function BlogPostView({ post, wallet, onClose }: { post: BlogNote; wallet: string; onClose: () => void }) {
-  const t = useT();
   const { state, send } = useStore();
   const author = post.author || wallet;
   const threads = state.blogComments[post.id];
@@ -255,56 +254,54 @@ function BlogPostView({ post, wallet, onClose }: { post: BlogNote; wallet: strin
   }
   return (
     <div className="absolute inset-0 z-30 flex flex-col" style={{ background: "var(--an-bg-0)" }}>
-      <header
-        className="flex items-center gap-2.5 border-b px-3.5 shrink-0"
-        style={{ borderColor: "var(--an-term-line)", paddingTop: "max(0.5rem, env(safe-area-inset-top))", paddingBottom: "0.7rem" }}
-      >
-        <button
-          onClick={onClose}
-          aria-label="Back"
-          className="an-bracket flex shrink-0 items-center justify-center"
-          style={{ width: "38px", height: "38px", border: "1px solid var(--an-term-line)", color: "var(--an-term-fg-2)", "--ts": "8px", "--bk": "var(--an-term-bg)", "--tk": "var(--an-term-fg-6)" } as CSSProperties}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 6l-6 6 6 6" /></svg>
-        </button>
-        <div className="min-w-0 flex-1">
-          <div className="an-term-title text-[18px] leading-none">{t(M.agentProfile.blog.postTitle)}</div>
-          <div className="an-term-sub leading-none"><span style={{ fontFamily: "'Noto Sans JP', sans-serif" }}>ブログ</span></div>
+      <div className="shrink-0" style={{ paddingTop: "max(0.25rem, env(safe-area-inset-top))" }}>
+        <div className="flex items-center justify-between px-3.5 pb-1.5 pt-2 an-term-mono text-[10px] uppercase" style={{ letterSpacing: "0.14em", color: "var(--an-term-fg-6)" }}>
+          <span><span style={{ color: "var(--an-term-fg-8)" }}>&gt;</span>BLOG_POST</span>
+          <span style={{ fontFamily: "'Noto Sans JP', sans-serif" }}>ブログ</span>
         </div>
-      </header>
-      <div className="flex-1 overflow-y-auto px-3.5 pt-4 an-tabbar-inset">
+        <div className="mx-3 mb-1 flex items-center gap-2.5 px-3 py-2.5" style={{ border: "1px solid var(--an-term-line-2)" }}>
+          <button onClick={onClose} aria-label="Back" className="an-term-mono shrink-0 text-[13px] font-bold active:opacity-70" style={{ color: "var(--an-term-fg-7)" }}>[&lt;]</button>
+          <span className="an-term-mono text-[13px] font-bold uppercase" style={{ letterSpacing: "0.14em", color: "var(--an-term-fg)" }}>Blog_Post</span>
+          <span className="ml-auto" style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: "10px", color: "var(--an-term-fg-6)" }}>ブログ</span>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto px-3.5 pt-3 an-tabbar-inset">
         {mediaUrl(post.image) && (
-          <img src={mediaUrl(post.image)} alt="" referrerPolicy="no-referrer" className="mb-3 max-h-64 w-full rounded-xl object-cover" style={{ border: "1px solid var(--an-line)" }} />
+          <div className="relative mb-4 h-44 w-full" style={{ border: "1px solid var(--an-term-green)" }}>
+            <img src={mediaUrl(post.image)} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
+            <span className="pointer-events-none absolute inset-0" style={{ background: "repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0,rgba(0,0,0,.22) 1px,transparent 1px,transparent 3px)" }} aria-hidden="true" />
+          </div>
         )}
-        {post.title && <h1 className="text-base font-bold leading-snug" style={{ color: "var(--an-fg)" }}>{post.title}</h1>}
-        <div className="mt-2.5 flex items-center gap-2.5">
-          <div className="h-8 w-8 shrink-0 overflow-hidden rounded-full" style={{ background: "var(--an-bg-2)", border: "1px solid var(--an-line)" }} aria-hidden="true" dangerouslySetInnerHTML={{ __html: walletAvatarSvg(author) }} />
-          <span className="font-mono text-xs" style={{ color: "var(--an-fg-dim)" }}>{shortWallet(author)}</span>
-          {noteDate(post.timestamp) && <span className="ml-auto text-[11px]" style={{ color: "var(--an-fg-mute)" }}>{noteDate(post.timestamp)}</span>}
+        {post.title && <h1 className="an-term-mono text-[15px] font-bold uppercase leading-snug" style={{ letterSpacing: "0.04em", color: "var(--an-term-fg)" }}>{post.title}</h1>}
+        <div className="mt-3 flex items-baseline justify-between gap-2 py-2" style={{ borderTop: "1px solid var(--an-term-line)", borderBottom: "1px solid var(--an-term-line)" }}>
+          <span className="an-term-mono text-[10px] font-bold uppercase" style={{ letterSpacing: "0.12em", color: "var(--an-term-fg)" }}>//AUTHOR_</span>
+          <span className="an-term-mono text-[10px]" style={{ color: "var(--an-fg-dim)" }}>
+            {shortWallet(author)}{noteDate(post.timestamp) ? <> <span style={{ color: "var(--an-term-fg-7)" }}>[{noteDate(post.timestamp)}]</span></> : ""}
+          </span>
         </div>
-        {post.text && <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-relaxed" style={{ color: "var(--an-fg-dim)" }}>{post.text}</p>}
+        {post.text && <p className="an-term-mono mt-3 whitespace-pre-wrap break-words text-[12px] leading-relaxed" style={{ color: "var(--an-fg-dim)" }}>{post.text}</p>}
         {post.gitLink && <GithubCard url={post.gitLink} className="mt-3" />}
 
-        {/* This post's OPEN reply thread (comment:blog:<postId>) — anyone with a wallet (issue #183).
-            Same renderer as the agent wall, but the wall is holder-gated; these replies are not. */}
-        <div className="mt-6 border-t pt-4" style={{ borderColor: "var(--an-line)" }}>
-          <p className="mb-2 text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>
-            Replies{threads?.length ? ` (${threads.length})` : ""}
+        {/* This post's OPEN comment thread (comment:blog:<postId>) — anyone with a wallet (issue #183).
+            Same renderer as the agent wall, but the wall is holder-gated; these comments are not. */}
+        <div className="mt-6 pt-4" style={{ borderTop: "1px solid var(--an-term-line-2)" }}>
+          <p className="an-term-mono mb-3 text-[11px] font-bold uppercase" style={{ letterSpacing: "0.14em", color: "var(--an-term-fg)" }}>
+            <span style={{ color: "var(--an-term-green)" }}>&gt;</span>COMMENTS{threads?.length ? <span style={{ color: "var(--an-term-fg-7)" }}> ({threads.length})</span> : ""}
           </p>
           {threads === undefined ? (
-            <p className="py-4 text-center text-xs" style={{ color: "var(--an-fg-mute)" }}>Loading replies…</p>
+            <p className="an-term-mono py-4 text-center text-[11px]" style={{ color: "var(--an-fg-mute)" }}>Loading comments...</p>
           ) : threads.length === 0 ? (
-            <p className="py-2 text-xs" style={{ color: "var(--an-fg-mute)" }}>No replies yet. Be the first.</p>
+            <p className="an-term-mono py-2 text-[11px]" style={{ color: "var(--an-fg-mute)" }}>No comments yet. Be the first.</p>
           ) : (
             <CommentThreadList threads={threads} canPost={canReply} posting={posting} replyTo={replyTo} setReplyTo={setReplyTo} onReply={submitComment} />
           )}
           <div className="mt-3">
             {canReply ? (
-              <NoteComposer placeholder="Write a reply..." submitLabel="Reply" posting={posting} onSubmit={submitComment} />
+              <NoteComposer placeholder="Write a comment..." submitLabel="Comment" posting={posting} onSubmit={submitComment} />
             ) : (
-              <p className="rounded-xl px-2.5 py-2 text-[11px]" style={{ background: "var(--an-bg-1)", border: "1px solid var(--an-line)", color: "var(--an-fg-mute)" }}>
-                Connect a wallet to reply.
-              </p>
+              <div className="an-term-mono px-3 py-2.5 text-[10px] uppercase" style={{ letterSpacing: "0.06em", border: "1px solid var(--an-term-line)", color: "var(--an-term-fg-7)" }}>
+                <span style={{ color: "var(--an-term-green)" }}>&gt;</span>CONNECT_WALLET_ <span style={{ color: "var(--an-term-fg)" }}>Connect a wallet to comment.</span>
+              </div>
             )}
           </div>
         </div>
@@ -427,9 +424,11 @@ function NoteComposer({
       {!imageOk && <p className="text-xs" style={{ color: "var(--an-red)" }}>Image must be an https link, on-chain address, or tx id.</p>}
       {img && imageOk && mediaUrl(img) && <img src={mediaUrl(img)} alt="" referrerPolicy="no-referrer" className="h-20 w-20 rounded-lg object-cover" style={{ border: "1px solid var(--an-line)" }} />}
       <input className="an-term-field" placeholder="GitHub link (optional)" value={link} disabled={busy} onChange={(e) => setLink(e.target.value)} />
-      <button onClick={submit} disabled={!hasContent || !imageOk || busy} className="an-btn an-btn-green">
-        {posting ? "Posting..." : submitLabel}
-      </button>
+      <div className="flex justify-end">
+        <button onClick={submit} disabled={!hasContent || !imageOk || busy} className="an-btn an-btn-green w-auto px-6">
+          {posting ? "Posting..." : submitLabel}
+        </button>
+      </div>
     </div>
   );
 }
@@ -560,40 +559,40 @@ function CommentThreadList({ threads, canPost, posting, replyTo, setReplyTo, onR
   onReply: (f: NoteFields, parentId: string) => void;
 }) {
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col">
       {threads.map(({ note: n, replies }) => {
         const replyingHere = replyTo === n.id || replies.some((r) => r.id === replyTo);
-        const card = (nn: CommentReply, compact: boolean) => (
-          <div className={`rounded-xl border ${compact ? "p-3" : "p-3.5"} text-sm`} style={{ background: "var(--an-bg-1)", borderColor: "var(--an-line)", color: "var(--an-fg-dim)" }}>
+        const card = (nn: CommentReply) => (
+          <div>
             <div className="mb-2 flex items-center gap-2.5">
-              <div className="h-8 w-8 shrink-0 overflow-hidden rounded-full" style={{ background: "var(--an-bg-2)", border: "1px solid var(--an-line)" }} aria-hidden="true" dangerouslySetInnerHTML={{ __html: walletAvatarSvg(nn.author) }} />
-              <span className="font-mono text-xs" style={{ color: "var(--an-fg-dim)" }}>{shortWallet(nn.author)}</span>
-              {noteDate(nn.timestamp) && <span className="ml-auto text-[11px]" style={{ color: "var(--an-fg-mute)" }}>{noteDate(nn.timestamp)}</span>}
+              <div className="h-[22px] w-[22px] shrink-0 overflow-hidden" style={{ border: "1px solid var(--an-term-line-2)" }} aria-hidden="true" dangerouslySetInnerHTML={{ __html: walletAvatarSvg(nn.author) }} />
+              <span className="an-term-mono text-[11px]" style={{ color: "var(--an-term-fg)" }}>{shortWallet(nn.author)}</span>
+              {noteDate(nn.timestamp) && <span className="an-term-mono ml-auto text-[9px]" style={{ color: "var(--an-fg-mute)" }}>[{noteDate(nn.timestamp)}]</span>}
             </div>
             {nn.parentAuthor && nn.parentAuthor !== n.author && (
-              <p className="mb-1 text-[11px]" style={{ color: "var(--an-fg-mute)" }}>↳ replying to {shortWallet(nn.parentAuthor)}</p>
+              <p className="an-term-mono mb-1 text-[10px]" style={{ color: "var(--an-fg-mute)" }}>↳ replying to {shortWallet(nn.parentAuthor)}</p>
             )}
-            {mediaUrl(nn.image) && <img src={mediaUrl(nn.image)} alt="" referrerPolicy="no-referrer" className="mb-2 max-h-32 w-full rounded-lg object-cover" />}
-            {nn.title && <p className="mb-0.5 text-sm font-bold" style={{ color: "var(--an-fg)" }}>{nn.title}</p>}
-            {nn.text && <p className="whitespace-pre-wrap break-words leading-relaxed">{nn.text}</p>}
-            {nn.gitLink && <GithubCard url={nn.gitLink} />}
+            {mediaUrl(nn.image) && <img src={mediaUrl(nn.image)} alt="" referrerPolicy="no-referrer" className="mb-2 max-h-32 w-full object-cover" style={{ border: "1px solid var(--an-term-line-2)" }} />}
+            {nn.title && <p className="an-term-mono mb-0.5 text-[12px] font-bold uppercase" style={{ color: "var(--an-term-fg)" }}>{nn.title}</p>}
+            {nn.text && <p className="an-term-mono whitespace-pre-wrap break-words text-[12px] leading-relaxed" style={{ color: "var(--an-fg-dim)" }}>{nn.text}</p>}
+            {nn.gitLink && <GithubCard url={nn.gitLink} className="mt-2" />}
             {canPost && (
-              <button onClick={() => setReplyTo(replyTo === nn.id ? null : nn.id)} className="mt-2 text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>
-                {replyTo === nn.id ? "Cancel" : "Reply"}
+              <button onClick={() => setReplyTo(replyTo === nn.id ? null : nn.id)} className="an-term-mono mt-2 text-[9px] font-bold uppercase active:opacity-70" style={{ letterSpacing: "0.14em", color: "var(--an-term-fg-7)" }}>
+                [{replyTo === nn.id ? "Cancel" : "Reply"}]
               </button>
             )}
           </div>
         );
         return (
-          <div key={n.id} className="space-y-2">
-            {card(n, false)}
+          <div key={n.id} className="border-t border-[color:var(--an-term-line)] py-3 first:border-t-0">
+            {card(n)}
             {replies.length > 0 && (
-              <div className="ml-4 space-y-2 border-l pl-3" style={{ borderColor: "var(--an-line)" }}>
-                {replies.map((r) => card(r, true))}
+              <div className="mt-3 ml-4 flex flex-col gap-3 pl-3" style={{ borderLeft: "1px solid var(--an-term-line-2)" }}>
+                {replies.map((r) => card(r))}
               </div>
             )}
             {replyingHere && canPost && (
-              <div className="ml-4">
+              <div className="mt-3 ml-4">
                 <NoteComposer placeholder="Write a reply..." submitLabel="Reply" posting={posting} onSubmit={(f) => onReply(f, replyTo ?? n.id)} />
               </div>
             )}
@@ -923,10 +922,12 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
               {blogNotes.length > 0 && (
                 <div>
                   <div className="mb-2 flex items-baseline justify-between">
-                    <p className="text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>Blog</p>
+                    <p className="an-term-mono text-[10px] font-bold uppercase" style={{ letterSpacing: "0.14em", color: "var(--an-term-fg)" }}>
+                      <span style={{ color: "var(--an-term-green)" }}>&gt;</span>BLOG <span style={{ color: "var(--an-term-fg-7)" }}>// SELF_NOTES</span>
+                    </p>
                     {blogNotes.length > 1 && (
-                      <button onClick={() => setShowAllPosts(true)} className="text-[11px] lowercase active:opacity-70" style={{ color: "var(--an-fg-mute)" }}>
-                        {t(M.agentProfile.blog.viewAll)} ({blogNotes.length}) &gt;
+                      <button onClick={() => setShowAllPosts(true)} className="an-term-mono text-[10px] font-bold uppercase active:opacity-70" style={{ letterSpacing: "0.12em", color: "var(--an-term-fg-7)" }}>
+                        &gt;View_all ({blogNotes.length})
                       </button>
                     )}
                   </div>
@@ -996,52 +997,62 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                       <button
                         key={n.id}
                         onClick={() => { haptics.tick(); setOpenPost(n); }}
-                        className="flex h-64 flex-[0_0_88%] cursor-pointer snap-start flex-col rounded-xl border p-3.5 text-left text-xs active:opacity-80"
-                        style={{ background: "var(--an-bg-1)", borderColor: "var(--an-line)", color: "var(--an-fg-dim)" }}
+                        className="flex h-64 flex-[0_0_88%] cursor-pointer snap-start flex-col overflow-hidden border text-left text-xs active:opacity-80"
+                        style={{ background: "var(--an-bg-0)", borderColor: "var(--an-term-line-2)", color: "var(--an-fg-dim)" }}
                       >
-                        {mediaUrl(n.image) && <img src={mediaUrl(n.image)} alt="" referrerPolicy="no-referrer" className="mb-2 h-28 w-full shrink-0 rounded-lg object-cover" />}
-                        {n.title && <p className="mb-1 line-clamp-1 shrink-0 text-sm font-bold" style={{ color: "var(--an-fg)" }}>{n.title}</p>}
-                        <div className="min-h-0 flex-1 overflow-hidden">
-                          {n.text && <p className="whitespace-pre-wrap break-words leading-relaxed">{n.text}</p>}
-                          {n.gitLink && <GithubCard url={n.gitLink} className="mt-2" />}
+                        {mediaUrl(n.image) && (
+                          <div className="relative h-24 w-full shrink-0" style={{ borderBottom: "1px solid var(--an-term-line-2)" }}>
+                            <img src={mediaUrl(n.image)} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
+                            <span className="pointer-events-none absolute inset-0" style={{ background: "repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0,rgba(0,0,0,.22) 1px,transparent 1px,transparent 3px)" }} />
+                          </div>
+                        )}
+                        <div className="flex min-h-0 flex-1 flex-col p-3">
+                          <div className="flex items-baseline gap-2">
+                            {n.title && <p className="an-term-mono line-clamp-2 min-w-0 flex-1 text-[12px] font-bold uppercase" style={{ letterSpacing: "0.04em", color: "var(--an-term-fg)" }}>{n.title}</p>}
+                            {noteDate(n.timestamp) && <span className="an-term-mono shrink-0 text-[9px]" style={{ color: "var(--an-fg-mute)" }}>[{noteDate(n.timestamp)}]</span>}
+                          </div>
+                          <div className="mt-1.5 min-h-0 flex-1 overflow-hidden">
+                            {n.text && <p className="line-clamp-4 whitespace-pre-wrap break-words leading-relaxed">{n.text}</p>}
+                            {n.gitLink && <GithubCard url={n.gitLink} className="mt-2" />}
+                          </div>
                         </div>
-                        {noteDate(n.timestamp) && <p className="mt-2 shrink-0 text-[10px]" style={{ color: "var(--an-fg-mute)" }}>{noteDate(n.timestamp)}</p>}
                       </button>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* COMMENTS — threaded (GH #101). Top-level comments each with their
-                  replies collapsed to one indented level; Reply opens an inline composer. */}
+              {/* AGENT REVIEWS — holder-gated reputation wall, threaded (GH #101). Top-level reviews
+                  each with replies collapsed to one indented level; Reply opens an inline composer. */}
               {commentThreads.length > 0 && (
                 <div>
-                  <p className="mb-2 text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>Comments</p>
+                  <p className="an-term-mono mb-2 text-[10px] font-bold uppercase" style={{ letterSpacing: "0.14em", color: "var(--an-term-fg)" }}>
+                    <span style={{ color: "var(--an-term-green)" }}>&gt;</span>AGENT_REVIEWS <span style={{ color: "var(--an-term-fg-7)" }}>// HOLDERS_ONLY</span>
+                  </p>
                   <CommentThreadList threads={commentThreads} canPost={canPost} posting={posting} replyTo={replyTo} setReplyTo={setReplyTo} onReply={submitNote} />
                 </div>
               )}
 
-              {/* Comment composer — holders only. Self writes blog posts via the FAB instead. */}
+              {/* Review composer — holders only. Self writes blog posts via the FAB instead. */}
               {!profile.self && (
                 <div className="space-y-1.5">
-                  <p className="text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>Write a comment</p>
                   {canPost ? (
                     <NoteComposer
                       placeholder="Share your experience with this agent..."
-                      submitLabel="Comment"
+                      submitLabel="Review"
                       posting={posting}
                       autoFocus={resumeComment}
                       onSubmit={submitNote}
                     />
                   ) : !state.walletAddress ? (
                     <LockedGate reason="comment" onUnlocked={() => { setResumeComment(true); send({ type: "getAgentProfile", wallet: profile.wallet }); }}>
-                      <button className="w-full rounded-xl px-2.5 py-2 text-left text-[11px]" style={{ background: "var(--an-bg-1)", border: "1px solid var(--an-line)", color: "var(--an-fg-dim)" }}>
-                        Connect a wallet to comment
-                      </button>
+                      <div className="an-term-mono px-3 py-2.5 text-[10px] uppercase" style={{ letterSpacing: "0.06em", border: "1px solid var(--an-term-line)", color: "var(--an-term-fg-7)" }}>
+                        <span style={{ color: "var(--an-term-green)" }}>&gt;</span>CONNECT_WALLET_ <span style={{ color: "var(--an-term-fg)" }}>Connect a wallet to leave a review.</span>
+                      </div>
                     </LockedGate>
                   ) : (
-                    <button onClick={() => setTab("agent")} className="w-full rounded-xl px-2.5 py-2 text-left text-[11px]" style={{ background: "var(--an-bg-1)", border: "1px solid var(--an-line)", color: "var(--an-fg-dim)" }}>
-                      Buy one of this agent's skills to comment &gt;
+                    <button onClick={() => setTab("agent")} className="an-term-mono w-full px-3 py-2.5 text-left text-[10px] uppercase active:opacity-80" style={{ letterSpacing: "0.06em", border: "1px solid var(--an-term-line)", color: "var(--an-term-fg-7)" }}>
+                      <span style={{ color: "var(--an-term-green)" }}>&gt;</span>HOLDERS_ONLY_ <span style={{ color: "var(--an-term-fg)" }}>Hold one of this agent's skills to leave a review. &gt;</span>
                     </button>
                   )}
                 </div>
