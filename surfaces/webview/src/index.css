@@ -1061,6 +1061,7 @@ body {
   letter-spacing: 1.5px;
 }
 .an-navdock-status .dim { color: #6e6e72; }
+.an-navdock-status .an-navdock-kana { display: none; } /* desktop rail only, see the >=1024px block */
 .an-navdock-status .sig { color: #5e5e62; }
 .an-navdock-status .sig b { color: #cfcfcf; }
 .an-navdock-status .sig i { color: #2c2c2f; font-style: normal; }
@@ -2134,6 +2135,19 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
      bottom edge instead of hanging open mid-rail; the indicator is one fixed
      56px segment (25% of a full-height bar would balloon). */
   .an-navdock-shell { display: flex; flex-direction: column; padding: 14px 10px 0; }
+
+  /* The rail's NAV_DOCK line gets its kana sub, same title + kana idiom as the
+     screen headers (MY SKILLS / マイスキル). Second line, so the status row
+     stacks instead of spreading. */
+  .an-navdock-status { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .an-navdock-status .an-navdock-kana {
+    display: block;
+    font-family: "Noto Sans JP", ui-sans-serif, sans-serif;
+    font-weight: 400;
+    font-size: 8px;
+    letter-spacing: 1px;
+    color: #5a5a5d;
+  }
   .an-navdock { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; }
   .an-navdock-bar { flex-direction: column; height: auto; flex: 1; }
   .an-navdock-ind { width: 100%; height: 56px; }
@@ -2164,14 +2178,19 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
      (marquee / approval dock / composer) follow the same readable column. */
   .an-chat-float > * { width: 100%; max-width: 42rem; margin-inline: auto; }
 
-  /* Market / Skills / Rank screens: a wide but bounded content column. */
-  .an-screen { width: 100%; max-width: 1120px; margin-inline: auto; }
+  /* Market / Skills / Rank screens: a wide but bounded content column. The screens
+     paint Tailwind zinc-950 (#09090b), one shade off the app ground (--an-bg-0,
+     #0a0b0d). Full-bleed on phone that never shows; here the capped column exposes
+     both blacks side by side as a seam, so the screen takes the ground token. */
+  .an-screen { width: 100%; max-width: 1120px; margin-inline: auto; background: var(--an-bg-0); }
 
-  /* Rank reads best as a narrower column (the trading cards are ~phone-width
-     artwork), so the whole screen — header included — shares one 880px axis.
-     The header's phone padding (14px) is trued up to the body's 12px so the
-     "AGENT RANK" title and the card edges sit on the same line. */
-  .an-screen-rank { max-width: 880px; }
+  /* Rank reads best as one narrow column (the trading cards are ~phone-width
+     artwork): 584px = the 560px card plus the px-3 gutters, so the header,
+     hero, search bar, and list cards all share a single axis (see the rank
+     rules further down). The header's phone padding (14px) is trued up to the
+     body's 12px so the "AGENT RANK" title and the card edges sit on the same
+     line. */
+  .an-screen-rank { max-width: 584px; }
   .an-screen-rank > header { padding-inline: 12px; }
 
   /* Skill-card tiles: keep tile size sane and let the count grow with width. */
@@ -2182,15 +2201,15 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
      gaps). Solid backstop over the button + inset, fading out across the pt-8 zone. */
   .an-cta-float { background: linear-gradient(to top, var(--an-bg-0) 70px, transparent); }
 
-  /* Rank: the agent-card list becomes a 2-up grid (space-y margins are a
-     phone-stack concern — the grid gap replaces them). The trading cards are
-     drawn for a ~350px phone column: their fixed aspect-ratio would balloon a
-     wide card's height, so height follows content instead. The pinned "YOU"
-     hero keeps trading-card proportions rather than stretching its stars gauge
-     across the whole column. */
-  .an-ac.is-self { max-width: 560px; }
-  /* Same treatment for the profile detail's portrait ID card: capped so its
-     stat leaders and stars gauge keep card proportions on a wide screen. */
+  /* Rank reads as a single centered leaderboard column: the screen cap above
+     (584px = a 560px card + the px-3 gutters) makes the header, the pinned
+     "YOU" hero, the search bar, and every list card the exact same width on
+     one axis, whatever the agent count. The cards are drawn for ~a phone
+     column, so 560px keeps their proportions without any per-card capping;
+     their fixed aspect-ratio would still balloon the height, so height
+     follows content instead. */
+  /* The profile detail's portrait ID card: capped so its stat leaders and
+     stars gauge keep card proportions on a wide screen. */
   .an-id { max-width: 600px; }
   .an-agentgrid {
     display: grid;

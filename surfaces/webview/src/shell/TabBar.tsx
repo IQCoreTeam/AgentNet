@@ -87,6 +87,9 @@ export function TabBar({ position, instant, onChange }: { position: number; inst
       <div className="an-navdock">
         <div className="an-navdock-status">
           <span className="dim">&gt; NAV_DOCK</span>
+          {/* Kana sub in the screen-header idiom (title + kana). Phone hides it:
+              the dock's one status row has no room for a second line there. */}
+          <span className="an-navdock-kana" aria-hidden="true">ナビドック</span>
         </div>
         <div className="an-navdock-bar">
           {/* sliding active fill — engine-tinted, glides between segments */}
