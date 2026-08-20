@@ -2136,6 +2136,9 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
     border-top: 1px solid color-mix(in srgb, var(--an-fg) 12%, transparent);
   }
   .an-navseg:first-child { border-top: none; }
+  /* Close the stack: the last segment gets the same separator underneath, so
+     MARKET does not bleed into the empty rail below it. */
+  .an-navseg:last-child { border-bottom: 1px solid color-mix(in srgb, var(--an-fg) 12%, transparent); }
 
   /* No floating dock ⇒ no bottom glass to fade into. */
   .an-shell-panels::after { display: none; }
