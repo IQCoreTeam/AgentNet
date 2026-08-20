@@ -1,3 +1,5 @@
+import { createPortal } from "react-dom";
+
 // Green LED dot-matrix "COMPLETE" plaque (design "OVERLAY // COMPLETE"). One plaque, only
 // the [CONTEXT] sub-label swaps per action. Presentational only: callers own the timing,
 // haptics, and dismissal. Styling lives in index.css (.cmp-*) so it mirrors the VS Code
@@ -16,13 +18,20 @@ export function CompleteOverlay({ label, onClick, flicker = false }: { label: st
       <div className="cmp-label">[{label}]</div>
     </div>
   );
-  return (
+  // Portal to <body>: this overlay is often rendered from views that live inside the
+  // swipe pager, whose ancestors carry a CSS transform (and will-change: transform).
+  // A transformed ancestor makes position:fixed resolve against THAT ancestor, not the
+  // viewport, so `fixed inset-0` lands off-screen (the 400%-wide, translated pager
+  // track). Portaling out to body restores true viewport centering everywhere, matching
+  // the createPortal pattern the profile sheet and FundModal already use.
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
       style={{ background: "rgba(6,9,11,0.74)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)" }}
       onClick={onClick}
     >
       {flicker ? <div className="unlock-flicker">{plaque}</div> : plaque}
-    </div>
+    </div>,
+    document.body,
   );
 }

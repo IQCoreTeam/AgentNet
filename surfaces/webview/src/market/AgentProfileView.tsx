@@ -896,7 +896,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
               {allSkills.length > 0 && (
                 <div>
                   <p className="mb-2 text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>Skills</p>
-                  <div className="grid grid-cols-3 gap-3.5">
+                  <div className="an-cardgrid grid grid-cols-3 gap-3.5">
                     {allSkills.map((card) => (
                       <SkillSdCard
                         key={card.id}

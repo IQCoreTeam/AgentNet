@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { useElementHeightVariable } from "../layoutEffects";
+import { useElementHeightVariable, useIsDesktop } from "../layoutEffects";
 import { useStore } from "../state/store";
 import { useUnlock } from "../unlock/UnlockProvider";
 
@@ -72,8 +72,12 @@ const TABS: { key: TabKey; label: string; Glyph: () => JSX.Element }[] = [
 // it follows a live page swipe) and animates on tap (transition off only while dragging).
 export function TabBar({ position, instant, onChange }: { position: number; instant: boolean; onChange: (i: number) => void }) {
   // Publish the dock's height so the chat composer can sit just above it (0 when hidden).
+  // On desktop the rail is full-height on the LEFT, so it publishes 0 (a null ref writes 0px);
+  // nothing at the bottom to clear.
+  const desktop = useIsDesktop();
   const navRef = useRef<HTMLElement>(null);
-  useElementHeightVariable(navRef, "--tabbar-height");
+  const noneRef = useRef<HTMLElement>(null);
+  useElementHeightVariable(desktop ? noneRef : navRef, "--tabbar-height");
   const { state } = useStore();
   const { unlocked } = useUnlock();
   const accent = state.cli === "claude" ? "var(--claude)" : "var(--an-green)";
@@ -90,7 +94,7 @@ export function TabBar({ position, instant, onChange }: { position: number; inst
             className="an-navdock-ind"
             style={{
               background: accent,
-              transform: `translateX(calc(${position} * 100%))`,
+              transform: desktop ? `translateY(calc(${position} * 100%))` : `translateX(calc(${position} * 100%))`,
               transition: instant ? "none" : undefined,
             }}
           />

@@ -179,7 +179,7 @@ export function AgentDirectory() {
   const loading = state.agentsLoading || !everLoaded || state.agents.length === 0;
 
   return (
-    <div className="pt-1">
+    <div className="an-rankcol pt-1">
       {/* Sticky "me" + wallet search: both pinned so the self card and the filter stay reachable
           while the ranked list scrolls under them. */}
       <div className="sticky top-0 z-10 pt-1" style={{ background: "var(--an-bg-0)" }}>
@@ -228,7 +228,7 @@ export function AgentDirectory() {
           {query.trim() ? "No agent matches that wallet" : "No other agents yet"}
         </div>
       ) : (
-        <div className="space-y-2.5">
+        <div className="an-agentgrid space-y-2.5">
           {others.map((agent) => (
             <AgentCard key={agent.wallet} agent={agent} onOpen={openProfile} />
           ))}
