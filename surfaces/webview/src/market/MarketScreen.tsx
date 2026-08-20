@@ -9,7 +9,7 @@ import type { SkillCard } from "../transport/protocol";
 import { HeliusSetupPanel } from "../settings/HeliusKeyForm";
 import { SkillDetailSkeleton, MarketListSkeleton, AgentProfileSkeleton } from "./Skeletons";
 import { LockedGate, useUnlock } from "../unlock/UnlockProvider";
-import { LockIcon } from "../icons";
+import { LockIcon, SolIcon } from "../icons";
 import { AlertCard } from "../Alert";
 import { haptics } from "../haptics";
 
@@ -30,18 +30,6 @@ let marketAutoOpenedThisRun = false;
 //              the product store, so the agents directory moved OUT of Market and lives here.
 // Owned is no longer an internal tab (it is the Skills tab) and there is no back-to-chat
 // button (the bottom tab bar owns navigation).
-// The real Solana mark (the official three slanted bars), sized for inline
-// text use. Replaces the lookalike circled ring the balance used to carry.
-function SolanaGlyph() {
-  return (
-    <svg width="11" height="9" viewBox="0 0 398 312" fill="currentColor" aria-hidden="true">
-      <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1l62.7-62.7z"/>
-      <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z"/>
-      <path d="M333.1 120.9c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z"/>
-    </svg>
-  );
-}
-
 export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBack?: () => void; onGoMarket?: () => void }) {
   const { state, send, setMarketTab, marketSearching, clearMarketDetail, clearAgentProfile } = useStore();
   const { unlocked, requestUnlock } = useUnlock();
@@ -235,7 +223,7 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
         {/* SKILLS: SOL balance + owned-count readout (stacked, right-aligned) */}
         {isSkills && (
           <div className="shrink-0 text-right">
-            {balanceSol && <div className="an-term-mono flex items-center justify-end gap-1.5 text-[13px] font-bold leading-none" style={{ color: "var(--an-term-fg-2)", letterSpacing: "0.5px" }}>{balanceSol} <SolanaGlyph /></div>}
+            {balanceSol && <div className="an-term-mono flex items-center justify-end gap-1.5 text-[13px] font-bold leading-none" style={{ color: "var(--an-term-fg-2)", letterSpacing: "0.5px" }}>{balanceSol} <SolIcon /></div>}
             <div className="an-term-mono text-[8px] font-bold tracking-wider" style={{ color: "var(--an-term-fg-7)", marginTop: "5px" }}>[ {state.marketOwned.length} OWNED ]</div>
           </div>
         )}
@@ -248,7 +236,7 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
             className="an-term-mono flex shrink-0 items-center gap-1.5 self-center text-xs font-bold active:opacity-80"
             style={{ color: "var(--an-term-fg-2)", letterSpacing: "0.5px" }}
           >
-            {balanceSol} <SolanaGlyph />
+            {balanceSol} <SolIcon />
           </button>
         )}
         {isMarket && (

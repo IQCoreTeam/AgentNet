@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { SolIcon } from "../icons";
 import type { SkillCard } from "../transport/protocol";
 import { skillSigilSvg } from "./skillSigil";
 import { mediaUrl } from "./mediaUrl";
@@ -48,7 +49,7 @@ export function SkillSdCard({ card, owned, disposed, firing, dim, onOpen }: Prop
         {/* the data chip: copies big, price + state stacked small */}
         <div className="an-sd-chip">
           <span className="an-sd-big">{card.supply ?? "—"}</span>
-          <span className="an-sd-meta">{priceSol ? `${priceSol}◎` : "FREE"}<br />{state}</span>
+          <span className="an-sd-meta">{priceSol ? <>{priceSol}<SolIcon width={7} height={5.5} /></> : "FREE"}<br />{state}</span>
         </div>
         {/* 2a gold star grade: summed GitHub stars of repos using this skill (issue #89), corner
             brackets on the right axis under the mark. Hidden at 0 so plain skills stay clean. */}

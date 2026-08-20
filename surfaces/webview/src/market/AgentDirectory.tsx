@@ -5,7 +5,7 @@ import { walletAvatarSvg, walletBandColor } from "./walletAvatar";
 import { AgentListSkeleton } from "./Skeletons";
 import type { Reputation } from "../transport/protocol";
 import { LockedGate } from "../unlock/UnlockProvider";
-import { LockIcon } from "../icons";
+import { LockIcon, SolIcon } from "../icons";
 
 // The card's single accent — the avatar's own hue, normalized to one chic mid-tone so it reads
 // the same as a tag fill / gauge fill whatever the avatar's exact shade. The colour avatar is the
@@ -117,7 +117,7 @@ function AgentCard({ agent, self, onOpen }: { agent: Reputation; self?: boolean;
         </div>
         <div className="an-ac-foot">
           <span className="an-ac-box" />
-          <span>&gt;EARNED <span className="earn">{earned}&#9678;</span></span>
+          <span>&gt;EARNED <span className="earn">{earned} <SolIcon width={8} height={6.5} /></span></span>
           <span className="an-ac-box" />
         </div>
       </div>
