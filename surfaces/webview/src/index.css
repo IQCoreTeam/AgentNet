@@ -2110,7 +2110,7 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
   .an-tabbar-shell {
     position: static;
     order: -1;            /* DOM keeps panels-then-nav; the rail renders left */
-    width: 168px;
+    width: 116px;
     flex: none;
     align-self: stretch;
     border-right: 1px solid var(--an-line);
@@ -2125,13 +2125,13 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
      bracket frame stretches to the rail's full height so the box closes at the
      bottom edge instead of hanging open mid-rail; the indicator is one fixed
      62px segment (25% of a full-height bar would balloon). */
-  .an-navdock-shell { display: flex; flex-direction: column; padding: 18px 14px 0; }
+  .an-navdock-shell { display: flex; flex-direction: column; padding: 14px 10px 0; }
   .an-navdock { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; }
   .an-navdock-bar { flex-direction: column; height: auto; flex: 1; }
-  .an-navdock-ind { width: 100%; height: 62px; }
+  .an-navdock-ind { width: 100%; height: 56px; }
   .an-navseg {
     flex: none;
-    height: 62px;
+    height: 56px;
     border-left: none;
     border-top: 1px solid color-mix(in srgb, var(--an-fg) 12%, transparent);
   }
