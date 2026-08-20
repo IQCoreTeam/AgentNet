@@ -151,6 +151,19 @@ body {
   overscroll-behavior: none;
 }
 
+/* Pointer affordance: the surface is phone-first (tap feedback is active:
+   states, hover never fires), so nothing declares a cursor and a mouse reads
+   the whole app as inert text. With a real pointer present, clickables get
+   the hand. Touch devices never match this media block. */
+@media (hover: hover) and (pointer: fine) {
+  button:not(:disabled),
+  a,
+  summary,
+  [role="button"] {
+    cursor: pointer;
+  }
+}
+
 /* Responsive: the surface is a phone-first, full-bleed layout (pager is width:400%,
    cards sized for ~a phone column). On the Android shell and narrow windows that is
    exactly right, so nothing changes below the phone breakpoint. In the tablet /
