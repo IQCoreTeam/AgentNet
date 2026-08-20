@@ -21,22 +21,88 @@ use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 const PORT: u16 = 4317;
 
-/// Path to the built localhost server (run unchanged). Resolved, in order:
-///   1. AGENTNET_SERVER_JS env var (e.g. a bundled resource path in a packaged app)
-///   2. relative to this crate's source at build time, so `cargo run` from any
-///      clone finds `surfaces/localhost/dist/index.js` without a hardcoded path.
-fn server_js() -> String {
-    if let Ok(p) = std::env::var("AGENTNET_SERVER_JS") {
-        return p;
+/// The .app's Contents/Resources dir, when running from inside a macOS
+/// bundle. Resolved from the CANONICALIZED executable path, so launching
+/// through a symlinked location (/tmp -> /private/tmp, a symlinked
+/// ~/Applications, a dotfiles-managed dir) still finds the real bundle.
+/// (tauri's resource_dir() refuses symlinked exe paths on macOS and errors,
+/// which previously caused a silent fallback to repo paths.) A bare cargo
+/// binary in target/<profile>/ returns None, so dev builds keep dev paths.
+fn bundle_resources_dir() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?.canonicalize().ok()?;
+    let macos = exe.parent()?;
+    if !macos.ends_with("Contents/MacOS") {
+        return None;
     }
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../localhost/dist/index.js").to_string()
+    Some(macos.parent()?.join("Resources"))
 }
 
-/// Node binary. AGENTNET_NODE_BIN wins, else the first common install that
-/// exists, else `node` on PATH.
-fn node_bin() -> String {
+/// Path to the built localhost server (run unchanged). Resolved, in order:
+///   1. AGENTNET_SERVER_JS env var (explicit override always wins)
+///   2. the bundled resource inside a packaged .app (staged by
+///      stage-resources.sh; the surfaces/ layout is preserved so the server
+///      finds ../../webview/dist relative to itself exactly as in the repo).
+///      Inside a bundle a MISSING resource is a packaging bug and a hard
+///      error: never silently fall back to a repo checkout that may not exist.
+///   3. (debug builds only) relative to this crate's source at build time, so
+///      `cargo run` from any clone just works. Release binaries do not embed
+///      the build machine's path; outside a bundle they require the env var.
+fn server_js() -> Result<String, String> {
+    if let Ok(p) = std::env::var("AGENTNET_SERVER_JS") {
+        return Ok(p);
+    }
+    if let Some(res) = bundle_resources_dir() {
+        let bundled = res
+            .join("surfaces")
+            .join("localhost")
+            .join("dist")
+            .join("index.js");
+        if bundled.is_file() {
+            return Ok(bundled.to_string_lossy().into_owned());
+        }
+        return Err(format!(
+            "bundled server missing at {} (run stage-resources.sh before tauri build)",
+            bundled.display()
+        ));
+    }
+    #[cfg(debug_assertions)]
+    {
+        Ok(concat!(env!("CARGO_MANIFEST_DIR"), "/../../localhost/dist/index.js").to_string())
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        Err("not inside a .app bundle and AGENTNET_SERVER_JS is not set".to_string())
+    }
+}
+
+/// Node binary. AGENTNET_NODE_BIN wins, else the portable node bundled in the
+/// .app's Resources (official nodejs.org build, links only system dylibs;
+/// missing = hard packaging error), else common installs, else PATH.
+fn node_bin() -> Result<String, String> {
     if let Ok(n) = std::env::var("AGENTNET_NODE_BIN") {
-        return n;
+        return Ok(n);
+    }
+    if let Some(res) = bundle_resources_dir() {
+        let bundled = res.join("nodebin").join("node");
+        if bundled.is_file() {
+            // Resource copying can drop the exec bit; restore it if needed.
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                if let Ok(meta) = std::fs::metadata(&bundled) {
+                    let mut perms = meta.permissions();
+                    if perms.mode() & 0o111 == 0 {
+                        perms.set_mode(0o755);
+                        let _ = std::fs::set_permissions(&bundled, perms);
+                    }
+                }
+            }
+            return Ok(bundled.to_string_lossy().into_owned());
+        }
+        return Err(format!(
+            "bundled node missing at {} (run stage-resources.sh before tauri build)",
+            bundled.display()
+        ));
     }
     for candidate in [
         "/opt/homebrew/opt/node@24/bin/node",
@@ -45,10 +111,35 @@ fn node_bin() -> String {
         "/usr/bin/node",
     ] {
         if Path::new(candidate).exists() {
-            return candidate.to_string();
+            return Ok(candidate.to_string());
         }
     }
-    "node".to_string()
+    Ok("node".to_string())
+}
+
+/// Last-spawned child pid for the signal path. RunEvent::ExitRequested covers
+/// menu Quit / Cmd-Q, but a raw SIGTERM/SIGINT bypasses tauri's event loop and
+/// previously leaked the node child; this handler reaps it, then exits.
+static CHILD_PID: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
+#[cfg(unix)]
+extern "C" fn on_term_signal(_sig: libc::c_int) {
+    let pid = CHILD_PID.load(std::sync::atomic::Ordering::Relaxed);
+    if pid > 0 {
+        unsafe {
+            libc::kill(pid, libc::SIGTERM);
+        }
+    }
+    unsafe { libc::_exit(0) }
+}
+
+#[cfg(unix)]
+fn install_signal_handlers() {
+    let handler: extern "C" fn(libc::c_int) = on_term_signal;
+    unsafe {
+        libc::signal(libc::SIGTERM, handler as usize as libc::sighandler_t);
+        libc::signal(libc::SIGINT, handler as usize as libc::sighandler_t);
+    }
 }
 
 /// Holds the spawned node server so we can kill it on exit. `None` when the
@@ -63,21 +154,21 @@ fn port_answering() -> bool {
     .is_ok()
 }
 
-fn spawn_server() -> std::io::Result<Child> {
-    let node = node_bin();
-    let server = server_js();
-    let server_dir = PathBuf::from(&server)
+fn spawn_server(node: &str, server: &str) -> std::io::Result<Child> {
+    let server_dir = PathBuf::from(server)
         .parent()
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| PathBuf::from("."));
-    Command::new(node)
-        .arg(&server)
+    let child = Command::new(node)
+        .arg(server)
         .env("AGENTNET_PORT", PORT.to_string())
         .current_dir(server_dir)
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
-        .spawn()
+        .spawn()?;
+    CHILD_PID.store(child.id() as i32, std::sync::atomic::Ordering::Relaxed);
+    Ok(child)
 }
 
 fn kill_server(app: &tauri::AppHandle) {
@@ -121,12 +212,16 @@ fn main() {
             // (a) Spawn her server unless something already answers on the port
             // (e.g. a dev server the user started by hand; don't double-bind,
             // and don't kill a process we don't own).
+            #[cfg(unix)]
+            install_signal_handlers();
             let child = if port_answering() {
                 eprintln!("[agentnet-desktop] port {PORT} already serving; reusing it");
                 None
             } else {
-                eprintln!("[agentnet-desktop] spawning node server: {}", server_js());
-                Some(spawn_server()?)
+                let node = node_bin()?;
+                let server = server_js()?;
+                eprintln!("[agentnet-desktop] spawning node server: {node} {server}");
+                Some(spawn_server(&node, &server)?)
             };
             app.manage(ServerProcess(Mutex::new(child)));
 

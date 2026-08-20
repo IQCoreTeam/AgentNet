@@ -5,11 +5,15 @@ description = "AgentNet desktop shell: spawns the localhost server and wraps the
 edition = "2021"
 
 [build-dependencies]
-tauri-build = "2"
+tauri-build = { version = "2", features = [] }
 
 [dependencies]
+libc = "0.2"
 tauri = { version = "2", features = ["tray-icon"] }
 
 [[bin]]
 name = "agentnet-desktop"
 path = "src/main.rs"
+
+[profile.release]
+strip = true
