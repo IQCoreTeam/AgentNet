@@ -6,6 +6,7 @@ import { SkillIcon } from "../icons";
 import { mediaUrl } from "./mediaUrl";
 import { walletAvatarSvg } from "./walletAvatar";
 import { CompleteCelebration } from "./CompleteCelebration";
+import { CommentThreadList, NoteComposer, type NoteFields } from "./AgentProfileView";
 import { LockedGate } from "../unlock/UnlockProvider";
 
 function shortAddr(w?: string) {
@@ -296,13 +297,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
           {noteCount > 0 && (
             <div className="mb-3 flex flex-col">
               {(notes as any[]).map((n: any, i) => (
-                <div key={i} className="border-t py-3 first:border-t-0" style={{ borderColor: "var(--an-term-line)" }}>
-                  <div className="mb-2 flex items-center gap-2.5">
-                    <div className="h-[22px] w-[22px] shrink-0 overflow-hidden" style={{ border: "1px solid var(--an-term-line-2)" }} aria-hidden="true" dangerouslySetInnerHTML={{ __html: walletAvatarSvg(n.author ?? "") }} />
-                    <span className="an-term-mono text-[11px]" style={{ color: "var(--an-term-fg)" }}>{shortAddr(n.author)}</span>
-                  </div>
-                  <p className="an-term-mono whitespace-pre-wrap break-words text-[12px] leading-relaxed" style={{ color: "var(--an-fg-dim)" }}>{n.text}</p>
-                </div>
+                <SkillCommentRow key={n.id ?? i} note={n} />
               ))}
             </div>
           )}
@@ -339,6 +334,64 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
           )}
         </Section>
       </div>
+    </div>
+  );
+}
+
+// One comment row plus its OPEN reply thread. The comment itself stays holder
+// gated above (it shapes the skill's standing), but replies ride the same
+// comment:blog:<noteId> tables the blog reader uses (issue #183 model), so any
+// connected wallet may answer. The thread loads lazily per comment; the host
+// pushes the refreshed thread after a reply lands, which also closes the
+// composer. Renderer and composer are the blog reader's own.
+function SkillCommentRow({ note }: { note: { id?: string; author?: string; text: string } }) {
+  const { state, send } = useStore();
+  const canReply = !!state.walletAddress;
+  const [replyOpen, setReplyOpen] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const [replyTo, setReplyTo] = useState<string | null>(null);
+  const threads = note.id ? state.blogComments[note.id] : undefined;
+  useEffect(() => {
+    if (note.id) send({ type: "getBlogComments", postId: note.id, agentWallet: note.author ?? "" });
+  }, [note.id, note.author, send]);
+  useEffect(() => { setPosting(false); setReplyOpen(false); setReplyTo(null); }, [threads]);
+  function submitReply(f: NoteFields, parentId?: string) {
+    const text = f.text.trim();
+    if (!text || !canReply || !note.id) return;
+    setPosting(true);
+    send({ type: "postBlogComment", postId: note.id, agentWallet: note.author ?? "", text, gitLink: f.gitLink, parentId });
+  }
+  return (
+    <div className="border-t py-3 first:border-t-0" style={{ borderColor: "var(--an-term-line)" }}>
+      <div className="mb-2 flex items-center gap-2.5">
+        <div className="h-[22px] w-[22px] shrink-0 overflow-hidden" style={{ border: "1px solid var(--an-term-line-2)" }} aria-hidden="true" dangerouslySetInnerHTML={{ __html: walletAvatarSvg(note.author ?? "") }} />
+        <span className="an-term-mono text-[11px]" style={{ color: "var(--an-term-fg)" }}>{shortAddr(note.author)}</span>
+      </div>
+      <p className="an-term-mono whitespace-pre-wrap break-words text-[12px] leading-relaxed" style={{ color: "var(--an-fg-dim)" }}>{note.text}</p>
+      {note.id && (
+        <button
+          type="button"
+          onClick={() => setReplyOpen((v) => !v)}
+          className="an-term-mono mt-2 text-[10px] font-bold uppercase active:opacity-70"
+          style={{ letterSpacing: "0.08em", color: "var(--an-term-fg-7)" }}
+        >
+          [Reply{threads?.length ? ` (${threads.length})` : ""}]
+        </button>
+      )}
+      {(threads?.length || replyOpen) ? (
+        <div className="mt-2 space-y-2 pl-8">
+          {!!threads?.length && (
+            <CommentThreadList threads={threads} canPost={canReply} posting={posting} replyTo={replyTo} setReplyTo={setReplyTo} onReply={submitReply} />
+          )}
+          {replyOpen && (canReply ? (
+            <NoteComposer placeholder="Write a reply..." submitLabel="Reply" posting={posting} autoFocus onSubmit={(f) => submitReply(f)} />
+          ) : (
+            <div className="an-term-mono px-3 py-2.5 text-[10px] uppercase" style={{ letterSpacing: "0.06em", border: "1px solid var(--an-term-line)", color: "var(--an-term-fg-7)" }}>
+              <span style={{ color: "var(--an-term-green)" }}>&gt;</span>CONNECT_WALLET_ <span style={{ color: "var(--an-term-fg)" }}>Connect a wallet to reply.</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
