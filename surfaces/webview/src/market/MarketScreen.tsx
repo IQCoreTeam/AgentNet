@@ -205,7 +205,7 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
   const balanceSol = state.marketBalance != null ? (state.marketBalance / 1_000_000_000).toFixed(3) : null;
 
   return (
-    <div className="an-screen flex flex-col h-full bg-zinc-950">
+    <div className={`an-screen ${isAgents ? "an-screen-rank" : ""} flex flex-col h-full bg-zinc-950`}>
       {/* Header (no back-to-chat button — the bottom tab bar owns top-level nav) */}
       <header
         className="flex items-start gap-2.5 border-b px-3.5 shrink-0"

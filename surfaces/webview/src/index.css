@@ -2121,11 +2121,14 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
   html[data-keyboard="open"] .an-shell-panels::after { display: none; }
 
   /* NAV_DOCK → vertical rail: same bar, brackets, glyphs and engine-tinted
-     indicator; segments stack and the indicator slides on Y (TabBar.tsx). */
-  .an-navdock-shell { padding: 18px 14px 0; }
-  .an-navdock { width: 100%; }
-  .an-navdock-bar { flex-direction: column; height: auto; }
-  .an-navdock-ind { width: 100%; height: 25%; }
+     indicator; segments stack and the indicator slides on Y (TabBar.tsx). The
+     bracket frame stretches to the rail's full height so the box closes at the
+     bottom edge instead of hanging open mid-rail; the indicator is one fixed
+     62px segment (25% of a full-height bar would balloon). */
+  .an-navdock-shell { display: flex; flex-direction: column; padding: 18px 14px 0; }
+  .an-navdock { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; }
+  .an-navdock-bar { flex-direction: column; height: auto; flex: 1; }
+  .an-navdock-ind { width: 100%; height: 62px; }
   .an-navseg {
     flex: none;
     height: 62px;
@@ -2153,14 +2156,26 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
   /* Market / Skills / Rank screens: a wide but bounded content column. */
   .an-screen { width: 100%; max-width: 1120px; margin-inline: auto; }
 
+  /* Rank reads best as a narrower column (the trading cards are ~phone-width
+     artwork), so the whole screen — header included — shares one 880px axis.
+     The header's phone padding (14px) is trued up to the body's 12px so the
+     "AGENT RANK" title and the card edges sit on the same line. */
+  .an-screen-rank { max-width: 880px; }
+  .an-screen-rank > header { padding-inline: 12px; }
+
   /* Skill-card tiles: keep tile size sane and let the count grow with width. */
   .an-cardgrid { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); }
 
-  /* Rank: a comfortable centered column; the agent-card list becomes a 2-up grid
-     (space-y margins are a phone-stack concern — the grid gap replaces them). The
-     trading cards are drawn for a ~350px phone column: their fixed aspect-ratio
-     would balloon a wide card's height, so height follows content instead. */
-  .an-rankcol { max-width: 880px; margin-inline: auto; }
+  /* Rank: the agent-card list becomes a 2-up grid (space-y margins are a
+     phone-stack concern — the grid gap replaces them). The trading cards are
+     drawn for a ~350px phone column: their fixed aspect-ratio would balloon a
+     wide card's height, so height follows content instead. The pinned "YOU"
+     hero keeps trading-card proportions rather than stretching its stars gauge
+     across the whole column. */
+  .an-ac.is-self { max-width: 560px; }
+  /* Same treatment for the profile detail's portrait ID card: capped so its
+     stat leaders and stars gauge keep card proportions on a wide screen. */
+  .an-id { max-width: 600px; }
   .an-agentgrid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
