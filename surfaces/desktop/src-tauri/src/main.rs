@@ -20,10 +20,36 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 const PORT: u16 = 4317;
-/// Preferred node binary; falls back to `node` on PATH if this doesn't exist.
-const NODE_BIN: &str = "/opt/homebrew/opt/node@24/bin/node";
-/// Her built localhost server, run unchanged.
-const SERVER_JS: &str = "/Users/nubs/Git/AgentNet-reply/surfaces/localhost/dist/index.js";
+
+/// Path to the built localhost server (run unchanged). Resolved, in order:
+///   1. AGENTNET_SERVER_JS env var (e.g. a bundled resource path in a packaged app)
+///   2. relative to this crate's source at build time, so `cargo run` from any
+///      clone finds `surfaces/localhost/dist/index.js` without a hardcoded path.
+fn server_js() -> String {
+    if let Ok(p) = std::env::var("AGENTNET_SERVER_JS") {
+        return p;
+    }
+    concat!(env!("CARGO_MANIFEST_DIR"), "/../../localhost/dist/index.js").to_string()
+}
+
+/// Node binary. AGENTNET_NODE_BIN wins, else the first common install that
+/// exists, else `node` on PATH.
+fn node_bin() -> String {
+    if let Ok(n) = std::env::var("AGENTNET_NODE_BIN") {
+        return n;
+    }
+    for candidate in [
+        "/opt/homebrew/opt/node@24/bin/node",
+        "/opt/homebrew/bin/node",
+        "/usr/local/bin/node",
+        "/usr/bin/node",
+    ] {
+        if Path::new(candidate).exists() {
+            return candidate.to_string();
+        }
+    }
+    "node".to_string()
+}
 
 /// Holds the spawned node server so we can kill it on exit. `None` when the
 /// server was already running before we launched (we don't own it then).
@@ -38,17 +64,14 @@ fn port_answering() -> bool {
 }
 
 fn spawn_server() -> std::io::Result<Child> {
-    let node: &str = if Path::new(NODE_BIN).exists() {
-        NODE_BIN
-    } else {
-        "node"
-    };
-    let server_dir = PathBuf::from(SERVER_JS)
+    let node = node_bin();
+    let server = server_js();
+    let server_dir = PathBuf::from(&server)
         .parent()
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| PathBuf::from("."));
     Command::new(node)
-        .arg(SERVER_JS)
+        .arg(&server)
         .env("AGENTNET_PORT", PORT.to_string())
         .current_dir(server_dir)
         .stdin(Stdio::null())
@@ -102,7 +125,7 @@ fn main() {
                 eprintln!("[agentnet-desktop] port {PORT} already serving; reusing it");
                 None
             } else {
-                eprintln!("[agentnet-desktop] spawning node server: {SERVER_JS}");
+                eprintln!("[agentnet-desktop] spawning node server: {}", server_js());
                 Some(spawn_server()?)
             };
             app.manage(ServerProcess(Mutex::new(child)));
