@@ -10,7 +10,21 @@ import { CHAT_SLASH_COMMANDS } from "@iqlabs-official/agent-sdk/chat/slashComman
 
 // ── Context dot (compact donut circle for mobile, mirrors Claude Code's meter) ──
 // Colors: green < 60 %, amber < 85 %, red ≥ 85 %. Orange pulse while compacting.
+// Tapping it opens a small readout of the numbers behind the ring: the title
+// tooltip only exists for mouse hover, which touch (and most desktop users)
+// never see.
 function CtxDot({ tokens, window: win, compacting }: { tokens: number; window: number; compacting?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLSpanElement>(null);
+  // Tap-away closes: listen only while open, the same pattern the pickers use.
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [open]);
   const frac = Math.min(1, tokens / win);
   const pct = Math.round(frac * 100);
   const color = compacting
@@ -21,10 +35,37 @@ function CtxDot({ tokens, window: win, compacting }: { tokens: number; window: n
   const fmtK = (n: number) => n >= 1000 ? Math.round(n / 1000) + "k" : String(n);
   return (
     <span
-      className="ml-auto flex items-center"
+      ref={rootRef}
+      className="ml-auto relative flex items-center"
       title={compacting ? "Compacting context…" : `Context: ${tokens.toLocaleString()} / ${win.toLocaleString()} tokens (${pct}%)\n${fmtK(tokens)} / ${fmtK(win)} ctx`}
-      style={{ cursor: "default" }}
     >
+      {open && (
+        <div
+          className="an-term-mono absolute bottom-full right-0 z-30 mb-2 whitespace-nowrap px-3 py-2.5 text-[10px] font-bold tracking-wider"
+          style={{ background: "var(--an-bg-1)", border: "1px solid var(--an-line)", color: "var(--an-fg-dim)", boxShadow: "0 10px 30px rgba(0,0,0,0.5)" }}
+        >
+          <div className="mb-1 uppercase" style={{ color: "var(--an-fg-mute)" }}>Context</div>
+          {compacting ? (
+            <div style={{ color: "var(--an-orange, #f80)" }}>COMPACTING…</div>
+          ) : (
+            <>
+              <div style={{ color: "var(--an-fg)" }}>{tokens.toLocaleString()} / {win.toLocaleString()} tk</div>
+              <div className="mt-0.5 flex items-center gap-1.5">
+                <span style={{ color }}>{pct}%</span>
+                <span style={{ color: "var(--an-fg-mute)" }}>used · compacts near full</span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+      <button
+        type="button"
+        aria-label="Context usage"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center active:opacity-80"
+        style={{ background: "none", border: 0, padding: 0 }}
+      >
       <svg width="18" height="18" viewBox="0 0 18 18" style={{ display: "block" }}>
         <circle cx="9" cy="9" r={r} fill="none" stroke="var(--an-line, #333)" strokeWidth="2.5" />
         <circle
@@ -38,6 +79,7 @@ function CtxDot({ tokens, window: win, compacting }: { tokens: number; window: n
           style={compacting ? { transformBox: "fill-box", transformOrigin: "center", animation: "ctxspin 1s linear infinite" } : undefined}
         />
       </svg>
+      </button>
       {compacting && <style>{`@keyframes ctxspin { from { transform: rotate(-90deg); } to { transform: rotate(270deg); } }`}</style>}
     </span>
   );
