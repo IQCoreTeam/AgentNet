@@ -88,7 +88,10 @@ function AgentCard({ agent, self, onOpen }: { agent: Reputation; self?: boolean;
           <div className="an-ac-access">
             アクセス / ACCESS
             <br />
-            <span className={`an-ac-tier ${tier ? "" : "unranked"}`}>{tierName}</span>
+            {/* The badge reads the tier ramp, not the wallet accent: BRONZE is copper
+                everywhere (card, profile gauge, VS Code directory), per the shared
+                an-tier tokens this file already declares for exactly that reason. */}
+            <span className={`an-ac-tier ${tier ? "" : "unranked"}`} style={tier ? { background: `var(${tier.token})` } : undefined}>{tierName}</span>
           </div>
         </div>
         <div className="an-ac-body">
