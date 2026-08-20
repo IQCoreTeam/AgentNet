@@ -2224,6 +2224,13 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
   /* The profile detail's portrait ID card: capped so its stat leaders and
      stars gauge keep card proportions on a wide screen. */
   .an-id { max-width: 600px; }
+
+  /* Blog: the 90/10 peek carousel is a touch idiom (its wheel, drag, and
+     keyboard handlers stay for phone-sized windows). A tall desktop column
+     has room, so posts stack vertically and read like a feed; the dormant
+     horizontal handlers become no-ops against a column layout. */
+  .an-blogrow { flex-direction: column; overflow-x: visible; scroll-snap-type: none; }
+  .an-blogrow > * { flex: none; }
   .an-agentgrid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));

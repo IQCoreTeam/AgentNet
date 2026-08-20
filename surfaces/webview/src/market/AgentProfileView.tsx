@@ -932,7 +932,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                     )}
                   </div>
                   <div
-                    className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-2 outline-none [-webkit-overflow-scrolling:touch]"
+                    className="an-blogrow flex snap-x snap-mandatory gap-2 overflow-x-auto pb-2 outline-none [-webkit-overflow-scrolling:touch]"
                     tabIndex={0}
                     aria-label="Blog posts"
                     onKeyDown={onBlogKeyDown}
