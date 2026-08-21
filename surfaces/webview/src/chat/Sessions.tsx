@@ -122,6 +122,12 @@ function StorageOption({ active, title, subtitle, onClick }: { active: boolean; 
 
 type SettingsMode = "list" | "configure" | "wallet" | "connect" | "gdrive" | "custom" | "helius" | "github" | "engines" | "language";
 
+// The server runs on the host this page came from, so its OS decides whether an
+// iCloud Drive folder can exist. Every macOS host webview (Tauri WKWebView, a
+// browser on the Mac, VS Code's webview) carries Macintosh in the UA; Android
+// and Windows do not.
+const IS_MAC = typeof navigator !== "undefined" && /Macintosh/.test(navigator.userAgent);
+
 export function Sessions({
   onClose,
   embedded = false,
@@ -459,7 +465,7 @@ export function Sessions({
                 unlocked={!!state.walletAddress}
                 onUnlocked={() => setSettingsMode("connect")}
                 label={t(M.settings.storage)}
-                subtitle={cloudConnected ? `${info?.account ?? (info?.kind === "gdrive" ? "Google Drive" : t(M.settings.customCloud))}${cloudSync ? ` · ${cloudSync.ok ? t(M.settings.synced) : t(M.settings.syncError)}` : ""}` : t(M.settings.localOnly)}
+                subtitle={cloudConnected ? `${info?.account ?? (info?.kind === "gdrive" ? "Google Drive" : info?.kind === "icloud" ? "iCloud Drive" : t(M.settings.customCloud))}${cloudSync ? ` · ${cloudSync.ok ? t(M.settings.synced) : t(M.settings.syncError)}` : ""}` : t(M.settings.localOnly)}
                 icon={<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7.5c0-1.4 3.1-2.5 7-2.5s7 1.1 7 2.5S14.9 10 11 10 4 8.9 4 7.5Z" /><path d="M4 7.5v7c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-7" /><path d="M4 11c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5" /></svg>}
               />
               {!state.walletAddress && (
@@ -745,6 +751,23 @@ export function Sessions({
                     setSettingsMode("configure");
                   }}
                 />
+                {/* iCloud = a folder macOS syncs (core icloudStorage, decided with zo): one tap,
+                    no OAuth. Only offered where that folder can exist, so Android never sees it. */}
+                {IS_MAC && (
+                  <StorageOption
+                    active={info?.kind === "icloud" && !!info?.connected}
+                    title="iCloud Drive"
+                    subtitle={
+                      info?.kind === "icloud" && info?.connected
+                        ? `${t(M.storagePicker.connected)}${info.location ? ` · ${info.location}` : ""}`
+                        : t(M.storagePicker.icloudSub)
+                    }
+                    onClick={() => {
+                      send({ type: "connectCloud", kind: "icloud" });
+                      setSettingsMode("configure");
+                    }}
+                  />
+                )}
                 <StorageOption
                   active={info?.kind === "gdrive" && !!info?.connected}
                   title="Google Drive"

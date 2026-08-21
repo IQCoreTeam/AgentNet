@@ -282,6 +282,7 @@ export const M = {
     thisDeviceSub: m("Sessions stay local. No cloud mirror.", "세션이 로컬에만 저장됩니다. 클라우드 미러 없음.", "Сессии остаются локально. Без облачного зеркала."),
     connected: m("Connected", "연결됨", "Подключено"),
     gdriveSub: m("Mirror sessions to your own Google account", "내 Google 계정으로 세션 미러링", "Зеркалить сессии в ваш Google аккаунт"),
+    icloudSub: m("Mirror to your iCloud Drive folder. No sign in.", "iCloud Drive 폴더로 미러링. 로그인 불필요.", "Зеркалить в папку iCloud Drive. Без входа."),
     customStorage: m("Custom Storage", "커스텀 저장소", "Своё Хранилище"),
     customStorageSub: m("Mirror to an S3 / WebDAV / HTTP endpoint", "S3 / WebDAV / HTTP 엔드포인트로 미러링", "Зеркалить в S3 / WebDAV / HTTP endpoint"),
     done: m("Done", "완료", "Готово"),
