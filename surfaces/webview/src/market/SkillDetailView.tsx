@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode, type CSSProperties } from "react";
 import { useStore } from "../state/store";
 import { haptics } from "../haptics";
 import type { SkillCard, SkillDetail } from "../transport/protocol";
@@ -12,6 +12,32 @@ function shortAddr(w?: string) {
   return w ? `${w.slice(0, 4)}…${w.slice(-4)}` : "";
 }
 
+// Accent-green 12px corner ticks that frame the hero card as an owned-object plaque (matching
+// the OWNED button family). Purely decorative, so it stays out of the tab order.
+function Corners() {
+  const g = "var(--an-term-green)";
+  const base = "pointer-events-none absolute h-3 w-3";
+  return (
+    <>
+      <span className={base} style={{ top: -1, left: -1, borderTop: `2px solid ${g}`, borderLeft: `2px solid ${g}` }} />
+      <span className={base} style={{ top: -1, right: -1, borderTop: `2px solid ${g}`, borderRight: `2px solid ${g}` }} />
+      <span className={base} style={{ bottom: -1, left: -1, borderBottom: `2px solid ${g}`, borderLeft: `2px solid ${g}` }} />
+      <span className={base} style={{ bottom: -1, right: -1, borderBottom: `2px solid ${g}`, borderRight: `2px solid ${g}` }} />
+    </>
+  );
+}
+
+// A `> LABEL` terminal section header + its body. Labels are uppercased in green, matching the
+// card art's engraving and the rest of the terminal surfaces.
+function Section({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="mx-4 mt-5">
+      <div className="an-term-mono mb-2 text-[10px] uppercase" style={{ letterSpacing: "0.14em", color: "var(--an-term-green)" }}>&gt; {label}</div>
+      {children}
+    </div>
+  );
+}
+
 interface Props {
   detail: SkillDetail;
   owned: boolean;
@@ -19,6 +45,13 @@ interface Props {
   onOpenSkill?: (card: SkillCard) => void;
 }
 
+// Card-hero detail view (design "Skill Detail - Card Hero", direction 1): the minted 1:1 card
+// PNG is the hero, so the old icon + title + description head is dropped (the wordmark is baked
+// into the art; a visually-hidden h1 keeps the live name for a11y). Below the card: the action
+// bar (Buy / Owned + Unequip), a meta line, then the live/accessible body the art cannot do -
+// full untruncated > ABOUT, live hashtag chips, > SKILL TEXT, and > COMMENTS. Items with no
+// image degrade to the sigil-icon + Chakra Petch title head. Skill-item comments are ON-CHAIN
+// token gated: owners get the composer; non-owners get the collect-to-comment gate.
 export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
   const { state, send } = useStore();
   const [buying, setBuying] = useState(false);
@@ -38,6 +71,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
   const isWorkflow = requiredCards.length > 0;
   const ownedRequiredCount = requiredCards.filter((r) => state.marketOwned.includes(r.name)).length;
   const allRequiredOwned = ownedRequiredCount === requiredCards.length;
+  const noteCount = Array.isArray(notes) ? notes.length : 0;
 
   function handleBuy() {
     haptics.strong();
@@ -73,106 +107,135 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
     setResumeComment(false);
   }, [owned, resumeComment]);
 
-  return (
-    <div className="relative flex flex-col h-full">
-      {commentDone && <CompleteCelebration label="COMMENT POSTED" onDone={() => setCommentDone(false)} />}
-      <header className="flex items-center gap-2 border-b border-zinc-800 px-2.5 shrink-0" style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))", paddingBottom: "0.55rem" }}>
-        <button onClick={() => { haptics.tick(); onBack(); }} className="an-iconbtn shrink-0" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg></button>
-        {isWorkflow && (
-          <span className="shrink-0 rounded px-1 py-0.5 text-[9px] font-bold tracking-wide bg-amber-500/20 text-amber-300">WORKFLOW</span>
-        )}
-        <span className="truncate font-medium text-sm">{card.name}</span>
-        {owned && (
-          <span className="ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-green-900/60 text-green-400">
-            owned
-          </span>
-        )}
-        {disposed && (
-          <span className="ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-zinc-800 text-zinc-500">
-            un-equipped
-          </span>
-        )}
-      </header>
+  const img = mediaUrl(card.image);
+  const solidGreen: CSSProperties = { background: "var(--an-term-green)", color: "var(--an-on-green)" };
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-4" style={{ paddingBottom: "calc(var(--tabbar-height, 0px) + max(0.75rem, env(safe-area-inset-bottom)) + 76px)" }}>
-        <div className="flex items-start gap-3">
-          {mediaUrl(card.image) ? (
-            <img src={mediaUrl(card.image)} alt="" referrerPolicy="no-referrer" className="h-14 w-14 rounded-xl object-cover shrink-0" />
-          ) : (
-            <div className="h-14 w-14 rounded-xl bg-zinc-800 shrink-0 flex items-center justify-center text-zinc-400"><SkillIcon className="h-7 w-7" /></div>
-          )}
-          <div className="min-w-0">
-            <p className="text-sm text-zinc-300">{card.description}</p>
-            <div className="mt-1 flex flex-wrap gap-1.5 text-[11px]">
-              {card.category && <span className="bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">{card.category}</span>}
-              {card.hashtags?.map((h) => (
-                <span key={h} className="bg-zinc-800/60 text-zinc-500 px-1.5 py-0.5 rounded">#{h}</span>
-              ))}
-              {card.supply != null && <span className="text-zinc-600">↑{card.supply} holders</span>}
-              {card.stars ? <span className="text-amber-400">★{card.stars}</span> : null}
-              {/* inventory only: a small jump to the item's public marketplace page */}
-              {owned && card.id && (
-                <a
-                  href={`https://magiceden.io/item-details/${card.id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="border border-zinc-700 text-zinc-400 px-1.5 py-0.5 rounded active:opacity-80"
-                >
-                  MAGIC EDEN
-                </a>
-              )}
-            </div>
-          </div>
+  return (
+    <div className="relative flex h-full flex-col" style={{ background: "var(--an-bg-0)" }}>
+      {commentDone && <CompleteCelebration label="COMMENT POSTED" onDone={() => setCommentDone(false)} />}
+      {/* live name for screen readers / find-in-page (the visible title lives in the card art) */}
+      <h1 className="sr-only">{card.name}</h1>
+
+      <div
+        className="flex-1 overflow-y-auto an-tabbar-inset"
+        style={{ paddingTop: "max(0.6rem, env(safe-area-inset-top))", paddingBottom: "calc(max(0.75rem, env(safe-area-inset-bottom)) + 12px)" }}
+      >
+        {/* back */}
+        <div className="px-4">
+          <button onClick={() => { haptics.tick(); onBack(); }} className="an-term-mono text-[11px] uppercase tracking-[0.08em] active:opacity-70" style={{ color: "var(--an-term-fg-6)" }}>
+            &lt; Back_to_market
+          </button>
         </div>
 
-        {skillText && (
-          <div className="rounded-lg bg-zinc-900 border border-zinc-800 p-3">
-            <p className="text-[11px] text-zinc-500 mb-1 uppercase tracking-wide">SKILL.md</p>
-            <pre className="text-xs text-zinc-300 whitespace-pre-wrap font-mono overflow-x-auto">{skillText}</pre>
+        {/* HERO: the 1:1 card art as a bracket-corner plaque, or the sigil-icon fallback head */}
+        {img ? (
+          <div className="relative mx-4 mt-3">
+            <div className="relative" style={{ border: "1px solid var(--an-term-line-2)", background: "#080b09" }}>
+              <img
+                src={img}
+                alt={`${card.name} skill card`}
+                referrerPolicy="no-referrer"
+                className="block w-full"
+                style={{ aspectRatio: "1 / 1", objectFit: "cover", imageRendering: "pixelated" }}
+              />
+              <Corners />
+            </div>
           </div>
-        )}
-
-        {Array.isArray(detail.repos) && detail.repos.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-[11px] text-zinc-500 uppercase tracking-wide">
-              Used by · <span className="text-amber-400">★{card.stars ?? detail.repos.reduce((s, r) => s + (r.stars || 0), 0)}</span>
-            </p>
-            <div className="space-y-1.5">
-              {detail.repos.map((r) => (
-                <a key={r.url} href={r.url} target="_blank" rel="noreferrer"
-                  className="flex items-center gap-2 rounded-lg bg-zinc-900 border border-zinc-800 p-2.5 text-sm active:opacity-80">
-                  <span className="min-w-0 flex-1 truncate text-zinc-300">{r.owner}/{r.name}</span>
-                  <span className="shrink-0 text-[11px] text-amber-400">★{r.stars}</span>
-                </a>
-              ))}
+        ) : (
+          <div className="mx-4 mt-3.5 flex items-center gap-3">
+            <div className="relative grid h-14 w-14 shrink-0 place-items-center" style={{ border: "1px solid var(--an-term-green-line-2)", background: "var(--an-term-green-bg)", color: "var(--an-term-green)" }}>
+              <SkillIcon className="h-7 w-7" />
+              <span className="pointer-events-none absolute h-2 w-2" style={{ top: -1, left: -1, borderTop: "2px solid var(--an-term-green)", borderLeft: "2px solid var(--an-term-green)" }} />
+              <span className="pointer-events-none absolute h-2 w-2" style={{ bottom: -1, right: -1, borderBottom: "2px solid var(--an-term-green)", borderRight: "2px solid var(--an-term-green)" }} />
+            </div>
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <span className="an-term-mono text-[9px] uppercase" style={{ letterSpacing: "0.18em", color: "var(--an-term-fg-7)" }}>{isWorkflow ? "Workflow" : "Skill"}</span>
+              <span className="truncate text-[19px] font-semibold" style={{ fontFamily: "var(--an-font-tech)", color: "var(--an-term-fg)" }}>{card.name}</span>
             </div>
           </div>
         )}
 
+        {/* ACTION BAR — right under the card so Buy / Owned sit above the fold */}
+        <div className="mx-4 mt-3">
+          {owned && !disposed ? (
+            <div className="flex items-center gap-2">
+              <span className="flex h-11 flex-1 items-center justify-center an-term-mono text-[12px] font-bold uppercase" style={{ letterSpacing: "0.12em", border: "1px solid var(--an-term-green-line)", color: "var(--an-term-green)", background: "var(--an-term-green-bg)" }}>Owned</span>
+              <button onClick={() => { haptics.tap(); send({ type: "disposeSkill", skillId: card.id }); }} className="flex h-11 flex-1 items-center justify-center an-term-mono text-[12px] font-bold uppercase active:opacity-80" style={{ letterSpacing: "0.12em", border: "1px solid var(--an-term-line-3)", color: "var(--an-fg-dim)" }}>Unequip</button>
+            </div>
+          ) : disposed ? (
+            <button onClick={() => { haptics.tap(); send({ type: "reEquipSkill", skillId: card.id }); }} className="flex h-11 w-full items-center justify-center an-term-mono text-[12px] font-bold uppercase active:opacity-90" style={{ letterSpacing: "0.12em", ...solidGreen }}>Re-equip</button>
+          ) : (
+            <LockedGate reason="buy" onUnlocked={handleBuy}>
+              <button
+                onClick={handleBuy}
+                disabled={buying || (isWorkflow && !allRequiredOwned)}
+                className="flex h-11 w-full items-center justify-center an-term-mono text-[12px] font-bold uppercase active:opacity-90 disabled:opacity-40"
+                style={{ letterSpacing: "0.12em", ...solidGreen }}
+              >
+                {buying
+                  ? "Buying..."
+                  : isWorkflow && !allRequiredOwned
+                    ? `Collect ${requiredCards.length - ownedRequiredCount} more skill${requiredCards.length - ownedRequiredCount === 1 ? "" : "s"}`
+                    : priceSol ? `Buy · ${priceSol} SOL` : "Buy · Free"}
+              </button>
+            </LockedGate>
+          )}
+        </div>
+
+        {/* meta line: holders / price on the left, Magic Eden (owned only) on the right */}
+        <div className="mx-4 mt-2.5 flex items-center justify-between an-term-mono text-[10px]" style={{ letterSpacing: "0.08em" }}>
+          <span style={{ color: "var(--an-term-fg-7)" }}>
+            {card.supply != null ? `${card.supply}x owned` : ""}
+            {card.supply != null && priceSol ? " · " : ""}
+            {priceSol ? `${priceSol} SOL` : card.supply == null ? "Free" : ""}
+          </span>
+          {owned && card.id && (
+            <a href={`https://magiceden.io/item-details/${card.id}`} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="active:opacity-70" style={{ color: "var(--an-term-fg-6)" }}>
+              Magic Eden ↗
+            </a>
+          )}
+        </div>
+
+        {/* > ABOUT — the full, untruncated, selectable description + live hashtag chips */}
+        <Section label="About">
+          <p className="whitespace-pre-wrap break-words text-[12.5px] leading-relaxed" style={{ color: "var(--an-fg-dim)" }}>{card.description}</p>
+          {(card.category || card.hashtags?.length) && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {card.category && (
+                <span className="an-term-mono px-2 py-1 text-[10px] uppercase" style={{ letterSpacing: "0.06em", border: "1px solid var(--an-term-green-line)", color: "var(--an-term-green)", background: "var(--an-term-green-bg)" }}>{card.category}</span>
+              )}
+              {card.hashtags?.map((h) => (
+                <span key={h} className="an-term-mono px-2 py-1 text-[10px]" style={{ border: "1px solid var(--an-term-line-2)", color: "var(--an-fg-mute)" }}>#{h}</span>
+              ))}
+            </div>
+          )}
+        </Section>
+
+        {/* Required skills (workflow) — collect the parts before the workflow can be bought */}
         {isWorkflow && (() => {
           const unowned = requiredCards.filter((r) => !state.marketOwned.includes(r.name));
           const totalLamports = unowned.reduce((sum, r) => sum + (r.price ? Number(r.price) : 0), 0);
           const totalSol = totalLamports > 0 ? (totalLamports / 1_000_000_000).toFixed(3) : null;
           return (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-[11px] text-zinc-500 uppercase tracking-wide">
-                  Required skills · <span className={allRequiredOwned ? "text-green-400" : "text-amber-300"}>{ownedRequiredCount}/{requiredCards.length} collected</span>
-                </p>
+            <div className="mx-4 mt-5">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="an-term-mono text-[10px] uppercase" style={{ letterSpacing: "0.14em", color: "var(--an-term-green)" }}>
+                  &gt; Required_skills <span style={{ color: allRequiredOwned ? "var(--an-term-green)" : "var(--an-amber)" }}>{ownedRequiredCount}/{requiredCards.length}</span>
+                </div>
                 {unowned.length > 0 && (
                   <LockedGate reason="buy" onUnlocked={() => { haptics.strong(); send({ type: "buyRequiredSkills", items: unowned.map((r) => ({ skillId: r.id, creatorWallet: r.creator })) }); }}>
                     <button
                       type="button"
                       onClick={() => { haptics.strong(); send({ type: "buyRequiredSkills", items: unowned.map((r) => ({ skillId: r.id, creatorWallet: r.creator })) }); }}
-                      className="rounded-lg bg-amber-400 px-2.5 py-1 text-[11px] font-semibold text-zinc-900 active:bg-amber-300"
+                      className="an-term-mono px-2.5 py-1 text-[10px] font-bold uppercase active:opacity-80"
+                      style={{ letterSpacing: "0.06em", ...solidGreen }}
                     >
-                      Collect all {unowned.length}{totalSol ? ` · ${totalSol} SOL` : ""}
+                      Collect {unowned.length}{totalSol ? ` · ${totalSol}` : ""}
                     </button>
                   </LockedGate>
                 )}
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {requiredCards.map((req) => {
                   const reqOwned = state.marketOwned.includes(req.name);
                   return (
@@ -180,24 +243,24 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
                       key={req.id}
                       type="button"
                       onClick={() => onOpenSkill?.(req)}
-                      className={`flex w-full items-center gap-2.5 rounded-lg border p-2.5 text-left active:opacity-80 ${reqOwned ? "bg-zinc-900 border-zinc-800" : "bg-zinc-900/40 border-dashed border-amber-500/40"}`}
+                      className="flex w-full items-center gap-2.5 p-2.5 text-left active:opacity-80"
+                      style={{ border: reqOwned ? "1px solid var(--an-term-line-2)" : "1px dashed var(--an-term-green-line)", background: reqOwned ? "var(--an-bg-1)" : "var(--an-term-green-bg)" }}
                     >
-                      {/* collection checkbox: filled green check when owned, empty slot when missing */}
                       {reqOwned ? (
-                        <span className="shrink-0 grid h-5 w-5 place-items-center rounded-md bg-green-500/90 text-zinc-950 text-xs font-bold">✓</span>
+                        <span className="grid h-5 w-5 shrink-0 place-items-center text-[11px] font-bold" style={solidGreen}>✓</span>
                       ) : (
-                        <span className="shrink-0 h-5 w-5 rounded-md border-2 border-dashed border-amber-500/50" />
+                        <span className="h-5 w-5 shrink-0" style={{ border: "1px dashed var(--an-term-green-line)" }} />
                       )}
                       <div className="min-w-0 flex-1">
-                        <p className={`text-xs font-medium ${reqOwned ? "text-zinc-200" : "text-zinc-300"}`}>{req.name}</p>
-                        <p className="mt-0.5 line-clamp-2 text-[11px] text-zinc-500">{req.description}</p>
+                        <p className="an-term-mono text-[12px]" style={{ color: "var(--an-term-fg)" }}>{req.name}</p>
+                        <p className="mt-0.5 line-clamp-2 text-[11px]" style={{ color: "var(--an-fg-mute)" }}>{req.description}</p>
                       </div>
                       {reqOwned ? (
-                        <span className="shrink-0 text-[10px] font-semibold text-green-400">owned</span>
+                        <span className="an-term-mono shrink-0 text-[10px] font-bold" style={{ color: "var(--an-term-green)" }}>owned</span>
                       ) : req.price ? (
-                        <span className="shrink-0 text-[11px] font-medium text-amber-300">{(Number(req.price) / 1_000_000_000).toFixed(3)} SOL</span>
+                        <span className="an-term-mono shrink-0 text-[11px]" style={{ color: "var(--an-fg-dim)" }}>{(Number(req.price) / 1_000_000_000).toFixed(3)}</span>
                       ) : (
-                        <span className="shrink-0 text-[11px] text-zinc-500">free</span>
+                        <span className="an-term-mono shrink-0 text-[11px]" style={{ color: "var(--an-fg-mute)" }}>free</span>
                       )}
                     </button>
                   );
@@ -207,94 +270,75 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
           );
         })()}
 
-        {Array.isArray(notes) && notes.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-[11px] text-zinc-500 uppercase tracking-wide">Comments</p>
-            {(notes as any[]).map((n: any, i) => (
-              <div key={i} className="rounded-xl bg-zinc-900 border border-zinc-800 p-3.5 text-sm text-zinc-300">
-                <div className="mb-2 flex items-center gap-2.5">
-                  <div className="h-8 w-8 shrink-0 overflow-hidden rounded-full border border-zinc-800 bg-zinc-800" aria-hidden="true" dangerouslySetInnerHTML={{ __html: walletAvatarSvg(n.author ?? "") }} />
-                  <span className="font-mono text-xs text-zinc-400">{shortAddr(n.author)}</span>
+        {/* > USED BY — repos that reference this skill, with their star grade */}
+        {Array.isArray(detail.repos) && detail.repos.length > 0 && (
+          <Section label="Used_by">
+            <div className="space-y-1.5">
+              {detail.repos.map((r) => (
+                <a key={r.url} href={r.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 p-2.5 active:opacity-80" style={{ border: "1px solid var(--an-term-line)", background: "var(--an-bg-1)" }}>
+                  <span className="an-term-mono min-w-0 flex-1 truncate text-[12px]" style={{ color: "var(--an-fg-dim)" }}>{r.owner}/{r.name}</span>
+                  <span className="an-term-mono shrink-0 text-[11px]" style={{ color: "var(--an-amber)" }}>★{r.stars}</span>
+                </a>
+              ))}
+            </div>
+          </Section>
+        )}
+
+        {/* > SKILL TEXT — the raw SKILL.md */}
+        {skillText && (
+          <Section label="Skill_text">
+            <pre className="an-term-mono overflow-x-auto whitespace-pre-wrap break-words text-[11px] leading-relaxed" style={{ border: "1px solid var(--an-term-line)", background: "#080b09", padding: "12px", color: "var(--an-fg-dim)" }}>{skillText}</pre>
+          </Section>
+        )}
+
+        {/* > COMMENTS — on-chain token-gated: owners post, non-owners see the collect gate */}
+        <Section label={`Comments (${noteCount})`}>
+          {noteCount > 0 && (
+            <div className="mb-3 flex flex-col">
+              {(notes as any[]).map((n: any, i) => (
+                <div key={i} className="border-t py-3 first:border-t-0" style={{ borderColor: "var(--an-term-line)" }}>
+                  <div className="mb-2 flex items-center gap-2.5">
+                    <div className="h-[22px] w-[22px] shrink-0 overflow-hidden" style={{ border: "1px solid var(--an-term-line-2)" }} aria-hidden="true" dangerouslySetInnerHTML={{ __html: walletAvatarSvg(n.author ?? "") }} />
+                    <span className="an-term-mono text-[11px]" style={{ color: "var(--an-term-fg)" }}>{shortAddr(n.author)}</span>
+                  </div>
+                  <p className="an-term-mono whitespace-pre-wrap break-words text-[12px] leading-relaxed" style={{ color: "var(--an-fg-dim)" }}>{n.text}</p>
                 </div>
-                <p className="whitespace-pre-wrap break-words leading-relaxed">{n.text}</p>
+              ))}
+            </div>
+          )}
+          {owned ? (
+            <div className="space-y-2.5">
+              <textarea
+                ref={noteInput}
+                className="an-term-field resize-none leading-relaxed"
+                rows={4}
+                placeholder="Write a comment..."
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value)}
+              />
+              <input
+                className="an-term-field"
+                placeholder="GitHub link (optional)"
+                value={noteGitLink}
+                onChange={(e) => setNoteGitLink(e.target.value)}
+              />
+              <div className="flex justify-end">
+                <button onClick={handleNote} disabled={!noteText.trim()} className="an-btn an-btn-green w-auto px-6">Post</button>
               </div>
-            ))}
-          </div>
-        )}
-
-        {owned && (
-          <div className="space-y-2.5">
-            <p className="text-[11px] text-zinc-500 uppercase tracking-wide">Leave a comment</p>
-            <textarea
-              ref={noteInput}
-              className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-3.5 text-base text-zinc-200 leading-relaxed resize-none focus:outline-none focus:border-green-500/50"
-              rows={4}
-              placeholder="Share your experience…"
-              value={noteText}
-              onChange={(e) => setNoteText(e.target.value)}
-            />
-            <input
-              className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-3 text-base text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-blue-500/50"
-              placeholder="GitHub link (optional)"
-              value={noteGitLink}
-              onChange={(e) => setNoteGitLink(e.target.value)}
-            />
-            <button
-              onClick={handleNote}
-              disabled={!noteText.trim()}
-              className="w-full rounded-xl py-3.5 text-base font-semibold bg-zinc-800 text-zinc-200 disabled:opacity-40 active:bg-zinc-700"
-            >
-              Post
-            </button>
-          </div>
-        )}
-        {!owned && !state.walletAddress && (
-          <LockedGate reason="comment" onUnlocked={() => { setResumeComment(true); send({ type: "ownedSkills" }); send({ type: "getSkillDetail", mint: card.id }); }}>
-            <button className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-3 text-left text-sm text-zinc-400">
-              Connect a wallet to comment
-            </button>
-          </LockedGate>
-        )}
-        {!owned && !!state.walletAddress && (
-          <p className="rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-3 text-sm text-zinc-500">Collect this skill before commenting.</p>
-        )}
+            </div>
+          ) : !state.walletAddress ? (
+            <LockedGate reason="comment" onUnlocked={() => { setResumeComment(true); send({ type: "ownedSkills" }); send({ type: "getSkillDetail", mint: card.id }); }}>
+              <div className="an-term-mono px-3 py-2.5 text-[10px] uppercase" style={{ letterSpacing: "0.06em", border: "1px solid var(--an-term-line)", color: "var(--an-term-fg-7)" }}>
+                <span style={{ color: "var(--an-term-green)" }}>&gt;</span>CONNECT_WALLET_ <span style={{ color: "var(--an-term-fg)" }}>Connect a wallet to comment.</span>
+              </div>
+            </LockedGate>
+          ) : (
+            <div className="an-term-mono px-3 py-2.5 text-[10px] uppercase" style={{ letterSpacing: "0.06em", border: "1px solid var(--an-term-green-line-2)", color: "var(--an-term-fg-7)" }}>
+              <span style={{ color: "var(--an-term-green)" }}>&gt;</span>HOLDERS_ONLY_ <span style={{ color: "var(--an-term-fg)" }}>Collect this skill to comment.</span>
+            </div>
+          )}
+        </Section>
       </div>
-
-      {owned && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-8 an-tabbar-inset" style={{ background: "linear-gradient(to top, color-mix(in srgb, var(--an-bg-0) 60%, transparent), transparent)" }}>
-          {/* pointer-events-auto: the fade wrapper is pointer-events-none (so it can't block
-              the list scroll), which otherwise swallows the tap too — see the Buy gate below. */}
-          <button onClick={() => { haptics.tap(); send({ type: "disposeSkill", skillId: card.id }); }} className="an-btn an-btn-danger pointer-events-auto">
-            Remove Skill
-          </button>
-        </div>
-      )}
-
-      {!owned && disposed && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-8 an-tabbar-inset" style={{ background: "linear-gradient(to top, color-mix(in srgb, var(--an-bg-0) 60%, transparent), transparent)" }}>
-          <button onClick={() => { haptics.tap(); send({ type: "reEquipSkill", skillId: card.id }); }} className="an-btn an-btn-green pointer-events-auto">
-            Re-equip Skill
-          </button>
-        </div>
-      )}
-
-      {!owned && !disposed && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-8 an-tabbar-inset" style={{ background: "linear-gradient(to top, color-mix(in srgb, var(--an-bg-0) 60%, transparent), transparent)" }}>
-          <LockedGate reason="buy" onUnlocked={handleBuy} className="pointer-events-auto">
-            <button
-              onClick={handleBuy}
-              disabled={buying || (isWorkflow && !allRequiredOwned)}
-              className="an-btn an-btn-orange"
-            >
-              {buying
-                ? "Buying…"
-                : isWorkflow && !allRequiredOwned
-                  ? `Collect ${requiredCards.length - ownedRequiredCount} more skill${requiredCards.length - ownedRequiredCount === 1 ? "" : "s"} to buy`
-                  : priceSol ? `Buy for ${priceSol} SOL` : "Buy (free)"}
-            </button>
-          </LockedGate>
-        </div>
-      )}
     </div>
   );
 }
