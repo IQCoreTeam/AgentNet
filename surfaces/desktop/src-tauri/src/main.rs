@@ -105,7 +105,6 @@ fn node_bin() -> Result<String, String> {
         ));
     }
     for candidate in [
-        "/opt/homebrew/opt/node@24/bin/node",
         "/opt/homebrew/bin/node",
         "/usr/local/bin/node",
         "/usr/bin/node",
@@ -155,14 +154,23 @@ fn port_answering() -> bool {
 }
 
 fn spawn_server(node: &str, server: &str) -> std::io::Result<Child> {
-    let server_dir = PathBuf::from(server)
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| PathBuf::from("."));
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    // Agents run from the user's HOME. A Finder/Dock launch would otherwise cwd
+    // the child into the .app bundle (read-only under Gatekeeper translocation),
+    // where files an agent writes fail or pollute the bundle. The server resolves
+    // the webview via its own path, not cwd, so nothing else depends on this.
+    // PATH: a Finder launch inherits launchd's minimal PATH, so `which claude` /
+    // `which codex` (how the core resolves engines) would miss Homebrew, npm
+    // global, and ~/.local installs. Prepend the usual locations.
+    let path = match std::env::var("PATH") {
+        Ok(p) => format!("/opt/homebrew/bin:/usr/local/bin:{home}/.local/bin:{home}/.npm-global/bin:{p}"),
+        Err(_) => format!("/opt/homebrew/bin:/usr/local/bin:{home}/.local/bin:{home}/.npm-global/bin:/usr/bin:/bin"),
+    };
     let child = Command::new(node)
         .arg(server)
         .env("AGENTNET_PORT", PORT.to_string())
-        .current_dir(server_dir)
+        .env("PATH", path)
+        .current_dir(&home)
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
@@ -229,6 +237,9 @@ fn main() {
             let deadline = Instant::now() + Duration::from_secs(30);
             while !port_answering() {
                 if Instant::now() >= deadline {
+                    // Tauri panics on a setup Err without firing Exit, so reap the
+                    // child we spawned here rather than leaking a server on 4317.
+                    kill_server(&app.handle());
                     return Err("AgentNet server did not answer on port 4317 within 30s".into());
                 }
                 std::thread::sleep(Duration::from_millis(200));

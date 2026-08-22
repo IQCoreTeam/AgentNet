@@ -1,6 +1,8 @@
 # AgentNet Desktop
 
-A native desktop app (macOS, Windows, Linux) for AgentNet, built with Tauri.
+A native desktop app for AgentNet, built with Tauri. The self-contained build
+script targets macOS (arm64); the shell code is cross-platform but only macOS is
+built and tested here.
 
 It is a thin native shell around the existing `localhost` surface: on launch it
 spawns `surfaces/localhost/dist/index.js` (the same server that serves the built
