@@ -160,6 +160,7 @@ body {
    rail + wide content, see the desktop block near the shell rules), so the cap
    must NOT apply there. */
 @media (min-width: 560px) and (max-width: 1023.98px) {
+  /* A hair darker than --an-bg-0 so the centered framed column reads as lifted. */
   body { background: #05070a; }
   #app {
     max-width: 460px;
@@ -1190,6 +1191,13 @@ body {
   padding-bottom: calc(var(--tabbar-height, 0px) + max(0.75rem, env(safe-area-inset-bottom)));
 }
 
+/* Pinned CTA over a detail scroll (Buy / Remove / Re-equip): the content fades out
+   under a translucent wash; on phone the floating dock covers the strip below the
+   button, so the wash can stay light. Desktop solidifies it (see the ≥1024px block). */
+.an-cta-float {
+  background: linear-gradient(to top, color-mix(in srgb, var(--an-bg-0) 60%, transparent), transparent);
+}
+
 /* Floating chat controls: the layer around the composer stays transparent so messages
    move behind it. The controls themselves are opaque surfaces. */
 .an-chat-float {
@@ -2124,7 +2132,7 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
      indicator; segments stack and the indicator slides on Y (TabBar.tsx). The
      bracket frame stretches to the rail's full height so the box closes at the
      bottom edge instead of hanging open mid-rail; the indicator is one fixed
-     62px segment (25% of a full-height bar would balloon). */
+     56px segment (25% of a full-height bar would balloon). */
   .an-navdock-shell { display: flex; flex-direction: column; padding: 14px 10px 0; }
   .an-navdock { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; }
   .an-navdock-bar { flex-direction: column; height: auto; flex: 1; }
@@ -2168,6 +2176,11 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
 
   /* Skill-card tiles: keep tile size sane and let the count grow with width. */
   .an-cardgrid { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); }
+
+  /* Pinned detail CTA: no floating dock hides the strip under the button here, so
+     the scrolled text bled through the translucent wash (and the button's bracket
+     gaps). Solid backstop over the button + inset, fading out across the pt-8 zone. */
+  .an-cta-float { background: linear-gradient(to top, var(--an-bg-0) 70px, transparent); }
 
   /* Rank: the agent-card list becomes a 2-up grid (space-y margins are a
      phone-stack concern — the grid gap replaces them). The trading cards are

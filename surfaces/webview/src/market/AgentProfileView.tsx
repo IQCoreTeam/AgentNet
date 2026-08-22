@@ -1068,10 +1068,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
 
       {/* Buy all footer (agent tab, viewing another agent's skills) */}
       {showBuyAll && tab === "agent" && (
-        <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-10 an-tabbar-inset"
-          style={{ background: "linear-gradient(to top, color-mix(in srgb, var(--an-bg-0) 60%, transparent), transparent)" }}
-        >
+        <div className="an-cta-float pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-10 an-tabbar-inset">
           <LockedGate reason="buy" onUnlocked={handleBuyAll} className="pointer-events-auto">
             <button onClick={handleBuyAll} disabled={buyingAll} className="an-btn an-btn-orange">
               {buyingAll
