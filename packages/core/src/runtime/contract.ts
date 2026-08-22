@@ -214,6 +214,17 @@ export interface AgentRuntime {
   // per-launch cloud storm. No-op (0 uploads) when the storage has no cloud tier or is
   // already in sync. See StorageAdapter.backfill.
   syncCloud(): Promise<{ uploaded: number; missing: number }>;
+
+  // Running Sync (issue #129): cross-device RUNNING markers on the same storage.
+  // Exactly two writes per turn: runningStart at turn start (returns the turnId
+  // runningEnd must echo; null when the session has no id yet - a fresh chat whose
+  // engine hasn't revealed one - so the next turn is the first marked one) and
+  // runningEnd at turn end. runningRemote lists sessionIds with a live marker
+  // from ANOTHER device, for the session list's cross-device RUNNING badge.
+  // Optional: a runtime without them leaves surfaces on local-only busy state.
+  runningStart?(sessionId: string): Promise<string | null>;
+  runningEnd?(sessionId: string, turnId: string): Promise<void>;
+  runningRemote?(): Promise<string[]>;
 }
 
 // paginated read result (newest-first; cursor walks toward older pages)
