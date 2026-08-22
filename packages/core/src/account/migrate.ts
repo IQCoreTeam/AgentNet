@@ -12,6 +12,9 @@
 // Idempotent: sessions already complete in the destination are skipped; a partial
 // copy (an interrupted earlier run) resumes — only the missing tail is appended,
 // matched by JSON prefix; a same-id session with DIFFERENT content is never touched.
+//
+// `sessionId` scopes the run to that one session (the opt-in per-session sync);
+// omitted, every source session is copied (the wallet-switch bulk path).
 
 import type { SessionStore } from "./store.js";
 
@@ -24,10 +27,12 @@ export interface MigrationReport {
 export async function migrateSessions(
   source: SessionStore,
   destination: SessionStore,
+  sessionId?: string,
 ): Promise<MigrationReport> {
   const report: MigrationReport = { copied: 0, skipped: 0, messages: 0 };
   const existing = new Set((await destination.listMine()).map((s) => s.sessionId));
-  for (const meta of await source.listMine()) {
+  const metas = await source.listMine();
+  for (const meta of sessionId ? metas.filter((m) => m.sessionId === sessionId) : metas) {
     // Per-session tolerance (mirrors listMine's): one undecryptable/corrupt session
     // must not abort the run — count it and keep copying the healthy ones.
     try {

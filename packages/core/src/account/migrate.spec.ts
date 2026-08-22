@@ -187,6 +187,24 @@ describe("account/migrate — session re-key between wallets", () => {
     expect((await storeFor(walletB).load("s-ok"))?.messages).toHaveLength(3);
   });
 
+  it("scopes to one session when a sessionId is given: siblings are untouched", async () => {
+    const src = storeFor(walletA);
+    await seed(src, meta("s1", "wanted", 2000), 3);
+    await seed(src, meta("s2", "left local", 1000), 2);
+
+    const report = await migrateSessions(storeFor(walletA), storeFor(walletB), "s1");
+    expect(report).toEqual({ copied: 1, skipped: 0, messages: 3 });
+
+    const dst = storeFor(walletB);
+    expect((await dst.listMine()).map((s) => s.sessionId)).toEqual(["s1"]);
+    expect((await dst.load("s1"))?.messages).toHaveLength(3);
+    expect(await dst.load("s2")).toBeNull();
+
+    // An unknown id copies nothing and fails nothing.
+    const miss = await migrateSessions(storeFor(walletA), storeFor(walletB), "nope");
+    expect(miss).toEqual({ copied: 0, skipped: 0, messages: 0 });
+  });
+
   it("covers the guest-unlock shape: a signMessage-only device wallet migrates into a real wallet", async () => {
     // Mirror of the surface's deviceGuestWallet: session-key signing works, chain signing
     // fails closed. Migration must only ever need signMessage.
