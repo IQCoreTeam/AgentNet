@@ -217,7 +217,7 @@ function sessionStoreFor(w: Wallet): SessionStore {
 // surface part only: which wallets and stores are involved. Scoped to ONE session, so
 // connecting a wallet never adopts guest work wholesale; the user pulls sessions in one
 // at a time from the chat list.
-async function migrateGuestSession(realWallet: Wallet, sessionId: string): Promise<void> {
+async function migrateGuestSession(realWallet: Wallet, sessionId: string): Promise<boolean> {
   const guest = await deviceGuestWallet();
   const report = await migrateSessions(
     sessionStoreFor(guest),
@@ -228,6 +228,10 @@ async function migrateGuestSession(realWallet: Wallet, sessionId: string): Promi
     `[wallet] session sync ${sessionId.slice(0, 8)}: ${report.copied} copied ` +
       `(${report.messages} messages), ${report.skipped} skipped`,
   );
+  // migrateSessions swallows per-session faults into report.skipped (an unloadable
+  // guest page throws inside the loop, not out of it), so "did not throw" is NOT
+  // "copied": only a real copy may clear the Local tag.
+  return report.copied === 1;
 }
 
 // Guest sessions NOT yet present in the connected wallet's store, cached at adopt/sync
@@ -1196,7 +1200,11 @@ function attachWalletConnection(c: Client) {
         return;
       }
       try {
-        await migrateGuestSession(wallet, m.sessionId);
+        const copied = await migrateGuestSession(wallet, m.sessionId);
+        if (!copied) {
+          c.send({ type: "sessionSynced", sessionId: m.sessionId, ok: false, error: "Could not read this session from local storage." });
+          return;
+        }
         if (localSessions) localSessions = localSessions.filter((s) => s.sessionId !== m.sessionId);
         c.send({ type: "sessionSynced", sessionId: m.sessionId, ok: true });
       } catch (e) {

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, type ReactNode, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { walletAvatarSvg } from "../market/walletAvatar";
 import { useStore } from "../state/store";
 import { IqLogo, AgentIcon, LockIcon, SkillIcon } from "../icons";
 import { useOnline } from "../layoutEffects";
@@ -469,9 +470,12 @@ export function Sessions({
                   <div className="an-chatmenu-title truncate">{syncFor.title}</div>
                   <div className="px-3 pb-3">
                     <p className="text-[12px] leading-relaxed" style={{ color: "var(--an-fg-dim)" }}>{t(M.menu.syncConfirm)}</p>
-                    <p className="an-term-mono mt-2 break-all border px-2 py-1.5 text-[11px] leading-relaxed" style={{ borderColor: "var(--an-green-line)", background: "var(--an-green-dim)", color: "var(--an-term-fg)" }}>
-                      {state.walletAddress}
-                    </p>
+                    {/* Destination identity, address AND the agent it renders as (issue #123
+                        point 3): the avatar is derived from the wallet, same as the rank cards. */}
+                    <div className="an-term-mono mt-2 flex items-center gap-2.5 border px-2 py-1.5 text-[11px] leading-relaxed" style={{ borderColor: "var(--an-green-line)", background: "var(--an-green-dim)", color: "var(--an-term-fg)" }}>
+                      <span className="h-7 w-7 shrink-0 overflow-hidden" style={{ border: "1px solid var(--an-line)" }} aria-hidden="true" dangerouslySetInnerHTML={{ __html: walletAvatarSvg(state.walletAddress ?? "") }} />
+                      <span className="break-all">{state.walletAddress}</span>
+                    </div>
                     <div className="mt-3 flex gap-2">
                       <button className="an-btn an-btn-outline flex-1" onClick={() => setSyncFor(null)}>{t(M.menu.syncKeepLocal)}</button>
                       <button
