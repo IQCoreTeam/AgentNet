@@ -432,6 +432,14 @@ function reducer(state: State, ev: Action): State {
         sessionsRunning: ev.running ?? [],
         activeSessionId: state.activeSessionId ?? ev.activeId,
       };
+    case "sessionSynced":
+      // Per-session sync ack (issue #123). Clear the row's Local tag right away instead of
+      // waiting for the next natural sessions push (which only fires at turn edges/ready).
+      if (!ev.ok) return { ...state, toast: `Sync failed: ${ev.error ?? "unknown"}` };
+      return {
+        ...state,
+        sessions: state.sessions.map((s) => (s.sessionId === ev.sessionId ? { ...s, local: undefined } : s)),
+      };
     case "loading":
       return { ...state, loading: true };
     // Optimistic session switch: the moment the user taps a chat, flip the active id (so

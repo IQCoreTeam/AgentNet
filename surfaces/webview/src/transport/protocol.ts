@@ -43,6 +43,10 @@ export interface SessionMeta {
   sessionId: string;
   title: string;
   ts: number;
+  // true = a pre-wallet guest session still living in the device store: not bound to the
+  // connected wallet until the user opts in via syncSessionToWallet. Only ever set while
+  // a wallet is connected (localhost splices these into the list, see withLocalSessions).
+  local?: boolean;
 }
 
 export type ApprovalKind = "bash" | "edit" | "write" | "read" | "question" | "plan" | "other";
@@ -105,6 +109,9 @@ export type ClientMessage =
   | { type: "interrupt" }
   | { type: "loadMore"; cursor: number }
   | { type: "delete"; sessionId: string }
+  // opt-in per-session sync (issue #123): copy ONE local (guest) session into the
+  // connected wallet's store; answered by sessionSynced.
+  | { type: "syncSessionToWallet"; sessionId: string }
   | { type: "wallet" }
   | { type: "getCliStatus" }
   | { type: "getEngineVersions" }
@@ -207,6 +214,9 @@ export type ServerMessage =
   // running: sessionIds whose agent turn is in flight right now (server reads its `busy`
   // set at each turn edge). Lets the list mark a per-session RUNNING state; absent = none.
   | { type: "sessions"; list: SessionMeta[]; activeId?: string; running?: string[]; cloud?: "ok" | "reauth" | "transient" | "none" }
+  // ack of syncSessionToWallet: ok = the session now lives in the wallet's store (its
+  // Local tag clears); the guest copy stays on disk either way (migration never deletes).
+  | { type: "sessionSynced"; sessionId: string; ok: boolean; error?: string }
   | { type: "modelOptions"; cli: Cli; options: import("@iqlabs-official/agent-sdk").ChatModelOption[] }
   | { type: "loading" }
   | { type: "platform"; cli: Cli }
