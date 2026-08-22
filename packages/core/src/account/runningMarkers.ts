@@ -6,9 +6,14 @@
 // marker can never spin forever: expiry is a read-side display decision.
 //
 // The issue's open questions, resolved conservatively for v1:
-// - Placement: ONE MARKER FILE PER SESSION ("running__{sessionId}") rather than a
-//   single account-wide map - two devices running turns at the same time never
-//   contend on one blob, and the key shape mirrors the memory__ / page keys.
+// - Placement: ONE MARKER FILE PER SESSION PER DEVICE
+//   ("running__{sessionId}__{deviceId}") rather than a single account-wide map
+//   or one shared per-session file. Each device only ever writes ITS OWN key,
+//   which is what makes the local-first mirror safe: the mirror's get() prefers
+//   the local tier, so a shared key would let this device's stale local copy
+//   shadow (and its sweep destroy) another device's live cloud marker. With
+//   per-device keys another device's marker never exists in our local tier, so
+//   reading it always hits the cloud, and the sweep can only touch our own.
 // - Expiry classes: the issue's defaults (20 min normal, 60 min deepResearch).
 //   No flow sets deepResearch yet; the class is kept here so a known long-running
 //   flow can opt in at turn start later without a format change.
@@ -45,7 +50,7 @@ export interface RunningMarker {
 }
 
 const PREFIX = "running__";
-const markerKey = (sessionId: string) => `${PREFIX}${sessionId}`;
+const markerKey = (sessionId: string, deviceId: string) => `${PREFIX}${sessionId}__${deviceId}`;
 
 // The reader rule: running AND not yet expired on OUR clock (+ grace). An
 // expired marker is ended regardless of its state - nobody has to delete it.
@@ -70,7 +75,7 @@ export class RunningMarkers {
   }
 
   private async write(m: RunningMarker): Promise<void> {
-    await this.storage.put(markerKey(m.sessionId), new TextEncoder().encode(JSON.stringify(m)));
+    await this.storage.put(markerKey(m.sessionId, m.deviceId), new TextEncoder().encode(JSON.stringify(m)));
   }
 
   // Turn start -> write the `running` marker (write 1 of 2). Returns the turnId
@@ -95,7 +100,8 @@ export class RunningMarkers {
   // Turn end (interrupt lands on the same path) -> overwrite with `ended`
   // (write 2 of 2). Only closes the matching turnId: a newer turn owns the file.
   async end(sessionId: string, turnId: string): Promise<void> {
-    const cur = await this.read(markerKey(sessionId), true);
+    const device = await getDeviceProfile();
+    const cur = await this.read(markerKey(sessionId, device.id), true);
     if (!cur || cur.turnId !== turnId) return;
     await this.write({ ...cur, state: "ended", endedAt: Date.now() });
   }

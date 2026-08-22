@@ -22,8 +22,10 @@ function memStorage(): StorageAdapter & { blobs: Map<string, Uint8Array> } {
   };
 }
 
-const readMarker = (s: { blobs: Map<string, Uint8Array> }, sessionId: string): RunningMarker =>
-  JSON.parse(new TextDecoder().decode(s.blobs.get(`running__${sessionId}`)!));
+// Keys are per session PER DEVICE (running__{sessionId}__{deviceId}) so a
+// device can only ever shadow or sweep its own markers (see the module header).
+const readMarker = (s: { blobs: Map<string, Uint8Array> }, sessionId: string, device = THIS_DEVICE): RunningMarker =>
+  JSON.parse(new TextDecoder().decode(s.blobs.get(`running__${sessionId}__${device}`)!));
 
 describe("account/runningMarkers", () => {
   beforeEach(() => {
@@ -103,8 +105,8 @@ describe("account/runningMarkers", () => {
 
     await markers.sweep();
     expect(readMarker(storage, "crashed").state).toBe("ended");
-    expect(storage.blobs.has("running__finished")).toBe(false); // bounded marker set
-    expect(readMarker(storage, "theirs").state).toBe("running"); // not ours to touch
+    expect(storage.blobs.has(`running__finished__${THIS_DEVICE}`)).toBe(false); // bounded marker set
+    expect(readMarker(storage, "theirs", "device-bbbb").state).toBe("running"); // not ours to touch
   });
 
   it("ignores a corrupt marker blob instead of failing the list", async () => {

@@ -276,7 +276,13 @@ export function createChatSession(
     if (s.restage === h) s.restage = null;
     busy.delete(h);
     retire.delete(h);
+    // Running Sync: an app-controlled stop (clear, delete) ends the turn without
+    // ever reaching onTurnEnd, so close the cross-device marker here too or other
+    // devices would show RUNNING for the full expiry window. Best-effort like the
+    // normal turn-end write.
+    const mark = turnMarks.get(h);
     turnMarks.delete(h);
+    if (mark && rt.runningEnd) void mark.then((turnId) => (turnId ? rt.runningEnd!(h.sessionId, turnId) : undefined)).catch(() => {});
     h.stop();
   }
 
