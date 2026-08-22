@@ -6,7 +6,7 @@ import { SkillIcon } from "../icons";
 import { mediaUrl } from "./mediaUrl";
 import { walletAvatarSvg } from "./walletAvatar";
 import { CompleteCelebration } from "./CompleteCelebration";
-import { CommentThreadList, NoteComposer, type NoteFields } from "./AgentProfileView";
+import { CommentThreadList, GithubCard, NoteComposer, type NoteFields } from "./AgentProfileView";
 import { LockedGate } from "../unlock/UnlockProvider";
 
 function shortAddr(w?: string) {
@@ -344,7 +344,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
 // connected wallet may answer. The thread loads lazily per comment; the host
 // pushes the refreshed thread after a reply lands, which also closes the
 // composer. Renderer and composer are the blog reader's own.
-function SkillCommentRow({ note }: { note: { id?: string; author?: string; text: string } }) {
+function SkillCommentRow({ note }: { note: { id?: string; author?: string; text: string; gitLink?: string } }) {
   const { state, send } = useStore();
   const canReply = !!state.walletAddress;
   const [replyOpen, setReplyOpen] = useState(false);
@@ -368,6 +368,7 @@ function SkillCommentRow({ note }: { note: { id?: string; author?: string; text:
         <span className="an-term-mono text-[11px]" style={{ color: "var(--an-term-fg)" }}>{shortAddr(note.author)}</span>
       </div>
       <p className="an-term-mono whitespace-pre-wrap break-words text-[12px] leading-relaxed" style={{ color: "var(--an-fg-dim)" }}>{note.text}</p>
+      {note.gitLink && <GithubCard url={note.gitLink} />}
       {note.id && (
         <button
           type="button"
