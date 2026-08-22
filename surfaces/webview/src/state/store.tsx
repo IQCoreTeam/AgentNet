@@ -117,7 +117,8 @@ export interface State {
   sessionsCloud: "ok" | "reauth" | "transient" | "none";
   activeSessionId?: string;
   // sessionIds whose agent turn is in flight (server pushes this in every `sessions`
-  // frame off its `busy` set). Drives the per-row RUNNING marker; transient, not persisted.
+  // frame off its `busy` set plus live cross-device Running Sync markers, issue #129).
+  // Drives the per-row RUNNING marker; transient, not persisted.
   sessionsRunning: string[];
   approvals: ApprovalRequest[];
   storage: { info: unknown; options: unknown; googleCredsConfigured?: boolean } | null;
