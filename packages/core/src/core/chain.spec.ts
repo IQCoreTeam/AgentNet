@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Connection, PublicKey, Keypair } from "@solana/web3.js";
-import { init, ensureDbRoot, createTable, writeRow, codeIn, signerAddress, tableExists, readCodeIn, readRows, inscriptionSigOf, itemMetadataUri } from "./chain.js";
+import { init, ensureDbRoot, createTable, writeRow, codeIn, signerAddress, tableExists, readCodeIn, readRows, inscriptionSigOf, itemMetadataUri, feedPda } from "./chain.js";
 import { readCodeIn as sdkReadCodeIn, readTableRows as sdkReadTableRows } from "@iqlabs-official/solana-sdk/reader";
 
 // Mock the solana-sdk modules
@@ -11,6 +11,7 @@ vi.mock("@iqlabs-official/solana-sdk/contract", async () => {
     getTablePda: vi.fn().mockReturnValue(new PublicKey("11111111111111111111111111111111")),
     initializeDbRootInstruction: vi.fn().mockReturnValue(new (require("@solana/web3.js").TransactionInstruction)({ keys: [], programId: new PublicKey("11111111111111111111111111111111"), data: Buffer.alloc(0) })),
     createInstructionBuilder: vi.fn().mockReturnValue({}),
+    DEFAULT_ANCHOR_PROGRAM_ID: "9KLLchQVJpGkw4jPuUmnvqESdR7mtNCYr3qS4iQLabs",
   };
 });
 
@@ -20,7 +21,9 @@ vi.mock("@iqlabs-official/solana-sdk/reader", () => ({
 }));
 
 vi.mock("@iqlabs-official/solana-sdk/utils", () => ({
-  toSeedBytes: vi.fn().mockReturnValue(new Uint8Array([1, 2, 3])),
+  // Hint-dependent bytes (like the real helper) so PDA derivations for two
+  // different hints can never collide in tests.
+  toSeedBytes: vi.fn((v: string | Uint8Array) => (typeof v === "string" ? new TextEncoder().encode(v) : v)),
 }));
 
 vi.mock("@iqlabs-official/solana-sdk/writer", () => ({
@@ -249,5 +252,24 @@ describe("core/chain", () => {
       expect(uri.endsWith(`/skill/${MINT}/${SIG}`)).toBe(true);
       expect(inscriptionSigOf(uri)).toBe(SIG);
     });
+  });
+});
+
+describe("chain/feed anchor (issue #183)", () => {
+  it("feedPda derives a stable program address for a hint", () => {
+    const a = feedPda("feed:blog");
+    const b = feedPda("feed:blog");
+    expect(a.equals(b)).toBe(true);
+    expect(a.toBase58()).toHaveLength(44);
+    expect(feedPda("feed:other").equals(a)).toBe(false);
+  });
+
+  it("writeRow passes mirrors through as the write's remainingAccounts", async () => {
+    const { writeRow: sdkWriteRow } = await import("@iqlabs-official/solana-sdk/writer");
+    const signer = Keypair.generate();
+    const anchor = feedPda("feed:blog");
+    await writeRow(signer, "reviews:agent:x", "{}", [anchor]);
+    const call = vi.mocked(sdkWriteRow).mock.calls.at(-1)!;
+    expect(call[6]).toEqual([anchor]);
   });
 });
