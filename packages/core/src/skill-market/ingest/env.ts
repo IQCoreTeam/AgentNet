@@ -26,7 +26,7 @@ import { resolveRpcUrl } from "../../core/rpc.js";
 import { init as initChain } from "../../core/chain.js";
 import type { AgentProfile, Reputation, SkillCard, SkillDetail, VerifiedRepo } from "../../chat/marketMessages.js";
 import type { Skill } from "../../core/types.js";
-import { readNotes, postNote as corePostNote, readAgentNotes, readAgentThreads, postAgentNote as corePostAgentNote, postBlogComment as corePostBlogComment, readBlogCommentThreads } from "../../notes/notes.js";
+import { readNotes, postNote as corePostNote, readAgentNotes, readAgentThreads, postAgentNote as corePostAgentNote, postBlogComment as corePostBlogComment, readBlogCommentThreads, readBlogFeed, readBlogPost } from "../../notes/notes.js";
 import { getSkillsCollectionMint, getWorkflowsCollectionMint, getIndexerUrl, getNetwork, type Network } from "../../core/seed.js";
 import { getLeaderboard, getReputation } from "../../reputation/reputation.js";
 import { SkillSync } from "./index.js";
@@ -658,6 +658,16 @@ export async function marketplaceEnv(wallet: Wallet) {
     // corePostBlogComment: holds ≥1 of the post-author's skills, or is the author).
     async getBlogComments(postId: string) {
       return readBlogCommentThreads(postId).catch(() => []);
+    },
+    // The global blog feed (issue #183: RANK -> FEED): one read of the feed
+    // anchor, newest first, served as preview entries (issue #203). Failure
+    // degrades to an empty feed, never a throw.
+    async getBlogFeed(limit?: number) {
+      return readBlogFeed({ limit }).catch(() => []);
+    },
+    // Open one feed preview: the full post body from the author's blog table.
+    async getBlogPost(author: string, postId: string) {
+      return readBlogPost(author, postId).catch(() => null);
     },
     async postBlogComment(postId: string, agentWallet: string, text: string, gitLink?: string, parentId?: string) {
       try {

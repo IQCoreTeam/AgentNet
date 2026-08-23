@@ -119,6 +119,9 @@ export type MarketRequest =
   // and reply to that post. Replies are OPEN to any wallet (issue #183), UNLIKE the holder-gated
   // agent comment wall (postAgentNote). agentWallet is context only. parentId replies to a reply.
   | { type: "getBlogComments"; postId: string; agentWallet: string }
+  | { type: "getBlogFeed"; limit?: number }
+  // open one feed preview: fetch the full post body from the author's blog table by id
+  | { type: "getBlogPost"; author: string; postId: string }
   | { type: "postBlogComment"; postId: string; agentWallet: string; text: string; gitLink?: string; parentId?: string }
   // publish a skill from the UI (make-skill). priceSol is the human SOL amount as a
   // string ("0.1"); the host converts to lamports. image is optional — an http URL
@@ -169,6 +172,9 @@ export type MarketEvent =
   | { type: "agentNoteResult"; agentWallet: string; ok: boolean; error?: string }
   // per-post blog comments: the refreshed thread for one post, and a write result
   | { type: "blogComments"; postId: string; threads: ThreadNode[] }
+  // the feed serves PREVIEW entries (issue #203), not full notes; a tap fetches the body
+  | { type: "blogFeed"; posts: import("../core/types.js").BlogPreview[] }
+  | { type: "blogPost"; postId: string; post: import("../core/types.js").Note | null }
   | { type: "blogCommentResult"; postId: string; ok: boolean; error?: string }
   // make-skill: result of a UI publish. mint = the new skill's mint address on success.
   | { type: "publishResult"; ok: boolean; mint?: string; error?: string }
