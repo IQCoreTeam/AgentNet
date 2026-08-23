@@ -69,6 +69,23 @@ export interface Note {
   isSelfNote?: boolean; // derived on read: author == subject (owner post)
 }
 
+/**
+ * Feed entry for one blog post (issue #203): the preview shape the global
+ * feed serves, projected at READ time from the full row mirrored into the
+ * feed anchor (the anchor mirror carries the SAME row json as the post's
+ * blog:agent table; see readBlogFeed). Enough to render a timeline card;
+ * the full body is fetched from `homeHint` by `id` on open.
+ */
+export interface BlogPreview {
+  id: string; // the post's note id (comment:blog:{id} stays keyed by this)
+  author: string; // wallet address
+  homeHint: string; // table holding the full body: blog:agent:<author>
+  time: number; // post timestamp (ms, same clock as Note.timestamp)
+  title?: string;
+  snippet: string; // text truncated at a word boundary (~200 chars)
+  image?: string;
+}
+
 /** A reply flattened under its top-level ancestor. `parentAuthor` is the author
  *  of the *immediate* parent, so replies pushed past the 2-level render cap can
  *  still show an `@author` reference to whoever they actually answered. */

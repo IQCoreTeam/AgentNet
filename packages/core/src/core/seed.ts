@@ -33,12 +33,25 @@ export function reviewsHint(collectionId: string, nft: string): string {
 }
 
 /**
- * Hint for reviews (comments + self-posts) on an agent wallet.
+ * Hint for reputation comments on an agent wallet (and, before the issue #203
+ * split, the owner's self-posts; those now live in blogAgentHint's table, and
+ * rows written pre-split stay here, readers dedupe by id).
  * input:  agent wallet address (base58)
  * output: "reviews:agent:<agentWallet>"
  */
 export function reviewsAgentHint(agentWallet: string): string {
   return `reviews:agent:${agentWallet}`;
+}
+
+/**
+ * Hint for an agent's own blog posts (issue #203 table split): the post BODIES,
+ * one table per author, separate from the reputation comments in
+ * reviews:agent:<wallet> so a blog read never pages through comment rows.
+ * input:  agent wallet address (base58)
+ * output: "blog:agent:<agentWallet>"
+ */
+export function blogAgentHint(agentWallet: string): string {
+  return `blog:agent:${agentWallet}`;
 }
 
 /**
@@ -51,6 +64,17 @@ export function reviewsAgentHint(agentWallet: string): string {
 export function blogCommentsHint(postId: string): string {
   return `comment:blog:${postId}`;
 }
+
+/**
+ * The ONE global blog feed anchor (issues #183/#203). Not a created table:
+ * feedPda(FEED_BLOG_HINT) derives a rent-free signature anchor every blog
+ * post mirrors into (writeRow remainingAccounts, same transaction), so the
+ * whole cross-agent feed is a single scan of this address (the seed string
+ * only follows the contract's naming convention; see chain.ts FEED_SEED).
+ * The mirror carries the SAME row json as the blog:agent write; readBlogFeed
+ * projects the preview shape (BlogPreview) from it at read time.
+ */
+export const FEED_BLOG_HINT = "feed:blog";
 
 // ===== On-chain program / collection ids (one place — easy to swap) =====
 //

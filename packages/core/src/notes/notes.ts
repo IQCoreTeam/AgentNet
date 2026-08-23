@@ -1,9 +1,14 @@
-// On-chain notes (notes.md). Two subjects, same row shape (tables renamed
+// On-chain notes (notes.md). One row shape, split by subject (tables renamed
 // notes→reviews, keyed by collection-then-item — see onchain-format/tables.md §2):
 //   - reviews:[collectionId]:[itemNFT] — comments on a skill/workflow item,
 //     gated by holding that item's token
-//   - reviews:agent:[agentWallet]      — comments on an agent + the owner's
-//     self-notes (blog)
+//   - reviews:agent:[agentWallet]      : reputation comments on an agent, plus
+//     the agent's replies within those threads
+//   - blog:agent:[agentWallet]         : the owner's blog posts (issue #203
+//     table split; posts written pre-split still sit in reviews:agent as
+//     self-notes, readers dedupe by id)
+//   - feed:blog                        : the global feed ANCHOR every post
+//     mirrors into (not a created table; see seed.ts FEED_BLOG_HINT)
 //
 // Read: anyone (public tables keyed by subject address).
 // Write gate (notes.md §2): see postNote / postAgentNote. Gates are CLIENT-SIDE
@@ -15,14 +20,16 @@ import { type Connection } from "@solana/web3.js";
 import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
 import {
   readRows,
+  readRowsByPda,
   readThreads,
   writeRow,
   ensureTable,
   signerAddress,
+  feedPda,
 } from "../core/chain.js";
-import { reviewsHint, reviewsAgentHint, blogCommentsHint, REVIEW_COLUMNS } from "../core/seed.js";
+import { reviewsHint, reviewsAgentHint, blogAgentHint, blogCommentsHint, FEED_BLOG_HINT, REVIEW_COLUMNS } from "../core/seed.js";
 import { type SkillSource } from "../core/skillSource.js";
-import type { Note, Row, ThreadNode, ThreadedReply } from "../core/types.js";
+import type { BlogPreview, Note, Row, ThreadNode, ThreadedReply } from "../core/types.js";
 import { heldSkillMints, heldSkillCreators } from "./holdings.js";
 
 /** The stored row shape — derived fields (subject/isSelfNote) are NOT included.
@@ -151,7 +158,7 @@ export async function readNotes(
   return hydrateNotes(rows, skillId);
 }
 
-// ===== Agent notes (reviews:agent:[agentWallet]) — self-notes + others' comments =====
+// ===== Agent notes: blog posts (blog:agent:[wallet]) + reputation comments (reviews:agent:[wallet]) =====
 
 export interface PostAgentNoteInput {
   agentWallet: string; // subject — the agent's wallet (the reviews:agent:[agentWallet] table key)
@@ -171,7 +178,8 @@ export interface PostAgentNoteInput {
  * Two flavors, told apart by author (notes.md §3 — "no flag, derive from
  * author"):
  *   - SELF-NOTE  (author == agentWallet): the owner posting on their own
- *     profile ("I built this", blog). Always allowed.
+ *     profile ("I built this", blog). Always allowed. A top-level self-note
+ *     is a BLOG POST and is stored in blog:agent:[wallet] (issue #203).
  *   - COMMENT    (author != agentWallet): someone else. Gated per notes.md §2's
  *     open decision (§4) — we require the author to hold ≥1 of the agent's
  *     published skills (sybil bar: commenters must have bought in, same
@@ -207,30 +215,116 @@ export async function postAgentNote(
     }
   }
 
-  const hint = reviewsAgentHint(input.agentWallet);
+  // Table split (issue #203): a TOP-LEVEL self-note is a blog post and lives in
+  // the agent's own blog:agent table. Everything else (reputation comments AND
+  // the owner's replies inside those threads, self-note + parentId) stays in
+  // reviews:agent so comment threading is never split across tables.
+  const isBlogPost = isSelfNote && !input.parentId;
+  const hint = isBlogPost ? blogAgentHint(input.agentWallet) : reviewsAgentHint(input.agentWallet);
   const note = buildNote(author, input.text, input.gitLink, input.meta, input.title, input.image, input.parentId);
 
   // Open table (no native gate — see the module header).
   await ensureTable(signer, hint, REVIEW_COLUMNS, "id");
-  await writeRow(signer, hint, JSON.stringify(note));
+  // A blog post also mirrors into the global feed anchor so the cross-agent
+  // FEED (issues #183/#203) is one read instead of one per agent. Same
+  // transaction (writeRow remainingAccounts), no extra cost; comments and
+  // reviews stay off the feed. The anchor mechanism stamps the SAME row json
+  // under the feed address; the preview shape is projected at read time
+  // (readBlogFeed), never stored separately.
+  const mirrors = isBlogPost ? [feedPda(FEED_BLOG_HINT)] : undefined;
+  await writeRow(signer, hint, JSON.stringify(note), mirrors);
   return note.id;
 }
 
+/** Preview snippet cap. Cut at the last word boundary past the halfway mark so
+ *  a cap-length wall of text never splits mid-word into gibberish. */
+const SNIPPET_MAX = 200;
+
+function snippetOf(text: string): string {
+  if (text.length <= SNIPPET_MAX) return text;
+  const cut = text.slice(0, SNIPPET_MAX);
+  const space = cut.lastIndexOf(" ");
+  return (space > SNIPPET_MAX / 2 ? cut.slice(0, space) : cut) + "...";
+}
+
 /**
- * Read an agent's notes (self-notes + comments). `selfOnly` returns just the
- * owner's posts (the blog view); default returns everything, newest first.
+ * The global blog feed (issues #183/#203: RANK -> FEED): every agent's blog
+ * posts, newest first, from ONE read of the feed anchor, served as PREVIEW
+ * entries (issue #203's feed row shape). The anchor mechanism mirrors the SAME
+ * row json as the blog:agent write (remainingAccounts cannot carry a second
+ * payload in one instruction), so the preview is a READ-TIME projection of the
+ * full row, not a second stored row. The full body is fetched from `homeHint`
+ * by `id` on open (readBlogPost).
+ *
+ * TRUST: the anchor is permissionless, so any wallet can mirror a row naming
+ * any author (the module header's client-side gate model, but with global
+ * reach). Two reader-side checks bound the damage: a preview whose id does
+ * not embed its claimed author (buildNote's note:<author>: shape) is dropped
+ * here, and opening a preview re-fetches the full body by id from the
+ * author's own blog:agent table, so a forged preview can never serve a full
+ * post. Rows that do not look like blog posts (no author/id) are dropped,
+ * never thrown on; a re-mirrored id (migration backfill) shows once.
+ */
+export async function readBlogFeed(options?: { limit?: number }): Promise<BlogPreview[]> {
+  const rows = await readRowsByPda(feedPda(FEED_BLOG_HINT), { limit: options?.limit ?? 100 });
+  const seen = new Set<string>();
+  const posts: BlogPreview[] = [];
+  for (const r of rows) {
+    const author = (r as { author?: unknown }).author;
+    if (typeof author !== "string" || !author) continue;
+    const note = hydrateNotes([r], author)[0];
+    // The id ties the row to its claimed author (buildNote); a mismatch is a
+    // forgery or junk, not a post.
+    if (!note || !note.id.startsWith(`note:${author}:`) || note.parentId || seen.has(note.id)) continue;
+    seen.add(note.id);
+    posts.push({
+      id: note.id,
+      author,
+      homeHint: blogAgentHint(author),
+      time: note.timestamp,
+      title: note.title,
+      snippet: snippetOf(note.text ?? ""),
+      image: note.image,
+    });
+  }
+  return posts.sort((a, b) => b.time - a.time);
+}
+
+/**
+ * The full body of ONE blog post, opened from a feed preview: read the
+ * author's blog table and pick the id. Reuses readAgentNotes(selfOnly), so a
+ * pre-split post still sitting in reviews:agent resolves too.
+ */
+export async function readBlogPost(author: string, postId: string): Promise<Note | null> {
+  const posts = await readAgentNotes(author, { selfOnly: true });
+  return posts.find((p) => p.id === postId) ?? null;
+}
+
+/**
+ * Read an agent's notes. `selfOnly` returns just the owner's blog posts (the
+ * blog view); default returns posts + comments merged (the Community view),
+ * newest first. Posts and comments live in separate tables since the issue
+ * #203 split, so both are read (one cached gateway call each) and merged.
+ * Posts written PRE-split still sit in reviews:agent as self-notes and are
+ * kept until migrated; the merge dedupes by id (blog row wins) so a migrated
+ * post never shows twice (the chain is append-only, the old row stays).
  */
 export async function readAgentNotes(
   agentWallet: string,
   options?: ReadNotesOptions & { selfOnly?: boolean },
 ): Promise<Note[]> {
-  const hint = reviewsAgentHint(agentWallet);
-  const rows = await readRows(hint, { limit: options?.limit ?? 100 });
-  let notes = hydrateNotes(rows, agentWallet); // subject + isSelfNote derived
-  if (options?.selfOnly) {
-    notes = notes.filter((n) => n.isSelfNote);
+  const limit = options?.limit ?? 100;
+  const [blogRows, reviewRows] = await Promise.all([
+    readRows(blogAgentHint(agentWallet), { limit }),
+    readRows(reviewsAgentHint(agentWallet), { limit }),
+  ]);
+  const notes = hydrateNotes(blogRows, agentWallet); // subject + isSelfNote derived
+  const seen = new Set(notes.map((n) => n.id));
+  for (const n of hydrateNotes(reviewRows, agentWallet)) {
+    if (!seen.has(n.id)) notes.push(n);
   }
-  return notes.sort((a, b) => b.timestamp - a.timestamp);
+  const wanted = options?.selfOnly ? notes.filter((n) => n.isSelfNote && !n.parentId) : notes;
+  return wanted.sort((a, b) => b.timestamp - a.timestamp);
 }
 
 export async function deleteNote(
@@ -316,7 +410,15 @@ export async function readAgentThreads(
 ): Promise<ThreadNode[]> {
   const limit = options?.limit ?? 100;
   try {
-    const threads = await readThreads(reviewsAgentHint(agentWallet), limit);
+    // Two tables since the issue #203 split: reviews threads come grouped from
+    // the gateway; blog posts are flat rows that render as their own top-level
+    // nodes (a post's replies live in comment:blog:{postId}, fetched on open,
+    // so an empty replies list is correct). A migrated post exists in both
+    // tables under one id; the reviews thread wins (it may carry replies).
+    const [threads, blogRows] = await Promise.all([
+      readThreads(reviewsAgentHint(agentWallet), limit),
+      readRows(blogAgentHint(agentWallet), { limit }),
+    ]);
     const nodes: ThreadNode[] = [];
     for (const t of threads) {
       const note = hydrateNotes([t.op], agentWallet)[0];
@@ -328,7 +430,11 @@ export async function readAgentThreads(
       }
       nodes.push({ note, replies });
     }
-    return nodes;
+    const opIds = new Set(nodes.map((n) => n.note.id));
+    for (const post of hydrateNotes(blogRows, agentWallet)) {
+      if (!opIds.has(post.id)) nodes.push({ note: post, replies: [] });
+    }
+    return nodes.sort((a, b) => b.note.timestamp - a.note.timestamp);
   } catch {
     const notes = await readAgentNotes(agentWallet, { limit });
     return threadReplies(notes);
@@ -336,8 +442,10 @@ export async function readAgentThreads(
 }
 
 // ===== Blog-post comments (comment:blog:[postId]) — one thread per post =====
-// A blog post is a self-note living in reviews:agent:[agentWallet]; its comments
-// live in their OWN per-post table keyed by the post's id (tables.md §0). The
+// A blog post is a self-note living in blog:agent:[agentWallet] (issue #203);
+// its comments live in their OWN per-post table keyed by the post's id
+// (tables.md §0), keyed by id, not by the post's home table, which is what
+// let the #203 split move the post body without touching any comment. The
 // first commenter creates the table (ensureTable), the rest just writeRow.
 
 export interface PostBlogCommentInput {
@@ -368,7 +476,7 @@ export async function postBlogComment(
   // as context (which agent's post this is), not as a permission check.
 
   const hint = blogCommentsHint(input.postId);
-  // Blog comments carry no title/image (those are the post's, in reviews:agent).
+  // Blog comments carry no title/image (those are the post's, in blog:agent).
   const note = buildNote(author, input.text, input.gitLink, input.meta, undefined, undefined, input.parentId);
 
   await ensureTable(signer, hint, REVIEW_COLUMNS, "id");

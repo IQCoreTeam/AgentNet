@@ -24,11 +24,43 @@ mints themselves are NOT tables (the Token-2022 collection IS the registry; see
 |---|---|---|---|
 | `mysessions:{wallet}` | wallet | session **pointer** list (sessionId), not the blob | owner only |
 | `reviews:{collectionId}:{nft}` | collection mint + item mint | comments on a skill/workflow item | (gate §3) |
-| `reviews:agent:{wallet}` | agent wallet | comments on an agent + the owner's self-notes (blog) | (gate §3) |
+| `reviews:agent:{wallet}` | agent wallet | reputation comments on an agent (+ pre-split self-notes, kept, deduped by readers) | (gate §3) |
+| `blog:agent:{wallet}` | agent wallet | the owner's blog posts (bodies) | owner (client-side, author == wallet) |
 | `comment:blog:{postId}` | a blog post's note id | comments on ONE blog post (per-post thread) | (gate §3) |
+| `feed:blog` | global (ONE anchor) | the global blog feed index: every post mirrors its row here | any poster (mirror of their own post write) |
 
 The hint strings are produced by functions in `seed.ts`: `mysessionsHint(wallet)`,
-`reviewsHint(collectionId, nft)`, `reviewsAgentHint(wallet)`, `blogCommentsHint(postId)`.
+`reviewsHint(collectionId, nft)`, `reviewsAgentHint(wallet)`, `blogAgentHint(wallet)`,
+`blogCommentsHint(postId)`, and the `FEED_BLOG_HINT` constant.
+
+> Added 2026-08-23 (issue #203): the blog table split + the feed anchor.
+> Blog posts moved OUT of `reviews:agent:{wallet}` into `blog:agent:{wallet}`;
+> `reviews:agent` keeps reputation comments and the owner's replies inside those
+> threads. Comments stay keyed by the post's note id (`comment:blog:{postId}`),
+> which is exactly why the move touched no comment table. Posts written before
+> the split remain in `reviews:agent` (the chain is append-only); readers merge
+> both tables deduped by id, and `migrateBlogPosts` (core `notes/migrate.ts`)
+> backfills them into `blog:agent` preserving ids when the operator opts in.
+>
+> `feed:blog` is NOT a created table: it is a rent-free FEED anchor
+> (`feedPda(FEED_BLOG_HINT)`; the seed string follows the contract's naming
+> convention but is ours, not a program constant, and the program never checks
+> it). A post write lists the anchor in its `remainingAccounts`, which stamps
+> the SAME row json under the anchor's signature history in the same
+> transaction: zero rent, zero extra signature, and the whole cross-agent feed
+> is one scan of one address. Because `remainingAccounts` cannot carry a second
+> payload, the feed PREVIEW shape { id, author, homeHint, time, title, snippet,
+> image } is a READ-TIME projection (`readBlogFeed`) of the mirrored full row,
+> never a second stored row; the client opens the full body from
+> `blog:agent:{wallet}` by `id`.
+>
+> TRUST: the anchor is permissionless (the "any poster" writer above is
+> unenforced), so any wallet can mirror a row naming any author. Readers bound
+> the damage client-side, the same gate model as §3: `readBlogFeed` drops
+> previews whose id does not embed the claimed author (buildNote's
+> `note:<author>:` shape), and opening a preview re-fetches the full body by id
+> from the author's own `blog:agent` table, so a forged preview can never serve
+> a full post.
 
 > Added 2026-08-17: `comment:blog:{postId}`. A blog post is a self-note in
 > `reviews:agent:{wallet}`; its comments live in their OWN per-post table (created
