@@ -161,11 +161,11 @@ function TierHelp({ stars, onClose }: { stars: number; onClose: () => void }) {
   );
 }
 
-function shortWallet(wallet?: string) {
+export function shortWallet(wallet?: string) {
   return wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : "?";
 }
 
-function noteDate(timestamp?: number) {
+export function noteDate(timestamp?: number) {
   if (!timestamp) return "";
   try {
     return new Date(timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
@@ -234,7 +234,7 @@ export function GithubCard({ url, className = "mt-2" }: { url: string; className
 // header (bracket back + mono title + kana sub); the body scrolls and shows the whole post:
 // image, title, author identity row (the comment-card avatar + short wallet + date idiom),
 // full text, and the GithubCard embed for the git link.
-function BlogPostView({ post, wallet, onClose }: { post: BlogNote; wallet: string; onClose: () => void }) {
+export function BlogPostView({ post, wallet, onClose }: { post: BlogNote; wallet: string; onClose: () => void }) {
   const { state, send } = useStore();
   const author = post.author || wallet;
   const threads = state.blogComments[post.id];

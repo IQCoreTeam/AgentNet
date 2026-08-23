@@ -4,6 +4,7 @@ import { SkillSdCard } from "./SkillSdCard";
 import { SkillDetailView } from "./SkillDetailView";
 import { PublishForm } from "./PublishForm";
 import { AgentDirectory } from "./AgentDirectory";
+import { BlogFeed } from "./BlogFeed";
 import { AgentProfileView } from "./AgentProfileView";
 import type { SkillCard } from "../transport/protocol";
 import { HeliusSetupPanel } from "../settings/HeliusKeyForm";
@@ -40,6 +41,10 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
   // Hide already-owned skills from the market results by default (you came to find NEW ones);
   // untick to show them too (muted/greyed).
   const [hideOwned, setHideOwned] = useState(true);
+  // RANK tab sub-view (issue #183): the leaderboard, or the public FEED of every
+  // agent's blog posts. Feed re-requests on each flip TO it, so the tab tap is
+  // the refresh gesture (matches the market tabs' refetch-on-switch idiom).
+  const [rankView, setRankView] = useState<"rank" | "feed">("rank");
   // Market ranking: popularity (supply, indexer default) or GitHub stars (issue #89).
   const [marketSort, setMarketSort] = useState<"supply" | "stars">("supply");
   // Tracks a tapped card whose detail is still loading, so we can show a skeleton in the
@@ -296,6 +301,27 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
         </button>
       )}
 
+      {/* RANK sub-nav (issue #183): RANK leaderboard / public FEED, the profile-tab idiom. */}
+      {isAgents && (
+        <div className="flex items-end gap-6 border-b px-3.5 mt-1 shrink-0" style={{ borderColor: "var(--an-term-line)" }}>
+          {(["rank", "feed"] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => { setRankView(v); if (v === "feed") send({ type: "getBlogFeed" }); }}
+              className={[
+                "an-term-mono -mb-px px-1 pb-2.5 pt-2 text-[11px] font-bold uppercase tracking-wider border-b-2 transition-colors",
+                rankView === v ? "border-green-500 text-green-400" : "border-transparent text-zinc-500 active:text-zinc-300",
+              ].join(" ")}
+            >
+              <div>{v}</div>
+              <div style={{ fontFamily: "'Noto Sans JP', sans-serif", fontWeight: 500, fontSize: "8px", marginTop: "3px", color: rankView === v ? "var(--an-term-fg-7)" : "var(--an-term-line-3)" }}>
+                {v === "rank" ? "ランク" : "フィード"}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Browse tabs (market only): skill / workflow — agents moved to their own Agent tab */}
       {isMarket && (
         <div className="flex items-end gap-6 border-b px-3.5 mt-3 shrink-0" style={{ borderColor: "var(--an-term-line)" }}>
@@ -408,7 +434,7 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
             </div>
           )
         ) : isAgents ? (
-          <AgentDirectory />
+          rankView === "feed" ? <BlogFeed /> : <AgentDirectory />
         ) : (
           <>
             {state.marketSearchError ? (
