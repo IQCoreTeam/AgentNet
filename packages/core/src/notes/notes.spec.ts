@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Connection, Keypair } from "@solana/web3.js";
-import { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes, readBlogFeed, readBlogPost } from "./notes.js";
+import { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes, readBlogFeed } from "./notes.js";
 import * as chain from "../core/chain.js";
 import * as holdings from "./holdings.js";
 
@@ -194,7 +194,7 @@ describe("notes/blog feed (issues #183/#203)", () => {
     expect(mirrors).toBeUndefined();
   });
 
-  it("readBlogFeed projects previews from the mirrored rows, drops junk, sorts newest first", async () => {
+  it("readBlogFeed passes the mirrored full rows through, drops junk, sorts newest first", async () => {
     const B = "22222222222222222222222222222222";
     vi.mocked(chain.readRowsByPda).mockResolvedValue([
       { id: `note:${AUTHOR}:1:a`, author: AUTHOR, text: "old", timestamp: 1, meta: { title: "t", image: "img" } },
@@ -202,30 +202,23 @@ describe("notes/blog feed (issues #183/#203)", () => {
       { text: "no author, no id" },
     ] as any);
     const posts = await readBlogFeed();
-    expect(posts.map((p) => p.snippet)).toEqual(["new", "old"]);
-    // The preview shape (issue #203): id + author + homeHint + time + title/image.
-    expect(posts[1]).toEqual({
-      id: `note:${AUTHOR}:1:a`,
-      author: AUTHOR,
-      homeHint: `blog:agent:${AUTHOR}`,
-      time: 1,
-      title: "t",
-      snippet: "old",
-      image: "img",
-    });
+    // Full notes, untruncated, in hand for the client's X-model clamp; the
+    // preview projection and the on-open re-fetch are gone (zo's PR review).
+    expect(posts.map((p) => p.text)).toEqual(["new", "old"]);
+    expect(posts[1].title).toBe("t");
+    expect(posts[1].image).toBe("img");
+    expect(posts[1].isSelfNote).toBe(true);
   });
 
-  it("readBlogFeed truncates long text into a word-boundary snippet and dedupes re-mirrored ids", async () => {
-    const long = ("word ".repeat(60)).trim(); // 299 chars
+  it("readBlogFeed keeps long bodies whole and dedupes re-mirrored ids", async () => {
+    const long = ("word ".repeat(60)).trim(); // 299 chars, would have been snipped before
     vi.mocked(chain.readRowsByPda).mockResolvedValue([
       { id: `note:${AUTHOR}:2:a`, author: AUTHOR, text: long, timestamp: 2 },
       { id: `note:${AUTHOR}:2:a`, author: AUTHOR, text: long, timestamp: 2 }, // migration re-mirror
     ] as any);
     const posts = await readBlogFeed();
     expect(posts).toHaveLength(1);
-    expect(posts[0].snippet.length).toBeLessThanOrEqual(203);
-    expect(posts[0].snippet.endsWith("...")).toBe(true);
-    expect(posts[0].snippet.slice(0, -3).endsWith("word")).toBe(true); // cut on the boundary
+    expect(posts[0].text).toBe(long);
   });
 
   it("readBlogFeed drops a mirrored row whose id does not embed its claimed author", async () => {
@@ -235,18 +228,6 @@ describe("notes/blog feed (issues #183/#203)", () => {
       { id: `note:${victim}:2:b`, author: victim, text: "real", timestamp: 2 },
     ] as any);
     const posts = await readBlogFeed();
-    expect(posts.map((p) => p.snippet)).toEqual(["real"]);
-  });
-
-  it("readBlogPost resolves one preview id to the full note from the author's tables", async () => {
-    vi.mocked(chain.readRows).mockImplementation(async (hint: string) =>
-      (hint.startsWith("blog:agent:")
-        ? [{ id: "p1", author: AUTHOR, text: "full body", timestamp: 5 }]
-        : []) as any,
-    );
-    const post = await readBlogPost(AUTHOR, "p1");
-    expect(post?.text).toBe("full body");
-    expect(post?.isSelfNote).toBe(true);
-    expect(await readBlogPost(AUTHOR, "missing")).toBeNull();
+    expect(posts.map((p) => p.text)).toEqual(["real"]);
   });
 });

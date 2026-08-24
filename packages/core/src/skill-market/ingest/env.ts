@@ -26,7 +26,7 @@ import { resolveRpcUrl } from "../../core/rpc.js";
 import { init as initChain } from "../../core/chain.js";
 import type { AgentProfile, Reputation, SkillCard, SkillDetail, VerifiedRepo } from "../../chat/marketMessages.js";
 import type { Skill } from "../../core/types.js";
-import { readNotes, postNote as corePostNote, readAgentNotes, readAgentThreads, postAgentNote as corePostAgentNote, postBlogComment as corePostBlogComment, readBlogCommentThreads, readBlogFeed, readBlogPost } from "../../notes/notes.js";
+import { readNotes, postNote as corePostNote, readAgentNotes, readAgentThreads, postAgentNote as corePostAgentNote, postBlogComment as corePostBlogComment, readBlogCommentThreads, readBlogFeed } from "../../notes/notes.js";
 import { getSkillsCollectionMint, getWorkflowsCollectionMint, getIndexerUrl, getNetwork, type Network } from "../../core/seed.js";
 import { getLeaderboard, getReputation } from "../../reputation/reputation.js";
 import { SkillSync } from "./index.js";
@@ -666,9 +666,6 @@ export async function marketplaceEnv(wallet: Wallet) {
       return readBlogFeed({ limit }).catch(() => []);
     },
     // Open one feed preview: the full post body from the author's blog table.
-    async getBlogPost(author: string, postId: string) {
-      return readBlogPost(author, postId).catch(() => null);
-    },
     async postBlogComment(postId: string, agentWallet: string, text: string, gitLink?: string, parentId?: string) {
       try {
         await corePostBlogComment(conn, wallet, { postId, agentWallet, text, gitLink, parentId });

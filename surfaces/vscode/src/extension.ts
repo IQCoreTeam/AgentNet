@@ -646,7 +646,6 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
     postAgentNote: async (w, t, l, ti, im, p) => (await marketPromise).postAgentNote(w, t, l, ti, im, p),
     getBlogComments: async (postId) => (await marketPromise).getBlogComments(postId),
     getBlogFeed: async (limit) => (await marketPromise).getBlogFeed(limit),
-    getBlogPost: async (author, postId) => (await marketPromise).getBlogPost(author, postId),
     postBlogComment: async (postId, w, t, l, p) => (await marketPromise).postBlogComment(postId, w, t, l, p),
     solBalance: async () => (await marketPromise).solBalance(),
     publishSkill: async (input, onProgress) => (await marketPromise).publishSkill(input, onProgress),

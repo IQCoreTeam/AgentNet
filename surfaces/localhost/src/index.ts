@@ -1030,14 +1030,7 @@ function attachMarketHandlers(c: Client) {
         return;
       }
       // open a feed preview: fetch the full post body from the author's blog table
-      case "getBlogPost": {
-        try {
-          c.send({ type: "blogPost", postId: m.postId, post: await mkt.getBlogPost(m.author, m.postId) });
-        } catch {
-          c.send({ type: "blogPost", postId: m.postId, post: null });
-        }
-        return;
-      }
+
       case "postBlogComment": {
         try {
           const r = await mkt.postBlogComment(m.postId, m.agentWallet, m.text, m.gitLink, m.parentId);

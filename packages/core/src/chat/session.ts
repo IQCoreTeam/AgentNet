@@ -84,8 +84,7 @@ export interface ChatEnv {
   buyAllSkills?(wallet: string): Promise<{ ok: boolean; bought: number; failed: number; error?: string }>;
   postAgentNote?(agentWallet: string, text: string, gitLink?: string, title?: string, image?: string, parentId?: string): Promise<{ ok: boolean; notes?: import("./marketMessages.js").Note[]; error?: string }>;
   getBlogComments?(postId: string): Promise<import("./marketMessages.js").ThreadNode[]>;
-  getBlogFeed?(limit?: number): Promise<import("../core/types.js").BlogPreview[]>;
-  getBlogPost?(author: string, postId: string): Promise<import("../core/types.js").Note | null>;
+  getBlogFeed?(limit?: number): Promise<import("../core/types.js").Note[]>;
   postBlogComment?(postId: string, agentWallet: string, text: string, gitLink?: string, parentId?: string): Promise<{ ok: boolean; threads?: import("./marketMessages.js").ThreadNode[]; error?: string }>;
   solBalance?(): Promise<number | null>; // wallet's native SOL balance (lamports), for the UI funds display
   // devnet-only: fund the wallet from the faucet (manual "Get devnet SOL" on an insufficient-
@@ -979,13 +978,6 @@ export function createChatSession(
         const req = m as Extract<MarketRequest, { type: "getBlogFeed" }>;
         if (!env.getBlogFeed) break;
         sendMarket({ type: "blogFeed", posts: await env.getBlogFeed(req.limit) });
-        break;
-      }
-      // open a feed preview: the full post body, from the author's blog table by id
-      case "getBlogPost": {
-        const req = m as Extract<MarketRequest, { type: "getBlogPost" }>;
-        if (!env.getBlogPost) break;
-        sendMarket({ type: "blogPost", postId: req.postId, post: await env.getBlogPost(req.author, req.postId) });
         break;
       }
       // post a comment onto one blog post, then re-push that post's refreshed thread

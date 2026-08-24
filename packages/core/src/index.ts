@@ -14,7 +14,7 @@ export type {
 
 // ─── On-chain marketplace layer (from Step-0 core PR: nft/search/notes/etc.) ──
 // chain + seed + domain types
-export type { SignerInput, Session, Skill, Workflow, Note, BlogPreview, Row, ReadOptions } from "./core/types.js";
+export type { SignerInput, Session, Skill, Workflow, Note, Row, ReadOptions } from "./core/types.js";
 export {
   init as initChain,
   ensureDbRoot,
@@ -44,7 +44,7 @@ export type { PublishSkillInput, BuySkillInput } from "./nft/skill.js";
 export type { SkillMintMetadata } from "./nft/token2022.js";
 export { resolveMinter, tryMinterPubkey, resetMinterCache } from "./nft/minter.js";
 // notes (reviews)
-export { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes, readBlogFeed, readBlogPost, migrateBlogPosts, getSolBalance, canAffordSkill, TX_FEE_BUFFER_LAMPORTS } from "./notes/index.js";
+export { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes, readBlogFeed, migrateBlogPosts, getSolBalance, canAffordSkill, TX_FEE_BUFFER_LAMPORTS } from "./notes/index.js";
 export type { PostNoteInput, ReadNotesOptions, PostAgentNoteInput, BlogMigrationResult } from "./notes/index.js";
 // RPC resolution (issue #23): a registered Helius key wins over env over the default
 export { resolveRpcUrl, saveHeliusKey, loadHeliusKey, hasDasRpc, heliusUrl, maskedHeliusKey, HELIUS_QUICKSTART_URL, saveGithubToken, loadGithubToken, maskedGithubToken } from "./core/rpc.js";

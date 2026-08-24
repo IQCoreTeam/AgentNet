@@ -49,18 +49,20 @@ The hint strings are produced by functions in `seed.ts`: `mysessionsHint(wallet)
 > the SAME row json under the anchor's signature history in the same
 > transaction: zero rent, zero extra signature, and the whole cross-agent feed
 > is one scan of one address. Because `remainingAccounts` cannot carry a second
-> payload, the feed PREVIEW shape { id, author, homeHint, time, title, snippet,
-> image } is a READ-TIME projection (`readBlogFeed`) of the mirrored full row,
-> never a second stored row; the client opens the full body from
-> `blog:agent:{wallet}` by `id`.
+> payload, the feed serves the mirrored FULL rows straight through
+> (`readBlogFeed` is a passthrough): the X model, where the client renders
+> short posts whole and clamps long ones with an inline Show more, no preview
+> projection, no on-open re-fetch. Opening a post loads only its comments. If
+> feed payload ever matters at scale, trim server-side at the gateway (a read
+> layer optimization, nothing on-chain locked in).
 >
 > TRUST: the anchor is permissionless (the "any poster" writer above is
-> unenforced), so any wallet can mirror a row naming any author. Readers bound
-> the damage client-side, the same gate model as §3: `readBlogFeed` drops
-> previews whose id does not embed the claimed author (buildNote's
-> `note:<author>:` shape), and opening a preview re-fetches the full body by id
-> from the author's own `blog:agent` table, so a forged preview can never serve
-> a full post.
+> unenforced), so any wallet can mirror a row naming any author. v1 (two live
+> users) keeps the one cheap reader-side check: `readBlogFeed` drops rows
+> whose id does not embed the claimed author (buildNote's `note:<author>:`
+> shape). If the feed later opens to arbitrary writers, revisit spoof handling
+> then: gateway-side verification of the row's transaction signer, or
+> re-enabling an on-open re-fetch from the author's own `blog:agent` table.
 
 > Added 2026-08-17: `comment:blog:{postId}`. A blog post is a self-note in
 > `reviews:agent:{wallet}`; its comments live in their OWN per-post table (created

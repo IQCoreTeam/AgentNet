@@ -72,7 +72,8 @@ export function blogCommentsHint(postId: string): string {
  * whole cross-agent feed is a single scan of this address (the seed string
  * only follows the contract's naming convention; see chain.ts FEED_SEED).
  * The mirror carries the SAME row json as the blog:agent write; readBlogFeed
- * projects the preview shape (BlogPreview) from it at read time.
+ * passes those rows through whole (the X model: the client clamps long posts
+ * with an inline Show more, no preview projection, no on-open re-fetch).
  */
 export const FEED_BLOG_HINT = "feed:blog";
 

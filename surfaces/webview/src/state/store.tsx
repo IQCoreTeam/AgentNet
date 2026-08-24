@@ -144,8 +144,7 @@ export interface State {
   agentProfile: AgentProfile | null;
   agentProfileLoading: boolean;
   blogComments: Record<string, AgentProfile["threads"]>; // per-post comment threads, keyed by postId
-  blogFeed: import("@iqlabs-official/agent-sdk").BlogPreview[] | null; // global feed previews (issues #183/#203); null = not loaded yet
-  blogPosts: Record<string, import("@iqlabs-official/agent-sdk").Note | null>; // opened full posts by id; null = fetch came back empty
+  blogFeed: import("@iqlabs-official/agent-sdk").Note[] | null; // global feed, full rows (issues #183/#203); null = not loaded yet
   agentsLoading: boolean;
   githubStatus: { hasToken: boolean; masked?: string } | null;
   workRepoResult: { ok: boolean; count?: number; repo?: string; error?: string; at: number } | null;
@@ -219,7 +218,6 @@ const initialState: State = {
   agentProfileLoading: false,
   blogComments: {},
   blogFeed: null,
-  blogPosts: {},
   agentsLoading: false,
   githubStatus: null,
   workRepoResult: null,
@@ -654,8 +652,6 @@ function reducer(state: State, ev: Action): State {
       return { ...state, blogComments: { ...state.blogComments, [ev.postId]: ev.threads } };
     case "blogFeed":
       return { ...state, blogFeed: ev.posts };
-    case "blogPost":
-      return { ...state, blogPosts: { ...state.blogPosts, [ev.postId]: ev.post } };
     case "blogCommentResult":
       return { ...state, toast: ev.ok ? "Comment posted." : `Comment failed: ${ev.error ?? "unknown"}` };
     case "githubStatus":

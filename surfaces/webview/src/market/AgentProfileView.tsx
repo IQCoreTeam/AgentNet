@@ -199,8 +199,8 @@ function VerifiedRepoRow({ repo }: { repo: VRepo }) {
 }
 
 // A GitHub link rendered as an embed card (Repo/PR/File/Commit + label + meta). Shared by
-// the WORK cards, the blog/comment bodies, and the skill comment rows (exported like
-// CommentThreadList). `className` controls outer spacing.
+// the WORK cards, the blog/comment bodies, the skill comment rows, and the feed
+// (exported like CommentThreadList). `className` controls outer spacing.
 export function GithubCard({ url, className = "mt-2" }: { url: string; className?: string }) {
   const info = parseGithubLink(url);
   if (!info) {

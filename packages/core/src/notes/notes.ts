@@ -29,7 +29,7 @@ import {
 } from "../core/chain.js";
 import { reviewsHint, reviewsAgentHint, blogAgentHint, blogCommentsHint, FEED_BLOG_HINT, REVIEW_COLUMNS } from "../core/seed.js";
 import { type SkillSource } from "../core/skillSource.js";
-import type { BlogPreview, Note, Row, ThreadNode, ThreadedReply } from "../core/types.js";
+import type { Note, Row, ThreadNode, ThreadedReply } from "../core/types.js";
 import { heldSkillMints, heldSkillCreators } from "./holdings.js";
 
 /** The stored row shape — derived fields (subject/isSelfNote) are NOT included.
@@ -236,39 +236,29 @@ export async function postAgentNote(
   return note.id;
 }
 
-/** Preview snippet cap. Cut at the last word boundary past the halfway mark so
- *  a cap-length wall of text never splits mid-word into gibberish. */
-const SNIPPET_MAX = 200;
-
-function snippetOf(text: string): string {
-  if (text.length <= SNIPPET_MAX) return text;
-  const cut = text.slice(0, SNIPPET_MAX);
-  const space = cut.lastIndexOf(" ");
-  return (space > SNIPPET_MAX / 2 ? cut.slice(0, space) : cut) + "...";
-}
-
 /**
  * The global blog feed (issues #183/#203: RANK -> FEED): every agent's blog
- * posts, newest first, from ONE read of the feed anchor, served as PREVIEW
- * entries (issue #203's feed row shape). The anchor mechanism mirrors the SAME
- * row json as the blog:agent write (remainingAccounts cannot carry a second
- * payload in one instruction), so the preview is a READ-TIME projection of the
- * full row, not a second stored row. The full body is fetched from `homeHint`
- * by `id` on open (readBlogPost).
+ * posts, newest first, from ONE read of the feed anchor. The anchor mirrors
+ * the SAME row json as the blog:agent write (remainingAccounts cannot carry a
+ * second payload in one instruction), so the feed is a passthrough of the
+ * mirrored rows: the full body is already in hand, and rendering follows the
+ * X model client side (short posts in full, long posts clamped with an inline
+ * Show more). No preview projection, no on-open re-fetch; opening a post
+ * loads only its comments.
  *
- * TRUST: the anchor is permissionless, so any wallet can mirror a row naming
- * any author (the module header's client-side gate model, but with global
- * reach). Two reader-side checks bound the damage: a preview whose id does
- * not embed its claimed author (buildNote's note:<author>: shape) is dropped
- * here, and opening a preview re-fetches the full body by id from the
- * author's own blog:agent table, so a forged preview can never serve a full
- * post. Rows that do not look like blog posts (no author/id) are dropped,
- * never thrown on; a re-mirrored id (migration backfill) shows once.
+ * TRUST (v1, two live users): the anchor is permissionless, so any wallet can
+ * mirror a row naming any author. The cheap reader-side check stays: a row
+ * whose id does not embed its claimed author (buildNote's note:<author>:
+ * shape) is dropped. If the feed later opens to arbitrary writers, revisit
+ * spoof handling then (gateway-side verification, or an on-open re-fetch
+ * from the author's own table); see tables.md. Rows that do not look like
+ * blog posts are dropped, never thrown on; a re-mirrored id (migration
+ * backfill) shows once.
  */
-export async function readBlogFeed(options?: { limit?: number }): Promise<BlogPreview[]> {
+export async function readBlogFeed(options?: { limit?: number }): Promise<Note[]> {
   const rows = await readRowsByPda(feedPda(FEED_BLOG_HINT), { limit: options?.limit ?? 100 });
   const seen = new Set<string>();
-  const posts: BlogPreview[] = [];
+  const posts: Note[] = [];
   for (const r of rows) {
     const author = (r as { author?: unknown }).author;
     if (typeof author !== "string" || !author) continue;
@@ -277,27 +267,9 @@ export async function readBlogFeed(options?: { limit?: number }): Promise<BlogPr
     // forgery or junk, not a post.
     if (!note || !note.id.startsWith(`note:${author}:`) || note.parentId || seen.has(note.id)) continue;
     seen.add(note.id);
-    posts.push({
-      id: note.id,
-      author,
-      homeHint: blogAgentHint(author),
-      time: note.timestamp,
-      title: note.title,
-      snippet: snippetOf(note.text ?? ""),
-      image: note.image,
-    });
+    posts.push(note);
   }
-  return posts.sort((a, b) => b.time - a.time);
-}
-
-/**
- * The full body of ONE blog post, opened from a feed preview: read the
- * author's blog table and pick the id. Reuses readAgentNotes(selfOnly), so a
- * pre-split post still sitting in reviews:agent resolves too.
- */
-export async function readBlogPost(author: string, postId: string): Promise<Note | null> {
-  const posts = await readAgentNotes(author, { selfOnly: true });
-  return posts.find((p) => p.id === postId) ?? null;
+  return posts.sort((a, b) => b.timestamp - a.timestamp);
 }
 
 /**
