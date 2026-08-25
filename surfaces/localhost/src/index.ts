@@ -52,6 +52,7 @@ import {
   type ClaudeLogin,
   type CodexLogin,
   type Wallet,
+  type SessionMeta,
   type GoogleLogin,
   type StorageConfig,
   switchStorage,
@@ -205,22 +206,60 @@ async function ensureGuestRuntime(): Promise<AgentRuntime> {
   return ensureRuntime(guest);
 }
 
-// Preserve the value-first conversation when the user unlocks. Guest pages are decrypted
-// with the device key and re-encrypted into the real wallet's local store; the copy loop
-// (dedupe/resume/fault tolerance) lives in core's migrateSessions — this owns the surface
-// part only: which wallets and stores are involved.
-async function migrateGuestSessions(realWallet: Wallet): Promise<void> {
+// A wallet's manual store is always keyed by its own address; keep the pairing in one place.
+function sessionStoreFor(w: Wallet): SessionStore {
+  return new SessionStore(w, manualStorage(w.address));
+}
+
+// Preserve the value-first conversation when the user opts in (issue #123). Guest pages are
+// decrypted with the device key and re-encrypted into the real wallet's local store; the
+// copy loop (dedupe/resume/fault tolerance) lives in core's migrateSessions, this owns the
+// surface part only: which wallets and stores are involved. Scoped to ONE session, so
+// connecting a wallet never adopts guest work wholesale; the user pulls sessions in one
+// at a time from the chat list.
+async function migrateGuestSession(realWallet: Wallet, sessionId: string): Promise<boolean> {
   const guest = await deviceGuestWallet();
   const report = await migrateSessions(
-    new SessionStore(guest, manualStorage(guest.address)),
-    new SessionStore(realWallet, manualStorage(realWallet.address)),
+    sessionStoreFor(guest),
+    sessionStoreFor(realWallet),
+    sessionId,
   );
-  if (report.copied || report.skipped) {
-    console.log(
-      `[wallet] guest migration: ${report.copied} session(s) copied ` +
-        `(${report.messages} messages), ${report.skipped} skipped`,
-    );
-  }
+  console.log(
+    `[wallet] session sync ${sessionId.slice(0, 8)}: ${report.copied} copied ` +
+      `(${report.messages} messages), ${report.skipped} skipped`,
+  );
+  // migrateSessions swallows per-session faults into report.skipped (an unloadable
+  // guest page throws inside the loop, not out of it), so "did not throw" is NOT
+  // "copied": only a real copy may clear the Local tag.
+  return report.copied === 1;
+}
+
+// Guest sessions NOT yet present in the connected wallet's store, cached at adopt/sync
+// time. While a wallet is connected these ride along on every `sessions` push tagged
+// `local: true`, so the UI can show the Local tag + per-session sync affordance. Null
+// while no wallet is connected (a guest's list already IS its own local sessions).
+let localSessions: SessionMeta[] | null = null;
+
+async function refreshLocalSessions(realWallet: Wallet): Promise<void> {
+  const guest = await deviceGuestWallet();
+  const owned = new Set((await sessionStoreFor(realWallet).listMine()).map((s) => s.sessionId));
+  localSessions = (await sessionStoreFor(guest).listMine()).filter((s) => !owned.has(s.sessionId));
+}
+
+// Splice the cached guest-only sessions into a core `sessions` push, newest first and
+// tagged local. Pass-through for every other message and while no wallet is connected.
+// Synchronous (cached metas only), so SSE event ordering is untouched. Ids already in
+// the push are skipped: a client attached before the connect still lists from the guest
+// runtime until it reconnects, and appending there would duplicate every row.
+function withLocalSessions(msg: any): unknown {
+  if (msg?.type !== "sessions" || !walletAddress || !localSessions?.length) return msg;
+  const seen = new Set(msg.list.map((s: SessionMeta) => s.sessionId));
+  const extras = localSessions.filter((s) => !seen.has(s.sessionId));
+  if (!extras.length) return msg;
+  const list = [...msg.list, ...extras.map((s) => ({ ...s, local: true }))].sort(
+    (a, b) => b.ts - a.ts,
+  );
+  return { ...msg, list };
 }
 
 // Latest drive-mirror sync result + the hook the active chat sets to surface it
@@ -371,22 +410,27 @@ async function submitGoogleAuthCode(c: Client, code: string) {
 }
 
 // The one path a wallet takes to become THE connected wallet, whatever produced it
-// (external web/MWA wallet or a device-local keypair). Migrate the guest's work into the
-// new wallet's store, swap it in, and rebuild the runtime so the WebView reopens straight
-// into the unlocked state. Idempotent per host: re-connecting the same address is a no-op
-// so re-opened tabs don't rebuild. Adapters below build the Wallet; this owns the connect.
+// (external web/MWA wallet or a device-local keypair). Swap it in and rebuild the runtime
+// so the WebView reopens straight into the unlocked state. Guest sessions are NOT migrated
+// here (issue #123): connecting a wallet must not silently bind the device's local chats
+// to that identity. They stay in the guest store, listed with a Local tag, and move only
+// through the explicit syncSessionToWallet flow. Sessions created from here on are born
+// in the wallet's store, so those keep syncing automatically as before. Idempotent per
+// host: re-connecting the same address is a no-op so re-opened tabs don't rebuild.
+// Adapters below build the Wallet; this owns the connect.
 async function adoptWallet(connected: Wallet, address: string): Promise<void> {
   if (walletAddress === address) return;
-  // A damaged guest store must never lock the user out of connecting — the guest copy
-  // stays on disk, so a later connect can retry the migration.
-  try {
-    await migrateGuestSessions(connected);
-  } catch (e) {
-    console.error("[wallet] guest session migration failed:", e);
-  }
   wallet = connected;
   walletAddress = address;
   walletEpoch += 1;
+  // A damaged guest store must never lock the user out of connecting; tagging is
+  // best-effort and recomputed on the next connect.
+  try {
+    await refreshLocalSessions(connected);
+  } catch (e) {
+    localSessions = [];
+    console.error("[wallet] local session listing failed:", e);
+  }
   await rebuildRuntime(connected);
 }
 
@@ -994,7 +1038,9 @@ function attachMarketHandlers(c: Client) {
 // arrives via the same onRecv (POST), so TransportApprovalChannel is unchanged.
 function attachChat(id: string, c: Client, rt: AgentRuntime) {
   const transport = {
-    send: (msg: unknown) => c.send(msg),
+    // Local (guest) sessions ride along on the dispatcher's sessions pushes while a
+    // wallet is connected (see withLocalSessions); everything else passes through.
+    send: (msg: unknown) => c.send(withLocalSessions(msg)),
     // Subscribe (don't replace): both the dispatcher and the approval channel register a
     // handler on the same transport. POST fans out to all of them.
     onRecv: (cb: (m: any) => void) => { c.recvs.push(cb); },
@@ -1033,6 +1079,7 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
       await clearWalletMode(); // explicit disconnect = the standing choice is gone
       await disconnectCloud();
       walletAddress = null;
+      localSessions = null; // back to guest: its own list IS the local sessions
       runtime = null;
       wallet = await deviceGuestWallet();
       walletEpoch += 1;
@@ -1141,6 +1188,28 @@ function attachWalletConnection(c: Client) {
       c.send({ type: "walletConnected", address: walletAddress, storageOptions: STORAGE_OPTIONS, storageConfigured: await isCloudConnected() });
       c.send({ type: "storage", info: await getStorageInfo(), options: STORAGE_OPTIONS, googleCredsConfigured: await hasGoogleCreds() });
       await pushCliStatus(c);
+      return;
+    }
+    // Opt-in per-session sync (issue #123): copy ONE local (guest) session into the
+    // connected wallet's store. The reused migrateSessions machinery is idempotent, so
+    // a retry after a partial copy resumes instead of duplicating. On success the tag
+    // cache drops the session; the UI clears its Local tag off the sessionSynced ack.
+    if (m?.type === "syncSessionToWallet" && typeof m.sessionId === "string") {
+      if (!wallet || !walletAddress) {
+        c.send({ type: "sessionSynced", sessionId: m.sessionId, ok: false, error: "Connect a wallet first." });
+        return;
+      }
+      try {
+        const copied = await migrateGuestSession(wallet, m.sessionId);
+        if (!copied) {
+          c.send({ type: "sessionSynced", sessionId: m.sessionId, ok: false, error: "Could not read this session from local storage." });
+          return;
+        }
+        if (localSessions) localSessions = localSessions.filter((s) => s.sessionId !== m.sessionId);
+        c.send({ type: "sessionSynced", sessionId: m.sessionId, ok: true });
+      } catch (e) {
+        c.send({ type: "sessionSynced", sessionId: m.sessionId, ok: false, error: (e as Error).message });
+      }
       return;
     }
     if (m?.type !== "connectWallet" || typeof m.address !== "string" || !Array.isArray(m.signature)) return;
