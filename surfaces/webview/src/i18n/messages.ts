@@ -213,6 +213,11 @@ export const M = {
     untitled: m("(untitled)", "(제목 없음)", "(без названия)"),
     newChat: m("New chat", "새 채팅", "Новый чат"),
     deleteChat: m("Delete chat", "채팅 삭제", "Удалить чат"),
+    // opt-in per-session sync (issue #123): confirm sheet for pulling a Local chat
+    // into the connected wallet. The LOCAL row tag itself is a terminal token (inline).
+    syncConfirm: m("Sync this session with this agent?", "이 세션을 이 에이전트와 동기화할까요?", "Синхронизировать эту сессию с этим агентом?"),
+    syncAction: m("Sync", "동기화", "Синхронизировать"),
+    syncKeepLocal: m("Keep local", "로컬로 유지", "Оставить локально"),
   },
 
   settings: {

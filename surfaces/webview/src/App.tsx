@@ -11,7 +11,7 @@ import { TabBar } from "./shell/TabBar";
 import { WelcomeTutorial } from "./unlock/WelcomeTutorial";
 import { StarterTemplates } from "./unlock/StarterTemplates";
 import { Alert } from "./Alert";
-import { useVisualViewportVars, useKeyboardChrome } from "./layoutEffects";
+import { useVisualViewportVars, useKeyboardChrome, useIsDesktop } from "./layoutEffects";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { syncAgentService, notifyApproval, clearApprovalNotice, ensureBackgroundConsent, notifyTurnComplete } from "./platform/agentService";
 import { haptics } from "./haptics";
@@ -261,7 +261,10 @@ function TabShell() {
     : Math.max(0, Math.min(1, drawerDrag / drawerWidth));
 
   // Drawer push: the whole surface slides right (no shrink/rounding — reads as a panel).
-  const surfaceTx = drawerProgress * drawerWidth;
+  // On desktop the drawer OVERLAYS instead (index.css raises it above the surface):
+  // pushing a full-width desktop surface would shove the content area off the window.
+  const desktop = useIsDesktop();
+  const surfaceTx = desktop ? 0 : drawerProgress * drawerWidth;
   // Pager: the 400%-wide track sits at -idx*25%, plus the live drag offset.
   const tabPosition = Math.max(0, Math.min(LAST, idx - pageDrag / vw));
   const goToTab = (i: number) => { setIdx(i); changeDrawer(false); };

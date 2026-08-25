@@ -83,6 +83,21 @@ export function useKeyboardChrome() {
   }, []);
 }
 
+// Desktop breakpoint. MUST match the @media (min-width: 1024px) block in index.css.
+// There the bottom NAV_DOCK renders as a vertical LEFT rail and the chat drawer overlays
+// instead of pushing; components use this to flip the few behaviors CSS can't express
+// (indicator axis, published dock height, surface push distance).
+export function useIsDesktop() {
+  const [desktop, setDesktop] = useState(() => typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const sync = () => setDesktop(mq.matches);
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+  return desktop;
+}
+
 export function useElementHeightVariable(ref: { current: HTMLElement | null }, variableName: string) {
   useEffect(() => {
     const root = document.documentElement;

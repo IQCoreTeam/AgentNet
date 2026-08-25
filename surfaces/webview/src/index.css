@@ -151,6 +151,38 @@ body {
   overscroll-behavior: none;
 }
 
+/* Pointer affordance: the surface is phone-first (tap feedback is active:
+   states, hover never fires), so nothing declares a cursor and a mouse reads
+   the whole app as inert text. With a real pointer present, clickables get
+   the hand. Touch devices never match this media block. */
+@media (hover: hover) and (pointer: fine) {
+  button:not(:disabled),
+  a,
+  summary,
+  [role="button"] {
+    cursor: pointer;
+  }
+}
+
+/* Responsive: the surface is a phone-first, full-bleed layout (pager is width:400%,
+   cards sized for ~a phone column). On the Android shell and narrow windows that is
+   exactly right, so nothing changes below the phone breakpoint. In the tablet /
+   half-screen band (560px to 1023px) a full-bleed phone layout smears edge to edge; cap
+   #app to a centered phone-width column with a subtle frame so it reads as
+   intentional. From 1024px up the app switches to a real desktop layout (left nav
+   rail + wide content, see the desktop block near the shell rules), so the cap
+   must NOT apply there. */
+@media (min-width: 560px) and (max-width: 1023.98px) {
+  /* A hair darker than --an-bg-0 so the centered framed column reads as lifted. */
+  body { background: #05070a; }
+  #app {
+    max-width: 460px;
+    margin-inline: auto;
+    border-inline: 1px solid var(--an-line);
+    box-shadow: 0 0 90px rgba(0, 0, 0, 0.6);
+  }
+}
+
 .unlock-sheet { animation: unlock-sheet-in var(--dur-screen) var(--ease-emphasized-decelerate); }
 .unlock-pop { animation: unlock-pop var(--dur-celebrate) var(--ease-emphasized-decelerate); }
 .unlock-gate-reveal { animation: unlock-gate-reveal 520ms var(--ease-emphasized-decelerate) var(--unlock-delay) both; }
@@ -1042,6 +1074,7 @@ body {
   letter-spacing: 1.5px;
 }
 .an-navdock-status .dim { color: #6e6e72; }
+.an-navdock-status .an-navdock-kana { display: none; } /* desktop rail only, see the >=1024px block */
 .an-navdock-status .sig { color: #5e5e62; }
 .an-navdock-status .sig b { color: #cfcfcf; }
 .an-navdock-status .sig i { color: #2c2c2f; font-style: normal; }
@@ -1170,6 +1203,13 @@ body {
    page. Applied to the bottom-most scroll area or footer of each market/agent screen. */
 .an-tabbar-inset {
   padding-bottom: calc(var(--tabbar-height, 0px) + max(0.75rem, env(safe-area-inset-bottom)));
+}
+
+/* Pinned CTA over a detail scroll (Buy / Remove / Re-equip): the content fades out
+   under a translucent wash; on phone the floating dock covers the strip below the
+   button, so the wash can stay light. Desktop solidifies it (see the ≥1024px block). */
+.an-cta-float {
+  background: linear-gradient(to top, color-mix(in srgb, var(--an-bg-0) 60%, transparent), transparent);
 }
 
 /* Floating chat controls: the layer around the composer stays transparent so messages
@@ -2076,4 +2116,137 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .cmp-wrap, .cmp-label, .unlock-sheet, .unlock-pop, .unlock-gate-reveal, .unlock-badge-open, .unlock-denied-in, .unlock-flicker, .unlock-reward { animation-duration: 0.01ms; animation-delay: 0ms; }
+}
+
+/* ── Desktop (≥1024px) ──────────────────────────────────────────────────────
+   Same components, desktop layout: one codebase, media queries only. The
+   floating bottom NAV_DOCK becomes a persistent LEFT rail (TabBar.tsx flips its
+   sliding indicator to translateY and publishes --tabbar-height as 0 up here, so
+   every "clear the bottom dock" inset naturally collapses); the pager fills the
+   remaining width. Long-form content gets a readable centered column; card lists
+   flow into multi-column grids instead of smearing a phone column edge to edge.
+   Nothing in this block runs below 1024px; phone/tablet stay byte-identical. */
+@media (min-width: 1024px) {
+  /* shell = [ nav rail | active screen ] */
+  .an-app-surface { flex-direction: row; }
+  .an-tabbar-shell {
+    position: static;
+    order: -1;            /* DOM keeps panels-then-nav; the rail renders left */
+    width: 116px;
+    flex: none;
+    align-self: stretch;
+    border-right: 1px solid var(--an-line);
+    background: var(--an-bg-0);
+  }
+  /* Typing must not hide the rail; the keyboard-chrome rule is a phone concern. */
+  html[data-keyboard="open"] .an-tabbar-shell { display: block; }
+  html[data-keyboard="open"] .an-shell-panels::after { display: none; }
+
+  /* NAV_DOCK → vertical rail: same bar, brackets, glyphs and engine-tinted
+     indicator; segments stack and the indicator slides on Y (TabBar.tsx). The
+     bracket frame stretches to the rail's full height so the box closes at the
+     bottom edge instead of hanging open mid-rail; the indicator is one fixed
+     56px segment (25% of a full-height bar would balloon). */
+  .an-navdock-shell { display: flex; flex-direction: column; padding: 14px 10px 0; }
+
+  /* The rail's NAV_DOCK line gets its kana sub, same title + kana idiom as the
+     screen headers (MY SKILLS / マイスキル). Second line, so the status row
+     stacks instead of spreading. */
+  .an-navdock-status { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .an-navdock-status .an-navdock-kana {
+    display: block;
+    font-family: "Noto Sans JP", ui-sans-serif, sans-serif;
+    font-weight: 400;
+    font-size: 8px;
+    letter-spacing: 1px;
+    color: #5a5a5d;
+  }
+  .an-navdock { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; }
+  .an-navdock-bar { flex-direction: column; height: auto; flex: 1; }
+  .an-navdock-ind { width: 100%; height: 56px; }
+  .an-navseg {
+    flex: none;
+    height: 56px;
+    border-left: none;
+    border-top: 1px solid color-mix(in srgb, var(--an-fg) 12%, transparent);
+  }
+  .an-navseg:first-child { border-top: none; }
+  /* Close the stack: the last segment gets the same separator underneath, so
+     MARKET does not bleed into the empty rail below it. */
+  .an-navseg:last-child { border-bottom: 1px solid color-mix(in srgb, var(--an-fg) 12%, transparent); }
+
+  /* No floating dock ⇒ no bottom glass to fade into. */
+  .an-shell-panels::after { display: none; }
+
+  /* Chat drawer: overlay from the left instead of pushing the surface (App.tsx keeps
+     the surface still on desktop). Same panel, just stacked above with an edge. */
+  .an-drawer-base {
+    z-index: 30;
+    border-right: 1px solid var(--an-line);
+    box-shadow: 24px 0 60px rgba(0, 0, 0, 0.55);
+    animation: an-drawer-overlay-in var(--dur-screen) var(--ease-emphasized-decelerate);
+  }
+
+  /* Chat: the log already centers on max-w-2xl; the floating controls
+     (marquee / approval dock / composer) follow the same readable column. */
+  .an-chat-float > * { width: 100%; max-width: 42rem; margin-inline: auto; }
+
+  /* Market / Skills / Rank screens: a wide but bounded content column. The screens
+     paint Tailwind zinc-950 (#09090b), one shade off the app ground (--an-bg-0,
+     #0a0b0d). Full-bleed on phone that never shows; here the capped column exposes
+     both blacks side by side as a seam, so the screen takes the ground token. */
+  .an-screen { width: 100%; max-width: 1120px; margin-inline: auto; background: var(--an-bg-0); }
+
+  /* Rank reads best as one narrow column (the trading cards are ~phone-width
+     artwork): 584px = the 560px card plus the px-3 gutters, so the header,
+     hero, search bar, and list cards all share a single axis (see the rank
+     rules further down). The header's phone padding (14px) is trued up to the
+     body's 12px so the "AGENT RANK" title and the card edges sit on the same
+     line. */
+  .an-screen-rank { max-width: 584px; }
+  .an-screen-rank > header { padding-inline: 12px; }
+
+  /* Skill-card tiles: keep tile size sane and let the count grow with width. */
+  .an-cardgrid { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); }
+
+  /* Pinned detail CTA: no floating dock hides the strip under the button here, so
+     the scrolled text bled through the translucent wash (and the button's bracket
+     gaps). Solid backstop over the button + inset, fading out across the pt-8 zone. */
+  .an-cta-float { background: linear-gradient(to top, var(--an-bg-0) 70px, transparent); }
+
+  /* Rank reads as a single centered leaderboard column: the screen cap above
+     (584px = a 560px card + the px-3 gutters) makes the header, the pinned
+     "YOU" hero, the search bar, and every list card the exact same width on
+     one axis, whatever the agent count. The cards are drawn for ~a phone
+     column, so 560px keeps their proportions without any per-card capping;
+     their fixed aspect-ratio would still balloon the height, so height
+     follows content instead. */
+  /* The profile detail's portrait ID card: capped so its stat leaders and
+     stars gauge keep card proportions on a wide screen. */
+  .an-id { max-width: 600px; }
+
+  /* Blog: the 90/10 peek carousel is a touch idiom (its wheel, drag, and
+     keyboard handlers stay for phone-sized windows). A tall desktop column
+     has room, so posts stack vertically and read like a feed; the dormant
+     horizontal handlers become no-ops against a column layout. */
+  .an-blogrow { flex-direction: column; overflow-x: visible; scroll-snap-type: none; }
+  .an-blogrow > * { flex: none; }
+
+  /* Verified work: same touch-carousel idiom, but these are compact folder
+     cards, so on desktop the row wraps instead of stacking. */
+  .an-workrow { flex-wrap: wrap; overflow-x: visible; scroll-snap-type: none; }
+  .an-agentgrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+    gap: 10px;
+  }
+  .an-agentgrid > * { margin-top: 0 !important; }
+  .an-ac { aspect-ratio: auto; }
+  .an-ac-ava { min-height: 96px; }
+}
+
+/* Desktop drawer overlay entrance (used only inside the ≥1024px block above). */
+@keyframes an-drawer-overlay-in {
+  from { transform: translateX(-24px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
 }

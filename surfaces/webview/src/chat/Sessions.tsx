@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, type ReactNode, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { walletAvatarSvg } from "../market/walletAvatar";
 import { useStore } from "../state/store";
 import { IqLogo, AgentIcon, LockIcon, SkillIcon } from "../icons";
 import { useOnline } from "../layoutEffects";
@@ -16,6 +17,18 @@ function WifiOffIcon({ className, style }: { className?: string; style?: CSSProp
       <path d="M2 8.8a15 15 0 0 1 4.2-2.6" />
       <path d="M22 8.8a15 15 0 0 0-11.3-3.8" />
       <path d="M12 20h.01" />
+    </svg>
+  );
+}
+
+// circular-arrows mark for the per-session sync affordance (issue #123; inline SVG, no emoji).
+function SyncIcon({ className, style }: { className?: string; style?: CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+      <path d="M21 3v5h-5" />
+      <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+      <path d="M8 16H3v5" />
     </svg>
   );
 }
@@ -177,6 +190,10 @@ export function Sessions({
   // Long-press a chat row to reveal a delete menu (replaces the always-on per-row x).
   // `pressFired` suppresses the row's open-on-click that would otherwise follow pointerup.
   const [menuFor, setMenuFor] = useState<{ id: string; title: string } | null>(null);
+  // Confirm sheet for the opt-in per-session sync (issue #123): tapping a Local row
+  // opens this instead of the chat, so a pre-wallet session is never opened (and
+  // possibly forked) under the wallet identity without an explicit yes.
+  const [syncFor, setSyncFor] = useState<{ id: string; title: string } | null>(null);
   const pressTimer = useRef<number | null>(null);
   const pressOrigin = useRef<{ x: number; y: number } | null>(null);
   const pressFired = useRef(false);
@@ -375,15 +392,25 @@ export function Sessions({
                 {state.sessions.map((s) => {
                   const active = s.sessionId === state.activeSessionId;
                   const running = state.sessionsRunning.includes(s.sessionId);
+                  // Pre-wallet session still in the device store (server tags these only
+                  // while a wallet is connected). Its row opens the sync confirm, never
+                  // the chat: the wallet runtime can't load it, and sending into an empty
+                  // same-id chat would fork the history and block the sync forever. No
+                  // long-press delete either; the wallet store doesn't hold this session.
+                  const local = !!s.local;
                   return (
                     <button
                       key={s.sessionId}
-                      onPointerDown={(e) => startPress(e, s)}
+                      onPointerDown={(e) => { if (!local) startPress(e, s); }}
                       onPointerMove={movePress}
                       onPointerUp={clearPress}
                       onPointerCancel={clearPress}
                       onClick={() => {
                         if (pressFired.current) { pressFired.current = false; return; }
+                        if (local) {
+                          setSyncFor({ id: s.sessionId, title: s.title || t(M.menu.untitled) });
+                          return;
+                        }
                         send({ type: "open", sessionId: s.sessionId });
                         onClose();
                       }}
@@ -393,6 +420,12 @@ export function Sessions({
                       <span className="an-term-mono min-w-0 flex-1 truncate text-[15px] font-bold" style={{ color: running ? "var(--an-run-fg)" : active ? "var(--an-term-fg)" : "var(--an-term-fg-2)" }}>
                         {s.title || t(M.menu.untitled)}
                       </span>
+                      {local && (
+                        <span className="an-term-mono ml-2 flex flex-none items-center gap-1.5 text-[11px] font-bold" style={{ color: "var(--an-term-fg-6)", letterSpacing: "0.5px" }}>
+                          LOCAL
+                          <SyncIcon className="h-3.5 w-3.5" style={{ color: "var(--an-green)" }} />
+                        </span>
+                      )}
                       {running && (
                         <span className="an-term-mono an-run ml-2 flex-none text-[11px] font-bold" style={{ color: "var(--an-run-accent)", letterSpacing: "0.5px" }}>
                           RUN
@@ -431,6 +464,37 @@ export function Sessions({
                     <svg width="18" height="18" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h14M9 6V4.5h4V6M6 6l.8 11a1.5 1.5 0 0 0 1.5 1.4h5.4a1.5 1.5 0 0 0 1.5-1.4L17 6" /></svg>
                     {t(M.menu.deleteChat)}
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* Opt-in per-session sync confirm (issue #123): show the destination wallet
+                address up front, then migrate that ONE session on an explicit yes. */}
+            {syncFor && (
+              <div className="an-chatmenu-backdrop" onClick={() => setSyncFor(null)}>
+                <div className="an-chatmenu" onClick={(e) => e.stopPropagation()}>
+                  <div className="an-chatmenu-title truncate">{syncFor.title}</div>
+                  <div className="px-3 pb-3">
+                    <p className="text-[12px] leading-relaxed" style={{ color: "var(--an-fg-dim)" }}>{t(M.menu.syncConfirm)}</p>
+                    {/* Destination identity, address AND the agent it renders as (issue #123
+                        point 3): the avatar is derived from the wallet, same as the rank cards. */}
+                    <div className="an-term-mono mt-2 flex items-center gap-2.5 border px-2 py-1.5 text-[11px] leading-relaxed" style={{ borderColor: "var(--an-green-line)", background: "var(--an-green-dim)", color: "var(--an-term-fg)" }}>
+                      <span className="h-7 w-7 shrink-0 overflow-hidden" style={{ border: "1px solid var(--an-line)" }} aria-hidden="true" dangerouslySetInnerHTML={{ __html: walletAvatarSvg(state.walletAddress ?? "") }} />
+                      <span className="break-all">{state.walletAddress}</span>
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <button className="an-btn an-btn-outline flex-1" onClick={() => setSyncFor(null)}>{t(M.menu.syncKeepLocal)}</button>
+                      <button
+                        className="an-btn an-btn-green flex-1"
+                        onClick={() => {
+                          send({ type: "syncSessionToWallet", sessionId: syncFor.id });
+                          setSyncFor(null);
+                        }}
+                      >
+                        {t(M.menu.syncAction)}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

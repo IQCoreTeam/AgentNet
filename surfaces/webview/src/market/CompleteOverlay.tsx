@@ -16,6 +16,8 @@ export function CompleteOverlay({ label, onClick, flicker = false }: { label: st
       <div className="cmp-label">[{label}]</div>
     </div>
   );
+  // Presentational only; the parent (CompleteCelebration) owns the portal to
+  // <body> so this and SkillReceiptOverlay escape the transformed pager together.
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"

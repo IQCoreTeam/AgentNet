@@ -231,7 +231,7 @@ export function AgentDirectory() {
           {query.trim() ? "No agent matches that wallet" : "No other agents yet"}
         </div>
       ) : (
-        <div className="space-y-2.5">
+        <div className="an-agentgrid space-y-2.5">
           {others.map((agent) => (
             <AgentCard key={agent.wallet} agent={agent} onOpen={openProfile} />
           ))}
