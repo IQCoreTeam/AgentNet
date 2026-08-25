@@ -129,7 +129,9 @@ describe("skill-market", () => {
     vi.mocked(searchSkills).mockResolvedValue([]);
     const result = await handleToolCall(mockConn, signer, "defaultCreator", "search_skills", {});
     expect(result.content[0].text).toContain("No matching skills found");
-    expect(searchSkills).toHaveBeenCalledWith(mockConn, { filters: { keyword: undefined, category: undefined, type: undefined } });
+    // objectContaining: the handler also passes an optional `source` (set only when no
+    // Helius key is configured, e.g. in CI), which is incidental to this assertion about filters.
+    expect(searchSkills).toHaveBeenCalledWith(mockConn, expect.objectContaining({ filters: { keyword: undefined, category: undefined, type: undefined } }));
   });
 
   it("search_skills formats results", async () => {

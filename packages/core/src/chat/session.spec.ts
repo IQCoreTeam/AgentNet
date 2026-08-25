@@ -42,10 +42,12 @@ const flush = async () => {
 // Wait for a specific notice to be sent. `/init` does real fs writes before sending the
 // notice, so the notice is the completion signal — polling for it is deterministic where a
 // fixed microtask flush races the fs IO under full-suite load. Throws if it never arrives.
+// 5ms ticks give a ~2s budget: some paths (/skills via ownedSkillsMsg) await a slow
+// dynamic import (skillSource, ~400ms cold) first — same rationale as waitForType below.
 const waitForNotice = async (transport: any, text: string) => {
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < 400; i++) {
     if (transport.send.mock.calls.some((c: any[]) => c[0]?.type === "notice" && c[0]?.text === text)) return;
-    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 5));
   }
   throw new Error(`notice "${text}" was never sent`);
 };
@@ -367,7 +369,7 @@ describe("chat/session — slash commands", () => {
 
     fromUI({ type: "slashCommand", command: "resume" });
     await flush();
-    expect(transport.send).toHaveBeenCalledWith({ type: "sessions", list: [], activeId: undefined, cloud: "none" });
+    expect(transport.send).toHaveBeenCalledWith({ type: "sessions", list: [], activeId: undefined, running: [], cloud: "none" });
     expect(transport.send).toHaveBeenCalledWith({ type: "notice", text: "Resume: open a session from History." });
   });
 
@@ -401,13 +403,17 @@ describe("chat/session — slash commands", () => {
     const { fromUI, transport } = harness({ ownedSkills: ["clean-code"] });
 
     fromUI({ type: "slashCommand", command: "skills" });
-    await flush();
+    // ownedSkillsMsg awaits a dynamic import (skillSource, for catalog meta) before it
+    // replies, so a fixed flush races it; the trailing "Skills refreshed." notice is the
+    // completion signal (it is sent after the ownedSkills frame on the same await chain).
+    await waitForNotice(transport, "Skills refreshed.");
     expect(transport.send).toHaveBeenCalledWith({
       type: "ownedSkills",
       names: ["clean-code"],
       mints: {},
       disposedMints: {},
       workflowMints: [],
+      meta: {},
     });
   });
 
