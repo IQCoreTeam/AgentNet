@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { haptics } from "../haptics";
 import { CompleteOverlay } from "./CompleteOverlay";
 import { SkillReceiptOverlay } from "./SkillReceiptOverlay";
@@ -16,7 +17,14 @@ export function CompleteCelebration({ label, onDone, flicker = false, card }: { 
     return () => clearTimeout(t);
   }, []);
 
-  return card
-    ? <SkillReceiptOverlay card={card} onClick={onDone} />
-    : <CompleteOverlay label={label} onClick={onDone} flicker={flicker} />;
+  // Portal both success overlays to <body>: they are rendered from views inside
+  // the transformed swipe pager, where position:fixed resolves against the
+  // transformed ancestor instead of the viewport (the plaque otherwise lands
+  // off-screen). Hoisting the portal here keeps the two branches symmetric.
+  return createPortal(
+    card
+      ? <SkillReceiptOverlay card={card} onClick={onDone} />
+      : <CompleteOverlay label={label} onClick={onDone} flicker={flicker} />,
+    document.body,
+  );
 }

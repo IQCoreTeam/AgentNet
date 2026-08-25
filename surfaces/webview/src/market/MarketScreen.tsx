@@ -127,7 +127,7 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
   // Skill detail (reachable from any tab)
   if (state.marketDetail) {
     return (
-      <div className="flex flex-col h-full bg-zinc-950">
+      <div className="an-screen flex flex-col h-full bg-zinc-950">
         <SkillDetailView
           detail={state.marketDetail}
           owned={state.marketOwned.includes(state.marketDetail.card.name)}
@@ -147,7 +147,7 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
   // (or the user backs out). Mirrors the skill-detail pendingMint skeleton above.
   if (state.agentProfileLoading) {
     return (
-      <div className="flex flex-col h-full bg-zinc-950">
+      <div className="an-screen flex flex-col h-full bg-zinc-950">
         <AgentProfileSkeleton onBack={() => clearAgentProfile()} />
       </div>
     );
@@ -156,7 +156,7 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
   // Agent profile (self on Profile tab, or a tapped agent on Market tab)
   if (state.agentProfile) {
     return (
-      <div className="flex flex-col h-full bg-zinc-950">
+      <div className="an-screen flex flex-col h-full bg-zinc-950">
         <AgentProfileView
           profile={state.agentProfile}
           onBack={() => clearAgentProfile()}
@@ -170,7 +170,7 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
   // or workflow tab), same as the VSCode builder.
   if (view === "publish") {
     return (
-      <div className="flex flex-col h-full bg-zinc-950">
+      <div className="an-screen flex flex-col h-full bg-zinc-950">
         <PublishForm initialKind={state.marketTab} onBack={() => setView("browse")} />
       </div>
     );
@@ -205,7 +205,7 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
   const balanceSol = state.marketBalance != null ? (state.marketBalance / 1_000_000_000).toFixed(3) : null;
 
   return (
-    <div className="flex flex-col h-full bg-zinc-950">
+    <div className={`an-screen ${isAgents ? "an-screen-rank" : ""} flex flex-col h-full bg-zinc-950`}>
       {/* Header (no back-to-chat button — the bottom tab bar owns top-level nav) */}
       <header
         className="flex items-start gap-2.5 border-b px-3.5 shrink-0"
@@ -375,7 +375,7 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-3.5 pt-3">
+            <div className="an-cardgrid grid grid-cols-3 gap-3.5 pt-3">
               {ownedCards.map((card) => (
                 <SkillSdCard
                   key={card.id}
@@ -401,7 +401,7 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
                 No {state.marketTab}s found.{!state.rpcStatus?.hasKey && " Add a Helius key for better results."}
               </div>
             ) : (
-              <div className="grid grid-cols-3 gap-3.5 pt-1">
+              <div className="an-cardgrid grid grid-cols-3 gap-3.5 pt-1">
                 {state.marketResults
                   .filter((card) => !hideOwned || !state.marketOwned.includes(card.name))
                   .map((card) => {

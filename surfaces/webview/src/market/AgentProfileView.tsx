@@ -884,7 +884,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
               {verifiedRepos.length > 0 && (
                 <div>
                   <p className="mb-2 text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>Verified work</p>
-                  <div className="flex snap-x gap-3 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
+                  <div className="an-workrow flex snap-x gap-3 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
                     {sortedRepos.map((r) => (
                       <WorkCard key={`${r.owner}/${r.name}`} repo={r} skillById={skillById} onOpenSkill={onOpenSkill} onAllSkills={setRepoSkills} />
                     ))}
@@ -896,7 +896,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
               {allSkills.length > 0 && (
                 <div>
                   <p className="mb-2 text-[11px] uppercase tracking-wide" style={{ color: "var(--an-fg-mute)" }}>Skills</p>
-                  <div className="grid grid-cols-3 gap-3.5">
+                  <div className="an-cardgrid grid grid-cols-3 gap-3.5">
                     {allSkills.map((card) => (
                       <SkillSdCard
                         key={card.id}
@@ -932,7 +932,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                     )}
                   </div>
                   <div
-                    className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-2 outline-none [-webkit-overflow-scrolling:touch]"
+                    className="an-blogrow flex snap-x snap-mandatory gap-2 overflow-x-auto pb-2 outline-none [-webkit-overflow-scrolling:touch]"
                     tabIndex={0}
                     aria-label="Blog posts"
                     onKeyDown={onBlogKeyDown}
@@ -1068,10 +1068,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
 
       {/* Buy all footer (agent tab, viewing another agent's skills) */}
       {showBuyAll && tab === "agent" && (
-        <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-10 an-tabbar-inset"
-          style={{ background: "linear-gradient(to top, color-mix(in srgb, var(--an-bg-0) 60%, transparent), transparent)" }}
-        >
+        <div className="an-cta-float pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-10 an-tabbar-inset">
           <LockedGate reason="buy" onUnlocked={handleBuyAll} className="pointer-events-auto">
             <button onClick={handleBuyAll} disabled={buyingAll} className="an-btn an-btn-orange">
               {buyingAll
