@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { Connection } from "@solana/web3.js";
 import { spawnCli } from "./spawn.js";
 import { SessionStore } from "../account/store.js";
+import { RunningMarkers } from "../account/runningMarkers.js";
 import { prepareResume } from "./inject/index.js";
 import { getDeviceProfile, buildDeviceNotice } from "../core/device.js";
 import { MemorySync, updateSkillsSection, updatePreviewSection } from "../memory/index.js";
@@ -98,6 +99,11 @@ async function buildPassiveSpawn(
   return { mcpServers: { [AGENTNET_MCP_SERVER]: server }, allowedTools: agentNetAllowedTools() };
 }
 
+// Running Sync (issue #129): the startup sweep runs once per app instance, not per
+// createRuntime - a storage reconnect rebuilds the runtime, and re-sweeping then
+// could force-close the marker of a turn still running under the previous runtime.
+let sweptThisBoot = false;
+
 // `approval` is the swappable decision source (webview buttons / auto / push). The
 // surface passes one in; omit it and tool use auto-allows (safe local default).
 export function createRuntime(
@@ -112,6 +118,15 @@ export function createRuntime(
   // Soul (issue #84 follow-up): the wallet's persona, injected into the CLI's GLOBAL
   // instruction file so our engines wear the same self foreign hosts get.
   const souls = new SoulStore(wallet, storage);
+  // Running Sync (issue #129): cross-device RUNNING markers on the same storage.
+  // The startup sweep force-closes markers this device's previous run left behind
+  // (a crash never wrote their ended mark). Fire-and-forget, local tier only -
+  // it must never delay or fail runtime creation.
+  const running = new RunningMarkers(storage);
+  if (!sweptThisBoot) {
+    sweptThisBoot = true;
+    void running.sweep().catch((e) => console.warn("[running-sync] sweep failed:", e));
+  }
 
   return {
     async startSession(opts): Promise<SessionHandle> {
@@ -351,6 +366,21 @@ export function createRuntime(
     // cloud tier. Surfaces call this ONLY after an explicit (re)connect.
     async syncCloud(): Promise<{ uploaded: number; missing: number }> {
       return (await storage.backfill?.()) ?? { uploaded: 0, missing: 0 };
+    },
+
+    // Running Sync (issue #129): the dispatcher calls these at its existing turn
+    // edges (busy add / onTurnEnd). A fresh chat has no sessionId until the engine
+    // reveals one - no marker for that first turn (null), the next turn is marked.
+    async runningStart(sessionId: string): Promise<string | null> {
+      return sessionId ? running.start(sessionId) : null;
+    },
+
+    async runningEnd(sessionId: string, turnId: string): Promise<void> {
+      await running.end(sessionId, turnId);
+    },
+
+    async runningRemote(): Promise<string[]> {
+      return running.liveRemote();
     },
   };
 }

@@ -205,7 +205,8 @@ export type ServerMessage =
   // failed and the list is silently local-only (label it; other devices' sessions are
   // not gone, sync is down). "none" = no cloud configured.
   // running: sessionIds whose agent turn is in flight right now (server reads its `busy`
-  // set at each turn edge). Lets the list mark a per-session RUNNING state; absent = none.
+  // set at each turn edge, unioned with live Running Sync markers from OTHER devices -
+  // issue #129). Lets the list mark a per-session RUNNING state; absent = none.
   | { type: "sessions"; list: SessionMeta[]; activeId?: string; running?: string[]; cloud?: "ok" | "reauth" | "transient" | "none" }
   | { type: "modelOptions"; cli: Cli; options: import("@iqlabs-official/agent-sdk").ChatModelOption[] }
   | { type: "loading" }
