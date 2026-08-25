@@ -74,7 +74,7 @@ describe("core/skillSource — dasSource", () => {
     await expect(dasSource.listSkills()).rejects.toThrow(/DAS getAssetsByGroup failed/);
   });
 
-  it("falls back to the public-devnet default when no RPC is configured (issue #23)", async () => {
+  it("falls back to the public-mainnet default when no RPC is configured (issue #23)", async () => {
     delete process.env.DAS_RPC_URL;
     delete process.env.SOLANA_RPC_URL;
     let calledUrl = "";
@@ -84,10 +84,10 @@ describe("core/skillSource — dasSource", () => {
     }));
     // no throw — resolveRpcUrl() supplies the default (a Helius key would win if set)
     await expect(dasSource.listSkills()).resolves.toEqual([]);
-    expect(calledUrl).toContain("devnet"); // the public-devnet default
+    expect(calledUrl).toContain("mainnet"); // the public-mainnet default
   });
 
-  // (No "no collection mints" test: seed.ts now ships default devnet collection
+  // (No "no collection mints" test: seed.ts now ships default mainnet collection
   // ids, so a collection is always configured unless explicitly overridden.)
 });
 

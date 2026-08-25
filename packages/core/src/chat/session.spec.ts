@@ -42,15 +42,17 @@ const flush = async () => {
 // Wait for a specific notice to be sent. `/init` does real fs writes before sending the
 // notice, so the notice is the completion signal — polling for it is deterministic where a
 // fixed microtask flush races the fs IO under full-suite load. Throws if it never arrives.
+// 5ms ticks give a ~2s budget: some paths (/skills via ownedSkillsMsg) await a slow
+// dynamic import (skillSource, ~400ms cold) first — same rationale as waitForType below.
 const waitForNotice = async (transport: any, text: string) => {
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < 400; i++) {
     if (transport.send.mock.calls.some((c: any[]) => c[0]?.type === "notice" && c[0]?.text === text)) return;
-    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 5));
   }
   throw new Error(`notice "${text}" was never sent`);
 };
 
-function harness(opts: { cwd?: string; ownedSkills?: string[]; googleCredsConfigured?: boolean; env?: Record<string, unknown> } = {}) {
+function harness(opts: { cwd?: string; ownedSkills?: string[]; googleCredsConfigured?: boolean; env?: Record<string, unknown>; rt?: Record<string, unknown> } = {}) {
   const handles: ReturnType<typeof fakeHandle>[] = [];
   const startSession = vi.fn(async (opts: any) => {
     const h = fakeHandle("sess-" + handles.length, opts.cli);
@@ -69,7 +71,7 @@ function harness(opts: { cwd?: string; ownedSkills?: string[]; googleCredsConfig
     ownedSkills: opts.ownedSkills ? async () => opts.ownedSkills : undefined,
     ...opts.env,
   };
-  const chat = createChatSession(startSessionRuntime(startSession), transport as any, env);
+  const chat = createChatSession({ ...startSessionRuntime(startSession), ...opts.rt }, transport as any, env);
   return { handles, startSession, fromUI, chat, transport };
 }
 
@@ -367,7 +369,7 @@ describe("chat/session — slash commands", () => {
 
     fromUI({ type: "slashCommand", command: "resume" });
     await flush();
-    expect(transport.send).toHaveBeenCalledWith({ type: "sessions", list: [], activeId: undefined, cloud: "none" });
+    expect(transport.send).toHaveBeenCalledWith({ type: "sessions", list: [], activeId: undefined, running: [], cloud: "none" });
     expect(transport.send).toHaveBeenCalledWith({ type: "notice", text: "Resume: open a session from History." });
   });
 
@@ -401,13 +403,17 @@ describe("chat/session — slash commands", () => {
     const { fromUI, transport } = harness({ ownedSkills: ["clean-code"] });
 
     fromUI({ type: "slashCommand", command: "skills" });
-    await flush();
+    // ownedSkillsMsg awaits a dynamic import (skillSource, for catalog meta) before it
+    // replies, so a fixed flush races it; the trailing "Skills refreshed." notice is the
+    // completion signal (it is sent after the ownedSkills frame on the same await chain).
+    await waitForNotice(transport, "Skills refreshed.");
     expect(transport.send).toHaveBeenCalledWith({
       type: "ownedSkills",
       names: ["clean-code"],
       mints: {},
       disposedMints: {},
       workflowMints: [],
+      meta: {},
     });
   });
 
@@ -560,5 +566,60 @@ describe("chat/session — a handler that throws", () => {
     });
     // the message behind the failure is still handled — a throw must not abandon the queue
     expect(transport.send).toHaveBeenCalledWith({ type: "wallet", address: null });
+  });
+});
+
+// Running Sync (issue #129): the dispatcher writes the cross-device marker at its
+// existing turn edges (two writes per turn) and unions live markers from OTHER
+// devices into the sessions frame's running list.
+describe("chat/session - Running Sync markers (issue #129)", () => {
+  it("writes the running marker at turn start and the matching ended mark at turn end", async () => {
+    const runningStart = vi.fn(async () => "turn-1");
+    const runningEnd = vi.fn(async () => {});
+    const { fromUI, handles } = harness({ rt: { runningStart, runningEnd } });
+
+    fromUI({ type: "send", text: "hi" });
+    await flush();
+    expect(runningStart).toHaveBeenCalledWith("sess-0");
+    expect(runningEnd).not.toHaveBeenCalled();
+
+    handles[0].emitTurnEnd();
+    await flush();
+    expect(runningEnd).toHaveBeenCalledWith("sess-0", "turn-1");
+  });
+
+  it("an interrupted turn ends the marker too (interrupt fires the same turn-end path)", async () => {
+    const runningStart = vi.fn(async () => "turn-1");
+    const runningEnd = vi.fn(async () => {});
+    const { fromUI, handles } = harness({ rt: { runningStart, runningEnd } });
+
+    fromUI({ type: "send", text: "hi" });
+    await flush();
+    fromUI({ type: "interrupt" });
+    handles[0].emitTurnEnd(); // the engine acks the interrupt as a turn end
+    await flush();
+    expect(runningEnd).toHaveBeenCalledWith("sess-0", "turn-1");
+  });
+
+  it("merges live markers from other devices into the sessions frame's running list", async () => {
+    const runningRemote = vi.fn(async () => ["remote-sess"]);
+    const { fromUI, transport } = harness({ rt: { runningRemote } });
+
+    fromUI({ type: "ready" });
+    await flush();
+    const frames = transport.send.mock.calls.map((c: any[]) => c[0]).filter((m: any) => m?.type === "sessions");
+    expect(frames.length).toBeGreaterThan(0);
+    expect(frames[frames.length - 1].running).toContain("remote-sess");
+  });
+
+  it("a failing remote-marker read never breaks the session list", async () => {
+    const runningRemote = vi.fn(async () => { throw new Error("cloud down"); });
+    const { fromUI, transport } = harness({ rt: { runningRemote } });
+
+    fromUI({ type: "ready" });
+    await flush();
+    const frames = transport.send.mock.calls.map((c: any[]) => c[0]).filter((m: any) => m?.type === "sessions");
+    expect(frames.length).toBeGreaterThan(0);
+    expect(frames[frames.length - 1].running).toEqual([]);
   });
 });

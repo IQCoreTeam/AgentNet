@@ -1,0 +1,10 @@
+{
+  "name": "agentnet-desktop",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Native desktop shell (Tauri v2) that spawns the agentnet-localhost server and opens the same-origin SPA at http://localhost:4317.",
+  "scripts": {
+    "dev": "cargo run --manifest-path src-tauri/Cargo.toml",
+    "build": "cargo build --manifest-path src-tauri/Cargo.toml"
+  }
+}

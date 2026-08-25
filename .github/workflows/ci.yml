@@ -1,0 +1,48 @@
+name: ci
+# Correctness gate for the TypeScript surface: run the agent-sdk vitest suite
+# plus the runtime smoke test, typecheck the packages that own a tsconfig, and
+# build the TS packages (tsup transpiles without checking types, so the typecheck
+# steps above are the real type gate). Mirrors the android-* workflows' toolchain
+# (pnpm 9, node 22, frozen lockfile) so a clean checkout matches CI exactly.
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+
+      - name: Test (agent-sdk vitest suite)
+        run: pnpm --filter @iqlabs-official/agent-sdk test
+
+      # The runtime smoke test (pnpm run test:run) is intentionally NOT run here:
+      # it drives the real claude + codex CLIs and needs them installed and logged
+      # in, which a CI runner has not. Keep it as a local/manual integration check.
+
+      - name: Typecheck agent-sdk
+        run: pnpm --filter @iqlabs-official/agent-sdk exec tsc --noEmit
+      - name: Typecheck CLI
+        run: pnpm --filter agentnet-cli exec tsc --noEmit
+      - name: Typecheck localhost
+        run: pnpm --filter agentnet-localhost exec tsc --noEmit
+
+      # agent-sdk has no build step here on purpose: its package.json `build`
+      # (bare tsup, no config/entry) fails on any clean checkout, and the package
+      # is consumed as TypeScript source by the surfaces; its type safety is the
+      # tsc step above.
+      - name: Build CLI
+        run: pnpm --filter agentnet-cli build
+      - name: Build MCP server
+        run: pnpm --filter @iqlabs-official/agentnet-mcp build

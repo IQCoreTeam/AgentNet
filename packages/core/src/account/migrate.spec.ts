@@ -73,9 +73,11 @@ describe("account/migrate — session re-key between wallets", () => {
     // A fresh store under B reads everything back — identity fields and full transcript.
     const dst = storeFor(walletB);
     const listed = await dst.listMine();
-    expect(listed.map((s) => s.sessionId)).toEqual(["s1", "s2"]); // ts-desc order
-    expect(listed[0]).toMatchObject({ title: "long session", cli: "claude", ts: 2000, lastDevice: { id: "device-A", label: "Device A" } });
-    expect(listed[1]).toMatchObject({ title: "short session", cli: "claude", ts: 1000 });
+    expect(listed.map((s) => s.sessionId)).toEqual(["s1", "s2"]); // last-activity ts, desc
+    // listMine reports LAST-ACTIVITY ts (the newest message's ts), not the meta creation
+    // ts; the meta ts is preserved on disk and still comes back via load() below.
+    expect(listed[0]).toMatchObject({ title: "long session", cli: "claude", ts: msg(over - 1).ts, lastDevice: { id: "device-A", label: "Device A" } });
+    expect(listed[1]).toMatchObject({ title: "short session", cli: "claude", ts: msg(2).ts });
 
     const srcS1 = await storeFor(walletA).load("s1");
     const dstS1 = await dst.load("s1");

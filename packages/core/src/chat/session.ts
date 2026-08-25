@@ -253,6 +253,10 @@ export function createChatSession(
   // Parked handles to stop the moment their background turn ends (flagged on switch-away
   // from a busy session). Cleared if you switch back before that turn ends.
   const retire = new Set<SessionHandle>();
+  // Running Sync (issue #129): per-handle turnId of the cross-device RUNNING marker
+  // written at turn start (a promise - marker writes never block the send path);
+  // onTurnEnd awaits it to write the matching `ended` mark, and only that turn's.
+  const turnMarks = new Map<SessionHandle, Promise<string | null>>();
 
   function isVisibleHandle(forCli: "claude" | "codex", h: SessionHandle): boolean {
     return cli === forCli && slots[forCli].handle === h;
@@ -272,6 +276,13 @@ export function createChatSession(
     if (s.restage === h) s.restage = null;
     busy.delete(h);
     retire.delete(h);
+    // Running Sync: an app-controlled stop (clear, delete) ends the turn without
+    // ever reaching onTurnEnd, so close the cross-device marker here too or other
+    // devices would show RUNNING for the full expiry window. Best-effort like the
+    // normal turn-end write.
+    const mark = turnMarks.get(h);
+    turnMarks.delete(h);
+    if (mark && rt.runningEnd) void mark.then((turnId) => (turnId ? rt.runningEnd!(h.sessionId, turnId) : undefined)).catch(() => {});
     h.stop();
   }
 
@@ -308,6 +319,13 @@ export function createChatSession(
     });
     h.onTurnEnd(async () => {
       busy.delete(h);
+      // Running Sync (issue #129): close this turn's cross-device marker (interrupt
+      // lands here too, so an interrupted turn writes `ended` like a normal one).
+      // Best-effort and fire-and-forget - a cloud hiccup just leaves the marker to
+      // its fixed expiry, which readers already treat as ended.
+      const mark = turnMarks.get(h);
+      turnMarks.delete(h);
+      if (mark && rt.runningEnd) void mark.then((turnId) => (turnId ? rt.runningEnd!(h.sessionId, turnId) : undefined)).catch(() => {});
       if (isVisibleHandle(forCli, h)) transport.send({ type: "turnEnd" }); // stop the typing dots
       await pushSessions();
       // A backgrounded session that just finished its in-flight turn is retired here:
@@ -430,6 +448,11 @@ export function createChatSession(
     // approval-blocked) session alive on switch-away; an idle one is stopped instead.
     const h = s.handle!;
     busy.add(h);
+    // Running Sync (issue #129): publish this turn's cross-device RUNNING marker
+    // (fixed TTL; closed in wire()'s onTurnEnd). Fire-and-forget - the send must
+    // never wait on a cloud write; the turnId promise is kept so the end write
+    // closes exactly this turn's marker.
+    if (rt.runningStart) turnMarks.set(h, rt.runningStart(h.sessionId).catch(() => null));
     // Turn just started: re-push so surfaces flip this session to RUNNING now (the
     // matching clear already happens in wire()'s onTurnEnd). Fire-and-forget so the
     // send isn't delayed by the session-list read.
@@ -438,13 +461,20 @@ export function createChatSession(
   }
 
   async function pushSessions() {
-    const list = await rt.listSessions();
+    // Running Sync (issue #129): sessions with a LIVE marker from ANOTHER device ride
+    // the same `running` list, so a turn started elsewhere badges RUNNING here too.
+    // Read in parallel with the session list (both are one storage round-trip) and
+    // best-effort - a cloud hiccup must never break the local list.
+    const [list, remote] = await Promise.all([
+      rt.listSessions(),
+      rt.runningRemote ? rt.runningRemote().catch(() => [] as string[]) : [],
+    ]);
     const activeId = slot().handle?.sessionId ?? slot().pendingId;
     // Sessions with a turn in flight, keyed by sessionId, so every surface can paint a
     // per-session RUNNING marker. Read straight off `busy` (the source of truth): it
     // mutates only at turn start/end and this push fires at both edges, so it stays live
     // with no polling. Dedupe (a cross-cli session could appear once per slot).
-    const running = [...new Set([...busy].map((h) => h.sessionId).filter(Boolean))];
+    const running = [...new Set([...busy].map((h) => h.sessionId).filter(Boolean).concat(remote))];
     // cloud reflects THIS list's union (read after listSessions): "reauth"/"transient"
     // mean the cloud tier failed and `list` is silently local-only — the UI labels it
     // so missing remote sessions read as "sync is down", not "they don't exist".

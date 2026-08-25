@@ -19,7 +19,7 @@ describe("core/dasSource", () => {
     vi.unstubAllGlobals();
   });
 
-  it("falls back to the public-devnet default when no RPC is configured (issue #23)", async () => {
+  it("falls back to the public-mainnet default when no RPC is configured (issue #23)", async () => {
     process.env[SKILLS] = "SkiLLCoLLecTion1111111111111111111111111111";
     let calledUrl = "";
     vi.stubGlobal("fetch", vi.fn().mockImplementation(async (url: string) => {
@@ -27,10 +27,10 @@ describe("core/dasSource", () => {
       return { json: async () => ({ result: { items: [] } }) };
     }));
     await expect(dasSource.listSkills()).resolves.toEqual([]);
-    expect(calledUrl).toContain("devnet"); // resolveRpcUrl() supplied the default
+    expect(calledUrl).toContain("mainnet"); // resolveRpcUrl() supplied the default
   });
 
-  // (No "no collection mint" test: seed.ts ships default devnet collection ids,
+  // (No "no collection mint" test: seed.ts ships default mainnet collection ids,
   // so a collection is always configured unless explicitly overridden.)
 
   it("builds a getAssetsByGroup(collection) request and parses items into Skill[]", async () => {

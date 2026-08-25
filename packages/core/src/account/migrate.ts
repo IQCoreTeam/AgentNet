@@ -36,6 +36,12 @@ export async function migrateSessions(
         report.skipped += 1;
         continue;
       }
+      // Write the SOURCE's stored meta (load(): newest readable page wins) into the
+      // destination, not the listMine row: listMine derives ts from last activity
+      // (store.ts lastActivityTs), so stamping ITS ts into the copy would replace the
+      // session's stored creation ts. load()'s meta is the stored truth, ts/model/
+      // effort included, which keeps the copy meta-faithful to the source.
+      const { messages: _msgs, ...srcMeta } = session;
       let start = 0;
       if (existing.has(meta.sessionId)) {
         const current = await destination.load(meta.sessionId);
@@ -53,10 +59,10 @@ export async function migrateSessions(
         start = current.messages.length; // resume: append only the missing tail
       }
       if (session.messages.length === 0) {
-        await destination.recordMeta(meta); // meta-only session still shows up in lists
+        await destination.recordMeta(srcMeta); // meta-only session still shows up in lists
       } else {
         for (const m of session.messages.slice(start)) {
-          await destination.appendMessage(meta, m);
+          await destination.appendMessage(srcMeta, m);
           report.messages += 1;
         }
       }
