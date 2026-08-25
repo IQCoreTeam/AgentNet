@@ -179,3 +179,15 @@ export function CollectionIcon(props: IconProps) {
     </svg>
   );
 }
+
+// The Solana mark (the official three slanted bars), sized for inline text
+// use next to SOL amounts. currentColor so it inherits the amount's tone.
+export function SolIcon(props: IconProps) {
+  return (
+    <svg width="10" height="8" viewBox="0 0 398 312" fill="currentColor" style={{ display: "inline-block", verticalAlign: "-0.5px" }} aria-label="SOL" {...props}>
+      <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1l62.7-62.7z"/>
+      <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z"/>
+      <path d="M333.1 120.9c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z"/>
+    </svg>
+  );
+}

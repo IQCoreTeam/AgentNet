@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { SolIcon } from "../icons";
 import type { SkillCard } from "../transport/protocol";
 import { skillSigilSvg } from "./skillSigil";
 
@@ -11,7 +12,7 @@ const SCANLINES = "repeating-linear-gradient(0deg, rgba(0,0,0,0.22) 0, rgba(0,0,
 
 export function SkillReceiptOverlay({ card, onClick }: { card: SkillCard; onClick?: () => void }) {
   const sigil = useMemo(() => skillSigilSvg(card.name, card.category), [card.name, card.category]);
-  const paid = card.price && card.price !== "0" ? `${(Number(card.price) / 1e9).toFixed(2)} ◎` : "FREE";
+  const paidSol = card.price && card.price !== "0" ? (Number(card.price) / 1e9).toFixed(2) : null;
   const mint = card.id ? `${card.id.slice(0, 4)}…${card.id.slice(-4)}` : "-";
   const kindLabel = card.type === "workflow" ? "Workflow" : "Skill";
 
@@ -34,7 +35,7 @@ export function SkillReceiptOverlay({ card, onClick }: { card: SkillCard; onClic
           <div className="flex min-w-0 flex-1 flex-col gap-2 pt-0.5">
             <span className="an-rcpt-k">{kindLabel}</span>
             <p className="an-rcpt-name">&gt;{card.name}<span className="unlock-cursor">_</span></p>
-            <div className="an-rcpt-row"><span className="an-rcpt-k">Paid</span><span>{paid}</span></div>
+            <div className="an-rcpt-row"><span className="an-rcpt-k">Paid</span><span>{paidSol ? <>{paidSol} <SolIcon width={8} height={6.5} /></> : "FREE"}</span></div>
             <div className="an-rcpt-row"><span className="an-rcpt-k">Mint</span><span style={{ color: "var(--an-green)" }}>{mint}</span></div>
             <div className="mt-auto flex flex-col gap-1.5">
               <span className="an-rcpt-k">Sync</span>

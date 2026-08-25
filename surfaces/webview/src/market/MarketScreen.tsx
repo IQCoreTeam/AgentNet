@@ -9,7 +9,7 @@ import type { SkillCard } from "../transport/protocol";
 import { HeliusSetupPanel } from "../settings/HeliusKeyForm";
 import { SkillDetailSkeleton, MarketListSkeleton, AgentProfileSkeleton } from "./Skeletons";
 import { LockedGate, useUnlock } from "../unlock/UnlockProvider";
-import { LockIcon } from "../icons";
+import { LockIcon, SolIcon } from "../icons";
 import { AlertCard } from "../Alert";
 import { haptics } from "../haptics";
 
@@ -223,14 +223,24 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
         {/* SKILLS: SOL balance + owned-count readout (stacked, right-aligned) */}
         {isSkills && (
           <div className="shrink-0 text-right">
-            {balanceSol && <div className="an-term-mono text-[13px] font-bold leading-none" style={{ color: "var(--an-term-fg-2)", letterSpacing: "0.5px" }}>{balanceSol} ◎</div>}
+            {balanceSol && <div className="an-term-mono flex items-center justify-end gap-1.5 text-[13px] font-bold leading-none" style={{ color: "var(--an-term-fg-2)", letterSpacing: "0.5px" }}>{balanceSol} <SolIcon /></div>}
             <div className="an-term-mono text-[8px] font-bold tracking-wider" style={{ color: "var(--an-term-fg-7)", marginTop: "5px" }}>[ {state.marketOwned.length} OWNED ]</div>
           </div>
         )}
-        {/* MARKET: SOL balance + publish */}
-        {isMarket && balanceSol && <span className="an-term-mono shrink-0 text-xs font-bold" style={{ color: "var(--an-term-fg-2)", letterSpacing: "0.5px" }}>{balanceSol} ◎</span>}
+        {/* MARKET: SOL balance (taps through to your own agent profile) + publish */}
+        {isMarket && balanceSol && (
+          <button
+            onClick={() => { if (state.walletAddress) send({ type: "getAgentProfile", wallet: state.walletAddress }); }}
+            disabled={!state.walletAddress}
+            aria-label="Your agent profile"
+            className="an-term-mono flex shrink-0 items-center gap-1.5 self-center text-xs font-bold active:opacity-80"
+            style={{ color: "var(--an-term-fg-2)", letterSpacing: "0.5px" }}
+          >
+            {balanceSol} <SolIcon />
+          </button>
+        )}
         {isMarket && (
-          <LockedGate reason="publish" onUnlocked={() => setView("publish")} className="shrink-0" badge={false}>
+          <LockedGate reason="publish" onUnlocked={() => setView("publish")} className="shrink-0 self-center" badge={false}>
             <button
               onClick={() => setView("publish")}
               className="an-term-mono text-[10px] font-bold uppercase tracking-wider active:opacity-80"
@@ -273,11 +283,17 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
         </button>
       )}
       {isMarket && state.rpcStatus?.hasKey && (
-        <div className="mx-3 mt-2 shrink-0 flex items-center gap-1.5 rounded-lg border border-green-800/40 bg-green-900/10 px-3 py-1.5 text-[11px] text-green-500">
-          <span>●</span>
-          <span>{state.rpcStatus.network} · {state.rpcStatus.masked}</span>
-          <button onClick={() => setView("helius")} className="ml-auto text-zinc-600 hover:text-zinc-400">⚙</button>
-        </div>
+        <button
+          onClick={() => setView("helius")}
+          className="an-bracket mx-3.5 mt-2.5 shrink-0 flex items-center gap-2.5 px-3 py-2.5 active:opacity-80"
+          style={{ border: "1px solid var(--an-term-green-line)", color: "var(--an-term-green)", "--ts": "8px", "--bk": "var(--an-term-green-bg)", "--tk": "var(--an-term-green-line)" } as CSSProperties}
+        >
+          <span style={{ fontSize: "8px" }}>●</span>
+          <span className="an-term-mono flex-1 text-left text-[10px] font-bold tracking-wide">
+            <span className="uppercase">{state.rpcStatus.network}</span> · {state.rpcStatus.masked}
+          </span>
+          <span className="an-term-mono font-bold">›</span>
+        </button>
       )}
 
       {/* Browse tabs (market only): skill / workflow — agents moved to their own Agent tab */}
@@ -294,7 +310,10 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
                   : "border-transparent text-zinc-500 active:text-zinc-300",
               ].join(" ")}
             >
-              {t}s
+              <div>{t}s</div>
+              <div style={{ fontFamily: "'Noto Sans JP', sans-serif", fontWeight: 500, fontSize: "8px", marginTop: "3px", color: view === "browse" && state.marketTab === t ? "var(--an-term-fg-7)" : "var(--an-term-line-3)" }}>
+                {t === "skill" ? "スキル" : "ワークフロー"}
+              </div>
             </button>
           ))}
           {/* HIDE OWNED filter — on by default so the grid surfaces NEW skills */}
