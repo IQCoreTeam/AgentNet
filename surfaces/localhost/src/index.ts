@@ -1377,8 +1377,19 @@ http.listen(PORT, () => {
 // listen: a UI that attaches mid-reconnect sees guest until its next `ready`.
 void (async () => {
   if ((await loadWalletMode()) !== "local") return;
+  // Guarded against the user acting first (issue #204): this task races the UI.
+  // On a slow cold start (Android under proot especially) the user can hit
+  // Disconnect while the reconnect is still loading the keypair; an unguarded
+  // adopt then resurrects the wallet they just removed and re-persists "local",
+  // so the disconnect silently never takes effect. Any explicit wallet action
+  // bumps walletEpoch, so: bail if the epoch moved while we loaded, and skip
+  // the mode re-save if it moved after the adopt. The explicit action wins.
+  const epoch = walletEpoch;
   try {
-    await connectLocalWallet();
+    const loaded = await localWallet();
+    if (walletEpoch !== epoch) return; // user connected/disconnected first
+    await adoptWallet(loaded.wallet, loaded.address);
+    if (walletEpoch === epoch + 1) await saveWalletMode("local");
     console.log(`AgentNet wallet → local wallet reconnected (${walletAddress})`);
   } catch (e) {
     console.error("[wallet] local wallet reconnect failed:", e);
