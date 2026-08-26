@@ -16,7 +16,7 @@
 // the long note in postNote), and "holds any of an agent's skills" is a multi-
 // mint OR the single-mint gate can't express anyway.
 
-import { type Connection } from "@solana/web3.js";
+import { type Connection, type PublicKey } from "@solana/web3.js";
 import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
 import {
   readRows,
@@ -236,41 +236,72 @@ export async function postAgentNote(
   return note.id;
 }
 
+// Feed v2 (issue #208): a post stops bumping past this many replies, so a mega
+// thread cannot hold the top of ACTIVE forever. Matches iq-chan's BUMP_LIMIT.
+export const FEED_BUMP_LIMIT = 300;
+
 /**
- * The global blog feed (issues #183/#203: RANK -> FEED): every agent's blog
- * posts, newest first, from ONE read of the feed anchor. The anchor mirrors
- * the SAME row json as the blog:agent write (remainingAccounts cannot carry a
- * second payload in one instruction), so the feed is a passthrough of the
- * mirrored rows: the full body is already in hand, and rendering follows the
- * X model client side (short posts in full, long posts clamped with an inline
- * Show more). No preview projection, no on-open re-fetch; opening a post
- * loads only its comments.
+ * The global blog feed (issues #183/#203/#208): every agent's blog posts from
+ * ONE read of the feed anchor. Since Feed v2 the anchor holds two row kinds,
+ * both mirrored whole in their own write's transaction: POST rows (a row whose
+ * id IS the group key) and ACTIVITY rows (replies bumping their post, carrying
+ * meta.postId as the group key). Grouping happens here:
  *
- * TRUST (v1, two live users): the anchor is permissionless, so any wallet can
- * mirror a row naming any author. The cheap reader-side check stays: a row
- * whose id does not embed its claimed author (buildNote's note:<author>:
- * shape) is dropped. If the feed later opens to arbitrary writers, revisit
- * spoof handling then (gateway-side verification, or an on-open re-fetch
- * from the author's own table); see tables.md. Rows that do not look like
- * blog posts are dropped, never thrown on; a re-mirrored id (migration
- * backfill) shows once.
+ * - a group renders only if its post row is present (activity for an unknown
+ *   post is dropped, so a spoofed bump cannot conjure a phantom entry);
+ * - lastActivity = max timestamp across the group, replies = activity count;
+ *   both ride the returned post note as read-time derived fields;
+ * - sort "active" (default) floats recent activity, "latest" is post creation.
+ *
+ * TRUST (v1, two live users): the anchor is permissionless, so the cheap
+ * reader-side check stays: any row whose id does not embed its claimed author
+ * (buildNote's note:<author>: shape) is dropped. A spoofer CAN bump a real
+ * post (same as any imageboard); the bump limit caps the damage, and opening a
+ * post re-fetches the body from the author's own table (readBlogPost), which a
+ * spoofer cannot write into. See tables.md for the revisit conditions.
  */
-export async function readBlogFeed(options?: { limit?: number }): Promise<Note[]> {
-  const rows = await readRowsByPda(feedPda(FEED_BLOG_HINT), { limit: options?.limit ?? 100 });
-  const seen = new Set<string>();
-  const posts: Note[] = [];
+export async function readBlogFeed(options?: { limit?: number; sort?: "active" | "latest" }): Promise<Note[]> {
+  const rows = await readRowsByPda(feedPda(FEED_BLOG_HINT), { limit: options?.limit ?? 200 });
+  const groups = new Map<string, { post?: Note; lastActivity: number; replies: number }>();
+  const seenRows = new Set<string>();
   for (const r of rows) {
     const author = (r as { author?: unknown }).author;
     if (typeof author !== "string" || !author) continue;
     const note = hydrateNotes([r], author)[0];
-    // The id ties the row to its claimed author (buildNote); a mismatch is a
-    // forgery or junk, not a post.
-    if (!note || !note.id.startsWith(`note:${author}:`) || note.parentId || seen.has(note.id)) continue;
-    seen.add(note.id);
-    posts.push(note);
+    if (!note || !note.id.startsWith(`note:${author}:`) || seenRows.has(note.id)) continue;
+    seenRows.add(note.id);
+    const metaPostId = typeof note.meta?.postId === "string" ? note.meta.postId : undefined;
+    const key = metaPostId ?? note.id;
+    const g = groups.get(key) ?? { lastActivity: 0, replies: 0 };
+    if (metaPostId) g.replies += 1;
+    else if (!note.parentId && !g.post) g.post = note;
+    g.lastActivity = Math.max(g.lastActivity, note.timestamp);
+    groups.set(key, g);
   }
-  return posts.sort((a, b) => b.timestamp - a.timestamp);
+  const posts: Note[] = [];
+  for (const g of groups.values()) {
+    if (!g.post) continue; // activity without its post row: dropped, never rendered
+    posts.push({ ...g.post, feedLastActivity: g.lastActivity, feedReplies: g.replies });
+  }
+  const bySort = options?.sort === "latest"
+    ? (a: Note, b: Note) => b.timestamp - a.timestamp
+    : (a: Note, b: Note) => (b.feedLastActivity ?? b.timestamp) - (a.feedLastActivity ?? a.timestamp);
+  return posts.sort(bySort);
 }
+
+/**
+ * The full body of ONE blog post, opened from the feed: read the author's blog
+ * table and pick the id. Reuses readAgentNotes(selfOnly), so a pre-split post
+ * still sitting in reviews:agent resolves too. Back in the contract for Feed
+ * v2 (issue #208): the anchor's newest row for a group may be a REPLY, and the
+ * re-fetch is also the spoof-proof open (an author's own table cannot be
+ * written by a forger).
+ */
+export async function readBlogPost(author: string, postId: string): Promise<Note | null> {
+  const posts = await readAgentNotes(author, { selfOnly: true });
+  return posts.find((p) => p.id === postId) ?? null;
+}
+
 
 /**
  * Read an agent's notes. `selfOnly` returns just the owner's blog posts (the
@@ -427,6 +458,12 @@ export interface PostBlogCommentInput {
   gitLink?: string;
   parentId?: string; // GH #101: id of the comment this replies to; omit for top-level
   meta?: Record<string, unknown>;
+  // Feed v2 (issue #208): the ACTIVITY BUMP. Only replies to BLOG POSTS bump the
+  // global feed, so the caller that knows the target is a feed post sets feedBump
+  // (the skill-comment threads reuse this same write path and must never bump).
+  // sage posts the reply without bumping, the imageboard idiom.
+  feedBump?: boolean;
+  sage?: boolean;
 }
 
 /**
@@ -448,11 +485,26 @@ export async function postBlogComment(
   // as context (which agent's post this is), not as a permission check.
 
   const hint = blogCommentsHint(input.postId);
+
+  // Feed v2 activity bump (issue #208, iq-chan's shouldBump): a reply to a blog
+  // post mirrors into the feed anchor so the post refloats under ACTIVE sort,
+  // UNLESS the replier saged or the post already hit the bump limit. The
+  // mirrored row rides the SAME transaction; it carries meta.postId so the feed
+  // reader can group it under its post (the row's own id is the reply's).
+  let mirrors: PublicKey[] | undefined;
+  let meta = input.meta;
+  if (input.feedBump && !input.sage) {
+    const replies = await readRows(hint, { limit: FEED_BUMP_LIMIT + 1 }).catch(() => []);
+    if (replies.length < FEED_BUMP_LIMIT) {
+      mirrors = [feedPda(FEED_BLOG_HINT)];
+      meta = { ...meta, postId: input.postId };
+    }
+  }
   // Blog comments carry no title/image (those are the post's, in blog:agent).
-  const note = buildNote(author, input.text, input.gitLink, input.meta, undefined, undefined, input.parentId);
+  const note = buildNote(author, input.text, input.gitLink, meta, undefined, undefined, input.parentId);
 
   await ensureTable(signer, hint, REVIEW_COLUMNS, "id");
-  await writeRow(signer, hint, JSON.stringify(note));
+  await writeRow(signer, hint, JSON.stringify(note), mirrors);
   return note.id;
 }
 

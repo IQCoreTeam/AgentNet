@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Connection, Keypair } from "@solana/web3.js";
-import { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes, readBlogFeed } from "./notes.js";
+import { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes, readBlogFeed, readBlogPost, postBlogComment, FEED_BUMP_LIMIT } from "./notes.js";
 import * as chain from "../core/chain.js";
 import * as holdings from "./holdings.js";
 
@@ -229,5 +229,65 @@ describe("notes/blog feed (issues #183/#203)", () => {
     ] as any);
     const posts = await readBlogFeed();
     expect(posts.map((p) => p.text)).toEqual(["real"]);
+  });
+});
+
+describe("notes/feed v2 (issue #208)", () => {
+  let mockConn: any;
+  let signer: Keypair;
+
+  beforeEach(() => {
+    mockConn = {};
+    signer = Keypair.generate();
+    vi.clearAllMocks();
+    vi.mocked(chain.signerAddress).mockResolvedValue(AUTHOR);
+    vi.mocked(chain.readRows).mockResolvedValue([]);
+  });
+
+  it("a feed-bumping reply mirrors into the anchor and carries meta.postId", async () => {
+    await postBlogComment(mockConn as Connection, signer, { postId: "note:P:1:x", agentWallet: "P", text: "gm", feedBump: true });
+    const [, hint, json, mirrors] = vi.mocked(chain.writeRow).mock.calls[0];
+    expect(hint).toBe("comment:blog:note:P:1:x");
+    expect(mirrors).toHaveLength(1);
+    expect(JSON.parse(json as string).meta.postId).toBe("note:P:1:x");
+  });
+
+  it("sage posts the reply without bumping", async () => {
+    await postBlogComment(mockConn as Connection, signer, { postId: "note:P:1:x", agentWallet: "P", text: "gm", feedBump: true, sage: true });
+    expect(vi.mocked(chain.writeRow).mock.calls[0][3]).toBeUndefined();
+  });
+
+  it("a skill-thread reply (no feedBump) never bumps", async () => {
+    await postBlogComment(mockConn as Connection, signer, { postId: "note:C:1:y", agentWallet: "C", text: "re" });
+    expect(vi.mocked(chain.writeRow).mock.calls[0][3]).toBeUndefined();
+    expect(vi.mocked(chain.readRows)).not.toHaveBeenCalled(); // no count read either
+  });
+
+  it("past the bump limit a reply stops bumping", async () => {
+    vi.mocked(chain.readRows).mockResolvedValue(Array.from({ length: FEED_BUMP_LIMIT }, (_, i) => ({ id: `r${i}` })) as any);
+    await postBlogComment(mockConn as Connection, signer, { postId: "note:P:1:x", agentWallet: "P", text: "gm", feedBump: true });
+    expect(vi.mocked(chain.writeRow).mock.calls[0][3]).toBeUndefined();
+  });
+
+  it("readBlogFeed groups activity under its post: ACTIVE refloats, LATEST keeps creation order", async () => {
+    const B = "22222222222222222222222222222222";
+    vi.mocked(chain.readRowsByPda).mockResolvedValue([
+      { id: `note:${AUTHOR}:1:a`, author: AUTHOR, text: "old post", timestamp: 1 },
+      { id: `note:${B}:2:b`, author: B, text: "new post", timestamp: 2 },
+      { id: `note:${B}:9:r`, author: B, text: "reply to old", timestamp: 9, meta: { postId: `note:${AUTHOR}:1:a` } },
+    ] as any);
+    const active = await readBlogFeed({ sort: "active" });
+    expect(active.map((p) => p.text)).toEqual(["old post", "new post"]);
+    expect(active[0].feedReplies).toBe(1);
+    expect(active[0].feedLastActivity).toBe(9);
+    const latest = await readBlogFeed({ sort: "latest" });
+    expect(latest.map((p) => p.text)).toEqual(["new post", "old post"]);
+  });
+
+  it("activity without its post row never renders a phantom entry", async () => {
+    vi.mocked(chain.readRowsByPda).mockResolvedValue([
+      { id: `note:${AUTHOR}:9:r`, author: AUTHOR, text: "bump for nothing", timestamp: 9, meta: { postId: "note:GHOST:1:z" } },
+    ] as any);
+    expect(await readBlogFeed()).toEqual([]);
   });
 });
