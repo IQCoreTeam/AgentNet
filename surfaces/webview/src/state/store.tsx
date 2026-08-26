@@ -641,7 +641,11 @@ function reducer(state: State, ev: Action): State {
     case "agentNoteResult":
       return { ...state, toast: ev.ok ? "Note posted." : `Note failed: ${ev.error ?? "unknown"}` };
     case "notes":
-      return state;
+      // issue #34: refreshed comments pushed after a successful postNote. Write them into
+      // the open detail (matched by mint) so the fresh comment appears without reopening.
+      return state.marketDetail && state.marketDetail.card.id === ev.skillId
+        ? { ...state, marketDetail: { ...state.marketDetail, notes: ev.notes as SkillDetail["notes"] } }
+        : state;
     case "blogComments":
       return { ...state, blogComments: { ...state.blogComments, [ev.postId]: ev.threads } };
     case "blogCommentResult":

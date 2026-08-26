@@ -199,8 +199,9 @@ function VerifiedRepoRow({ repo }: { repo: VRepo }) {
 }
 
 // A GitHub link rendered as an embed card (Repo/PR/File/Commit + label + meta). Shared by
-// the WORK cards and the blog/comment bodies. `className` controls outer spacing.
-function GithubCard({ url, className = "mt-2" }: { url: string; className?: string }) {
+// the WORK cards, the blog/comment bodies, and the skill comment rows (exported like
+// CommentThreadList). `className` controls outer spacing.
+export function GithubCard({ url, className = "mt-2" }: { url: string; className?: string }) {
   const info = parseGithubLink(url);
   if (!info) {
     const safe = safeExternalUrl(url);
@@ -373,7 +374,7 @@ function WorkCard({
   );
 }
 
-interface NoteFields {
+export interface NoteFields {
   text: string;
   title?: string;
   gitLink?: string;
@@ -384,7 +385,7 @@ interface NoteFields {
 // box (holders). Keeps its own draft; the parent owns postAgentNote + success. Empty posts
 // are blocked (need a title OR body); a title-only post is allowed. Image accepts an https
 // link or an on-chain ref (resolved via the gateway on render).
-function NoteComposer({
+export function NoteComposer({
   placeholder,
   submitLabel,
   posting,
@@ -550,7 +551,7 @@ type CommentReply = CommentThread["replies"][number];
 // Threaded comment list (GH #101): top-level comments, each with its replies collapsed to one
 // indented level; Reply opens an inline composer. Shared by the agent-profile comment wall and
 // a blog post's own comment thread (comment:blog:<postId>), so both render identically.
-function CommentThreadList({ threads, canPost, posting, replyTo, setReplyTo, onReply }: {
+export function CommentThreadList({ threads, canPost, posting, replyTo, setReplyTo, onReply }: {
   threads: CommentThread[];
   canPost: boolean;
   posting: boolean;
