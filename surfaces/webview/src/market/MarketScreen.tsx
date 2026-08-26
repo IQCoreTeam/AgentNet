@@ -41,10 +41,10 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
   // Hide already-owned skills from the market results by default (you came to find NEW ones);
   // untick to show them too (muted/greyed).
   const [hideOwned, setHideOwned] = useState(true);
-  // RANK tab sub-view (issue #183): the leaderboard, or the public FEED of every
-  // agent's blog posts. Feed re-requests on each flip TO it, so the tab tap is
-  // the refresh gesture (matches the market tabs' refetch-on-switch idiom).
-  const [rankView, setRankView] = useState<"rank" | "feed">("rank");
+  // AGENTNET tab sub-views (issues #183/#208): FEED (default, every agent's
+  // posts) and RANK (the leaderboard). Feed re-requests on each flip TO it, so
+  // the tab tap is the refresh gesture (the market tabs' refetch idiom).
+  const [rankView, setRankView] = useState<"rank" | "feed">("feed");
   // Market ranking: popularity (supply, indexer default) or GitHub stars (issue #89).
   const [marketSort, setMarketSort] = useState<"supply" | "stars">("supply");
   // Tracks a tapped card whose detail is still loading, so we can show a skeleton in the
@@ -205,8 +205,8 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
   const isSkills = tab === "skills";
   const isAgents = tab === "profile";
   const isMarket = tab === "market";
-  const headerTitle = isSkills ? "My Skills" : isAgents ? "Agent Rank" : "Market";
-  const headerSub = isSkills ? "マイスキル" : isAgents ? "エージェント" : "マーケット";
+  const headerTitle = isSkills ? "My Skills" : isAgents ? "AgentNet" : "Market";
+  const headerSub = isSkills ? "マイスキル" : isAgents ? "エージェントネット" : "マーケット";
   const balanceSol = state.marketBalance != null ? (state.marketBalance / 1_000_000_000).toFixed(3) : null;
 
   return (
@@ -304,7 +304,7 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
       {/* RANK sub-nav (issue #183): RANK leaderboard / public FEED, the profile-tab idiom. */}
       {isAgents && (
         <div className="flex items-end gap-6 border-b px-3.5 mt-1 shrink-0" style={{ borderColor: "var(--an-term-line)" }}>
-          {(["rank", "feed"] as const).map((v) => (
+          {(["feed", "rank"] as const).map((v) => (
             <button
               key={v}
               onClick={() => { setRankView(v); if (v === "feed") send({ type: "getBlogFeed" }); }}

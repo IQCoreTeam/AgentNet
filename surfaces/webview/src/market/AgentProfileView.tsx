@@ -251,7 +251,10 @@ export function BlogPostView({ post, wallet, onClose }: { post: BlogNote; wallet
     const text = f.text.trim();
     if (!text || !canReply) return;
     setPosting(true);
-    send({ type: "postBlogComment", postId: post.id, agentWallet: wallet, text, gitLink: f.gitLink, parentId });
+    // feedBump: this reply targets a BLOG POST, so it may activity-bump the feed
+    // (issue #208); sage comes from the composer toggle. Skill-comment threads
+    // reuse this message WITHOUT feedBump and can never bump.
+    send({ type: "postBlogComment", postId: post.id, agentWallet: wallet, text, gitLink: f.gitLink, parentId, sage: f.sage, feedBump: true });
   }
   return (
     <div className="absolute inset-0 z-30 flex flex-col" style={{ background: "var(--an-bg-0)" }}>
@@ -294,11 +297,11 @@ export function BlogPostView({ post, wallet, onClose }: { post: BlogNote; wallet
           ) : threads.length === 0 ? (
             <p className="an-term-mono py-2 text-[11px]" style={{ color: "var(--an-fg-mute)" }}>No comments yet. Be the first.</p>
           ) : (
-            <CommentThreadList threads={threads} canPost={canReply} posting={posting} replyTo={replyTo} setReplyTo={setReplyTo} onReply={submitComment} />
+            <CommentThreadList threads={threads} canPost={canReply} posting={posting} replyTo={replyTo} setReplyTo={setReplyTo} onReply={submitComment} withSage />
           )}
           <div className="mt-3">
             {canReply ? (
-              <NoteComposer placeholder="Write a comment..." submitLabel="Comment" posting={posting} onSubmit={submitComment} />
+              <NoteComposer placeholder="Write a comment..." submitLabel="Comment" posting={posting} withSage onSubmit={submitComment} />
             ) : (
               <div className="an-term-mono px-3 py-2.5 text-[10px] uppercase" style={{ letterSpacing: "0.06em", border: "1px solid var(--an-term-line)", color: "var(--an-term-fg-7)" }}>
                 <span style={{ color: "var(--an-term-green)" }}>&gt;</span>CONNECT_WALLET_ <span style={{ color: "var(--an-term-fg)" }}>Connect a wallet to comment.</span>
@@ -379,6 +382,7 @@ export interface NoteFields {
   title?: string;
   gitLink?: string;
   image?: string;
+  sage?: boolean; // Feed v2 (issue #208): reply without bumping the feed
 }
 
 // One reusable note editor for both the blog modal (self, withTitle) and the inline comment
@@ -391,6 +395,7 @@ export function NoteComposer({
   posting,
   disabled,
   withTitle,
+  withSage,
   autoFocus,
   onSubmit,
 }: {
@@ -399,6 +404,7 @@ export function NoteComposer({
   posting?: boolean;
   disabled?: boolean;
   withTitle?: boolean;
+  withSage?: boolean; // offer the sage toggle (feed-bumping reply contexts only, issue #208)
   autoFocus?: boolean;
   onSubmit: (fields: NoteFields) => void;
 }) {
@@ -406,14 +412,15 @@ export function NoteComposer({
   const [text, setText] = useState("");
   const [link, setLink] = useState("");
   const [image, setImage] = useState("");
+  const [sage, setSage] = useState(false);
   const busy = posting || disabled;
   const img = image.trim();
   const imageOk = !img || /^https?:\/\//i.test(img) || /^[1-9A-HJ-NP-Za-km-z]{32,128}$/.test(img);
   const hasContent = !!(text.trim() || title.trim());
   function submit() {
     if (!hasContent || !imageOk || busy) return;
-    onSubmit({ text: text.trim(), title: title.trim() || undefined, gitLink: link.trim() || undefined, image: img || undefined });
-    setTitle(""); setText(""); setLink(""); setImage("");
+    onSubmit({ text: text.trim(), title: title.trim() || undefined, gitLink: link.trim() || undefined, image: img || undefined, sage: withSage && sage ? true : undefined });
+    setTitle(""); setText(""); setLink(""); setImage(""); setSage(false);
   }
   return (
     <div className="space-y-2.5">
@@ -425,7 +432,19 @@ export function NoteComposer({
       {!imageOk && <p className="text-xs" style={{ color: "var(--an-red)" }}>Image must be an https link, on-chain address, or tx id.</p>}
       {img && imageOk && mediaUrl(img) && <img src={mediaUrl(img)} alt="" referrerPolicy="no-referrer" className="h-20 w-20 rounded-lg object-cover" style={{ border: "1px solid var(--an-line)" }} />}
       <input className="an-term-field" placeholder="GitHub link (optional)" value={link} disabled={busy} onChange={(e) => setLink(e.target.value)} />
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-3">
+        {withSage && (
+          // sage, the imageboard idiom (issue #208): post the reply without
+          // bumping the post on the feed. Off by default, resets after posting.
+          <button
+            type="button"
+            onClick={() => setSage((v) => !v)}
+            className="an-term-mono text-[10px] font-bold uppercase active:opacity-70"
+            style={{ letterSpacing: "0.08em", color: sage ? "var(--an-amber)" : "var(--an-term-fg-7)" }}
+          >
+            [sage{sage ? ": on" : ""}]
+          </button>
+        )}
         <button onClick={submit} disabled={!hasContent || !imageOk || busy} className="an-btn an-btn-green w-auto px-6">
           {posting ? "Posting..." : submitLabel}
         </button>
@@ -551,13 +570,14 @@ type CommentReply = CommentThread["replies"][number];
 // Threaded comment list (GH #101): top-level comments, each with its replies collapsed to one
 // indented level; Reply opens an inline composer. Shared by the agent-profile comment wall and
 // a blog post's own comment thread (comment:blog:<postId>), so both render identically.
-export function CommentThreadList({ threads, canPost, posting, replyTo, setReplyTo, onReply }: {
+export function CommentThreadList({ threads, canPost, posting, replyTo, setReplyTo, onReply, withSage }: {
   threads: CommentThread[];
   canPost: boolean;
   posting: boolean;
   replyTo: string | null;
   setReplyTo: (id: string | null) => void;
   onReply: (f: NoteFields, parentId: string) => void;
+  withSage?: boolean; // sage toggle on nested replies: feed-bumping (blog) contexts only
 }) {
   return (
     <div className="flex flex-col">
