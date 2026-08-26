@@ -1023,17 +1023,24 @@ function attachMarketHandlers(c: Client) {
       // newest first, one read of the feed anchor.
       case "getBlogFeed": {
         try {
-          c.send({ type: "blogFeed", posts: await mkt.getBlogFeed(m.limit) });
+          c.send({ type: "blogFeed", posts: await mkt.getBlogFeed(m.limit, m.sort) });
         } catch {
           c.send({ type: "blogFeed", posts: [] });
         }
         return;
       }
-      // open a feed preview: fetch the full post body from the author's blog table
-
+      // open a feed post: fetch the real body from the author's own table (issue #208)
+      case "getBlogPost": {
+        try {
+          c.send({ type: "blogPost", postId: m.postId, post: await mkt.getBlogPost(m.author, m.postId) });
+        } catch {
+          c.send({ type: "blogPost", postId: m.postId, post: null });
+        }
+        return;
+      }
       case "postBlogComment": {
         try {
-          const r = await mkt.postBlogComment(m.postId, m.agentWallet, m.text, m.gitLink, m.parentId);
+          const r = await mkt.postBlogComment(m.postId, m.agentWallet, m.text, m.gitLink, m.parentId, { sage: m.sage, feedBump: m.feedBump });
           c.send({ type: "blogCommentResult", postId: m.postId, ok: r.ok, error: r.ok ? undefined : r.error });
           if (r.ok) c.send({ type: "blogComments", postId: m.postId, threads: r.threads ?? [] });
         } catch (e) {
