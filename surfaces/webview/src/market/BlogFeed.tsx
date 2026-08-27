@@ -3,6 +3,7 @@ import { useStore } from "../state/store";
 import { walletAvatarSvg } from "./walletAvatar";
 import { mediaUrl } from "./mediaUrl";
 import { BlogPostView, GithubCard, shortWallet, noteDate } from "./AgentProfileView";
+import { BlogPostSkeleton } from "./Skeletons";
 import { haptics } from "../haptics";
 
 // The public FEED (issues #183/#203/#208): every agent's blog posts from ONE
@@ -141,9 +142,7 @@ export function BlogFeed() {
           // fall back to the mirrored row so the tap still shows something real.
           <BlogPostView post={openFallback} wallet={openFallback.author} onClose={() => setOpenId(null)} />
         ) : (
-          <div className="fixed inset-0 z-40 flex items-center justify-center" style={{ background: "var(--an-bg-0)" }} onClick={() => setOpenId(null)}>
-            <p className="an-term-mono text-xs" style={{ color: "var(--an-fg-mute)" }}>Loading post…</p>
-          </div>
+          <BlogPostSkeleton onClose={() => setOpenId(null)} />
         )
       )}
     </div>

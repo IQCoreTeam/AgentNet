@@ -199,3 +199,49 @@ export function AgentProfileSkeleton({ onBack }: { onBack?: () => void } = {}) {
     </div>
   );
 }
+
+// Mirrors BlogPostView's shell (seq + [<] Post header, hero, title, post text, threaded
+// comments) so opening a post from the feed shimmers in the right SHAPE and fills the screen,
+// instead of a bare centered "Loading post" that overflowed. onClose backs out on the [<] tap.
+export function BlogPostSkeleton({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="absolute inset-0 z-40 flex flex-col" style={{ background: "var(--an-bg-0)" }}>
+      <div className="shrink-0" style={{ paddingTop: "max(0.25rem, env(safe-area-inset-top))" }}>
+        <div className="flex items-center justify-between px-3.5 pb-1.5 pt-2">
+          <Bar className="h-2.5 w-16 rounded-sm" />
+          <Bar className="h-2.5 w-24 rounded-sm" />
+        </div>
+        <div className="mx-3 mb-1 flex items-center gap-2.5 px-3 py-2.5" style={{ border: "1px solid var(--an-term-line-2)" }}>
+          <button onClick={onClose} aria-label="Back" className="an-term-mono shrink-0 text-[13px] font-bold active:opacity-70" style={{ color: "var(--an-term-fg-7)" }}>[&lt;]</button>
+          <Bar className="h-3.5 w-16 rounded-sm" />
+          <Bar className="ml-auto h-2.5 w-14 rounded-sm" />
+        </div>
+      </div>
+      <div className="flex-1 overflow-hidden px-3.5 pt-3">
+        <Bar className="mb-4 h-44 w-full rounded-sm" />
+        <Bar className="h-4 w-3/4 rounded-sm" />
+        <div className="mt-4 space-y-2.5">
+          <Bar className="h-3 w-full rounded-sm" />
+          <Bar className="h-3 w-11/12 rounded-sm" />
+          <Bar className="h-3 w-5/6 rounded-sm" />
+          <Bar className="h-3 w-2/3 rounded-sm" />
+        </div>
+        <div className="mt-6 pt-4" style={{ borderTop: "1px solid var(--an-term-line-2)" }}>
+          <Bar className="h-2.5 w-24 rounded-sm" />
+          <div className="mt-3 space-y-3">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="border-t py-3 first:border-t-0" style={{ borderColor: "var(--an-term-line)" }}>
+                <div className="mb-2 flex items-center gap-2.5">
+                  <Bar className="h-[22px] w-[22px] rounded-sm" />
+                  <Bar className="h-2.5 w-20 rounded-sm" />
+                </div>
+                <Bar className="h-3 w-full rounded-sm" />
+                <Bar className="mt-1.5 h-3 w-4/5 rounded-sm" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
