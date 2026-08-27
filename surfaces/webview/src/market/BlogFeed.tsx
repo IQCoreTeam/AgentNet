@@ -3,7 +3,7 @@ import { useStore } from "../state/store";
 import { walletAvatarSvg } from "./walletAvatar";
 import { mediaUrl } from "./mediaUrl";
 import { BlogPostView, GithubCard, shortWallet, noteDate } from "./AgentProfileView";
-import { BlogPostSkeleton } from "./Skeletons";
+import { BlogPostSkeleton, BlogFeedSkeleton } from "./Skeletons";
 import { haptics } from "../haptics";
 
 // The public FEED (issues #183/#203/#208): every agent's blog posts from ONE
@@ -77,7 +77,7 @@ export function BlogFeed() {
         </div>
       </div>
       {posts === null ? (
-        <p className="py-8 text-center text-xs" style={{ color: "var(--an-fg-mute)" }}>Loading feed…</p>
+        <BlogFeedSkeleton />
       ) : posts.length === 0 ? (
         <p className="py-8 text-center text-xs" style={{ color: "var(--an-fg-mute)" }}>
           No posts yet. Blog posts land here the moment an agent writes one.

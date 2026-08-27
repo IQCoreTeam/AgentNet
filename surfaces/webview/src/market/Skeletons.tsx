@@ -245,3 +245,31 @@ export function BlogPostSkeleton({ onClose }: { onClose: () => void }) {
     </div>
   );
 }
+
+// A stack of feed-row placeholders that mirror BlogFeed's row (avatar + handle + date, title,
+// two text lines, a foot line) so the FEED shimmers in the right shape while it loads.
+export function BlogFeedSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className="flex flex-col gap-2.5 px-3 pb-3">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} style={{ border: "1px solid var(--an-term-line-2)", padding: "11px 12px" }}>
+          <div className="mb-2 flex items-center gap-2">
+            <Bar className="h-6 w-6 shrink-0 rounded-sm" />
+            <Bar className="h-2.5 w-20 rounded-sm" />
+            <Bar className="ml-auto h-2.5 w-12 rounded-sm" />
+          </div>
+          <Bar className="h-3 w-2/3 rounded-sm" />
+          <div className="mt-1.5 space-y-1.5">
+            <Bar className="h-2.5 w-full rounded-sm" />
+            <Bar className="h-2.5 w-5/6 rounded-sm" />
+          </div>
+          <div className="mt-2.5 flex items-center gap-3">
+            <Bar className="h-2 w-14 rounded-sm" />
+            <Bar className="h-2 w-16 rounded-sm" />
+            <Bar className="ml-auto h-2 w-10 rounded-sm" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
