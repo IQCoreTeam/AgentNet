@@ -882,7 +882,6 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
         <div className="flex px-3" style={{ background: "var(--an-bg-0)" }}>
           {(["agent", "community"] as const).map((t) => {
             const active = tab === t;
-            const kana = t === "agent" ? "エージェント" : "コミュニティ";
             return (
               <button
                 key={t}
@@ -891,7 +890,6 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                 style={{ paddingTop: "10px", paddingBottom: "13px", borderBottom: active ? "2px solid var(--an-term-fg)" : "1px solid var(--an-term-line)" }}
               >
                 <div className="an-term-mono text-[13px] font-bold uppercase" style={{ letterSpacing: "1.5px", color: active ? "var(--an-term-fg)" : "var(--an-term-fg-7)" }}>{t}</div>
-                <div style={{ fontFamily: "'Noto Sans JP', sans-serif", fontWeight: 500, fontSize: "8px", marginTop: "4px", color: active ? "var(--an-term-fg-7)" : "var(--an-term-line-3)" }}>{kana}</div>
               </button>
             );
           })}
