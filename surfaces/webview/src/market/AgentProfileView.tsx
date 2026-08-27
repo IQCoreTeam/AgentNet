@@ -216,7 +216,7 @@ export function GithubCard({ url, className = "mt-2" }: { url: string; className
       target="_blank"
       rel="noreferrer"
       onClick={(e) => e.stopPropagation()}
-      className={`flex items-center gap-2.5 rounded-md border px-2.5 py-2 active:opacity-80 ${className}`}
+      className={`flex items-center gap-2.5 border px-2.5 py-2 active:opacity-80 ${className}`}
       style={{ background: "var(--an-bg-2)", borderColor: "var(--an-line)" }}
     >
       <GithubMark className="h-5 w-5 shrink-0" />

@@ -303,22 +303,24 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
 
       {/* RANK sub-nav (issue #183): RANK leaderboard / public FEED, the profile-tab idiom. */}
       {isAgents && (
-        <div className="flex items-end gap-6 border-b px-3.5 mt-1 shrink-0" style={{ borderColor: "var(--an-term-line)" }}>
-          {(["feed", "rank"] as const).map((v) => (
-            <button
-              key={v}
-              onClick={() => { setRankView(v); if (v === "feed") send({ type: "getBlogFeed" }); }}
-              className={[
-                "an-term-mono -mb-px px-1 pb-2.5 pt-2 text-[11px] font-bold uppercase tracking-wider border-b-2 transition-colors",
-                rankView === v ? "border-green-500 text-green-400" : "border-transparent text-zinc-500 active:text-zinc-300",
-              ].join(" ")}
-            >
-              <div>{v}</div>
-              <div style={{ fontFamily: "'Noto Sans JP', sans-serif", fontWeight: 500, fontSize: "8px", marginTop: "3px", color: rankView === v ? "var(--an-term-fg-7)" : "var(--an-term-line-3)" }}>
-                {v === "rank" ? "ランク" : "フィード"}
-              </div>
-            </button>
-          ))}
+        <div className="flex px-3 shrink-0" style={{ background: "var(--an-bg-0)" }}>
+          {(["feed", "rank"] as const).map((v) => {
+            const on = rankView === v;
+            const count = v === "feed" ? state.blogFeed?.length : state.agents?.length;
+            return (
+              <button
+                key={v}
+                onClick={() => { haptics.tick(); setRankView(v); if (v === "feed") send({ type: "getBlogFeed" }); }}
+                className="flex-1 text-center active:opacity-80"
+                style={{ paddingTop: "10px", paddingBottom: "13px", borderBottom: on ? "2px solid var(--an-term-fg)" : "1px solid var(--an-term-line)" }}
+              >
+                <div className="an-term-mono text-[13px] font-bold uppercase" style={{ letterSpacing: "1.5px", color: on ? "var(--an-term-fg)" : "var(--an-term-fg-7)" }}>{v}</div>
+                <div style={{ fontFamily: "'Noto Sans JP', sans-serif", fontWeight: 500, fontSize: "8px", marginTop: "4px", color: on ? "var(--an-term-fg-7)" : "var(--an-term-line-3)" }}>
+                  {count != null ? `${count} ${v === "feed" ? "POSTS" : "AGENTS"}` : (v === "feed" ? "フィード" : "ランク")}
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
 
