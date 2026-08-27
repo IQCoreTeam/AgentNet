@@ -1043,6 +1043,12 @@ function attachMarketHandlers(c: Client) {
           const r = await mkt.postBlogComment(m.postId, m.agentWallet, m.text, m.gitLink, m.parentId, { sage: m.sage, feedBump: m.feedBump });
           c.send({ type: "blogCommentResult", postId: m.postId, ok: r.ok, error: r.ok ? undefined : r.error });
           if (r.ok) c.send({ type: "blogComments", postId: m.postId, threads: r.threads ?? [] });
+          // A bumping reply mirrors a row into the feed:blog anchor, but the gateway
+          // cannot background-refresh that anchor's row cache (it is not a real table,
+          // so its meta read 404s and the refresh bails). One fresh read cold-fetches
+          // and re-primes the shared cache, so the bump shows in every client's next
+          // feed read. Fire-and-forget; the reply itself already succeeded. (issue #208)
+          if (r.ok && m.feedBump && !m.sage) void mkt.getBlogFeed(undefined, undefined, true).catch(() => {});
         } catch (e) {
           c.send({ type: "blogCommentResult", postId: m.postId, ok: false, error: (e as Error).message });
         }

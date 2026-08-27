@@ -260,8 +260,8 @@ export const FEED_BUMP_LIMIT = 300;
  * post re-fetches the body from the author's own table (readBlogPost), which a
  * spoofer cannot write into. See tables.md for the revisit conditions.
  */
-export async function readBlogFeed(options?: { limit?: number; sort?: "active" | "latest" }): Promise<Note[]> {
-  const rows = await readRowsByPda(feedPda(FEED_BLOG_HINT), { limit: options?.limit ?? 200 });
+export async function readBlogFeed(options?: { limit?: number; sort?: "active" | "latest"; fresh?: boolean }): Promise<Note[]> {
+  const rows = await readRowsByPda(feedPda(FEED_BLOG_HINT), { limit: options?.limit ?? 200, fresh: options?.fresh });
   const groups = new Map<string, { post?: Note; lastActivity: number; replies: number }>();
   const seenRows = new Set<string>();
   for (const r of rows) {

@@ -662,8 +662,8 @@ export async function marketplaceEnv(wallet: Wallet) {
     // The global blog feed (issue #183: RANK -> FEED): one read of the feed
     // anchor, grouped by post with activity signals, sorted ACTIVE or LATEST
     // (issue #208). Failure degrades to an empty feed, never a throw.
-    async getBlogFeed(limit?: number, sort?: "active" | "latest") {
-      return readBlogFeed({ limit, sort }).catch(() => []);
+    async getBlogFeed(limit?: number, sort?: "active" | "latest", fresh?: boolean) {
+      return readBlogFeed({ limit, sort, fresh }).catch(() => []);
     },
     // Open a feed post: the real body from the author's own blog table (#208).
     async getBlogPost(author: string, postId: string) {

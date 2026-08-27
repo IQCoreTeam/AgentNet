@@ -281,7 +281,7 @@ async function readRowsViaGateway(pda: PublicKey, options?: ReadOptions): Promis
   let before = options?.before;
   while (out.length < want) {
     const pageLimit = Math.min(100, want - out.length);
-    const url = `${base}?limit=${pageLimit}${before ? `&before=${encodeURIComponent(before)}` : ""}`;
+    const url = `${base}?limit=${pageLimit}${before ? `&before=${encodeURIComponent(before)}` : ""}${options?.fresh ? "&fresh=true" : ""}`;
 
     const cached = rowsEtagCache.get(url);
     const res = await fetch(url, cached ? { headers: { "If-None-Match": cached.etag } } : undefined);

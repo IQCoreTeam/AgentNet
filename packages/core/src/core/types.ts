@@ -119,4 +119,8 @@ export type Row = Record<string, unknown>;
 export interface ReadOptions {
   limit?: number;
   before?: string;
+  /** Bypass the gateway's row cache (append &fresh=true) for a cold re-fetch,
+   *  which also re-primes the shared cache. Needed for feed-anchor reads: the
+   *  gateway can't background-refresh an anchor's rows (it is not a real table). */
+  fresh?: boolean;
 }
