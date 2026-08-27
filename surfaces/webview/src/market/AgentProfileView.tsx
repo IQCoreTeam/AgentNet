@@ -260,13 +260,13 @@ export function BlogPostView({ post, wallet, onClose }: { post: BlogNote; wallet
     <div className="absolute inset-0 z-30 flex flex-col" style={{ background: "var(--an-bg-0)" }}>
       <div className="shrink-0" style={{ paddingTop: "max(0.25rem, env(safe-area-inset-top))" }}>
         <div className="flex items-center justify-between px-3.5 pb-1.5 pt-2 an-term-mono text-[10px] uppercase" style={{ letterSpacing: "0.14em", color: "var(--an-term-fg-6)" }}>
-          <span><span style={{ color: "var(--an-term-fg-8)" }}>&gt;</span>BLOG_POST</span>
-          <span style={{ fontFamily: "'Noto Sans JP', sans-serif" }}>ブログ</span>
+          <span><span style={{ color: "var(--an-term-fg-8)" }}>&gt;</span>POST</span>
+          <span style={{ color: "var(--an-term-fg-7)" }}>BY {shortWallet(post.author || wallet)}</span>
         </div>
         <div className="mx-3 mb-1 flex items-center gap-2.5 px-3 py-2.5" style={{ border: "1px solid var(--an-term-line-2)" }}>
           <button onClick={onClose} aria-label="Back" className="an-term-mono shrink-0 text-[13px] font-bold active:opacity-70" style={{ color: "var(--an-term-fg-7)" }}>[&lt;]</button>
-          <span className="an-term-mono text-[13px] font-bold uppercase" style={{ letterSpacing: "0.14em", color: "var(--an-term-fg)" }}>Blog_Post</span>
-          <span className="ml-auto" style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: "10px", color: "var(--an-term-fg-6)" }}>ブログ</span>
+          <span className="an-term-mono text-[13px] font-bold uppercase" style={{ letterSpacing: "0.14em", color: "var(--an-term-fg)" }}>Post</span>
+          {noteDate(post.timestamp) && <span className="ml-auto an-term-mono" style={{ fontSize: "10px", color: "var(--an-term-fg-6)", letterSpacing: "1px" }}>[{noteDate(post.timestamp)}]</span>}
         </div>
       </div>
       <div className="flex-1 overflow-y-auto px-3.5 pt-3 an-tabbar-inset">
@@ -1018,7 +1018,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                       <button
                         key={n.id}
                         onClick={() => { haptics.tick(); setOpenPost(n); }}
-                        className="flex h-64 flex-[0_0_88%] cursor-pointer snap-start flex-col overflow-hidden border text-left text-xs active:opacity-80"
+                        className="flex flex-[0_0_82%] cursor-pointer snap-start flex-col overflow-hidden border text-left text-xs active:opacity-80"
                         style={{ background: "var(--an-bg-0)", borderColor: "var(--an-term-line-2)", color: "var(--an-fg-dim)" }}
                       >
                         {mediaUrl(n.image) && (
@@ -1033,7 +1033,7 @@ export function AgentProfileView({ profile, onBack, onOpenSkill }: Props) {
                             {noteDate(n.timestamp) && <span className="an-term-mono shrink-0 text-[9px]" style={{ color: "var(--an-fg-mute)" }}>[{noteDate(n.timestamp)}]</span>}
                           </div>
                           <div className="mt-1.5 min-h-0 flex-1 overflow-hidden">
-                            {n.text && <p className="line-clamp-4 whitespace-pre-wrap break-words leading-relaxed">{n.text}</p>}
+                            {n.text && <p className="line-clamp-2 whitespace-pre-wrap break-words leading-relaxed">{n.text}</p>}
                             {n.gitLink && <GithubCard url={n.gitLink} className="mt-2" />}
                           </div>
                         </div>
