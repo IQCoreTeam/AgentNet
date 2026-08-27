@@ -16,6 +16,7 @@ import {
   getTablePda,
   initializeDbRootInstruction,
   createInstructionBuilder,
+  DEFAULT_ANCHOR_PROGRAM_ID,
 } from "@iqlabs-official/solana-sdk/contract";
 import {
   readTableRows,
@@ -70,6 +71,24 @@ async function signTx(signer: SignerInput, tx: Transaction): Promise<Transaction
 
 function tablePda(hint: string): PublicKey {
   return getTablePda(DB_ROOT, toSeedBytes(hint));
+}
+
+/** A FEED anchor for `hint`: the seed string follows the contract's
+ *  `<name>mY}AGBJiqLabs` naming convention but is OURS, not a program constant
+ *  (the pinned SDK and IDL export no feed seed; the program never checks it,
+ *  and the mirror mechanism only needs a deterministic address). Deliberately
+ *  NOT an account: it is never created and holds no data. Passing it in a
+ *  write's remainingAccounts stamps the feed address into that transaction, so
+ *  one signature scan of the feed PDA (readRowsByPda / the gateway's generic
+ *  table read) sees every row mirrored to it, across any number of source
+ *  tables. Zero rent, zero init. */
+const FEED_SEED = "feedmY}AGBJiqLabs";
+export function feedPda(hint: string): PublicKey {
+  const program = new PublicKey(DEFAULT_ANCHOR_PROGRAM_ID);
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(FEED_SEED), program.toBuffer(), DB_ROOT.toBuffer(), Buffer.from(toSeedBytes(hint))],
+    program,
+  )[0];
 }
 
 async function accountExists(pda: PublicKey): Promise<boolean> {
@@ -187,13 +206,19 @@ export async function writeRow(
   signer: DomainSignerInput,
   hint: string,
   rowJson: string,
+  mirrors?: PublicKey[],
 ): Promise<string> {
-  const txSig = await sdkWriteRow(conn(), asSolana(signer), AGENTNET_ROOT_ID, hint, rowJson);
+  // `mirrors` ride the write's remainingAccounts: the same row lands under each
+  // mirror PDA's signature history in the SAME transaction (see feedPda). One
+  // write, visible from N read points; no second transaction, no copy.
+  const txSig = await sdkWriteRow(conn(), asSolana(signer), AGENTNET_ROOT_ID, hint, rowJson, undefined, mirrors);
   // Push the new row into the gateway cache so the next read sees it right away
   // (GH #101). Best-effort; parse guarded so a non-JSON row can't break the write.
   try {
     const row = JSON.parse(rowJson);
-    notifyGatewayWrite(tablePda(hint), txSig, row, asSolana(signer).publicKey.toBase58());
+    const from = asSolana(signer).publicKey.toBase58();
+    notifyGatewayWrite(tablePda(hint), txSig, row, from);
+    for (const m of mirrors ?? []) notifyGatewayWrite(m, txSig, row, from);
   } catch {
     // row wasn't JSON, or signer had no pubkey — skip the notify, write still stands
   }
@@ -256,7 +281,7 @@ async function readRowsViaGateway(pda: PublicKey, options?: ReadOptions): Promis
   let before = options?.before;
   while (out.length < want) {
     const pageLimit = Math.min(100, want - out.length);
-    const url = `${base}?limit=${pageLimit}${before ? `&before=${encodeURIComponent(before)}` : ""}`;
+    const url = `${base}?limit=${pageLimit}${before ? `&before=${encodeURIComponent(before)}` : ""}${options?.fresh ? "&fresh=true" : ""}`;
 
     const cached = rowsEtagCache.get(url);
     const res = await fetch(url, cached ? { headers: { "If-None-Match": cached.etag } } : undefined);

@@ -61,7 +61,7 @@ function LockGlyph() {
 const TABS: { key: TabKey; label: string; Glyph: () => JSX.Element }[] = [
   { key: "chat", label: "CHAT", Glyph: ChatGlyph },
   { key: "skills", label: "SKILLS", Glyph: SkillsGlyph },
-  { key: "profile", label: "RANK", Glyph: AgentGlyph },
+  { key: "profile", label: "AGENTNET", Glyph: AgentGlyph },
   { key: "market", label: "MARKET", Glyph: MarketGlyph },
 ];
 

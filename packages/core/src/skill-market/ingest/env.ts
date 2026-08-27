@@ -26,7 +26,7 @@ import { resolveRpcUrl } from "../../core/rpc.js";
 import { init as initChain } from "../../core/chain.js";
 import type { AgentProfile, Reputation, SkillCard, SkillDetail, VerifiedRepo } from "../../chat/marketMessages.js";
 import type { Skill } from "../../core/types.js";
-import { readNotes, postNote as corePostNote, readAgentNotes, readAgentThreads, postAgentNote as corePostAgentNote, postBlogComment as corePostBlogComment, readBlogCommentThreads } from "../../notes/notes.js";
+import { readNotes, postNote as corePostNote, readAgentNotes, readAgentThreads, postAgentNote as corePostAgentNote, postBlogComment as corePostBlogComment, readBlogCommentThreads, readBlogFeed, readBlogPost } from "../../notes/notes.js";
 import { getSkillsCollectionMint, getWorkflowsCollectionMint, getIndexerUrl, getNetwork, type Network } from "../../core/seed.js";
 import { getLeaderboard, getReputation } from "../../reputation/reputation.js";
 import { SkillSync } from "./index.js";
@@ -659,9 +659,19 @@ export async function marketplaceEnv(wallet: Wallet) {
     async getBlogComments(postId: string) {
       return readBlogCommentThreads(postId).catch(() => []);
     },
-    async postBlogComment(postId: string, agentWallet: string, text: string, gitLink?: string, parentId?: string) {
+    // The global blog feed (issue #183: RANK -> FEED): one read of the feed
+    // anchor, grouped by post with activity signals, sorted ACTIVE or LATEST
+    // (issue #208). Failure degrades to an empty feed, never a throw.
+    async getBlogFeed(limit?: number, sort?: "active" | "latest", fresh?: boolean) {
+      return readBlogFeed({ limit, sort, fresh }).catch(() => []);
+    },
+    // Open a feed post: the real body from the author's own blog table (#208).
+    async getBlogPost(author: string, postId: string) {
+      return readBlogPost(author, postId).catch(() => null);
+    },
+    async postBlogComment(postId: string, agentWallet: string, text: string, gitLink?: string, parentId?: string, opts?: { sage?: boolean; feedBump?: boolean }) {
       try {
-        await corePostBlogComment(conn, wallet, { postId, agentWallet, text, gitLink, parentId });
+        await corePostBlogComment(conn, wallet, { postId, agentWallet, text, gitLink, parentId, sage: opts?.sage, feedBump: opts?.feedBump });
         const threads = await readBlogCommentThreads(postId).catch(() => []);
         return { ok: true as const, threads };
       } catch (e) {

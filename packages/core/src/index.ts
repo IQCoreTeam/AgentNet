@@ -28,7 +28,7 @@ export {
   getTablePdaRef,
   signerAddress,
 } from "./core/chain.js";
-export { AGENTNET_ROOT_ID, mysessionsHint, reviewsHint, reviewsAgentHint } from "./core/seed.js";
+export { AGENTNET_ROOT_ID, mysessionsHint, reviewsHint, reviewsAgentHint, blogAgentHint } from "./core/seed.js";
 // skill / workflow NFTs (Token-2022 + code-in)
 export {
   publishSkill,
@@ -44,8 +44,8 @@ export type { PublishSkillInput, BuySkillInput } from "./nft/skill.js";
 export type { SkillMintMetadata } from "./nft/token2022.js";
 export { resolveMinter, tryMinterPubkey, resetMinterCache } from "./nft/minter.js";
 // notes (reviews)
-export { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes, getSolBalance, canAffordSkill, TX_FEE_BUFFER_LAMPORTS } from "./notes/index.js";
-export type { PostNoteInput, ReadNotesOptions, PostAgentNoteInput } from "./notes/index.js";
+export { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes, readBlogFeed, readBlogPost, migrateBlogPosts, getSolBalance, canAffordSkill, TX_FEE_BUFFER_LAMPORTS } from "./notes/index.js";
+export type { PostNoteInput, ReadNotesOptions, PostAgentNoteInput, BlogMigrationResult } from "./notes/index.js";
 // RPC resolution (issue #23): a registered Helius key wins over env over the default
 export { resolveRpcUrl, saveHeliusKey, loadHeliusKey, hasDasRpc, heliusUrl, maskedHeliusKey, HELIUS_QUICKSTART_URL, saveGithubToken, loadGithubToken, maskedGithubToken } from "./core/rpc.js";
 export { getNetwork, NETWORK } from "./core/seed.js";

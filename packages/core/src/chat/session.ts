@@ -84,7 +84,9 @@ export interface ChatEnv {
   buyAllSkills?(wallet: string): Promise<{ ok: boolean; bought: number; failed: number; error?: string }>;
   postAgentNote?(agentWallet: string, text: string, gitLink?: string, title?: string, image?: string, parentId?: string): Promise<{ ok: boolean; notes?: import("./marketMessages.js").Note[]; error?: string }>;
   getBlogComments?(postId: string): Promise<import("./marketMessages.js").ThreadNode[]>;
-  postBlogComment?(postId: string, agentWallet: string, text: string, gitLink?: string, parentId?: string): Promise<{ ok: boolean; threads?: import("./marketMessages.js").ThreadNode[]; error?: string }>;
+  getBlogFeed?(limit?: number, sort?: "active" | "latest"): Promise<import("../core/types.js").Note[]>;
+  getBlogPost?(author: string, postId: string): Promise<import("../core/types.js").Note | null>;
+  postBlogComment?(postId: string, agentWallet: string, text: string, gitLink?: string, parentId?: string, opts?: { sage?: boolean; feedBump?: boolean }): Promise<{ ok: boolean; threads?: import("./marketMessages.js").ThreadNode[]; error?: string }>;
   solBalance?(): Promise<number | null>; // wallet's native SOL balance (lamports), for the UI funds display
   // devnet-only: fund the wallet from the faucet (manual "Get devnet SOL" on an insufficient-
   // funds buy). Returns the new balance so the UI refreshes and lets the buyer retry.
@@ -972,11 +974,25 @@ export function createChatSession(
         sendMarket({ type: "blogComments", postId: req.postId, threads });
         break;
       }
+      // The global blog feed (issue #183: RANK -> FEED), one read of the feed anchor.
+      case "getBlogFeed": {
+        const req = m as Extract<MarketRequest, { type: "getBlogFeed" }>;
+        if (!env.getBlogFeed) break;
+        sendMarket({ type: "blogFeed", posts: await env.getBlogFeed(req.limit, req.sort) });
+        break;
+      }
+      // open a feed post: fetch the real body from the author's own table (issue #208)
+      case "getBlogPost": {
+        const req = m as Extract<MarketRequest, { type: "getBlogPost" }>;
+        if (!env.getBlogPost) break;
+        sendMarket({ type: "blogPost", postId: req.postId, post: await env.getBlogPost(req.author, req.postId) });
+        break;
+      }
       // post a comment onto one blog post, then re-push that post's refreshed thread
       case "postBlogComment": {
         const req = m as Extract<MarketRequest, { type: "postBlogComment" }>;
         if (!env.postBlogComment) break;
-        const res = await env.postBlogComment(req.postId, req.agentWallet, req.text, req.gitLink, req.parentId);
+        const res = await env.postBlogComment(req.postId, req.agentWallet, req.text, req.gitLink, req.parentId, { sage: req.sage, feedBump: req.feedBump });
         sendMarket({ type: "blogCommentResult", postId: req.postId, ok: res.ok, error: res.ok ? undefined : (res as { ok: false; error?: string }).error });
         if (res.ok) sendMarket({ type: "blogComments", postId: req.postId, threads: res.threads ?? [] });
         break;

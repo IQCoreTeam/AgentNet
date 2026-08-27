@@ -4,6 +4,7 @@ import { SkillSdCard } from "./SkillSdCard";
 import { SkillDetailView } from "./SkillDetailView";
 import { PublishForm } from "./PublishForm";
 import { AgentDirectory } from "./AgentDirectory";
+import { BlogFeed } from "./BlogFeed";
 import { AgentProfileView } from "./AgentProfileView";
 import type { SkillCard } from "../transport/protocol";
 import { HeliusSetupPanel } from "../settings/HeliusKeyForm";
@@ -40,6 +41,10 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
   // Hide already-owned skills from the market results by default (you came to find NEW ones);
   // untick to show them too (muted/greyed).
   const [hideOwned, setHideOwned] = useState(true);
+  // AGENTNET tab sub-views (issues #183/#208): FEED (default, every agent's
+  // posts) and RANK (the leaderboard). Feed re-requests on each flip TO it, so
+  // the tab tap is the refresh gesture (the market tabs' refetch idiom).
+  const [rankView, setRankView] = useState<"rank" | "feed">("feed");
   // Market ranking: popularity (supply, indexer default) or GitHub stars (issue #89).
   const [marketSort, setMarketSort] = useState<"supply" | "stars">("supply");
   // Tracks a tapped card whose detail is still loading, so we can show a skeleton in the
@@ -200,8 +205,8 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
   const isSkills = tab === "skills";
   const isAgents = tab === "profile";
   const isMarket = tab === "market";
-  const headerTitle = isSkills ? "My Skills" : isAgents ? "Agent Rank" : "Market";
-  const headerSub = isSkills ? "マイスキル" : isAgents ? "エージェント" : "マーケット";
+  const headerTitle = isSkills ? "My Skills" : isAgents ? "AgentNet" : "Market";
+  const headerSub = isSkills ? "マイスキル" : isAgents ? "エージェントネット" : "マーケット";
   const balanceSol = state.marketBalance != null ? (state.marketBalance / 1_000_000_000).toFixed(3) : null;
 
   return (
@@ -294,6 +299,29 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
           </span>
           <span className="an-term-mono font-bold">›</span>
         </button>
+      )}
+
+      {/* RANK sub-nav (issue #183): RANK leaderboard / public FEED, the profile-tab idiom. */}
+      {isAgents && (
+        <div className="flex px-3 shrink-0" style={{ background: "var(--an-bg-0)" }}>
+          {(["feed", "rank"] as const).map((v) => {
+            const on = rankView === v;
+            const count = v === "feed" ? state.blogFeed?.length : state.agents?.length;
+            return (
+              <button
+                key={v}
+                onClick={() => { haptics.tick(); setRankView(v); if (v === "feed") send({ type: "getBlogFeed" }); }}
+                className="flex-1 text-center active:opacity-80"
+                style={{ paddingTop: "10px", paddingBottom: "13px", borderBottom: on ? "2px solid var(--an-term-fg)" : "1px solid var(--an-term-line)" }}
+              >
+                <div className="an-term-mono text-[13px] font-bold uppercase" style={{ letterSpacing: "1.5px", color: on ? "var(--an-term-fg)" : "var(--an-term-fg-7)" }}>{v}</div>
+                <div style={{ fontFamily: "'Noto Sans JP', sans-serif", fontWeight: 500, fontSize: "8px", marginTop: "4px", color: on ? "var(--an-term-fg-7)" : "var(--an-term-line-3)" }}>
+                  {count != null ? `${count} ${v === "feed" ? "POSTS" : "AGENTS"}` : (v === "feed" ? "フィード" : "ランク")}
+                </div>
+              </button>
+            );
+          })}
+        </div>
       )}
 
       {/* Browse tabs (market only): skill / workflow — agents moved to their own Agent tab */}
@@ -408,7 +436,7 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
             </div>
           )
         ) : isAgents ? (
-          <AgentDirectory />
+          rankView === "feed" ? <BlogFeed /> : <AgentDirectory />
         ) : (
           <>
             {state.marketSearchError ? (

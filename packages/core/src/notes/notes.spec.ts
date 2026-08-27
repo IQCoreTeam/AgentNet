@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Connection, Keypair } from "@solana/web3.js";
-import { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes } from "./notes.js";
+import { postNote, readNotes, deleteNote, postAgentNote, readAgentNotes, readBlogFeed, readBlogPost, postBlogComment, FEED_BUMP_LIMIT } from "./notes.js";
 import * as chain from "../core/chain.js";
 import * as holdings from "./holdings.js";
 
@@ -8,9 +8,11 @@ const AUTHOR = "11111111111111111111111111111111";
 
 vi.mock("../core/chain.js", () => ({
   readRows: vi.fn().mockResolvedValue([{ id: "note1" }]),
+  readRowsByPda: vi.fn().mockResolvedValue([]),
   writeRow: vi.fn().mockResolvedValue("mockWriteSig"),
   ensureTable: vi.fn().mockResolvedValue(null),
   signerAddress: vi.fn().mockResolvedValue("11111111111111111111111111111111"),
+  feedPda: vi.fn(() => ({ toBase58: () => "FeedAnchor1111111111111111111111111111111111" })),
 }));
 
 vi.mock("./holdings.js", () => ({
@@ -132,17 +134,160 @@ describe("notes/notes", () => {
     ).rejects.toThrow(/Must hold ≥1 of agentWalletX's skills/);
   });
 
-  it("readAgentNotes selfOnly returns only the owner's posts, newest first", async () => {
-    vi.mocked(chain.readRows).mockResolvedValue([
-      { id: "n1", author: "agentX", timestamp: 100 },
-      { id: "n2", author: "someoneElse", timestamp: 200 },
-      { id: "n3", author: "agentX", timestamp: 300 },
-    ] as any);
+  it("readAgentNotes merges blog + reviews tables, deduped by id, newest first", async () => {
+    // Table split (issue #203): posts come from blog:agent, comments from
+    // reviews:agent; a migrated post (same id in both) shows once.
+    vi.mocked(chain.readRows).mockImplementation(async (hint: string) =>
+      (hint.startsWith("blog:agent:")
+        ? [
+            { id: "p1", author: "agentX", timestamp: 300 },
+            { id: "legacy1", author: "agentX", timestamp: 100 }, // migrated copy
+          ]
+        : [
+            { id: "c1", author: "someoneElse", timestamp: 200 },
+            { id: "legacy1", author: "agentX", timestamp: 100 }, // pre-split original
+            { id: "r1", author: "agentX", timestamp: 400, meta: { parentId: "c1" } },
+          ]) as any,
+    );
 
     const all = await readAgentNotes("agentX");
-    expect(all.map((n) => n.id)).toEqual(["n3", "n2", "n1"]); // sorted desc
+    expect(all.map((n) => n.id)).toEqual(["r1", "p1", "c1", "legacy1"]); // sorted desc, no dupe
 
+    // selfOnly = the blog view: the owner's POSTS only, replies excluded.
     const self = await readAgentNotes("agentX", { selfOnly: true });
-    expect(self.map((n) => n.id)).toEqual(["n3", "n1"]);
+    expect(self.map((n) => n.id)).toEqual(["p1", "legacy1"]);
+  });
+});
+
+describe("notes/blog feed (issues #183/#203)", () => {
+  let mockConn: any;
+  let signer: Keypair;
+
+  beforeEach(() => {
+    mockConn = {};
+    signer = Keypair.generate();
+    vi.clearAllMocks();
+    vi.mocked(chain.signerAddress).mockResolvedValue(AUTHOR);
+  });
+
+  it("a blog post (top-level self-note) writes to blog:agent and mirrors into the feed anchor", async () => {
+    await postAgentNote(mockConn as Connection, signer, { agentWallet: AUTHOR, text: "gm", title: "hello" });
+    const [, hint, , mirrors] = vi.mocked(chain.writeRow).mock.calls[0];
+    expect(hint).toBe(`blog:agent:${AUTHOR}`);
+    expect(vi.mocked(chain.ensureTable).mock.calls[0][1]).toBe(`blog:agent:${AUTHOR}`);
+    expect(mirrors).toHaveLength(1);
+    expect(chain.feedPda).toHaveBeenCalledWith("feed:blog");
+  });
+
+  it("a self reply stays in reviews:agent (thread intact) and does not mirror", async () => {
+    await postAgentNote(mockConn as Connection, signer, { agentWallet: AUTHOR, text: "re", parentId: "note:x" });
+    const [, hint, , mirrors] = vi.mocked(chain.writeRow).mock.calls[0];
+    expect(hint).toBe(`reviews:agent:${AUTHOR}`);
+    expect(mirrors).toBeUndefined();
+  });
+
+  it("a comment on someone else's board stays in reviews:agent and does not mirror", async () => {
+    vi.mocked(holdings.heldSkillCreators).mockResolvedValue(new Map([["m1", "OTHER"]]));
+    await postAgentNote(mockConn as Connection, signer, { agentWallet: "OTHER", text: "nice" });
+    const [, hint, , mirrors] = vi.mocked(chain.writeRow).mock.calls[0];
+    expect(hint).toBe("reviews:agent:OTHER");
+    expect(mirrors).toBeUndefined();
+  });
+
+  it("readBlogFeed passes the mirrored full rows through, drops junk, sorts newest first", async () => {
+    const B = "22222222222222222222222222222222";
+    vi.mocked(chain.readRowsByPda).mockResolvedValue([
+      { id: `note:${AUTHOR}:1:a`, author: AUTHOR, text: "old", timestamp: 1, meta: { title: "t", image: "img" } },
+      { id: `note:${B}:2:b`, author: B, text: "new", timestamp: 2 },
+      { text: "no author, no id" },
+    ] as any);
+    const posts = await readBlogFeed();
+    // Full notes, untruncated, in hand for the client's X-model clamp; the
+    // preview projection and the on-open re-fetch are gone (zo's PR review).
+    expect(posts.map((p) => p.text)).toEqual(["new", "old"]);
+    expect(posts[1].title).toBe("t");
+    expect(posts[1].image).toBe("img");
+    expect(posts[1].isSelfNote).toBe(true);
+  });
+
+  it("readBlogFeed keeps long bodies whole and dedupes re-mirrored ids", async () => {
+    const long = ("word ".repeat(60)).trim(); // 299 chars, would have been snipped before
+    vi.mocked(chain.readRowsByPda).mockResolvedValue([
+      { id: `note:${AUTHOR}:2:a`, author: AUTHOR, text: long, timestamp: 2 },
+      { id: `note:${AUTHOR}:2:a`, author: AUTHOR, text: long, timestamp: 2 }, // migration re-mirror
+    ] as any);
+    const posts = await readBlogFeed();
+    expect(posts).toHaveLength(1);
+    expect(posts[0].text).toBe(long);
+  });
+
+  it("readBlogFeed drops a mirrored row whose id does not embed its claimed author", async () => {
+    const victim = "33333333333333333333333333333333";
+    vi.mocked(chain.readRowsByPda).mockResolvedValue([
+      { id: `note:${AUTHOR}:1:a`, author: victim, text: "forged", timestamp: 1 }, // spoofed author
+      { id: `note:${victim}:2:b`, author: victim, text: "real", timestamp: 2 },
+    ] as any);
+    const posts = await readBlogFeed();
+    expect(posts.map((p) => p.text)).toEqual(["real"]);
+  });
+});
+
+describe("notes/feed v2 (issue #208)", () => {
+  let mockConn: any;
+  let signer: Keypair;
+
+  beforeEach(() => {
+    mockConn = {};
+    signer = Keypair.generate();
+    vi.clearAllMocks();
+    vi.mocked(chain.signerAddress).mockResolvedValue(AUTHOR);
+    vi.mocked(chain.readRows).mockResolvedValue([]);
+  });
+
+  it("a feed-bumping reply mirrors into the anchor and carries meta.postId", async () => {
+    await postBlogComment(mockConn as Connection, signer, { postId: "note:P:1:x", agentWallet: "P", text: "gm", feedBump: true });
+    const [, hint, json, mirrors] = vi.mocked(chain.writeRow).mock.calls[0];
+    expect(hint).toBe("comment:blog:note:P:1:x");
+    expect(mirrors).toHaveLength(1);
+    expect(JSON.parse(json as string).meta.postId).toBe("note:P:1:x");
+  });
+
+  it("sage posts the reply without bumping", async () => {
+    await postBlogComment(mockConn as Connection, signer, { postId: "note:P:1:x", agentWallet: "P", text: "gm", feedBump: true, sage: true });
+    expect(vi.mocked(chain.writeRow).mock.calls[0][3]).toBeUndefined();
+  });
+
+  it("a skill-thread reply (no feedBump) never bumps", async () => {
+    await postBlogComment(mockConn as Connection, signer, { postId: "note:C:1:y", agentWallet: "C", text: "re" });
+    expect(vi.mocked(chain.writeRow).mock.calls[0][3]).toBeUndefined();
+    expect(vi.mocked(chain.readRows)).not.toHaveBeenCalled(); // no count read either
+  });
+
+  it("past the bump limit a reply stops bumping", async () => {
+    vi.mocked(chain.readRows).mockResolvedValue(Array.from({ length: FEED_BUMP_LIMIT }, (_, i) => ({ id: `r${i}` })) as any);
+    await postBlogComment(mockConn as Connection, signer, { postId: "note:P:1:x", agentWallet: "P", text: "gm", feedBump: true });
+    expect(vi.mocked(chain.writeRow).mock.calls[0][3]).toBeUndefined();
+  });
+
+  it("readBlogFeed groups activity under its post: ACTIVE refloats, LATEST keeps creation order", async () => {
+    const B = "22222222222222222222222222222222";
+    vi.mocked(chain.readRowsByPda).mockResolvedValue([
+      { id: `note:${AUTHOR}:1:a`, author: AUTHOR, text: "old post", timestamp: 1 },
+      { id: `note:${B}:2:b`, author: B, text: "new post", timestamp: 2 },
+      { id: `note:${B}:9:r`, author: B, text: "reply to old", timestamp: 9, meta: { postId: `note:${AUTHOR}:1:a` } },
+    ] as any);
+    const active = await readBlogFeed({ sort: "active" });
+    expect(active.map((p) => p.text)).toEqual(["old post", "new post"]);
+    expect(active[0].feedReplies).toBe(1);
+    expect(active[0].feedLastActivity).toBe(9);
+    const latest = await readBlogFeed({ sort: "latest" });
+    expect(latest.map((p) => p.text)).toEqual(["new post", "old post"]);
+  });
+
+  it("activity without its post row never renders a phantom entry", async () => {
+    vi.mocked(chain.readRowsByPda).mockResolvedValue([
+      { id: `note:${AUTHOR}:9:r`, author: AUTHOR, text: "bump for nothing", timestamp: 9, meta: { postId: "note:GHOST:1:z" } },
+    ] as any);
+    expect(await readBlogFeed()).toEqual([]);
   });
 });

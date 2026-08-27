@@ -67,6 +67,8 @@ export interface Note {
   parentId?: string; // GH #101: id of the note this replies to (stored in meta); absent → top-level
   subject?: string; // derived on read: the table key (skill mint / agent wallet)
   isSelfNote?: boolean; // derived on read: author == subject (owner post)
+  feedLastActivity?: number; // derived on FEED read only (issue #208): max timestamp across the post's anchor rows
+  feedReplies?: number; // derived on FEED read only: activity-bump rows grouped under this post
 }
 
 /** A reply flattened under its top-level ancestor. `parentAuthor` is the author
@@ -117,4 +119,8 @@ export type Row = Record<string, unknown>;
 export interface ReadOptions {
   limit?: number;
   before?: string;
+  /** Bypass the gateway's row cache (append &fresh=true) for a cold re-fetch,
+   *  which also re-primes the shared cache. Needed for feed-anchor reads: the
+   *  gateway can't background-refresh an anchor's rows (it is not a real table). */
+  fresh?: boolean;
 }
