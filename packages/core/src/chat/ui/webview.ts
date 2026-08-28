@@ -4084,6 +4084,7 @@ export function chatHtml(): string {
   let feedSort = 'active';          // ACTIVE = lastActivityTime, LATEST = createdAt
   let feedPosts = null;             // null = never loaded (skeletons), [] = settled empty
   let currentFeedPost = null;       // the post open in the reader
+  let feedLastSage = false;         // whether the comment in flight was sage (skips the fresh re-read)
   const feedBodies = {};            // postId -> authoritative body from the author's table
   const feedThreads = {};           // postId -> comment threads
   function openAgents() {
@@ -4304,6 +4305,7 @@ export function chatHtml(): string {
       return el;
     }
     function submitComment(f, parentId) {
+      feedLastSage = !!f.sage;
       vscode.postMessage({
         type: 'postBlogComment', postId: p.id, agentWallet: p.author, text: f.text,
         gitLink: f.gitLink, parentId: parentId, sage: !!f.sage, feedBump: !f.sage,
@@ -6102,7 +6104,10 @@ export function chatHtml(): string {
             pane._mainCompose._btn.disabled = false; pane._mainCompose._btn.textContent = pane._mainCompose._label;
           }
           feedReplyTo = null;
-          vscode.postMessage({ type: 'getBlogFeed', sort: feedSort, fresh: true });
+          // a sage reply never bumped, so the anchor cache is not stale: a cheap cached
+          // read repaints the list without the cold fresh fetch (the dispatcher already
+          // re-primes after a bumping reply, so fresh here only covers the repaint)
+          vscode.postMessage({ type: 'getBlogFeed', sort: feedSort, fresh: !feedLastSage });
         } else {
           const box = pane._activeCompose || pane._mainCompose;
           if (box) {
