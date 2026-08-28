@@ -119,7 +119,7 @@ export type MarketRequest =
   // and reply to that post. Replies are OPEN to any wallet (issue #183), UNLIKE the holder-gated
   // agent comment wall (postAgentNote). agentWallet is context only. parentId replies to a reply.
   | { type: "getBlogComments"; postId: string; agentWallet: string }
-  | { type: "getBlogFeed"; limit?: number; sort?: "active" | "latest" }
+  | { type: "getBlogFeed"; limit?: number; sort?: "active" | "latest"; fresh?: boolean }
   | { type: "getBlogPost"; author: string; postId: string }
   // open one feed preview: fetch the full post body from the author's blog table by id
   | { type: "postBlogComment"; postId: string; agentWallet: string; text: string; gitLink?: string; parentId?: string; sage?: boolean; feedBump?: boolean }

@@ -343,7 +343,17 @@ function WorkCard({
     if (u) window.open(u, "_blank", "noopener");
   }
   return (
-    <div className="an-tfolder shrink-0 snap-start" style={{ "--c": tier.color, "--e": tier.empty } as CSSProperties}>
+    // The WHOLE folder opens the repo (not just the octocat) — the one exception is
+    // the skill pill, which stops propagation to keep its open-skill tap.
+    <div
+      className="an-tfolder shrink-0 cursor-pointer snap-start"
+      role="link"
+      tabIndex={0}
+      aria-label={`Open ${repo.owner}/${repo.name} on GitHub`}
+      onClick={openRepo}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openRepo(); } }}
+      style={{ "--c": tier.color, "--e": tier.empty } as CSSProperties}
+    >
       <div className="an-tfolder-clip">
         <div className="an-tfolder-screen" style={{ background: `radial-gradient(120% 100% at 50% 22%, ${tier.from} 0%, ${tier.to} 70%)` }}>
           <div className="an-tfolder-bin" aria-hidden="true">{FOLDER_BINARY}</div>
@@ -352,13 +362,13 @@ function WorkCard({
           <div className="an-tfolder-name">
             <span style={{ color: "var(--c)" }}>&gt;</span>
             <span className="an-tfolder-name-t">{repo.name}</span>
-            <button onClick={openRepo} aria-label="Open repository" className="shrink-0 active:opacity-70">
+            <span className="shrink-0" aria-hidden="true">
               <GithubMark style={{ width: 30, height: 26, color: "var(--an-term-fg-2)" }} />
-            </button>
+            </span>
           </div>
           <div className="an-tfolder-foot">
             {rep ? (
-              <button onClick={() => (extra > 0 ? onAllSkills(repo) : onOpenSkill(rep))} className="an-tfolder-skill active:opacity-80">
+              <button onClick={(e) => { e.stopPropagation(); if (extra > 0) onAllSkills(repo); else onOpenSkill(rep); }} className="an-tfolder-skill active:opacity-80">
                 {rep.name}{extra > 0 ? ` +${extra}` : ""}
               </button>
             ) : <span />}

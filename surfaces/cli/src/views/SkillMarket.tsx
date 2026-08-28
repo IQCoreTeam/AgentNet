@@ -124,7 +124,13 @@ function feedPostLines(post: Note, body: Note | null, threads: FeedThread[] | nu
   if (real.gitLink) out.push(<Text key="git" color={colors.ok}>{glyph.sparkle} {truncateEnd(real.gitLink, Math.max(4, w - 2))}</Text>);
   out.push(<Text key="sp1"> </Text>);
   const count = threads ? threads.reduce((s, t) => s + 1 + t.replies.length, 0) : (post.feedReplies ?? 0);
-  out.push(<Text key="ch" dimColor>── COMMENTS ({count}) ──</Text>);
+  out.push(
+    <Text key="ch">
+      <Text color={colors.ok}>{">"}</Text>
+      <Text bold color={colors.bone}>COMMENTS</Text>
+      <Text dimColor> ({count})</Text>
+    </Text>,
+  );
   if (threads === null) {
     out.push(<Text key="cl" dimColor>loading comments…</Text>);
   } else if (threads.length === 0) {
@@ -1197,7 +1203,8 @@ export function SkillMarket({
     return (
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
         <Box justifyContent="space-between">
-          <Text bold color={colors.bone}>FEED</Text>
+          {/* the mobile feed cap, ASCII-native: >GLOBAL_BLOG_FEED */}
+          <Text bold color={colors.bone}><Text color={colors.ok}>{">"}</Text>GLOBAL_BLOG_FEED</Text>
           <Text>
             <Text color={feedSort === "active" ? colors.ok : colors.dim} bold={feedSort === "active"}>ACTIVE</Text>
             <Text dimColor> | </Text>
@@ -1261,7 +1268,7 @@ export function SkillMarket({
     return (
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
         <Box justifyContent="space-between">
-          <Text bold color={colors.bone}>POST</Text>
+          <Text bold color={colors.bone}><Text color={colors.ok}>{">"}</Text>POST</Text>
           {flash ? <Text color={colors.ok}>{flash}</Text> : null}
         </Box>
         <Box flexDirection="column" marginTop={1}>

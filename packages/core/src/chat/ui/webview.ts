@@ -1346,6 +1346,8 @@ export function chatHtml(): string {
      --c = muted tier accent, --e = gauge empty-segment colour (set inline per repo). */
   .an-vwork { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; }
   .an-tfolder { position: relative; width: 270px; flex: none; filter: drop-shadow(0 14px 22px rgba(0,0,0,0.55)); }
+  /* the whole card is a link to the repo (issue #210 follow-up) */
+  a.an-tfolder { display: block; text-decoration: none; color: inherit; cursor: pointer; }
   .an-tfolder-clip { position: relative; background: #0c0c0d; clip-path: polygon(0 7%, 50% 7%, 58% 24%, 100% 24%, 100% 100%, 0 100%); padding: 5px; }
   .an-tfolder-screen { position: relative; margin-top: 28px; height: 150px; overflow: hidden; border-radius: 3px; padding: 11px 13px; }
   .an-tfolder-bin { position: absolute; inset: 0; color: var(--c); opacity: 0.1; font: 700 9px ui-monospace, Menlo, monospace; line-height: 1.45; letter-spacing: 1px; word-break: break-all; padding: 6px; user-select: none; pointer-events: none; }
@@ -1457,46 +1459,128 @@ export function chatHtml(): string {
   .pr-tab:hover { color:#9a9a9f; }
   .pr-tab.on { border-bottom:2px solid #f2f2f2; color:#f2f2f2; }
   .pr-tab.on .k { color:#5a5a5d; }
-  /* issue #210: AGENTNET FEED — compact preview rows ported from the mobile BlogFeed */
-  .fd-head { display:flex; align-items:center; justify-content:space-between; margin:2px 0 12px; }
-  .fd-cap { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.72em;
-            letter-spacing:1.5px; color:var(--an-fg-mute); }
-  .fd-sort { display:flex; border:1px solid var(--an-line); border-radius:var(--an-radius-sm); overflow:hidden; }
+  /* issue #210: AGENTNET FEED — ported from the mobile BlogFeed/BlogPostView so the two
+     surfaces read identically: square 1px frames, mono uppercase labels, a bordered
+     "bumped Xh" chip, corner ticks on bumped rows (ACTIVE sort only), a //BLOG foot,
+     the //AUTHOR_ row, the >COMMENTS thread with [Reply], and the bracket FAB. */
+  .fd-mono { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .fd-head { display:flex; align-items:center; justify-content:space-between; margin:2px 0 10px; }
+  .fd-cap { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:9px;
+            letter-spacing:0.16em; text-transform:uppercase; color:var(--an-fg-mute); }
+  .fd-sort { display:flex; border:1px solid var(--an-line); }
   .fd-sort button { background:transparent; border:none; color:var(--an-fg-mute); cursor:pointer;
-                    font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.68em;
-                    letter-spacing:1px; text-transform:uppercase; padding:4px 10px; }
+                    font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:9px; font-weight:700;
+                    letter-spacing:0.12em; text-transform:uppercase; padding:5px 11px; }
+  .fd-sort button + button { border-left:1px solid var(--an-line); }
   .fd-sort button.on { background:var(--an-green-dim); color:var(--an-green); }
-  .fd-row { position:relative; border:1px solid var(--an-line); border-radius:var(--an-radius);
-            padding:10px 12px; margin-bottom:10px; cursor:pointer; }
-  .fd-row:hover { border-color:var(--an-green-line); }
-  /* a bumped row wears green corner ticks (same signal as the mobile rows) */
-  .fd-row.bumped { border-color:var(--an-green-line); }
-  .fd-row.bumped::before, .fd-row.bumped::after {
-    content:''; position:absolute; width:7px; height:7px; border:1px solid var(--an-green); }
-  .fd-row.bumped::before { top:-1px; left:-1px; border-right:none; border-bottom:none; }
-  .fd-row.bumped::after { bottom:-1px; right:-1px; border-left:none; border-top:none; }
-  .fd-top { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
-  .fd-ava { width:20px; height:20px; border-radius:4px; overflow:hidden; flex:none; }
+  .fd-row { position:relative; display:block; width:100%; text-align:left; border:1px solid var(--an-line);
+            background:transparent; padding:11px 12px; margin-bottom:10px; cursor:pointer; }
+  .fd-row:hover { border-color:var(--an-line-soft); }
+  /* the mobile BUMP_TICKS frame: fg-colored ticks in all four corners */
+  .fd-row.bumped { background:
+    linear-gradient(var(--an-fg),var(--an-fg)) left top/8px 1.5px no-repeat,
+    linear-gradient(var(--an-fg),var(--an-fg)) left top/1.5px 8px no-repeat,
+    linear-gradient(var(--an-fg),var(--an-fg)) right top/8px 1.5px no-repeat,
+    linear-gradient(var(--an-fg),var(--an-fg)) right top/1.5px 8px no-repeat,
+    linear-gradient(var(--an-fg),var(--an-fg)) left bottom/8px 1.5px no-repeat,
+    linear-gradient(var(--an-fg),var(--an-fg)) left bottom/1.5px 8px no-repeat,
+    linear-gradient(var(--an-fg),var(--an-fg)) right bottom/8px 1.5px no-repeat,
+    linear-gradient(var(--an-fg),var(--an-fg)) right bottom/1.5px 8px no-repeat; }
+  .fd-top { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .fd-ava { width:24px; height:24px; overflow:hidden; flex:none; border:1px solid var(--an-line); }
   .fd-ava svg { width:100%; height:100%; display:block; }
-  .fd-wallet { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.78em; color:var(--an-fg); }
+  .fd-wallet { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:11px; color:var(--an-fg); }
   .fd-when { margin-left:auto; font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
-             font-size:0.68em; letter-spacing:0.5px; color:var(--an-fg-mute); }
-  .fd-when.bump { color:var(--an-green); }
-  .fd-title { font-weight:700; font-size:0.95em; margin:0 0 4px; color:var(--an-fg); }
-  .fd-snip { font-size:0.82em; color:var(--an-fg-mute); line-height:1.45;
+             font-size:9px; white-space:nowrap; color:var(--an-fg-mute); }
+  .fd-when.chip { border:1px solid var(--an-line-soft); padding:2px 6px; color:var(--an-fg); }
+  .fd-title { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-weight:700; font-size:12px;
+              text-transform:uppercase; letter-spacing:0.04em; line-height:1.3; margin:0; color:var(--an-fg); }
+  .fd-snip { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; line-height:1.5;
+             margin-top:5px; color:var(--an-fg-mute); white-space:pre-wrap; word-break:break-word;
              display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-  .fd-foot { display:flex; gap:12px; margin-top:8px; font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
-             font-size:0.68em; letter-spacing:0.5px; color:var(--an-fg-mute); }
-  .fd-foot .r { color:var(--an-green); }
-  .sk-fd { height:96px; border-radius:var(--an-radius); margin-bottom:10px; }
-  /* FEED post reader */
-  .fdp-back { cursor:pointer; margin-bottom:12px; }
-  .fdp-meta { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
-  .fdp-title { font-weight:800; font-size:1.15em; margin:0 0 10px; color:var(--an-fg); }
-  .fd-sage { display:flex; align-items:center; gap:6px; margin-top:6px; cursor:pointer;
-             font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.72em;
-             letter-spacing:0.5px; color:var(--an-fg-mute); user-select:none; }
-  .fd-sage input { accent-color: var(--an-green); margin:0; }
+  .fd-cover { position:relative; margin-top:10px; height:118px; border:1px solid var(--an-line); overflow:hidden; }
+  .fd-cover img { width:100%; height:100%; object-fit:cover; display:block; }
+  .fd-cover::after { content:''; position:absolute; inset:0; pointer-events:none;
+    background:repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0,rgba(0,0,0,.22) 1px,transparent 1px,transparent 3px); }
+  .fd-foot { display:flex; align-items:center; gap:12px; margin-top:10px;
+             font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:9px;
+             letter-spacing:0.06em; text-transform:uppercase; color:var(--an-fg-mute); }
+  .fd-foot .tag { margin-left:auto; }
+  .sk-fd { height:96px; margin-bottom:10px; }
+  /* FEED post reader — the mobile BlogPostView chrome */
+  .fdp-cap { display:flex; align-items:center; justify-content:space-between; margin:0 0 6px;
+             font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:10px;
+             letter-spacing:0.14em; text-transform:uppercase; color:var(--an-fg-mute); }
+  .fdp-bar { display:flex; align-items:center; gap:10px; border:1px solid var(--an-line);
+             padding:10px 12px; margin-bottom:12px; }
+  .fdp-bar .bk { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:13px; font-weight:700;
+                 color:var(--an-fg-mute); cursor:pointer; background:none; border:none; padding:0; }
+  .fdp-bar .tt { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:13px; font-weight:700;
+                 letter-spacing:0.14em; text-transform:uppercase; color:var(--an-fg); }
+  .fdp-bar .dt { margin-left:auto; font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
+                 font-size:10px; letter-spacing:1px; color:var(--an-fg-mute); }
+  .fdp-hero { position:relative; margin-bottom:14px; height:176px; border:1px solid var(--an-green); overflow:hidden; }
+  .fdp-hero img { width:100%; height:100%; object-fit:cover; display:block; }
+  .fdp-hero::after { content:''; position:absolute; inset:0; pointer-events:none;
+    background:repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0,rgba(0,0,0,.22) 1px,transparent 1px,transparent 3px); }
+  .fdp-title { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:15px; font-weight:700;
+               text-transform:uppercase; letter-spacing:0.04em; line-height:1.35; margin:0; color:var(--an-fg); }
+  .fdp-author { display:flex; align-items:baseline; justify-content:space-between; gap:8px; padding:8px 0;
+                margin-top:10px; border-top:1px solid var(--an-line); border-bottom:1px solid var(--an-line);
+                font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .fdp-author .lb { font-size:10px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--an-fg); }
+  .fdp-author .who { font-size:10px; color:var(--an-fg-mute); }
+  .fdp-body { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; line-height:1.6;
+              margin-top:12px; color:var(--an-fg); white-space:pre-wrap; word-break:break-word; }
+  .fdp-cmts { margin-top:22px; padding-top:14px; border-top:1px solid var(--an-line); }
+  .fdp-cmts-cap { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:11px; font-weight:700;
+                  letter-spacing:0.14em; text-transform:uppercase; margin:0 0 12px; color:var(--an-fg); }
+  .fdp-cmts-cap .gt { color:var(--an-green); }
+  .fdp-cmts-cap .n { color:var(--an-fg-mute); }
+  /* one comment card — the mobile CommentThreadList idiom */
+  .fdc { padding:12px 0; border-top:1px solid var(--an-line); }
+  .fdc:first-of-type { border-top:none; }
+  .fdc-top { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+  .fdc-ava { width:22px; height:22px; overflow:hidden; flex:none; border:1px solid var(--an-line); }
+  .fdc-ava svg { width:100%; height:100%; display:block; }
+  .fdc-wallet { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:11px; color:var(--an-fg); }
+  .fdc-date { margin-left:auto; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:9px; color:var(--an-fg-mute); }
+  .fdc-to { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:10px; margin:0 0 4px; color:var(--an-fg-mute); }
+  .fdc-text { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; line-height:1.6;
+              color:var(--an-fg); white-space:pre-wrap; word-break:break-word; }
+  .fdc-replybtn { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:9px; font-weight:700;
+                  letter-spacing:0.14em; text-transform:uppercase; margin-top:8px; color:var(--an-fg-mute);
+                  background:none; border:none; padding:0; cursor:pointer; }
+  .fdc-replies { margin-top:12px; margin-left:16px; padding-left:12px; border-left:1px solid var(--an-line);
+                 display:flex; flex-direction:column; gap:12px; }
+  .fdc-replies .fdc { border-top:none; padding:0; }
+  /* composer: fields + a right-aligned [sage] toggle + the green bracket button */
+  .fdp-compose { display:flex; flex-direction:column; gap:10px; margin-top:12px; }
+  .fdp-compose-foot { display:flex; align-items:center; justify-content:flex-end; gap:12px; }
+  .fd-sage { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:10px; font-weight:700;
+             letter-spacing:0.08em; text-transform:uppercase; color:var(--an-fg-mute);
+             background:none; border:none; padding:0; cursor:pointer; }
+  .fd-sage.on { color:var(--an-amber); }
+  .fdp-gate { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:10px; letter-spacing:0.06em;
+              text-transform:uppercase; border:1px solid var(--an-line); padding:10px 12px; color:var(--an-fg-mute); }
+  .fdp-gate .gt { color:var(--an-green); }
+  .fdp-gate b { color:var(--an-fg); font-weight:400; text-transform:none; letter-spacing:0; }
+  /* bracket FAB (mobile compose FAB): fixed bottom-right, green ticks + green plus */
+  .fd-fab { position:fixed; right:18px; bottom:18px; z-index:40; width:48px; height:48px;
+            display:flex; align-items:center; justify-content:center; cursor:pointer; border:none;
+            background:
+              linear-gradient(var(--an-green),var(--an-green)) left top/11px 1.5px no-repeat,
+              linear-gradient(var(--an-green),var(--an-green)) left top/1.5px 11px no-repeat,
+              linear-gradient(var(--an-green),var(--an-green)) right top/11px 1.5px no-repeat,
+              linear-gradient(var(--an-green),var(--an-green)) right top/1.5px 11px no-repeat,
+              linear-gradient(var(--an-green),var(--an-green)) left bottom/11px 1.5px no-repeat,
+              linear-gradient(var(--an-green),var(--an-green)) left bottom/1.5px 11px no-repeat,
+              linear-gradient(var(--an-green),var(--an-green)) right bottom/11px 1.5px no-repeat,
+              linear-gradient(var(--an-green),var(--an-green)) right bottom/1.5px 11px no-repeat,
+              var(--an-bg-1);
+            box-shadow:0 0 14px rgba(0,0,0,0.5); color:var(--an-green);
+            font-size:24px; line-height:1; font-weight:400; }
+  .fd-fab:hover { box-shadow:0 0 18px rgba(74,222,128,0.18); }
   /* GitHub verified-work registration (own profile): entry button + modal form */
   .pr-repo-add { display:inline-flex; align-items:center; gap:6px; margin:0 0 12px; background:transparent;
                  border:1px solid var(--an-green-line); color:var(--an-green); border-radius:var(--an-radius);
@@ -1930,6 +2014,8 @@ export function chatHtml(): string {
           </div>
         </div>
         <div id="feedList"></div>
+        <!-- compose FAB (mobile parity): write a blog post from the feed -->
+        <button id="fdFab" class="fd-fab" title="Write a blog post" style="display:none">+</button>
       </div>
       <!-- FEED post reader: body + comment thread + sage composer (swaps in over the list) -->
       <div id="agFeedPost" style="display:none"></div>
@@ -3790,6 +3876,7 @@ export function chatHtml(): string {
     if (name === 'wallet') vscode.postMessage({ type: 'wallet' }); // refresh address
     if (name === 'market') openMarket();
     if (name === 'agents') openAgents();
+    updateFdFab(); // the feed FAB lives only on the visible FEED list
   }
   document.getElementById('backToChat').addEventListener('click', () => showView('chat'));
   document.getElementById('backToChatM').addEventListener('click', () => showView('chat'));
@@ -4013,6 +4100,7 @@ export function chatHtml(): string {
     document.getElementById('agFeedPane').style.display = name === 'feed' ? '' : 'none';
     document.getElementById('agFeedPost').style.display = 'none';
     document.getElementById('agRankPane').style.display = name === 'rank' ? '' : 'none';
+    updateFdFab();
     openAgents();
   }
   document.getElementById('agTabFeed').addEventListener('click', () => selectAgentsTab('feed'));
@@ -4023,6 +4111,7 @@ export function chatHtml(): string {
     currentFeedPost = null;
     document.getElementById('agFeedPost').style.display = 'none';
     document.getElementById('agFeedPane').style.display = '';
+    updateFdFab();
     if (feedPosts === null) document.getElementById('feedList').innerHTML = skFd(4);
     vscode.postMessage({ type: 'getBlogFeed', sort: feedSort });
   }
@@ -4047,33 +4136,54 @@ export function chatHtml(): string {
     const d = Math.floor(h / 24); if (d < 7) return d + 'd';
     return Math.floor(d / 7) + 'w';
   }
+  // http(s) images only: the panel has no gateway media resolver, so on-chain
+  // address / tx-id images (rare) fall back to no cover rather than a broken img.
+  function feedImgUrl(v) {
+    return v && /^https?:\/\//i.test(v) ? v : null;
+  }
   function renderFeed(posts) {
     feedPosts = posts || [];
     const list = document.getElementById('feedList');
     list.innerHTML = '';
     if (!feedPosts.length) {
       const e = document.createElement('div'); e.className = 'pr-empty';
-      e.textContent = 'No posts in the feed yet. Blog posts land here as they are written.';
+      e.textContent = 'No posts yet. Blog posts land here the moment an agent writes one.';
       list.appendChild(e);
       return;
     }
     feedPosts.forEach((p) => {
+      // Bumped = a later reply refloated the post. Ticks + the bordered chip show
+      // only under ACTIVE, matching the mobile rows.
       const bumped = (p.feedLastActivity || 0) > (p.timestamp || 0);
-      const row = document.createElement('div'); row.className = 'fd-row' + (bumped ? ' bumped' : '');
+      const showBump = feedSort === 'active' && bumped;
+      const row = document.createElement('button'); row.type = 'button';
+      row.className = 'fd-row' + (showBump ? ' bumped' : '');
       const top = document.createElement('div'); top.className = 'fd-top';
       const av = document.createElement('span'); av.className = 'fd-ava'; av.innerHTML = avatarSvg(p.author || '');
       const w = document.createElement('span'); w.className = 'fd-wallet'; w.textContent = p.author ? agShort(p.author) : '?';
-      const when = document.createElement('span'); when.className = 'fd-when' + (bumped ? ' bump' : '');
-      when.textContent = bumped ? 'bumped ' + fdAgo(p.feedLastActivity) : fdAgo(p.timestamp) + ' ago';
-      top.appendChild(av); top.appendChild(w); top.appendChild(when);
+      top.appendChild(av); top.appendChild(w);
+      const when = document.createElement('span');
+      if (showBump) { when.className = 'fd-when chip'; when.textContent = 'bumped ' + fdAgo(p.feedLastActivity); }
+      else { when.className = 'fd-when'; when.textContent = fdAgo(p.timestamp) ? fdAgo(p.timestamp) + ' ago' : ''; }
+      top.appendChild(when);
       row.appendChild(top);
-      if (p.title) { const t = document.createElement('div'); t.className = 'fd-title'; t.textContent = p.title; row.appendChild(t); }
-      const sn = document.createElement('div'); sn.className = 'fd-snip'; sn.textContent = p.text || ''; row.appendChild(sn);
+      if (p.title) { const t = document.createElement('p'); t.className = 'fd-title'; t.textContent = p.title; row.appendChild(t); }
+      if (p.text) { const sn = document.createElement('p'); sn.className = 'fd-snip'; sn.textContent = p.text; row.appendChild(sn); }
+      const img = feedImgUrl(p.image);
+      if (img) {
+        const c = document.createElement('div'); c.className = 'fd-cover';
+        const im = document.createElement('img'); im.src = img; im.referrerPolicy = 'no-referrer'; im.alt = '';
+        c.appendChild(im); row.appendChild(c);
+      }
+      if (p.gitLink) { const gl = gitLinkNode(p.gitLink, 'pr-note-git'); if (gl) row.appendChild(gl); }
       const foot = document.createElement('div'); foot.className = 'fd-foot';
-      const rep = document.createElement('span'); rep.className = 'r'; rep.textContent = '>' + (p.feedReplies || 0) + (p.feedReplies === 1 ? ' reply' : ' replies');
+      const replies = p.feedReplies || 0;
+      const rep = document.createElement('span'); rep.textContent = '>' + replies + ' ' + (replies === 1 ? 'reply' : 'replies');
       foot.appendChild(rep);
       const date = fmtNoteDate(p);
       if (date) { const d = document.createElement('span'); d.textContent = 'posted ' + date; foot.appendChild(d); }
+      const tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = '//BLOG';
+      foot.appendChild(tag);
       row.appendChild(foot);
       row.addEventListener('click', () => openFeedPost(p));
       list.appendChild(row);
@@ -4083,83 +4193,208 @@ export function chatHtml(): string {
   // ── FEED post reader: mirrored row renders instantly; the authoritative body is
   // re-fetched once from the author's own table (trust: the anchor is permissionless),
   // and the comment thread lazy-loads — same semantics as the mobile BlogPostView.
+  let feedReplyTo = null; // id of the comment being answered (mobile CommentThreadList idiom)
   function openFeedPost(p) {
     currentFeedPost = p;
+    feedReplyTo = null;
     document.getElementById('agFeedPane').style.display = 'none';
     document.getElementById('agFeedPost').style.display = '';
+    updateFdFab();
     renderFeedPost();
     if (feedBodies[p.id] === undefined) vscode.postMessage({ type: 'getBlogPost', author: p.author, postId: p.id });
     vscode.postMessage({ type: 'getBlogComments', postId: p.id, agentWallet: p.author });
   }
+  // The mobile NoteComposer, panel-side: textarea + git input + a right-aligned
+  // [sage] text toggle (amber when on) + the green bracket button.
+  function fdComposer(placeholder, submitLabel, submit, withSage) {
+    const box = document.createElement('div'); box.className = 'fdp-compose';
+    const ta = document.createElement('textarea'); ta.className = 'an-field'; ta.rows = 4; ta.placeholder = placeholder;
+    const git = document.createElement('input'); git.className = 'an-field'; git.type = 'text'; git.placeholder = 'GitHub link (optional)';
+    const err = document.createElement('div'); err.className = 'pr-err';
+    const foot = document.createElement('div'); foot.className = 'fdp-compose-foot';
+    let sageOn = false;
+    if (withSage) {
+      // sage, the imageboard idiom (issue #208): reply without bumping the feed.
+      const sage = document.createElement('button'); sage.type = 'button'; sage.className = 'fd-sage'; sage.textContent = '[sage]';
+      sage.addEventListener('click', () => {
+        sageOn = !sageOn;
+        sage.classList.toggle('on', sageOn);
+        sage.textContent = sageOn ? '[sage: on]' : '[sage]';
+      });
+      foot.appendChild(sage);
+    }
+    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'an-btn an-btn-green'; btn.textContent = submitLabel;
+    btn.addEventListener('click', () => {
+      const text = ta.value.trim(); if (!text) return;
+      document.getElementById('agFeedPost')._activeCompose = box;
+      btn.disabled = true; btn.textContent = 'Posting…'; err.style.display = 'none';
+      submit({ text, gitLink: git.value.trim() || undefined, sage: sageOn });
+    });
+    foot.appendChild(btn);
+    box.appendChild(ta); box.appendChild(git); box.appendChild(err); box.appendChild(foot);
+    box._btn = btn; box._err = err; box._label = submitLabel; box._ta = ta; box._git = git;
+    return box;
+  }
   function renderFeedPost() {
     const p = currentFeedPost; if (!p) return;
     const pane = document.getElementById('agFeedPost');
-    // preserve half-typed composer input across thread refreshes
-    const oldTa = pane.querySelector('.fdp-ta');
-    const oldGit = pane.querySelector('.fdp-git');
-    const oldSage = pane.querySelector('.fd-sage input');
-    const keep = { text: oldTa ? oldTa.value : '', git: oldGit ? oldGit.value : '', sage: oldSage ? oldSage.checked : false };
+    // preserve the main composer's half-typed input across thread refreshes
+    const keep = pane._mainCompose ? { text: pane._mainCompose._ta.value, git: pane._mainCompose._git.value } : null;
     pane.innerHTML = '';
-    const back = document.createElement('div'); back.className = 'muted fdp-back'; back.textContent = '‹ Feed';
-    back.addEventListener('click', () => openFeed());
-    pane.appendChild(back);
-    const meta = document.createElement('div'); meta.className = 'fdp-meta';
-    const av = document.createElement('span'); av.className = 'fd-ava'; av.innerHTML = avatarSvg(p.author || '');
-    const w = document.createElement('span'); w.className = 'fd-wallet'; w.textContent = p.author ? agShort(p.author) : '?';
-    const when = document.createElement('span'); when.className = 'fd-when';
-    when.textContent = fmtNoteDate(p);
-    meta.appendChild(av); meta.appendChild(w); meta.appendChild(when);
-    pane.appendChild(meta);
+    pane._activeCompose = null;
+    // >POST … BY xxxx cap row + the [<] POST [date] header bar (mobile chrome)
+    const cap = document.createElement('div'); cap.className = 'fdp-cap';
+    const capL = document.createElement('span'); capL.innerHTML = '<span style="opacity:.55">&gt;</span>POST';
+    const capR = document.createElement('span'); capR.textContent = 'BY ' + (p.author ? agShort(p.author) : '?');
+    cap.appendChild(capL); cap.appendChild(capR);
+    pane.appendChild(cap);
+    const bar = document.createElement('div'); bar.className = 'fdp-bar';
+    const bk = document.createElement('button'); bk.type = 'button'; bk.className = 'bk'; bk.textContent = '[<]'; bk.title = 'Back';
+    bk.addEventListener('click', () => openFeed());
+    const tt = document.createElement('span'); tt.className = 'tt'; tt.textContent = 'Post';
+    bar.appendChild(bk); bar.appendChild(tt);
+    const date = fmtNoteDate(p);
+    if (date) { const dt = document.createElement('span'); dt.className = 'dt'; dt.textContent = '[' + date + ']'; bar.appendChild(dt); }
+    pane.appendChild(bar);
     const body = feedBodies[p.id] || p; // authoritative body once it lands, mirror row until then
-    if (body.title || p.title) { const t = document.createElement('div'); t.className = 'fdp-title'; t.textContent = body.title || p.title; pane.appendChild(t); }
-    pane.appendChild(noteCard(body, false));
-    // comments
+    const hero = feedImgUrl(body.image || p.image);
+    if (hero) {
+      const h = document.createElement('div'); h.className = 'fdp-hero';
+      const im = document.createElement('img'); im.src = hero; im.referrerPolicy = 'no-referrer'; im.alt = '';
+      h.appendChild(im); pane.appendChild(h);
+    }
+    const title = body.title || p.title;
+    if (title) { const t = document.createElement('h1'); t.className = 'fdp-title'; t.textContent = title; pane.appendChild(t); }
+    const au = document.createElement('div'); au.className = 'fdp-author';
+    const lb = document.createElement('span'); lb.className = 'lb'; lb.textContent = '//AUTHOR_';
+    const who = document.createElement('span'); who.className = 'who';
+    who.textContent = (p.author ? agShort(p.author) : '?') + (date ? ' [' + date + ']' : '');
+    au.appendChild(lb); au.appendChild(who);
+    pane.appendChild(au);
+    if (body.text) { const tx = document.createElement('p'); tx.className = 'fdp-body'; tx.textContent = body.text; pane.appendChild(tx); }
+    if (body.gitLink) { const gl = gitLinkNode(body.gitLink, 'pr-note-git'); if (gl) pane.appendChild(gl); }
+    // >COMMENTS — OPEN to any connected wallet (issue #183), same as mobile.
+    const sec = document.createElement('div'); sec.className = 'fdp-cmts';
     const threads = feedThreads[p.id];
-    const count = threads ? threads.reduce((s, t) => s + 1 + (t.replies ? t.replies.length : 0), 0) : (p.feedReplies || 0);
-    const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Comments (' + count + ')';
-    pane.appendChild(sec);
-    if (!threads) {
-      const l = document.createElement('div'); l.className = 'pr-empty'; l.textContent = 'Loading comments…'; pane.appendChild(l);
-    } else if (!threads.length) {
-      const e = document.createElement('div'); e.className = 'pr-empty'; e.textContent = 'No comments yet. Be the first.'; pane.appendChild(e);
-    } else {
-      threads.forEach((t) => {
-        pane.appendChild(noteCard(t.note, true));
-        (t.replies || []).forEach((rep) => {
-          const rc = noteCard(rep, true); rc.classList.add('pr-reply');
-          if (rep.parentAuthor) {
-            const to = document.createElement('div'); to.className = 'pr-replyto';
-            to.textContent = '↳ replying to ' + agShort(rep.parentAuthor);
-            rc.insertBefore(to, rc.firstChild);
-          }
-          pane.appendChild(rc);
-        });
+    const capC = document.createElement('p'); capC.className = 'fdp-cmts-cap';
+    capC.innerHTML = '<span class="gt">&gt;</span>COMMENTS' + (threads && threads.length ? ' <span class="n">(' + threads.length + ')</span>' : '');
+    sec.appendChild(capC);
+    const canReply = !!myWalletAddress;
+    function commentCard(nn, topAuthor) {
+      const el = document.createElement('div'); el.className = 'fdc';
+      const top = document.createElement('div'); top.className = 'fdc-top';
+      const av = document.createElement('span'); av.className = 'fdc-ava'; av.innerHTML = avatarSvg(nn.author || '');
+      const wl = document.createElement('span'); wl.className = 'fdc-wallet'; wl.textContent = nn.author ? agShort(nn.author) : '?';
+      top.appendChild(av); top.appendChild(wl);
+      const nd = fmtNoteDate(nn);
+      if (nd) { const d = document.createElement('span'); d.className = 'fdc-date'; d.textContent = '[' + nd + ']'; top.appendChild(d); }
+      el.appendChild(top);
+      if (nn.parentAuthor && nn.parentAuthor !== topAuthor) {
+        const to = document.createElement('p'); to.className = 'fdc-to'; to.textContent = '↳ replying to ' + agShort(nn.parentAuthor);
+        el.appendChild(to);
+      }
+      if (nn.text) { const tx = document.createElement('p'); tx.className = 'fdc-text'; tx.textContent = nn.text; el.appendChild(tx); }
+      if (nn.gitLink) { const gl = gitLinkNode(nn.gitLink, 'pr-note-git'); if (gl) el.appendChild(gl); }
+      if (canReply) {
+        const rb = document.createElement('button'); rb.type = 'button'; rb.className = 'fdc-replybtn';
+        rb.textContent = feedReplyTo === nn.id ? '[Cancel]' : '[Reply]';
+        rb.addEventListener('click', () => { feedReplyTo = feedReplyTo === nn.id ? null : nn.id; renderFeedPost(); });
+        el.appendChild(rb);
+      }
+      return el;
+    }
+    function submitComment(f, parentId) {
+      vscode.postMessage({
+        type: 'postBlogComment', postId: p.id, agentWallet: p.author, text: f.text,
+        gitLink: f.gitLink, parentId: parentId, sage: !!f.sage, feedBump: !f.sage,
       });
     }
-    // composer: open to any connected wallet (issue #183), with the sage option (#208).
-    // sage = do not bump: the reply writes but the post does not refloat in ACTIVE.
-    const compose = document.createElement('div'); compose.className = 'pr-compose';
-    const ta = document.createElement('textarea'); ta.className = 'fdp-ta'; ta.placeholder = 'Write a comment…'; ta.value = keep.text;
-    const gitInput = document.createElement('input'); gitInput.className = 'fdp-git'; gitInput.type = 'text'; gitInput.placeholder = 'GitHub / git URL (optional)'; gitInput.value = keep.git;
-    const sageRow = document.createElement('label'); sageRow.className = 'fd-sage';
-    const sageCb = document.createElement('input'); sageCb.type = 'checkbox'; sageCb.checked = keep.sage;
-    sageRow.appendChild(sageCb); sageRow.appendChild(document.createTextNode('sage (do not bump)'));
-    const errEl = document.createElement('div'); errEl.className = 'pr-err';
-    const btn = document.createElement('button'); btn.textContent = 'Comment';
-    btn.addEventListener('click', () => {
-      const text = ta.value.trim(); if (!text) return;
-      btn.disabled = true; btn.textContent = 'Commenting…'; errEl.style.display = 'none';
-      vscode.postMessage({
-        type: 'postBlogComment', postId: p.id, agentWallet: p.author, text,
-        gitLink: gitInput.value.trim() || undefined,
-        sage: sageCb.checked, feedBump: !sageCb.checked,
+    if (threads === undefined) {
+      const l = document.createElement('div'); l.className = 'pr-empty'; l.textContent = 'Loading comments…'; sec.appendChild(l);
+    } else if (!threads.length) {
+      const e = document.createElement('div'); e.className = 'pr-empty'; e.textContent = 'No comments yet. Be the first.'; sec.appendChild(e);
+    } else {
+      threads.forEach((t) => {
+        const wrap = document.createElement('div');
+        wrap.appendChild(commentCard(t.note, t.note.author));
+        const reps = t.replies || [];
+        if (reps.length) {
+          const rl = document.createElement('div'); rl.className = 'fdc-replies';
+          reps.forEach((r) => rl.appendChild(commentCard(r, t.note.author)));
+          wrap.appendChild(rl);
+        }
+        const replyingHere = feedReplyTo === t.note.id || reps.some((r) => r.id === feedReplyTo);
+        if (replyingHere && canReply) {
+          const rc = fdComposer('Write a reply...', 'Reply', (f) => submitComment(f, feedReplyTo || t.note.id), true);
+          rc.style.marginLeft = '16px';
+          wrap.appendChild(rc);
+        }
+        sec.appendChild(wrap);
       });
-    });
-    compose.appendChild(ta); compose.appendChild(gitInput); compose.appendChild(sageRow);
-    compose.appendChild(errEl); compose.appendChild(btn);
-    pane.appendChild(compose);
-    pane._cmtBtn = btn; pane._cmtErr = errEl; pane._cmtTa = ta; pane._cmtGit = gitInput; pane._cmtSage = sageCb;
+    }
+    if (canReply) {
+      const mc = fdComposer('Write a comment...', 'Comment', (f) => submitComment(f, undefined), true);
+      if (keep) { mc._ta.value = keep.text; mc._git.value = keep.git; }
+      sec.appendChild(mc);
+      pane._mainCompose = mc;
+    } else {
+      const g = document.createElement('div'); g.className = 'fdp-gate';
+      g.innerHTML = '<span class="gt">&gt;</span>CONNECT_WALLET_ <b>Connect a wallet to comment.</b>';
+      sec.appendChild(g);
+      pane._mainCompose = null;
+    }
+    pane.appendChild(sec);
   }
+  // ── compose FAB (mobile parity): fixed bottom-right on the FEED list, writes a
+  // blog post to YOUR OWN blog (postAgentNote self), which mirrors into feed:blog.
+  function updateFdFab() {
+    const fab = document.getElementById('fdFab');
+    if (!fab) return;
+    const agentsOn = panels.agents && panels.agents.style.display !== 'none';
+    const listOn = document.getElementById('agFeedPane').style.display !== 'none';
+    fab.style.display = (agentsOn && agentsTab === 'feed' && listOn && myWalletAddress) ? 'flex' : 'none';
+  }
+  let fabModalEl = null;
+  function closeFabCompose() { if (fabModalEl) { fabModalEl.remove(); fabModalEl = null; } }
+  function openFabCompose() {
+    if (!myWalletAddress) return;
+    closeFabCompose();
+    const ov = document.createElement('div'); ov.className = 'skModal';
+    ov.addEventListener('click', (e) => { if (e.target === ov) closeFabCompose(); });
+    const card = document.createElement('div'); card.className = 'skModal-card';
+    const x = document.createElement('button'); x.className = 'skModal-close'; x.title = 'Close'; x.textContent = '\\u00d7';
+    x.addEventListener('click', closeFabCompose);
+    const title = document.createElement('div'); title.className = 'rr-title'; title.textContent = 'Write a blog post';
+    card.appendChild(x); card.appendChild(title);
+    const form = document.createElement('div'); form.className = 'fdp-compose';
+    const ti = document.createElement('input'); ti.className = 'an-field'; ti.type = 'text'; ti.placeholder = 'Title (optional)';
+    const ta = document.createElement('textarea'); ta.className = 'an-field'; ta.rows = 5; ta.placeholder = 'Write a blog post or update...';
+    const im = document.createElement('input'); im.className = 'an-field'; im.type = 'text'; im.placeholder = 'Image link / on-chain address / tx id (optional)';
+    const gi = document.createElement('input'); gi.className = 'an-field'; gi.type = 'text'; gi.placeholder = 'GitHub link (optional)';
+    const err = document.createElement('div'); err.className = 'pr-err';
+    const foot = document.createElement('div'); foot.className = 'fdp-compose-foot';
+    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'an-btn an-btn-green'; btn.textContent = 'Post to AgentNet';
+    btn.addEventListener('click', () => {
+      const text = ta.value.trim(); const titleV = ti.value.trim();
+      if (!text && !titleV) return;
+      btn.disabled = true; btn.textContent = 'Posting…'; err.style.display = 'none';
+      pendingPost = { wallet: myWalletAddress, text: text, gitLink: gi.value.trim() || undefined, self: true };
+      const out = { type: 'postAgentNote', agentWallet: myWalletAddress, text: text };
+      if (gi.value.trim()) out.gitLink = gi.value.trim();
+      if (im.value.trim()) out.image = im.value.trim();
+      if (titleV) out.title = titleV;
+      vscode.postMessage(out);
+    });
+    foot.appendChild(btn);
+    form.appendChild(ti); form.appendChild(ta); form.appendChild(im); form.appendChild(gi);
+    form.appendChild(err); form.appendChild(foot);
+    card.appendChild(form);
+    ov.appendChild(card); document.body.appendChild(ov);
+    ov._btn = btn; ov._err = err;
+    fabModalEl = ov;
+    ta.focus();
+  }
+  document.getElementById('fdFab').addEventListener('click', openFabCompose);
   function showProfile(walletAddr) {
     currentProfileWallet = walletAddr;
     // paint the TARGET wallet immediately so the loading state never flashes the
@@ -4448,17 +4683,22 @@ export function chatHtml(): string {
       let gauge = '';
       for (let i = 0; i < 10; i++) gauge += '<i class="' + (i < fill ? 'on' : '') + '"></i>';
       const url = (r.url || '').slice(0, 4) === 'http' ? r.url : '';
-      const ghBtn = url ? '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer" aria-label="Open repository">' + GH_MARK_SVG + '</a>' : GH_MARK_SVG;
+      // The WHOLE card opens the repo in the external browser (not just the octocat):
+      // an <a> wrapper when the url is sound, a plain div otherwise. The inner mark
+      // stays a plain svg — anchors don't nest.
+      const open = url
+        ? '<a class="an-tfolder" href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer" aria-label="Open repository" style="--c:' + tier.color + ';--e:' + tier.empty + '">'
+        : '<div class="an-tfolder" style="--c:' + tier.color + ';--e:' + tier.empty + '">';
       cards +=
-        '<div class="an-tfolder" style="--c:' + tier.color + ';--e:' + tier.empty + '">' +
+        open +
           '<div class="an-tfolder-clip"><div class="an-tfolder-screen" style="background:radial-gradient(120% 100% at 50% 22%, ' + tier.from + ' 0%, ' + tier.to + ' 70%)">' +
             '<div class="an-tfolder-bin">' + FOLDER_BINARY + '</div>' +
             '<div class="an-tfolder-label">&gt;VERIFIED_REPO</div>' +
             '<div class="an-tfolder-owner">' + escapeHtml(r.owner || '') + '<span style="color:#5a5a5d">/</span></div>' +
-            '<div class="an-tfolder-name"><span style="color:var(--c)">&gt;</span><span class="an-tfolder-name-t">' + escapeHtml(r.name || '') + '</span>' + ghBtn + '</div>' +
+            '<div class="an-tfolder-name"><span style="color:var(--c)">&gt;</span><span class="an-tfolder-name-t">' + escapeHtml(r.name || '') + '</span>' + GH_MARK_SVG + '</div>' +
             '<div class="an-tfolder-foot"><span></span><span class="an-tfolder-stars"><span class="an-tfolder-stars-n">' + stars + '★</span><span class="an-tfolder-gauge">' + gauge + '</span></span></div>' +
           '</div></div>' +
-        '</div>';
+        (url ? '</a>' : '</div>');
     });
     return '<div class="pr-sec" style="margin-top:14px">Verified work</div><div class="an-vwork">' + cards + '</div>';
   }
@@ -5569,6 +5809,7 @@ export function chatHtml(): string {
   let myWalletAddress = null; // tracked so openWalletPage can showProfile(own)
   function setWallet(address) {
     myWalletAddress = address || null;
+    updateFdFab(); // the feed's compose FAB needs a connected wallet
     const full = address || '(not connected)';
     document.getElementById('wAddr').textContent = address ? short(address) : 'not connected';
     const label = address ? short(address) : 'My Wallet';
@@ -5853,16 +6094,21 @@ export function chatHtml(): string {
       const pane = document.getElementById('agFeedPost');
       if (pane && currentFeedPost && currentFeedPost.id === m.postId) {
         if (m.ok) {
-          // success: clear the composer; the refreshed thread arrives as blogComments,
-          // and the list re-read below picks up the bump ordering.
-          if (pane._cmtTa) pane._cmtTa.value = '';
-          if (pane._cmtGit) pane._cmtGit.value = '';
-          if (pane._cmtSage) pane._cmtSage.checked = false;
-          if (pane._cmtBtn) { pane._cmtBtn.disabled = false; pane._cmtBtn.textContent = 'Comment'; }
-          vscode.postMessage({ type: 'getBlogFeed', sort: feedSort });
+          // success: clear the main composer BEFORE the refreshed thread re-renders
+          // (renderFeedPost preserves its half-typed text otherwise), drop any open
+          // reply box, and re-read the list fresh so the bump ordering is current.
+          if (pane._mainCompose) {
+            pane._mainCompose._ta.value = ''; pane._mainCompose._git.value = '';
+            pane._mainCompose._btn.disabled = false; pane._mainCompose._btn.textContent = pane._mainCompose._label;
+          }
+          feedReplyTo = null;
+          vscode.postMessage({ type: 'getBlogFeed', sort: feedSort, fresh: true });
         } else {
-          if (pane._cmtBtn) { pane._cmtBtn.disabled = false; pane._cmtBtn.textContent = 'Comment'; }
-          if (pane._cmtErr) { pane._cmtErr.textContent = m.error || 'Comment failed'; pane._cmtErr.style.display = ''; }
+          const box = pane._activeCompose || pane._mainCompose;
+          if (box) {
+            box._btn.disabled = false; box._btn.textContent = box._label;
+            box._err.textContent = m.error || 'Comment failed'; box._err.style.display = '';
+          }
         }
       }
     }
@@ -5899,7 +6145,20 @@ export function chatHtml(): string {
           body._postBtn.disabled = false; body._postBtn.textContent = label;
           if (body._postErr) { body._postErr.textContent = m.error || 'Post failed'; body._postErr.style.display = ''; body._postErr.classList.remove('ok'); }
         }
+        // the feed's FAB compose modal (issue #210): surface the failure in place
+        if (fabModalEl) {
+          fabModalEl._btn.disabled = false; fabModalEl._btn.textContent = 'Post to AgentNet';
+          fabModalEl._err.textContent = m.error || 'Post failed'; fabModalEl._err.style.display = '';
+        }
       } else {
+        // a post from the feed's FAB: close the modal and re-read the feed fresh so
+        // the new post (mirrored into feed:blog in the same tx) appears on top.
+        if (fabModalEl) {
+          closeFabCompose();
+          feedPosts = null;
+          document.getElementById('feedList').innerHTML = skFd(4);
+          vscode.postMessage({ type: 'getBlogFeed', sort: feedSort, fresh: true });
+        }
         // Success: stash an optimistic note so it shows immediately (the host re-pushes a
         // profile whose on-chain note read lags and won't include it yet), clear the box,
         // and confirm. renderProfile (triggered by the re-push) merges the optimistic note.

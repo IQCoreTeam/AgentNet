@@ -978,7 +978,7 @@ export function createChatSession(
       case "getBlogFeed": {
         const req = m as Extract<MarketRequest, { type: "getBlogFeed" }>;
         if (!env.getBlogFeed) break;
-        sendMarket({ type: "blogFeed", posts: await env.getBlogFeed(req.limit, req.sort) });
+        sendMarket({ type: "blogFeed", posts: await env.getBlogFeed(req.limit, req.sort, req.fresh) });
         break;
       }
       // open a feed post: fetch the real body from the author's own table (issue #208)
