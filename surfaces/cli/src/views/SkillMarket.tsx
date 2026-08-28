@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { Box, Text, useInput, useStdout } from "ink";
-import type { SkillCard, SkillDetail } from "@iqlabs-official/agent-sdk";
+import type { SkillCard, SkillDetail, Note } from "@iqlabs-official/agent-sdk";
 import type { Reputation, AgentProfile } from "@iqlabs-official/agent-sdk";
 import { maskedHeliusKey, hasDasRpc, saveHeliusKey, getNetwork } from "@iqlabs-official/agent-sdk";
 import { saveGithubToken, loadGithubToken, maskedGithubToken, registerVerifiedWork, parseGithubRepo } from "@iqlabs-official/agent-sdk";
 import { colors, glyph, tierColor, tierColors } from "../theme.js";
-import { displayWidth, truncateEnd, truncateStart } from "../format.js";
+import { displayWidth, truncateEnd, truncateStart, wrapBlock } from "../format.js";
+import { ScrollView } from "./market/ScrollView.js";
 import type { OwnedSkill } from "../components/WelcomePanel.js";
 import { ChipCarousel } from "../components/ChipCarousel.js";
 import { Band } from "../components/Band.js";
@@ -37,7 +38,17 @@ export interface MarketApi {
   // name -> mint for the wallet's owned skills — used to resolve a workflow's required
   // skills (typed by name in the publish form) to the mints the on-chain gate needs.
   ownedSkillMints?(): Promise<Record<string, string>>;
+  // the global blog feed (issue #210) — marketplaceEnv already implements all four;
+  // these declarations just let the CLI see them. Same reads/writes as every surface.
+  getBlogFeed(limit?: number, sort?: "active" | "latest", fresh?: boolean): Promise<Note[]>;
+  getBlogPost(author: string, postId: string): Promise<Note | null>;
+  getBlogComments(postId: string): Promise<FeedThread[]>;
+  postBlogComment(postId: string, agentWallet: string, text: string, gitLink?: string, parentId?: string, opts?: { sage?: boolean; feedBump?: boolean }): Promise<{ ok: boolean; error?: string; threads?: FeedThread[] }>;
 }
+
+// the grouped comment-thread shape the profile already carries; core does not export
+// ThreadNode by name, so read it off AgentProfile instead of redeclaring the shape.
+type FeedThread = NonNullable<AgentProfile["threads"]>[number];
 
 type Stage =
   | "list"
@@ -50,7 +61,10 @@ type Stage =
   | "helius"
   | "github"
   | "blogCompose"
-  | "owned";
+  | "owned"
+  | "feed"
+  | "feedPost"
+  | "feedComment";
 
 // Publish form fields in order — tab/arrow cycles through them.
 type PublishField = "kind" | "name" | "desc" | "text" | "category" | "hashtags" | "price" | "image";
@@ -69,6 +83,73 @@ function sol(lamports: number | null): string {
 function clampScroll(offset: number, total: number, height: number): number {
   const max = Math.max(0, total - height);
   return Math.max(0, Math.min(max, offset));
+}
+
+// ── FEED helpers (issue #210) ─────────────────────────────────────────────────
+// short relative age for feed rows: 5s / 12m / 5h / 3d / 2w
+function agoShort(ms: number | undefined): string {
+  if (!ms) return "";
+  const s = Math.max(1, Math.floor((Date.now() - ms) / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d`;
+  return `${Math.floor(d / 7)}w`;
+}
+function feedShort(w: string): string { return `${w.slice(0, 6)}…${w.slice(-4)}`; }
+function feedDate(ts: number | undefined): string { return ts ? new Date(ts).toLocaleDateString() : ""; }
+
+// The FEED post view's line array — ONE array entry per terminal row (the ScrollView
+// slice-math contract), so the body is pre-wrapped with wrapBlock. The mirror row
+// renders until the authoritative body (fetched from the author's table) lands.
+function feedPostLines(post: Note, body: Note | null, threads: FeedThread[] | null, cols: number): React.ReactNode[] {
+  const w = Math.max(20, cols - 6);
+  const real = body ?? post;
+  const out: React.ReactNode[] = [];
+  out.push(
+    <Text key="meta">
+      <Text color={walletColor(post.author)}>{walletFace(post.author)} </Text>
+      <Text bold color={colors.bone}>{feedShort(post.author)}</Text>
+      <Text dimColor>  {feedDate(post.timestamp)}</Text>
+    </Text>,
+  );
+  const title = real.title ?? post.title;
+  if (title) out.push(<Text key="title" bold color={colors.iqCyan}>{truncateEnd(title, w)}</Text>);
+  out.push(<Text key="sp0"> </Text>);
+  wrapBlock(real.text || "", w).forEach((l, i) => out.push(<Text key={`b${i}`}>{l}</Text>));
+  if (real.image) out.push(<Text key="img" dimColor>[image: {truncateEnd(real.image, Math.max(4, w - 9))}]</Text>);
+  if (real.gitLink) out.push(<Text key="git" color={colors.ok}>{glyph.sparkle} {truncateEnd(real.gitLink, Math.max(4, w - 2))}</Text>);
+  out.push(<Text key="sp1"> </Text>);
+  const count = threads ? threads.reduce((s, t) => s + 1 + t.replies.length, 0) : (post.feedReplies ?? 0);
+  out.push(<Text key="ch" dimColor>── COMMENTS ({count}) ──</Text>);
+  if (threads === null) {
+    out.push(<Text key="cl" dimColor>loading comments…</Text>);
+  } else if (threads.length === 0) {
+    out.push(<Text key="ce" dimColor>no comments yet. [c] writes the first.</Text>);
+  } else {
+    threads.forEach((t, ti) => {
+      out.push(
+        <Text key={`t${ti}`}>
+          <Text color={walletColor(t.note.author)}>{walletFace(t.note.author)} </Text>
+          <Text color={colors.bone}>{feedShort(t.note.author)}</Text>
+          <Text dimColor>  {feedDate(t.note.timestamp)}</Text>
+        </Text>,
+      );
+      wrapBlock(t.note.text || "", Math.max(10, w - 2)).forEach((l, li) => out.push(<Text key={`t${ti}b${li}`}>{"  "}{l}</Text>));
+      t.replies.forEach((rep, ri) => {
+        out.push(
+          <Text key={`t${ti}r${ri}`} dimColor>
+            {"    ↳ "}{feedShort(rep.author)}{rep.parentAuthor ? ` → ${feedShort(rep.parentAuthor)}` : ""}{"  "}{feedDate(rep.timestamp)}
+          </Text>,
+        );
+        wrapBlock(rep.text || "", Math.max(10, w - 4)).forEach((l, li) => out.push(<Text key={`t${ti}r${ri}b${li}`}>{"    "}{l}</Text>));
+      });
+    });
+  }
+  return out;
 }
 
 const SKILL_CHIP_W = 26;
@@ -144,7 +225,7 @@ export function SkillMarket({
   ownedNames: string[];
   onBought: () => void;
   onClose: () => void;
-  initialStage?: "list" | "agents" | "owned" | "github";
+  initialStage?: "list" | "feed" | "agents" | "owned" | "github";
   // null = the host is still fetching the wallet's skills (the WelcomePanel convention:
   // skills === null means loading, [] means fetched and none owned). The owned stage and
   // the github panel read the difference so neither claims "no skills" mid-fetch.
@@ -229,6 +310,20 @@ export function SkillMarket({
   const [blogImage, setBlogImage] = useState("");
   const [blogGitLink, setBlogGitLink] = useState("");
 
+  // feed stage (issue #210). null = the fetch has not settled (the same null-means-
+  // loading convention as results/agents); [] only ever means a settled empty feed.
+  const [feedPosts, setFeedPosts] = useState<Note[] | null>(null);
+  const [feedSort, setFeedSort] = useState<"active" | "latest">("active");
+  const [feedIdx, setFeedIdx] = useState(0);
+  const [feedPost, setFeedPost] = useState<Note | null>(null);      // the opened post (mirror row)
+  const [feedBody, setFeedBody] = useState<Note | null>(null);      // authoritative body once fetched
+  const [feedThreads, setFeedThreads] = useState<FeedThread[] | null>(null);
+  const [feedScroll, setFeedScroll] = useState(0);
+  const [feedCmtText, setFeedCmtText] = useState("");
+  const [feedCmtGit, setFeedCmtGit] = useState("");
+  const [feedCmtSage, setFeedCmtSage] = useState(false);
+  const [feedCmtField, setFeedCmtField] = useState<"text" | "gitLink" | "sage">("text");
+
   // helius / RPC settings
   const [rpcStatus, setRpcStatus] = useState<RpcStatusLite | null>(null);
   const [heliusKeyInput, setHeliusKeyInput] = useState("");
@@ -311,6 +406,8 @@ export function SkillMarket({
     void api.disposedSkillMints?.().then((m) => setDisposedNames(new Set(Object.keys(m)))).catch(() => {});
     // /agents lands straight on the directory; owned needs no fetch (data via prop)
     if (initialStage === "agents") void loadAgents();
+    // /feed lands straight on the global blog feed
+    if (initialStage === "feed") void loadFeed();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -495,6 +592,60 @@ export function SkillMarket({
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
+    }
+  }
+
+  // ── feed (issue #210): load / open / comment ──────────────────────────────
+  async function loadFeed(sort: "active" | "latest" = feedSort, fresh = false) {
+    setLoading(true);
+    setError(null); // the error branch must only ever show a failure of THIS fetch
+    try {
+      setFeedPosts(await api.getBlogFeed(undefined, sort, fresh));
+      setFeedIdx(0);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // The mirror row renders instantly; the authoritative body is re-fetched once from
+  // the author's own table (trust: the anchor is permissionless) and the comment
+  // thread lazy-loads — the same open semantics as the webview BlogPostView.
+  function openFeedPost(p: Note) {
+    setFeedPost(p);
+    setFeedBody(null);
+    setFeedThreads(null);
+    setFeedScroll(0);
+    setStage("feedPost");
+    void api.getBlogPost(p.author, p.id).then(setFeedBody).catch(() => {});
+    void api.getBlogComments(p.id).then(setFeedThreads).catch(() => setFeedThreads([]));
+  }
+
+  async function doPostFeedComment() {
+    if (!feedPost || !feedCmtText.trim()) return;
+    const sage = feedCmtSage;
+    setBusy(true);
+    const res = await api.postBlogComment(
+      feedPost.id,
+      feedPost.author,
+      feedCmtText.trim(),
+      feedCmtGit.trim() || undefined,
+      undefined,
+      { sage, feedBump: !sage },
+    );
+    setBusy(false);
+    if (res.ok) {
+      setFeedCmtText(""); setFeedCmtGit(""); setFeedCmtSage(false);
+      if (res.threads) setFeedThreads(res.threads);
+      // a bumping reply must re-prime the gateway's feed anchor cache: one fresh read
+      // cold-fetches the new mirror row (same as every other host), and reloading the
+      // held list here means the bump ordering is already right when esc lands on it.
+      if (!sage) void api.getBlogFeed(undefined, feedSort, true).then(setFeedPosts).catch(() => {});
+      setFlash("comment posted");
+      setStage("feedPost");
+    } else {
+      setFlash(`comment failed: ${res.error ?? "unknown"}`);
     }
   }
 
@@ -746,6 +897,65 @@ export function SkillMarket({
       return;
     }
 
+    // ── feed list (issue #210) ─────────────────────────────────────────────
+    if (stage === "feed") {
+      const posts = feedPosts ?? [];
+      if (key.escape) { backOut("feed"); return; }
+      if (input === "s") {
+        const next = feedSort === "active" ? "latest" : "active";
+        setFeedSort(next);
+        setFeedPosts(null); // force the loading row: the two sorts are different reads
+        void loadFeed(next);
+        return;
+      }
+      if (input === "r") { setFeedPosts(null); void loadFeed(feedSort, true); return; }
+      if (key.upArrow) return setFeedIdx((i) => Math.max(0, i - 1));
+      if (key.downArrow) return setFeedIdx((i) => Math.min(Math.max(0, posts.length - 1), i + 1));
+      if (key.return && posts[feedIdx]) { openFeedPost(posts[feedIdx]); return; }
+      return;
+    }
+
+    // ── feed post (issue #210) ─────────────────────────────────────────────
+    if (stage === "feedPost" && feedPost) {
+      const total = feedPostLines(feedPost, feedBody, feedThreads, marketCols).length;
+      const height = subViewportH(agentRows, total);
+      if (key.escape) { setStage("feed"); setFeedPost(null); setFeedBody(null); setFeedThreads(null); return; }
+      if (input === "c") {
+        setFeedCmtText(""); setFeedCmtGit(""); setFeedCmtSage(false); setFeedCmtField("text");
+        setStage("feedComment");
+        return;
+      }
+      if (key.downArrow) { setFeedScroll((o) => clampScroll(o + 1, total, height)); return; }
+      if (key.upArrow) { setFeedScroll((o) => clampScroll(o - 1, total, height)); return; }
+      if (key.pageDown) { setFeedScroll((o) => clampScroll(o + height, total, height)); return; }
+      if (key.pageUp) { setFeedScroll((o) => clampScroll(o - height, total, height)); return; }
+      return;
+    }
+
+    // ── feed comment composer (issue #210) ─────────────────────────────────
+    if (stage === "feedComment") {
+      if (key.escape) { setStage("feedPost"); return; }
+      const FIELDS = ["text", "gitLink", "sage"] as const;
+      const fi = FIELDS.indexOf(feedCmtField);
+      if (key.tab || key.downArrow) { setFeedCmtField(FIELDS[(fi + 1) % FIELDS.length]); return; }
+      if (key.upArrow) { setFeedCmtField(FIELDS[(fi + FIELDS.length - 1) % FIELDS.length]); return; }
+      if (feedCmtField === "sage" && (input === " " || key.leftArrow || key.rightArrow)) {
+        setFeedCmtSage((v) => !v);
+        return;
+      }
+      if (key.return) {
+        if (fi < FIELDS.length - 1) setFeedCmtField(FIELDS[fi + 1]);
+        else void doPostFeedComment();
+        return;
+      }
+      if (feedCmtField === "sage") return; // toggle-only field, no free text
+      const setter = feedCmtField === "text" ? setFeedCmtText : setFeedCmtGit;
+      const cur = feedCmtField === "text" ? feedCmtText : feedCmtGit;
+      if (key.backspace || key.delete) { setter(cur.slice(0, -1)); return; }
+      if (input && !key.ctrl && !key.meta) { setter(cur + input); return; }
+      return;
+    }
+
     // ── agents list ────────────────────────────────────────────────────────
     if (stage === "agents") {
       const filtered = (agents ?? []).filter((a) => !agentQuery.trim() || a.wallet.toLowerCase().includes(agentQuery.toLowerCase()));
@@ -974,6 +1184,131 @@ export function SkillMarket({
         self={agentProfile.self}
         walletAddr={walletAddr}
       />
+    );
+  }
+
+  // ── feed list (issue #210) ────────────────────────────────────────────────
+  if (stage === "feed") {
+    const list = feedPosts ?? [];
+    const showFace = marketCols >= 40;
+    const vis = Math.max(2, Math.min(list.length, Math.floor((agentRows - 11) / 2)));
+    const fStart = Math.max(0, Math.min(feedIdx - Math.floor(vis / 2), Math.max(0, list.length - vis)));
+    const innerW = Math.max(20, marketCols - 6);
+    return (
+      <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
+        <Box justifyContent="space-between">
+          <Text bold color={colors.bone}>FEED</Text>
+          <Text>
+            <Text color={feedSort === "active" ? colors.ok : colors.dim} bold={feedSort === "active"}>ACTIVE</Text>
+            <Text dimColor> | </Text>
+            <Text color={feedSort === "latest" ? colors.ok : colors.dim} bold={feedSort === "latest"}>LATEST</Text>
+            {feedPosts ? <Text dimColor> · {list.length} POSTS</Text> : null}
+          </Text>
+        </Box>
+        <Box flexDirection="column" marginTop={1}>
+          {/* three honest states on the reserved rows (the null-means-loading
+              convention): pending says loading, a settled failure says what failed,
+              and "no posts" may only follow a SETTLED empty fetch. */}
+          {loading || (feedPosts === null && !error) ? (
+            <Text dimColor>loading…</Text>
+          ) : error ? (
+            <Text color={colors.err}>{error}</Text>
+          ) : list.length === 0 ? (
+            <Text dimColor>no posts yet. a blog post on any agent profile lands here.</Text>
+          ) : (
+            <>
+              {fStart > 0 ? <Text dimColor>… {fStart} more above</Text> : null}
+              {list.slice(fStart, fStart + vis).map((p, wi) => {
+                const i = fStart + wi;
+                const on = i === feedIdx;
+                const bumped = (p.feedLastActivity ?? 0) > (p.timestamp ?? 0);
+                const when = bumped ? `bumped ${agoShort(p.feedLastActivity)}` : `${agoShort(p.timestamp)} ago`;
+                const preview = (p.title || p.text || "").trim();
+                return (
+                  <Box key={p.id} flexDirection="column">
+                    <Box justifyContent="space-between">
+                      <Text wrap="truncate-end">
+                        <Text color={on ? colors.iqCyan : colors.bone} bold={on}>{on ? "› " : "  "}</Text>
+                        {showFace ? <Text color={walletColor(p.author)}>{walletFace(p.author)} </Text> : null}
+                        <Text color={on ? colors.iqCyan : colors.bone} bold={on}>{feedShort(p.author)}</Text>
+                      </Text>
+                      {/* a bumped row wears the green signal, same as the webview ticks */}
+                      <Text>
+                        <Text color={bumped ? colors.ok : colors.dim}>{when}</Text>
+                        <Text dimColor> · {p.feedReplies ?? 0}↩</Text>
+                      </Text>
+                    </Box>
+                    <Text dimColor wrap="truncate-end">{"    "}{truncateEnd(preview, Math.max(4, innerW - 4))}</Text>
+                  </Box>
+                );
+              })}
+              {fStart + vis < list.length ? <Text dimColor>… {list.length - fStart - vis} more below</Text> : null}
+            </>
+          )}
+        </Box>
+        <Box marginTop={1}>
+          <Band label="feed" note="A REPLY BUMPS THE POST · SAGE DOES NOT · WRITTEN ON CHAIN" inverted />
+        </Box>
+        <Text dimColor wrap="truncate-end">↑/↓ move · ↵ open · [s] active|latest · [r] refresh · esc back</Text>
+      </Box>
+    );
+  }
+
+  // ── feed post (issue #210) ────────────────────────────────────────────────
+  if (stage === "feedPost" && feedPost) {
+    const lines = feedPostLines(feedPost, feedBody, feedThreads, marketCols);
+    const height = subViewportH(agentRows, lines.length);
+    return (
+      <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
+        <Box justifyContent="space-between">
+          <Text bold color={colors.bone}>POST</Text>
+          {flash ? <Text color={colors.ok}>{flash}</Text> : null}
+        </Box>
+        <Box flexDirection="column" marginTop={1}>
+          <ScrollView lines={lines} height={height} offset={feedScroll} />
+        </Box>
+        <Box marginTop={1}>
+          <Text dimColor>[c] comment · ↑/↓/PgUp/PgDn scroll · esc back</Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  // ── feed comment composer (issue #210) ────────────────────────────────────
+  if (stage === "feedComment") {
+    const fields = ["text", "gitLink", "sage"] as const;
+    const labels: Record<(typeof fields)[number], string> = { text: "text    ", gitLink: "gitLink ", sage: "sage    " };
+    return (
+      <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
+        <Box>
+          <Band label="reply" note="A NON SAGE REPLY BUMPS THE POST · POSTS ON CHAIN" />
+        </Box>
+        <Box flexDirection="column" marginTop={1}>
+          {fields.map((f) => {
+            const on = f === feedCmtField;
+            if (f === "sage") {
+              return (
+                <Box key={f}>
+                  <Text color={on ? colors.iqCyan : colors.dim}>{on ? "▸ " : "  "}</Text>
+                  <Box width={10}><Text color={on ? colors.iqCyan : colors.dim} bold={on}>{labels[f]}</Text></Box>
+                  <Text color={feedCmtSage ? colors.ok : colors.dim}>{feedCmtSage ? "✓ on · do not bump" : "✗ off · bumps the post"}</Text>
+                </Box>
+              );
+            }
+            const val = f === "text" ? feedCmtText : feedCmtGit;
+            return (
+              <Box key={f}>
+                <Text color={on ? colors.iqCyan : colors.dim}>{on ? "▸ " : "  "}</Text>
+                <Box width={10}><Text color={on ? colors.iqCyan : colors.dim} bold={on}>{labels[f]}</Text></Box>
+                <Text dimColor={!val && f === "gitLink"}>{val || (f === "gitLink" ? "(optional)" : "")}</Text>
+                {on ? <Text inverse> </Text> : null}
+              </Box>
+            );
+          })}
+        </Box>
+        {busy ? <Box marginTop={1}><Text dimColor>posting…</Text></Box> : null}
+        <Box marginTop={1}><Text dimColor>↑/↓/[tab] field · space toggles sage · ↵ next / post on sage · esc cancel</Text></Box>
+      </Box>
     );
   }
 

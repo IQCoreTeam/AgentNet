@@ -1457,6 +1457,46 @@ export function chatHtml(): string {
   .pr-tab:hover { color:#9a9a9f; }
   .pr-tab.on { border-bottom:2px solid #f2f2f2; color:#f2f2f2; }
   .pr-tab.on .k { color:#5a5a5d; }
+  /* issue #210: AGENTNET FEED — compact preview rows ported from the mobile BlogFeed */
+  .fd-head { display:flex; align-items:center; justify-content:space-between; margin:2px 0 12px; }
+  .fd-cap { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.72em;
+            letter-spacing:1.5px; color:var(--an-fg-mute); }
+  .fd-sort { display:flex; border:1px solid var(--an-line); border-radius:var(--an-radius-sm); overflow:hidden; }
+  .fd-sort button { background:transparent; border:none; color:var(--an-fg-mute); cursor:pointer;
+                    font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.68em;
+                    letter-spacing:1px; text-transform:uppercase; padding:4px 10px; }
+  .fd-sort button.on { background:var(--an-green-dim); color:var(--an-green); }
+  .fd-row { position:relative; border:1px solid var(--an-line); border-radius:var(--an-radius);
+            padding:10px 12px; margin-bottom:10px; cursor:pointer; }
+  .fd-row:hover { border-color:var(--an-green-line); }
+  /* a bumped row wears green corner ticks (same signal as the mobile rows) */
+  .fd-row.bumped { border-color:var(--an-green-line); }
+  .fd-row.bumped::before, .fd-row.bumped::after {
+    content:''; position:absolute; width:7px; height:7px; border:1px solid var(--an-green); }
+  .fd-row.bumped::before { top:-1px; left:-1px; border-right:none; border-bottom:none; }
+  .fd-row.bumped::after { bottom:-1px; right:-1px; border-left:none; border-top:none; }
+  .fd-top { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .fd-ava { width:20px; height:20px; border-radius:4px; overflow:hidden; flex:none; }
+  .fd-ava svg { width:100%; height:100%; display:block; }
+  .fd-wallet { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.78em; color:var(--an-fg); }
+  .fd-when { margin-left:auto; font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
+             font-size:0.68em; letter-spacing:0.5px; color:var(--an-fg-mute); }
+  .fd-when.bump { color:var(--an-green); }
+  .fd-title { font-weight:700; font-size:0.95em; margin:0 0 4px; color:var(--an-fg); }
+  .fd-snip { font-size:0.82em; color:var(--an-fg-mute); line-height:1.45;
+             display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .fd-foot { display:flex; gap:12px; margin-top:8px; font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
+             font-size:0.68em; letter-spacing:0.5px; color:var(--an-fg-mute); }
+  .fd-foot .r { color:var(--an-green); }
+  .sk-fd { height:96px; border-radius:var(--an-radius); margin-bottom:10px; }
+  /* FEED post reader */
+  .fdp-back { cursor:pointer; margin-bottom:12px; }
+  .fdp-meta { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  .fdp-title { font-weight:800; font-size:1.15em; margin:0 0 10px; color:var(--an-fg); }
+  .fd-sage { display:flex; align-items:center; gap:6px; margin-top:6px; cursor:pointer;
+             font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.72em;
+             letter-spacing:0.5px; color:var(--an-fg-mute); user-select:none; }
+  .fd-sage input { accent-color: var(--an-green); margin:0; }
   /* GitHub verified-work registration (own profile): entry button + modal form */
   .pr-repo-add { display:inline-flex; align-items:center; gap:6px; margin:0 0 12px; background:transparent;
                  border:1px solid var(--an-green-line); color:var(--an-green); border-radius:var(--an-radius);
@@ -1701,7 +1741,7 @@ export function chatHtml(): string {
       <span class="caret">▾</span>
     </button>
     <button id="marketsBtn" title="Skill marketplace">Markets</button>
-    <button id="agentsBtn" title="Agent directory">Agents</button>
+    <button id="agentsBtn" title="Blog feed + agent directory">AGENTNET</button>
     <div class="spacer"></div>
     <button id="histBtn" title="Recent chats" aria-label="Recent chats"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.8"></circle><path d="M8 4.8v3.2l2.3 1.4"></path></svg></button>
     <button id="newTabBtn" title="Open another chat in a new tab"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3.2v9.6M3.2 8h9.6"></path></svg></button>
@@ -1872,19 +1912,39 @@ export function chatHtml(): string {
     </div>
   </div>
 
-  <!-- AGENTS DIRECTORY view — ranked list of agents (by totalSupply) -->
+  <!-- AGENTNET view (issue #210) — FEED (global blog feed, default) + RANK (agent directory) -->
   <div id="agentsView" class="panel" style="display:none">
     <div class="page">
       <div id="backToChatA" class="muted" style="cursor:pointer;margin-bottom:10px">‹ Back to chat</div>
-      <!-- sticky: your own agent card + wallet search, pinned while the ranked list scrolls under -->
-      <div class="agSticky">
-        <div id="agentsSelf"></div>
-        <div class="agSearch">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7a7a7a" stroke-width="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.5-4.5"/></svg>
-          <input id="agentSearch" type="text" placeholder="Search agent wallet…" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
-        </div>
+      <div class="pr-tabs" id="agSubTabs">
+        <button class="pr-tab on" id="agTabFeed" type="button"><div class="t">Feed</div></button>
+        <button class="pr-tab" id="agTabRank" type="button"><div class="t">Rank</div></button>
       </div>
-      <div id="agentsList" class="agList"></div>
+      <!-- FEED: compact preview rows over the feed:blog anchor, ACTIVE | LATEST sort -->
+      <div id="agFeedPane">
+        <div class="fd-head">
+          <span class="fd-cap">&gt;GLOBAL_BLOG_FEED</span>
+          <div class="fd-sort">
+            <button id="fdSortActive" class="on" type="button">Active</button>
+            <button id="fdSortLatest" type="button">Latest</button>
+          </div>
+        </div>
+        <div id="feedList"></div>
+      </div>
+      <!-- FEED post reader: body + comment thread + sage composer (swaps in over the list) -->
+      <div id="agFeedPost" style="display:none"></div>
+      <!-- RANK: the ranked agent directory (by totalSupply), unchanged -->
+      <div id="agRankPane" style="display:none">
+        <!-- sticky: your own agent card + wallet search, pinned while the ranked list scrolls under -->
+        <div class="agSticky">
+          <div id="agentsSelf"></div>
+          <div class="agSearch">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7a7a7a" stroke-width="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.5-4.5"/></svg>
+            <input id="agentSearch" type="text" placeholder="Search agent wallet…" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
+          </div>
+        </div>
+        <div id="agentsList" class="agList"></div>
+      </div>
     </div>
   </div>
 
@@ -3884,11 +3944,221 @@ export function chatHtml(): string {
   function skAc(n) { let s = ''; for (let i = 0; i < n; i++) s += '<div class="sk-ac sk-sh"></div>'; return s; }
   const skId = '<div class="sk-id sk-sh"></div>';
 
-  // ---- agent directory + profile (issue #35) ----
+  // ── helper: a note/comment card (date + on-chain tx link in the footer) ──
+  // __txSignature / __blockTime are attached per-row by the gateway and flow through
+  // hydrateNotes' spread, so historical cards link to their exact write tx. A freshly
+  // posted (optimistic) card has only a timestamp until the on-chain read catches up.
+  // Module scope (issue #210): shared by the profile Community pane and the FEED reader.
+  function fmtNoteDate(n) {
+    const ms = n.__blockTime ? n.__blockTime * 1000 : (n.timestamp || 0);
+    if (!ms) return '';
+    try { return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
+    catch { return ''; }
+  }
+  function explorerTxUrl(sig) {
+    const u = 'https://explorer.solana.com/tx/' + encodeURIComponent(sig);
+    return rpcNetwork === 'mainnet' ? u : u + '?cluster=' + encodeURIComponent(rpcNetwork);
+  }
+  function noteCard(n, withAuthor) {
+    const el = document.createElement('div'); el.className = 'pr-note';
+    if (withAuthor) {
+      const auth = document.createElement('div'); auth.className = 'pr-note-author';
+      auth.textContent = n.author ? (n.author.slice(0, 6) + '…' + n.author.slice(-4)) : '?';
+      el.appendChild(auth);
+    }
+    const bodyEl = document.createElement('div'); bodyEl.className = 'pr-note-body'; renderMd(bodyEl, n.text || ''); el.appendChild(bodyEl);
+    if (n.gitLink) {
+      const gl = gitLinkNode(n.gitLink, 'pr-note-git');
+      if (gl) el.appendChild(gl);
+    }
+    const date = fmtNoteDate(n);
+    const sig = typeof n.__txSignature === 'string' ? n.__txSignature : null;
+    if (date || sig) {
+      const foot = document.createElement('div'); foot.className = 'pr-note-foot';
+      const d = document.createElement('span'); d.className = 'pr-note-date'; d.textContent = date;
+      foot.appendChild(d);
+      if (sig) {
+        const a = document.createElement('a'); a.className = 'pr-note-tx';
+        a.href = explorerTxUrl(sig); a.target = '_blank'; a.rel = 'noopener noreferrer';
+        a.textContent = 'tx ↗'; a.title = sig;
+        foot.appendChild(a);
+      }
+      el.appendChild(foot);
+    }
+    return el;
+  }
+
+  // ---- AGENTNET: FEED (default) | RANK sub tabs (issue #210) ----
+  // FEED reads the global feed:blog anchor through the same messages the mobile
+  // surfaces use (getBlogFeed / getBlogPost / getBlogComments / postBlogComment).
+  // RANK is the pre-existing agent directory, unchanged.
   let currentProfileWallet = null;
+  let agentsTab = 'feed';           // persists across view switches, same as profileTab
+  let feedSort = 'active';          // ACTIVE = lastActivityTime, LATEST = createdAt
+  let feedPosts = null;             // null = never loaded (skeletons), [] = settled empty
+  let currentFeedPost = null;       // the post open in the reader
+  const feedBodies = {};            // postId -> authoritative body from the author's table
+  const feedThreads = {};           // postId -> comment threads
   function openAgents() {
+    if (agentsTab === 'feed') openFeed(); else openRank();
+  }
+  function openRank() {
     document.getElementById('agentsList').innerHTML = skAc(4);
     vscode.postMessage({ type: 'listAgents' });
+  }
+  function selectAgentsTab(name) {
+    agentsTab = name;
+    document.getElementById('agTabFeed').classList.toggle('on', name === 'feed');
+    document.getElementById('agTabRank').classList.toggle('on', name === 'rank');
+    document.getElementById('agFeedPane').style.display = name === 'feed' ? '' : 'none';
+    document.getElementById('agFeedPost').style.display = 'none';
+    document.getElementById('agRankPane').style.display = name === 'rank' ? '' : 'none';
+    openAgents();
+  }
+  document.getElementById('agTabFeed').addEventListener('click', () => selectAgentsTab('feed'));
+  document.getElementById('agTabRank').addEventListener('click', () => selectAgentsTab('rank'));
+
+  function skFd(n) { let s = ''; for (let i = 0; i < n; i++) s += '<div class="sk-fd sk-sh"></div>'; return s; }
+  function openFeed() {
+    currentFeedPost = null;
+    document.getElementById('agFeedPost').style.display = 'none';
+    document.getElementById('agFeedPane').style.display = '';
+    if (feedPosts === null) document.getElementById('feedList').innerHTML = skFd(4);
+    vscode.postMessage({ type: 'getBlogFeed', sort: feedSort });
+  }
+  function setFeedSort(s) {
+    if (feedSort === s) return;
+    feedSort = s;
+    document.getElementById('fdSortActive').classList.toggle('on', s === 'active');
+    document.getElementById('fdSortLatest').classList.toggle('on', s === 'latest');
+    feedPosts = null; // force skeletons: the two sorts are different reads
+    openFeed();
+  }
+  document.getElementById('fdSortActive').addEventListener('click', () => setFeedSort('active'));
+  document.getElementById('fdSortLatest').addEventListener('click', () => setFeedSort('latest'));
+
+  // short relative age: 5s / 12m / 5h / 3d / 2w — matches the mobile feed rows
+  function fdAgo(ms) {
+    if (!ms) return '';
+    const s = Math.max(1, Math.floor((Date.now() - ms) / 1000));
+    if (s < 60) return s + 's';
+    const m = Math.floor(s / 60); if (m < 60) return m + 'm';
+    const h = Math.floor(m / 60); if (h < 24) return h + 'h';
+    const d = Math.floor(h / 24); if (d < 7) return d + 'd';
+    return Math.floor(d / 7) + 'w';
+  }
+  function renderFeed(posts) {
+    feedPosts = posts || [];
+    const list = document.getElementById('feedList');
+    list.innerHTML = '';
+    if (!feedPosts.length) {
+      const e = document.createElement('div'); e.className = 'pr-empty';
+      e.textContent = 'No posts in the feed yet. Blog posts land here as they are written.';
+      list.appendChild(e);
+      return;
+    }
+    feedPosts.forEach((p) => {
+      const bumped = (p.feedLastActivity || 0) > (p.timestamp || 0);
+      const row = document.createElement('div'); row.className = 'fd-row' + (bumped ? ' bumped' : '');
+      const top = document.createElement('div'); top.className = 'fd-top';
+      const av = document.createElement('span'); av.className = 'fd-ava'; av.innerHTML = avatarSvg(p.author || '');
+      const w = document.createElement('span'); w.className = 'fd-wallet'; w.textContent = p.author ? agShort(p.author) : '?';
+      const when = document.createElement('span'); when.className = 'fd-when' + (bumped ? ' bump' : '');
+      when.textContent = bumped ? 'bumped ' + fdAgo(p.feedLastActivity) : fdAgo(p.timestamp) + ' ago';
+      top.appendChild(av); top.appendChild(w); top.appendChild(when);
+      row.appendChild(top);
+      if (p.title) { const t = document.createElement('div'); t.className = 'fd-title'; t.textContent = p.title; row.appendChild(t); }
+      const sn = document.createElement('div'); sn.className = 'fd-snip'; sn.textContent = p.text || ''; row.appendChild(sn);
+      const foot = document.createElement('div'); foot.className = 'fd-foot';
+      const rep = document.createElement('span'); rep.className = 'r'; rep.textContent = '>' + (p.feedReplies || 0) + (p.feedReplies === 1 ? ' reply' : ' replies');
+      foot.appendChild(rep);
+      const date = fmtNoteDate(p);
+      if (date) { const d = document.createElement('span'); d.textContent = 'posted ' + date; foot.appendChild(d); }
+      row.appendChild(foot);
+      row.addEventListener('click', () => openFeedPost(p));
+      list.appendChild(row);
+    });
+  }
+
+  // ── FEED post reader: mirrored row renders instantly; the authoritative body is
+  // re-fetched once from the author's own table (trust: the anchor is permissionless),
+  // and the comment thread lazy-loads — same semantics as the mobile BlogPostView.
+  function openFeedPost(p) {
+    currentFeedPost = p;
+    document.getElementById('agFeedPane').style.display = 'none';
+    document.getElementById('agFeedPost').style.display = '';
+    renderFeedPost();
+    if (feedBodies[p.id] === undefined) vscode.postMessage({ type: 'getBlogPost', author: p.author, postId: p.id });
+    vscode.postMessage({ type: 'getBlogComments', postId: p.id, agentWallet: p.author });
+  }
+  function renderFeedPost() {
+    const p = currentFeedPost; if (!p) return;
+    const pane = document.getElementById('agFeedPost');
+    // preserve half-typed composer input across thread refreshes
+    const oldTa = pane.querySelector('.fdp-ta');
+    const oldGit = pane.querySelector('.fdp-git');
+    const oldSage = pane.querySelector('.fd-sage input');
+    const keep = { text: oldTa ? oldTa.value : '', git: oldGit ? oldGit.value : '', sage: oldSage ? oldSage.checked : false };
+    pane.innerHTML = '';
+    const back = document.createElement('div'); back.className = 'muted fdp-back'; back.textContent = '‹ Feed';
+    back.addEventListener('click', () => openFeed());
+    pane.appendChild(back);
+    const meta = document.createElement('div'); meta.className = 'fdp-meta';
+    const av = document.createElement('span'); av.className = 'fd-ava'; av.innerHTML = avatarSvg(p.author || '');
+    const w = document.createElement('span'); w.className = 'fd-wallet'; w.textContent = p.author ? agShort(p.author) : '?';
+    const when = document.createElement('span'); when.className = 'fd-when';
+    when.textContent = fmtNoteDate(p);
+    meta.appendChild(av); meta.appendChild(w); meta.appendChild(when);
+    pane.appendChild(meta);
+    const body = feedBodies[p.id] || p; // authoritative body once it lands, mirror row until then
+    if (body.title || p.title) { const t = document.createElement('div'); t.className = 'fdp-title'; t.textContent = body.title || p.title; pane.appendChild(t); }
+    pane.appendChild(noteCard(body, false));
+    // comments
+    const threads = feedThreads[p.id];
+    const count = threads ? threads.reduce((s, t) => s + 1 + (t.replies ? t.replies.length : 0), 0) : (p.feedReplies || 0);
+    const sec = document.createElement('div'); sec.className = 'pr-sec'; sec.textContent = 'Comments (' + count + ')';
+    pane.appendChild(sec);
+    if (!threads) {
+      const l = document.createElement('div'); l.className = 'pr-empty'; l.textContent = 'Loading comments…'; pane.appendChild(l);
+    } else if (!threads.length) {
+      const e = document.createElement('div'); e.className = 'pr-empty'; e.textContent = 'No comments yet. Be the first.'; pane.appendChild(e);
+    } else {
+      threads.forEach((t) => {
+        pane.appendChild(noteCard(t.note, true));
+        (t.replies || []).forEach((rep) => {
+          const rc = noteCard(rep, true); rc.classList.add('pr-reply');
+          if (rep.parentAuthor) {
+            const to = document.createElement('div'); to.className = 'pr-replyto';
+            to.textContent = '↳ replying to ' + agShort(rep.parentAuthor);
+            rc.insertBefore(to, rc.firstChild);
+          }
+          pane.appendChild(rc);
+        });
+      });
+    }
+    // composer: open to any connected wallet (issue #183), with the sage option (#208).
+    // sage = do not bump: the reply writes but the post does not refloat in ACTIVE.
+    const compose = document.createElement('div'); compose.className = 'pr-compose';
+    const ta = document.createElement('textarea'); ta.className = 'fdp-ta'; ta.placeholder = 'Write a comment…'; ta.value = keep.text;
+    const gitInput = document.createElement('input'); gitInput.className = 'fdp-git'; gitInput.type = 'text'; gitInput.placeholder = 'GitHub / git URL (optional)'; gitInput.value = keep.git;
+    const sageRow = document.createElement('label'); sageRow.className = 'fd-sage';
+    const sageCb = document.createElement('input'); sageCb.type = 'checkbox'; sageCb.checked = keep.sage;
+    sageRow.appendChild(sageCb); sageRow.appendChild(document.createTextNode('sage (do not bump)'));
+    const errEl = document.createElement('div'); errEl.className = 'pr-err';
+    const btn = document.createElement('button'); btn.textContent = 'Comment';
+    btn.addEventListener('click', () => {
+      const text = ta.value.trim(); if (!text) return;
+      btn.disabled = true; btn.textContent = 'Commenting…'; errEl.style.display = 'none';
+      vscode.postMessage({
+        type: 'postBlogComment', postId: p.id, agentWallet: p.author, text,
+        gitLink: gitInput.value.trim() || undefined,
+        sage: sageCb.checked, feedBump: !sageCb.checked,
+      });
+    });
+    compose.appendChild(ta); compose.appendChild(gitInput); compose.appendChild(sageRow);
+    compose.appendChild(errEl); compose.appendChild(btn);
+    pane.appendChild(compose);
+    pane._cmtBtn = btn; pane._cmtErr = errEl; pane._cmtTa = ta; pane._cmtGit = gitInput; pane._cmtSage = sageCb;
   }
   function showProfile(walletAddr) {
     currentProfileWallet = walletAddr;
@@ -4349,49 +4619,6 @@ export function chatHtml(): string {
     }
     if (!profile.createdSkills.length && !ownedNotCreated.length && !vwHtml) {
       const e = document.createElement('div'); e.className = 'pr-empty'; e.textContent = 'No work or skills yet.'; paneAgent.appendChild(e);
-    }
-
-    // ── helper: a note/comment card (date + on-chain tx link in the footer) ──
-    // __txSignature / __blockTime are attached per-row by the gateway and flow through
-    // hydrateNotes' spread, so historical cards link to their exact write tx. A freshly
-    // posted (optimistic) card has only a timestamp until the on-chain read catches up.
-    function fmtNoteDate(n) {
-      const ms = n.__blockTime ? n.__blockTime * 1000 : (n.timestamp || 0);
-      if (!ms) return '';
-      try { return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
-      catch { return ''; }
-    }
-    function explorerTxUrl(sig) {
-      const u = 'https://explorer.solana.com/tx/' + encodeURIComponent(sig);
-      return rpcNetwork === 'mainnet' ? u : u + '?cluster=' + encodeURIComponent(rpcNetwork);
-    }
-    function noteCard(n, withAuthor) {
-      const el = document.createElement('div'); el.className = 'pr-note';
-      if (withAuthor) {
-        const auth = document.createElement('div'); auth.className = 'pr-note-author';
-        auth.textContent = n.author ? (n.author.slice(0, 6) + '…' + n.author.slice(-4)) : '?';
-        el.appendChild(auth);
-      }
-      const bodyEl = document.createElement('div'); bodyEl.className = 'pr-note-body'; renderMd(bodyEl, n.text || ''); el.appendChild(bodyEl);
-      if (n.gitLink) {
-        const gl = gitLinkNode(n.gitLink, 'pr-note-git');
-        if (gl) el.appendChild(gl);
-      }
-      const date = fmtNoteDate(n);
-      const sig = typeof n.__txSignature === 'string' ? n.__txSignature : null;
-      if (date || sig) {
-        const foot = document.createElement('div'); foot.className = 'pr-note-foot';
-        const d = document.createElement('span'); d.className = 'pr-note-date'; d.textContent = date;
-        foot.appendChild(d);
-        if (sig) {
-          const a = document.createElement('a'); a.className = 'pr-note-tx';
-          a.href = explorerTxUrl(sig); a.target = '_blank'; a.rel = 'noopener noreferrer';
-          a.textContent = 'tx ↗'; a.title = sig;
-          foot.appendChild(a);
-        }
-        el.appendChild(foot);
-      }
-      return el;
     }
 
     // ── NOTES pane: blog (self-notes) + compose (own) + comments ──
@@ -5607,6 +5834,38 @@ export function chatHtml(): string {
     // issue #35: agent directory + profile
     else if (m.type === 'agents') renderAgents(m.agents);
     else if (m.type === 'agentProfile') renderProfile(m.profile);
+    // issue #210: the AGENTNET FEED (global blog feed + post reader)
+    else if (m.type === 'blogFeed') renderFeed(m.posts);
+    else if (m.type === 'blogPost') {
+      // authoritative body from the author's own table; null = the mirror row was
+      // not backed by a real post (impersonation or a deleted table) — keep the reader
+      // on the mirror text rather than blanking it.
+      if (m.post) {
+        feedBodies[m.postId] = m.post;
+        if (currentFeedPost && currentFeedPost.id === m.postId) renderFeedPost();
+      }
+    }
+    else if (m.type === 'blogComments') {
+      feedThreads[m.postId] = m.threads || [];
+      if (currentFeedPost && currentFeedPost.id === m.postId) renderFeedPost();
+    }
+    else if (m.type === 'blogCommentResult') {
+      const pane = document.getElementById('agFeedPost');
+      if (pane && currentFeedPost && currentFeedPost.id === m.postId) {
+        if (m.ok) {
+          // success: clear the composer; the refreshed thread arrives as blogComments,
+          // and the list re-read below picks up the bump ordering.
+          if (pane._cmtTa) pane._cmtTa.value = '';
+          if (pane._cmtGit) pane._cmtGit.value = '';
+          if (pane._cmtSage) pane._cmtSage.checked = false;
+          if (pane._cmtBtn) { pane._cmtBtn.disabled = false; pane._cmtBtn.textContent = 'Comment'; }
+          vscode.postMessage({ type: 'getBlogFeed', sort: feedSort });
+        } else {
+          if (pane._cmtBtn) { pane._cmtBtn.disabled = false; pane._cmtBtn.textContent = 'Comment'; }
+          if (pane._cmtErr) { pane._cmtErr.textContent = m.error || 'Comment failed'; pane._cmtErr.style.display = ''; }
+        }
+      }
+    }
     else if (m.type === 'buyAllResult') {
       const confirm = document.getElementById('profileBody') && document.getElementById('profileBody').querySelector('.pr-confirm');
       if (confirm) confirm.remove();

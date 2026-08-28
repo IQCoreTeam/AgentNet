@@ -428,8 +428,8 @@ export function Chat({
   const qAccum = useRef<ApprovalQuestionResponse[]>([]);
   const [showSessions, setShowSessions] = useState(false);
   const [showMarket, setShowMarket] = useState(false);
-  // which market screen /market, /agents and /skills land on
-  const [marketStage, setMarketStage] = useState<"list" | "agents" | "owned" | "github">("list");
+  // which market screen /market, /feed, /agents and /skills land on
+  const [marketStage, setMarketStage] = useState<"list" | "feed" | "agents" | "owned" | "github">("list");
   const [showModels, setShowModels] = useState(false);
   const [showEfforts, setShowEfforts] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
@@ -871,7 +871,7 @@ export function Chat({
     setShowHelp(true);
   }
 
-  function openMarket(stage: "list" | "agents" | "owned" | "github" = "list") {
+  function openMarket(stage: "list" | "feed" | "agents" | "owned" | "github" = "list") {
     setPanelFocused(false);
     if (!market) {
       setNotice("skill market still loading, try again in a moment");
@@ -1047,6 +1047,9 @@ export function Chat({
         return;
       case "market":
         openMarket();
+        return;
+      case "feed":
+        openMarket("feed");
         return;
       case "agents":
         openMarket("agents");

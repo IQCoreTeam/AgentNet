@@ -11,6 +11,7 @@ export const SLASH_COMMANDS: SlashCmd[] = [
   { name: "fork", desc: "copy this session and switch to the copy" },
   { name: "resume", desc: "resume by id prefix", args: "<id>" },
   { name: "market", desc: "browse and buy skills" },
+  { name: "feed", desc: "the global blog feed" },
   { name: "agents", desc: "browse agents and profiles" },
   { name: "skills", desc: "your owned skill collection" },
   { name: "github", desc: "connect GitHub and register verified work" },
