@@ -4,7 +4,10 @@
 // read every post open uses (readBlogPost: the author's own table is the truth, the
 // anchor is permissionless), and renders the result as an inline quote card. Pure
 // text convention: nothing new on chain, no contract or seed change, a miss is a
-// deadlink, not an error. Descends from blockchan's ">>txSignature" quotelinks,
+// deadlink, not an error. Refs resolve BLOG POSTS only: a comment's note id has
+// the same shape but does not name the table it lives in (comment:blog:<postId>
+// needs the postId), so a ref to a comment deadlinks by design rather than
+// guessing tables. Descends from blockchan's ">>txSignature" quotelinks,
 // which only resolve inside one loaded page; the note id makes the quote portable
 // across threads, boards, and surfaces.
 

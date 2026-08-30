@@ -102,6 +102,42 @@ function agoShort(ms: number | undefined): string {
 function feedShort(w: string): string { return `${w.slice(0, 6)}…${w.slice(-4)}`; }
 function feedDate(ts: number | undefined): string { return ts ? new Date(ts).toLocaleDateString() : ""; }
 
+// One text's quote cards, one card per >>note: ref, hydrated from the quoted
+// author's own table. Shared by the post body and the comment thread so both
+// render the same card; same one-array-entry-per-terminal-row contract.
+function quoteCardLines(text: string | undefined, quotes: Record<string, Note | null>, w: number, keyPrefix: string, indent: string): React.ReactNode[] {
+  const out: React.ReactNode[] = [];
+  extractQuoteRefs(text).forEach((q, qi) => {
+    const qw = Math.max(10, w - 4 - indent.length);
+    const qn = quotes[q.ref];
+    out.push(<Text key={`${keyPrefix}q${qi}s`}> </Text>);
+    if (qn === undefined) {
+      out.push(<Text key={`${keyPrefix}q${qi}`} dimColor>{indent}{"  "}▌ {">>"}{qi + 1} resolving quote…</Text>);
+    } else if (qn === null) {
+      out.push(<Text key={`${keyPrefix}q${qi}`} dimColor>{indent}{"  "}▌ {">>"}{qi + 1} {feedShort(q.author)} (not found)</Text>);
+    } else {
+      // an untitled note promotes its first line to the title row, and the
+      // snippet then starts from line 2 so the same words never print twice
+      const hasTitle = !!(qn.title ?? "").trim();
+      const qt = hasTitle ? (qn.title ?? "").trim() : ((qn.text ?? "").split("\n")[0] ?? "").trim();
+      const snipText = hasTitle ? (qn.text || "") : (qn.text ?? "").split("\n").slice(1).join("\n");
+      out.push(
+        <Text key={`${keyPrefix}q${qi}`}>
+          {indent}{"  "}<Text color={colors.iqViolet}>▌ </Text>
+          <Text dimColor>{">>"}{qi + 1} </Text>
+          <Text color={walletColor(qn.author)}>{walletFace(qn.author)} </Text>
+          <Text bold color={colors.bone}>{feedShort(qn.author)}</Text>
+          <Text dimColor>  {feedDate(qn.timestamp)}</Text>
+        </Text>,
+      );
+      if (qt) out.push(<Text key={`${keyPrefix}q${qi}t`}>{indent}{"  "}<Text color={colors.iqViolet}>▌ </Text><Text bold color={colors.iqCyan}>{truncateEnd(qt, qw)}</Text></Text>);
+      wrapBlock(snipText, qw).slice(0, 2).forEach((l, li) =>
+        out.push(<Text key={`${keyPrefix}q${qi}b${li}`}>{indent}{"  "}<Text color={colors.iqViolet}>▌ </Text><Text dimColor>{l}</Text></Text>));
+    }
+  });
+  return out;
+}
+
 // The FEED post view's line array — ONE array entry per terminal row (the ScrollView
 // slice-math contract), so the body is pre-wrapped with wrapBlock. The mirror row
 // renders until the authoritative body (fetched from the author's table) lands.
@@ -122,37 +158,7 @@ function feedPostLines(post: Note, body: Note | null, threads: FeedThread[] | nu
   wrapBlock(real.text || "", w).forEach((l, i) => out.push(<Text key={`b${i}`}>{l}</Text>));
   if (real.image) out.push(<Text key="img" dimColor>[image: {truncateEnd(real.image, Math.max(4, w - 9))}]</Text>);
   if (real.gitLink) out.push(<Text key="git" color={colors.ok}>{glyph.sparkle} {truncateEnd(real.gitLink, Math.max(4, w - 2))}</Text>);
-  // >>note: quote cards, one per ref, hydrated from the quoted author's own table.
-  // Same one-array-entry-per-terminal-row contract as everything above.
-  const qrefs = extractQuoteRefs(real.text);
-  qrefs.forEach((q, qi) => {
-    const qw = Math.max(10, w - 4);
-    const qn = quotes[q.ref];
-    out.push(<Text key={`q${qi}s`}> </Text>);
-    if (qn === undefined) {
-      out.push(<Text key={`q${qi}`} dimColor>{"  "}▌ {">>"}{qi + 1} resolving quote…</Text>);
-    } else if (qn === null) {
-      out.push(<Text key={`q${qi}`} dimColor>{"  "}▌ {">>"}{qi + 1} {feedShort(q.author)} (not found)</Text>);
-    } else {
-      // an untitled note promotes its first line to the title row, and the
-      // snippet then starts from line 2 so the same words never print twice
-      const hasTitle = !!(qn.title ?? "").trim();
-      const qt = hasTitle ? (qn.title ?? "").trim() : ((qn.text ?? "").split("\n")[0] ?? "").trim();
-      const snipText = hasTitle ? (qn.text || "") : (qn.text ?? "").split("\n").slice(1).join("\n");
-      out.push(
-        <Text key={`q${qi}`}>
-          {"  "}<Text color={colors.iqViolet}>▌ </Text>
-          <Text dimColor>{">>"}{qi + 1} </Text>
-          <Text color={walletColor(qn.author)}>{walletFace(qn.author)} </Text>
-          <Text bold color={colors.bone}>{feedShort(qn.author)}</Text>
-          <Text dimColor>  {feedDate(qn.timestamp)}</Text>
-        </Text>,
-      );
-      if (qt) out.push(<Text key={`q${qi}t`}>{"  "}<Text color={colors.iqViolet}>▌ </Text><Text bold color={colors.iqCyan}>{truncateEnd(qt, qw)}</Text></Text>);
-      wrapBlock(snipText, qw).slice(0, 2).forEach((l, li) =>
-        out.push(<Text key={`q${qi}b${li}`}>{"  "}<Text color={colors.iqViolet}>▌ </Text><Text dimColor>{l}</Text></Text>));
-    }
-  });
+  out.push(...quoteCardLines(real.text, quotes, w, "", ""));
   out.push(<Text key="sp1"> </Text>);
   // top-level thread count, the same number the webview reader shows; before the
   // thread settles, feedReplies (anchor bump rows) stands in
@@ -178,6 +184,7 @@ function feedPostLines(post: Note, body: Note | null, threads: FeedThread[] | nu
         </Text>,
       );
       wrapBlock(t.note.text || "", Math.max(10, w - 2)).forEach((l, li) => out.push(<Text key={`t${ti}b${li}`}>{"  "}{l}</Text>));
+      out.push(...quoteCardLines(t.note.text, quotes, w, `t${ti}`, "  "));
       t.replies.forEach((rep, ri) => {
         out.push(
           <Text key={`t${ti}r${ri}`} dimColor>
@@ -185,6 +192,7 @@ function feedPostLines(post: Note, body: Note | null, threads: FeedThread[] | nu
           </Text>,
         );
         wrapBlock(rep.text || "", Math.max(10, w - 4)).forEach((l, li) => out.push(<Text key={`t${ti}r${ri}b${li}`}>{"    "}{l}</Text>));
+        out.push(...quoteCardLines(rep.text, quotes, w, `t${ti}r${ri}`, "    "));
       });
     });
   }
@@ -367,6 +375,9 @@ export function SkillMarket({
   // mirror-row and authoritative-body passes cannot double-fetch the same ref
   const feedQuotesPending = useRef<Set<string>>(new Set());
   const feedQuoteEpoch = useRef(0); // bumped per open; late settles from an old open are dropped
+  // set once the post-comment re-read lands: it is authoritative, and a slower
+  // initial comments read from the same open must not clobber it
+  const feedThreadsFresh = useRef(false);
   const [feedScroll, setFeedScroll] = useState(0);
   const [feedCmtText, setFeedCmtText] = useState("");
   const [feedCmtGit, setFeedCmtGit] = useState("");
@@ -671,7 +682,9 @@ export function SkillMarket({
     setFeedThreads(null);
     setFeedScroll(0);
     setFeedQuotes({});
+    setFlash(null); // a banner about post A must not caption post B
     feedQuotesPending.current = new Set();
+    feedThreadsFresh.current = false;
     // epoch fence: a quote-hop opens a new post while the old post's quote fetches
     // are still in flight; without the fence a late settle from the OLD open would
     // write into the NEW post's map (worst case stamping null over a good card)
@@ -683,12 +696,19 @@ export function SkillMarket({
       setFeedBody(b);
       if (b) hydrateQuotes(b.text, epoch);
     }).catch(() => {});
-    void api.getBlogComments(p.id).then((t) => { if (epoch === feedQuoteEpoch.current) setFeedThreads(t); }).catch(() => { if (epoch === feedQuoteEpoch.current) setFeedThreads([]); });
+    void api.getBlogComments(p.id).then((t) => {
+      if (epoch !== feedQuoteEpoch.current || feedThreadsFresh.current) return;
+      setFeedThreads(t);
+      hydrateThreadQuotes(t, epoch);
+    }).catch(() => { if (epoch === feedQuoteEpoch.current && !feedThreadsFresh.current) setFeedThreads([]); });
   }
 
   // Resolve each >>note: ref once per open, through the same read the open uses.
   function hydrateQuotes(text: string | undefined, epoch: number) {
     for (const q of extractQuoteRefs(text)) {
+      // the panel caps hydration per post VIEW, not per text; match it. The body
+      // hydrates first on open, so body refs keep their hop-key priority.
+      if (feedQuotesPending.current.size >= QUOTE_REFS_MAX && !feedQuotesPending.current.has(q.ref)) return;
       if (feedQuotesPending.current.has(q.ref)) continue;
       feedQuotesPending.current.add(q.ref);
       void api.getBlogPost(q.author, q.ref)
@@ -697,9 +717,17 @@ export function SkillMarket({
     }
   }
 
+  // hydrate every >>note: ref a thread carries (comment notes and their replies)
+  function hydrateThreadQuotes(threads: FeedThread[], epoch: number) {
+    for (const th of threads) { hydrateQuotes(th.note.text, epoch); for (const r of th.replies ?? []) hydrateQuotes(r.text, epoch); }
+  }
+
   async function doPostFeedComment() {
     if (!feedPost || !feedCmtText.trim()) return;
     const sage = feedCmtSage;
+    // captured before the await: today the busy gate makes a mid-post hop
+    // impossible, but nothing here should rely on that staying true
+    const epoch = feedQuoteEpoch.current;
     setBusy(true);
     const res = await api.postBlogComment(
       feedPost.id,
@@ -712,7 +740,15 @@ export function SkillMarket({
     setBusy(false);
     if (res.ok) {
       setFeedCmtText(""); setFeedCmtGit(""); setFeedCmtSage(false);
-      if (res.threads) setFeedThreads(res.threads);
+      // The re-read is authoritative ONLY when it really returned the thread:
+      // the env masks a failed re-read as [], and the user just posted, so an
+      // empty or missing list means the read failed and must not latch (the
+      // initial read, or a reopen, still holds the truth then).
+      if (epoch === feedQuoteEpoch.current && res.threads && res.threads.length) {
+        feedThreadsFresh.current = true;
+        setFeedThreads(res.threads);
+        hydrateThreadQuotes(res.threads, epoch);
+      }
       // a bumping reply must re-prime the gateway's feed anchor cache: one fresh read
       // cold-fetches the new mirror row (same as every other host), and reloading the
       // held list here means the bump ordering is already right when esc lands on it.
@@ -724,8 +760,10 @@ export function SkillMarket({
           if (seq === feedSeq.current) setFeedPosts(rows);
         }).catch(() => {});
       }
-      setFlash("comment posted");
-      setStage("feedPost");
+      if (epoch === feedQuoteEpoch.current) {
+        setFlash("comment posted");
+        setStage("feedPost");
+      }
     } else {
       setFlash(`comment failed: ${res.error ?? "unknown"}`);
     }
@@ -1004,6 +1042,7 @@ export function SkillMarket({
       if (key.escape) { setStage("feed"); setFeedPost(null); setFeedBody(null); setFeedThreads(null); return; }
       if (input === "c") {
         setFeedCmtText(""); setFeedCmtGit(""); setFeedCmtSage(false); setFeedCmtField("text");
+        setFlash(null); // a failure banner from an earlier attempt is not this composer's news
         setStage("feedComment");
         return;
       }
