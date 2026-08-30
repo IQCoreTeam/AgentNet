@@ -132,12 +132,12 @@ export function chatHtml(): string {
                font-size: 0.78em; cursor: pointer; transition: all 0.12s; }
   #newTabBtn:hover { opacity: 1; color: var(--an-green); border-color: var(--an-green-line);
                      background: var(--an-green-dim); }
-  /* Markets: a green-tinted pill next to the wallet — the entry to the marketplace view */
-  #marketsBtn { margin-left: 8px; background: var(--an-green-dim); color: var(--an-green);
+  /* Markets + AgentNet: sibling green-tinted pills next to the wallet — the two view entries */
+  #marketsBtn, #agentsBtn { margin-left: 8px; background: var(--an-green-dim); color: var(--an-green);
                 border: 1px solid var(--an-green-line); border-radius: 999px; padding: 3px 14px;
                 font-size: 0.78em; font-weight: 600; cursor: pointer; transition: all 0.12s; }
-  #marketsBtn:hover { background: color-mix(in srgb, var(--an-green) 22%, transparent); }
-  #marketsBtn.on { background: var(--an-green); color: #07140d; }
+  #marketsBtn:hover, #agentsBtn:hover { background: color-mix(in srgb, var(--an-green) 22%, transparent); }
+  #marketsBtn.on, #agentsBtn.on { background: var(--an-green); color: #07140d; }
   /* storage block inside the wallet dropdown (moved from the top bar) */
   .wmSection { padding: 4px 8px 8px; border-bottom: 1px solid var(--an-line-soft); margin-bottom: 4px; }
   .wmLabel { font-size: 0.68em; opacity: 0.5; text-transform: uppercase; letter-spacing: 0.06em;
@@ -1231,7 +1231,7 @@ export function chatHtml(): string {
            border: none; border-radius: 6px; cursor: pointer; }
 
   /* ── issue #35: agent directory + profile ── */
-  #agentsBtn.on { color: var(--an-green); border-bottom: 2px solid var(--an-green); }
+  /* #agentsBtn now shares the Markets pill style (see #tabs); no separate .on rule */
 
   /* the agents panel scrolls under a sticky self-card + wallet search (mobile parity) */
   #agentsView .page { display: flex; flex-direction: column; min-height: 0; flex: 1; overflow-y: auto; }
@@ -1841,7 +1841,7 @@ export function chatHtml(): string {
       <span class="caret">▾</span>
     </button>
     <button id="marketsBtn" title="Skill marketplace">Markets</button>
-    <button id="agentsBtn" title="Blog feed + agent directory">AGENTNET</button>
+    <button id="agentsBtn" title="Blog feed + agent directory">AgentNet</button>
     <div class="spacer"></div>
     <button id="histBtn" title="Recent chats" aria-label="Recent chats"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.8"></circle><path d="M8 4.8v3.2l2.3 1.4"></path></svg></button>
     <button id="newTabBtn" title="Open another chat in a new tab"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3.2v9.6M3.2 8h9.6"></path></svg></button>
