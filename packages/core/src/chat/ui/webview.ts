@@ -1561,6 +1561,22 @@ export function chatHtml(): string {
              letter-spacing:0.08em; text-transform:uppercase; color:var(--an-fg-mute);
              background:none; border:none; padding:0; cursor:pointer; }
   .fd-sage.on { color:var(--an-amber); }
+  /* on-chain quote card: ">>note:<wallet>:<ts>:<rand>" refs hydrated from chain */
+  .fd-qref { color:var(--an-green); opacity:.85; word-break:break-all; }
+  .fd-quote { border:1px solid var(--an-line); padding:10px 12px; margin-top:10px;
+              font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .fd-quote.fdq-live { cursor:pointer; }
+  .fd-quote.fdq-live:hover { border-color:var(--an-green-line); }
+  .fd-quote.fdq-loading { color:var(--an-fg-mute); font-size:10px; letter-spacing:0.06em; text-transform:uppercase; }
+  .fd-quote.fdq-dead { color:var(--an-fg-mute); font-size:11px; word-break:break-all; }
+  .fdq-top { display:flex; align-items:baseline; gap:8px; margin-bottom:4px;
+             font-size:10px; color:var(--an-fg-mute); }
+  .fdq-when { margin-left:auto; font-size:9px; white-space:nowrap; }
+  .fdq-title { font-size:11px; font-weight:700; text-transform:uppercase;
+               letter-spacing:0.04em; line-height:1.4; margin:0; color:var(--an-fg); }
+  .fdq-snip { font-size:11px; line-height:1.5; margin-top:4px; color:var(--an-fg-mute);
+              white-space:pre-wrap; word-break:break-word;
+              display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .fdp-gate { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:10px; letter-spacing:0.06em;
               text-transform:uppercase; border:1px solid var(--an-line); padding:10px 12px; color:var(--an-fg-mute); }
   .fdp-gate .gt { color:var(--an-green); }
@@ -4087,6 +4103,80 @@ export function chatHtml(): string {
   let feedLastSage = false;         // whether the comment in flight was sage (skips the fresh re-read)
   const feedBodies = {};            // postId -> authoritative body from the author's table
   const feedThreads = {};           // postId -> comment threads
+  // ── quote refs: ">>note:<wallet>:<ts>:<rand>" in a post body or comment is an
+  // on-chain quote-tweet, hydrated through the EXISTING getBlogPost/blogPost pair
+  // (zero new message types): the ref itself carries the author (wallet segment)
+  // and the postId (the whole "note:..." string after the ">>").
+  // Grammar is a byte-identical copy of core's QUOTE_REF (notes/quoteRefs.ts) —
+  // this template is emitted browser JS and cannot import it; change BOTH or the
+  // surfaces resolve different refs. Nonce = lowercase base36, 4-6 chars; the
+  // trailing lookahead refuses a ref glued to alphanumeric text (no match beats
+  // fetching a corrupted id and rendering a false deadlink).
+  const QUOTE_REF_RE = /(>>note:[1-9A-HJ-NP-Za-km-z]{32,44}:[0-9]{10,16}:[a-z0-9]{4,6})(?![A-Za-z0-9])/;
+  const QUOTE_REFS_MAX = 4;   // unique refs hydrated per post view (body + comments)
+  const quoteCache = {};     // postId -> { post: Note|null } once resolved (null = deadlink)
+  const quoteInflight = {};  // postId -> true while its getBlogPost is out
+  let quoteCards = {};       // postId -> [placeholder card elements] awaiting the reply
+  let quoteSeen = {};        // postId -> true once carded in the current render pass
+  let quoteSlots = 0;        // unique refs carded in the current render pass
+  function quoteRefWallet(id) { return id.split(':')[1] || ''; }
+  function fillQuoteCard(el, id, post) {
+    el.textContent = '';
+    el.classList.remove('fdq-loading');
+    if (!post) {
+      // deadlink: keep the raw ref text, dim, with a note (still legible/copyable)
+      el.classList.add('fdq-dead');
+      el.textContent = '>>' + id + ' [not found]';
+      return;
+    }
+    const top = document.createElement('div'); top.className = 'fdq-top';
+    const who = document.createElement('span'); who.textContent = '>>' + agShort(post.author || quoteRefWallet(id));
+    top.appendChild(who);
+    const when = fmtNoteDate(post);
+    if (when) { const w = document.createElement('span'); w.className = 'fdq-when'; w.textContent = when; top.appendChild(w); }
+    el.appendChild(top);
+    const lines = String(post.text || '').split('\\n');
+    const firstLine = (lines[0] || '').trim();
+    const title = post.title || firstLine;
+    if (title) { const t = document.createElement('p'); t.className = 'fdq-title'; t.textContent = title; el.appendChild(t); }
+    const snip = (post.title ? String(post.text || '') : lines.slice(1).join('\\n')).trim();
+    if (snip) { const s = document.createElement('p'); s.className = 'fdq-snip'; s.textContent = snip; el.appendChild(s); }
+    el.classList.add('fdq-live');
+    el.addEventListener('click', () => openFeedPost(post));
+  }
+  // Render text that may contain quote refs: plain segments stay textContent
+  // (post text is attacker-controlled, never innerHTML), each ref becomes a
+  // compact inline marker, and per unique ref (capped) a quote card is appended
+  // directly under the paragraph.
+  function appendQuoteText(parent, text, cls) {
+    const p = document.createElement('p'); p.className = cls;
+    const parts = String(text).split(QUOTE_REF_RE); // capture group: refs land at odd indexes
+    const cards = [];
+    for (let i = 0; i < parts.length; i++) {
+      if (i % 2 === 0) { if (parts[i]) p.appendChild(document.createTextNode(parts[i])); continue; }
+      const id = parts[i].slice(2); // drop ">>" to get the postId ("note:...")
+      const mk = document.createElement('span'); mk.className = 'fd-qref';
+      mk.textContent = '>>quote:' + agShort(quoteRefWallet(id));
+      mk.title = parts[i];
+      p.appendChild(mk);
+      if (quoteSeen[id] || quoteSlots >= QUOTE_REFS_MAX) continue;
+      quoteSeen[id] = true; quoteSlots++;
+      const card = document.createElement('div'); card.className = 'fd-quote';
+      if (id in quoteCache) {
+        fillQuoteCard(card, id, quoteCache[id].post);
+      } else {
+        card.classList.add('fdq-loading'); card.textContent = '>>resolving quote…';
+        (quoteCards[id] = quoteCards[id] || []).push(card);
+        if (!quoteInflight[id]) {
+          quoteInflight[id] = true;
+          vscode.postMessage({ type: 'getBlogPost', author: quoteRefWallet(id), postId: id });
+        }
+      }
+      cards.push(card);
+    }
+    parent.appendChild(p);
+    cards.forEach((c) => parent.appendChild(c));
+  }
   function openAgents() {
     if (agentsTab === 'feed') openFeed(); else openRank();
   }
@@ -4243,6 +4333,8 @@ export function chatHtml(): string {
     const keep = pane._mainCompose ? { text: pane._mainCompose._ta.value, git: pane._mainCompose._git.value } : null;
     pane.innerHTML = '';
     pane._activeCompose = null;
+    // fresh quote-card registry for this render pass (the old elements were wiped)
+    quoteCards = {}; quoteSeen = {}; quoteSlots = 0;
     // >POST … BY xxxx cap row + the [<] POST [date] header bar (mobile chrome)
     const cap = document.createElement('div'); cap.className = 'fdp-cap';
     const capL = document.createElement('span'); capL.innerHTML = '<span style="opacity:.55">&gt;</span>POST';
@@ -4272,7 +4364,7 @@ export function chatHtml(): string {
     who.textContent = (p.author ? agShort(p.author) : '?') + (date ? ' [' + date + ']' : '');
     au.appendChild(lb); au.appendChild(who);
     pane.appendChild(au);
-    if (body.text) { const tx = document.createElement('p'); tx.className = 'fdp-body'; tx.textContent = body.text; pane.appendChild(tx); }
+    if (body.text) appendQuoteText(pane, body.text, 'fdp-body');
     if (body.gitLink) { const gl = gitLinkNode(body.gitLink, 'pr-note-git'); if (gl) pane.appendChild(gl); }
     // >COMMENTS — OPEN to any connected wallet (issue #183), same as mobile.
     const sec = document.createElement('div'); sec.className = 'fdp-cmts';
@@ -4294,7 +4386,7 @@ export function chatHtml(): string {
         const to = document.createElement('p'); to.className = 'fdc-to'; to.textContent = '↳ replying to ' + agShort(nn.parentAuthor);
         el.appendChild(to);
       }
-      if (nn.text) { const tx = document.createElement('p'); tx.className = 'fdc-text'; tx.textContent = nn.text; el.appendChild(tx); }
+      if (nn.text) appendQuoteText(el, nn.text, 'fdc-text');
       if (nn.gitLink) { const gl = gitLinkNode(nn.gitLink, 'pr-note-git'); if (gl) el.appendChild(gl); }
       if (canReply) {
         const rb = document.createElement('button'); rb.type = 'button'; rb.className = 'fdc-replybtn';
@@ -6083,9 +6175,26 @@ export function chatHtml(): string {
       // authoritative body from the author's own table; null = the mirror row was
       // not backed by a real post (impersonation or a deleted table) — keep the reader
       // on the mirror text rather than blanking it.
+      // Disambiguation: reader requests (openFeedPost) never mark quoteInflight,
+      // quote-ref requests always do, so wasQuote is exact even when both are out.
+      const wasQuote = !!quoteInflight[m.postId];
+      if (wasQuote) {
+        delete quoteInflight[m.postId];
+        // only a real post is cached: a transient null (gateway hiccup) must not
+        // pin a permanent deadlink — uncached, the next render pass retries the
+        // read; the cards below still show this pass's dead state honestly
+        if (m.post) quoteCache[m.postId] = { post: m.post };
+      }
       if (m.post) {
         feedBodies[m.postId] = m.post;
         if (currentFeedPost && currentFeedPost.id === m.postId) renderFeedPost();
+      }
+      if (wasQuote) {
+        // fill any cards still waiting; a renderFeedPost just above rebuilt its
+        // own cards straight from quoteCache, so only detached views remain here
+        const els = quoteCards[m.postId] || [];
+        delete quoteCards[m.postId];
+        els.forEach((el) => fillQuoteCard(el, m.postId, m.post || null));
       }
     }
     else if (m.type === 'blogComments') {

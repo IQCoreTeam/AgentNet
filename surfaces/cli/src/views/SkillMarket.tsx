@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Box, Text, useInput, useStdout } from "ink";
 import type { SkillCard, SkillDetail, Note } from "@iqlabs-official/agent-sdk";
 import type { Reputation, AgentProfile } from "@iqlabs-official/agent-sdk";
-import { maskedHeliusKey, hasDasRpc, saveHeliusKey, getNetwork } from "@iqlabs-official/agent-sdk";
+import { maskedHeliusKey, hasDasRpc, saveHeliusKey, getNetwork, extractQuoteRefs, QUOTE_REFS_MAX } from "@iqlabs-official/agent-sdk";
 import { saveGithubToken, loadGithubToken, maskedGithubToken, registerVerifiedWork, parseGithubRepo } from "@iqlabs-official/agent-sdk";
 import { colors, glyph, tierColor, tierColors } from "../theme.js";
 import { displayWidth, truncateEnd, truncateStart, wrapBlock } from "../format.js";
@@ -105,7 +105,7 @@ function feedDate(ts: number | undefined): string { return ts ? new Date(ts).toL
 // The FEED post view's line array — ONE array entry per terminal row (the ScrollView
 // slice-math contract), so the body is pre-wrapped with wrapBlock. The mirror row
 // renders until the authoritative body (fetched from the author's table) lands.
-function feedPostLines(post: Note, body: Note | null, threads: FeedThread[] | null, cols: number): React.ReactNode[] {
+function feedPostLines(post: Note, body: Note | null, threads: FeedThread[] | null, cols: number, quotes: Record<string, Note | null> = {}): React.ReactNode[] {
   const w = Math.max(20, cols - 6);
   const real = body ?? post;
   const out: React.ReactNode[] = [];
@@ -122,6 +122,37 @@ function feedPostLines(post: Note, body: Note | null, threads: FeedThread[] | nu
   wrapBlock(real.text || "", w).forEach((l, i) => out.push(<Text key={`b${i}`}>{l}</Text>));
   if (real.image) out.push(<Text key="img" dimColor>[image: {truncateEnd(real.image, Math.max(4, w - 9))}]</Text>);
   if (real.gitLink) out.push(<Text key="git" color={colors.ok}>{glyph.sparkle} {truncateEnd(real.gitLink, Math.max(4, w - 2))}</Text>);
+  // >>note: quote cards, one per ref, hydrated from the quoted author's own table.
+  // Same one-array-entry-per-terminal-row contract as everything above.
+  const qrefs = extractQuoteRefs(real.text);
+  qrefs.forEach((q, qi) => {
+    const qw = Math.max(10, w - 4);
+    const qn = quotes[q.ref];
+    out.push(<Text key={`q${qi}s`}> </Text>);
+    if (qn === undefined) {
+      out.push(<Text key={`q${qi}`} dimColor>{"  "}▌ {">>"}{qi + 1} resolving quote…</Text>);
+    } else if (qn === null) {
+      out.push(<Text key={`q${qi}`} dimColor>{"  "}▌ {">>"}{qi + 1} {feedShort(q.author)} (not found)</Text>);
+    } else {
+      // an untitled note promotes its first line to the title row, and the
+      // snippet then starts from line 2 so the same words never print twice
+      const hasTitle = !!(qn.title ?? "").trim();
+      const qt = hasTitle ? (qn.title ?? "").trim() : ((qn.text ?? "").split("\n")[0] ?? "").trim();
+      const snipText = hasTitle ? (qn.text || "") : (qn.text ?? "").split("\n").slice(1).join("\n");
+      out.push(
+        <Text key={`q${qi}`}>
+          {"  "}<Text color={colors.iqViolet}>▌ </Text>
+          <Text dimColor>{">>"}{qi + 1} </Text>
+          <Text color={walletColor(qn.author)}>{walletFace(qn.author)} </Text>
+          <Text bold color={colors.bone}>{feedShort(qn.author)}</Text>
+          <Text dimColor>  {feedDate(qn.timestamp)}</Text>
+        </Text>,
+      );
+      if (qt) out.push(<Text key={`q${qi}t`}>{"  "}<Text color={colors.iqViolet}>▌ </Text><Text bold color={colors.iqCyan}>{truncateEnd(qt, qw)}</Text></Text>);
+      wrapBlock(snipText, qw).slice(0, 2).forEach((l, li) =>
+        out.push(<Text key={`q${qi}b${li}`}>{"  "}<Text color={colors.iqViolet}>▌ </Text><Text dimColor>{l}</Text></Text>));
+    }
+  });
   out.push(<Text key="sp1"> </Text>);
   // top-level thread count, the same number the webview reader shows; before the
   // thread settles, feedReplies (anchor bump rows) stands in
@@ -329,6 +360,13 @@ export function SkillMarket({
   const [feedPost, setFeedPost] = useState<Note | null>(null);      // the opened post (mirror row)
   const [feedBody, setFeedBody] = useState<Note | null>(null);      // authoritative body once fetched
   const [feedThreads, setFeedThreads] = useState<FeedThread[] | null>(null);
+  // >>note: quote refs in the open post, hydrated lazily through the same
+  // getBlogPost read the open itself uses. Missing key = resolving, null = deadlink.
+  const [feedQuotes, setFeedQuotes] = useState<Record<string, Note | null>>({});
+  // refs already being fetched for the open post; a Set (not state) so the
+  // mirror-row and authoritative-body passes cannot double-fetch the same ref
+  const feedQuotesPending = useRef<Set<string>>(new Set());
+  const feedQuoteEpoch = useRef(0); // bumped per open; late settles from an old open are dropped
   const [feedScroll, setFeedScroll] = useState(0);
   const [feedCmtText, setFeedCmtText] = useState("");
   const [feedCmtGit, setFeedCmtGit] = useState("");
@@ -632,9 +670,31 @@ export function SkillMarket({
     setFeedBody(null);
     setFeedThreads(null);
     setFeedScroll(0);
+    setFeedQuotes({});
+    feedQuotesPending.current = new Set();
+    // epoch fence: a quote-hop opens a new post while the old post's quote fetches
+    // are still in flight; without the fence a late settle from the OLD open would
+    // write into the NEW post's map (worst case stamping null over a good card)
+    const epoch = ++feedQuoteEpoch.current;
     setStage("feedPost");
-    void api.getBlogPost(p.author, p.id).then(setFeedBody).catch(() => {});
-    void api.getBlogComments(p.id).then(setFeedThreads).catch(() => setFeedThreads([]));
+    hydrateQuotes(p.text, epoch);
+    void api.getBlogPost(p.author, p.id).then((b) => {
+      if (epoch !== feedQuoteEpoch.current) return;
+      setFeedBody(b);
+      if (b) hydrateQuotes(b.text, epoch);
+    }).catch(() => {});
+    void api.getBlogComments(p.id).then((t) => { if (epoch === feedQuoteEpoch.current) setFeedThreads(t); }).catch(() => { if (epoch === feedQuoteEpoch.current) setFeedThreads([]); });
+  }
+
+  // Resolve each >>note: ref once per open, through the same read the open uses.
+  function hydrateQuotes(text: string | undefined, epoch: number) {
+    for (const q of extractQuoteRefs(text)) {
+      if (feedQuotesPending.current.has(q.ref)) continue;
+      feedQuotesPending.current.add(q.ref);
+      void api.getBlogPost(q.author, q.ref)
+        .then((n) => { if (epoch === feedQuoteEpoch.current) setFeedQuotes((prev) => ({ ...prev, [q.ref]: n })); })
+        .catch(() => { if (epoch === feedQuoteEpoch.current) setFeedQuotes((prev) => ({ ...prev, [q.ref]: null })); });
+    }
   }
 
   async function doPostFeedComment() {
@@ -939,13 +999,20 @@ export function SkillMarket({
 
     // ── feed post (issue #210) ─────────────────────────────────────────────
     if (stage === "feedPost" && feedPost) {
-      const total = feedPostLines(feedPost, feedBody, feedThreads, marketCols).length;
+      const total = feedPostLines(feedPost, feedBody, feedThreads, marketCols, feedQuotes).length;
       const height = subViewportH(agentRows, total);
       if (key.escape) { setStage("feed"); setFeedPost(null); setFeedBody(null); setFeedThreads(null); return; }
       if (input === "c") {
         setFeedCmtText(""); setFeedCmtGit(""); setFeedCmtSage(false); setFeedCmtField("text");
         setStage("feedComment");
         return;
+      }
+      // a number key opens the matching resolved quote card in the reader (quote-hop)
+      const hop = Number(input);
+      if (Number.isInteger(hop) && hop >= 1 && hop <= QUOTE_REFS_MAX) {
+        const q = extractQuoteRefs((feedBody ?? feedPost).text)[hop - 1];
+        const qn = q ? feedQuotes[q.ref] : undefined;
+        if (qn) { openFeedPost(qn); return; }
       }
       if (key.downArrow) { setFeedScroll((o) => clampScroll(o + 1, total, height)); return; }
       if (key.upArrow) { setFeedScroll((o) => clampScroll(o - 1, total, height)); return; }
@@ -1279,7 +1346,7 @@ export function SkillMarket({
 
   // ── feed post (issue #210) ────────────────────────────────────────────────
   if (stage === "feedPost" && feedPost) {
-    const lines = feedPostLines(feedPost, feedBody, feedThreads, marketCols);
+    const lines = feedPostLines(feedPost, feedBody, feedThreads, marketCols, feedQuotes);
     const height = subViewportH(agentRows, lines.length);
     return (
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
@@ -1291,7 +1358,7 @@ export function SkillMarket({
           <ScrollView lines={lines} height={height} offset={feedScroll} />
         </Box>
         <Box marginTop={1}>
-          <Text dimColor>[c] comment · ↑/↓/PgUp/PgDn scroll · esc back</Text>
+          <Text dimColor>[c] comment{extractQuoteRefs((feedBody ?? feedPost).text).length ? " · [1-4] open quote" : ""} · ↑/↓/PgUp/PgDn scroll · esc back</Text>
         </Box>
       </Box>
     );
