@@ -623,3 +623,54 @@ describe("chat/session - Running Sync markers (issue #129)", () => {
     expect(frames[frames.length - 1].running).toEqual([]);
   });
 });
+
+describe("chat/session — feed anchor re-prime after a bumping blog comment (issue #210)", () => {
+  const waitForType = async (transport: any, type: string) => {
+    for (let i = 0; i < 400; i++) {
+      const hit = transport.send.mock.calls.find((c: any[]) => c[0]?.type === type);
+      if (hit) return hit[0];
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    throw new Error(`"${type}" was never sent`);
+  };
+  const comment = (over: Record<string, unknown> = {}) => ({
+    type: "postBlogComment", postId: "note:w1:1:aa", agentWallet: "w1", text: "hi", feedBump: true, ...over,
+  });
+
+  it("a bumping reply fires one fresh getBlogFeed so the shared anchor cache is re-primed", async () => {
+    const getBlogFeed = vi.fn(async () => []);
+    const { fromUI, transport } = harness({ env: { getBlogFeed, postBlogComment: async () => ({ ok: true, threads: [] }) } });
+    fromUI(comment());
+    await waitForType(transport, "blogCommentResult");
+    for (let i = 0; i < 400 && !getBlogFeed.mock.calls.length; i++) await new Promise((r) => setTimeout(r, 5));
+    expect(getBlogFeed).toHaveBeenCalledWith(undefined, undefined, true);
+  });
+
+  it("a sage reply never re-primes: it did not bump, so the cache is not stale", async () => {
+    const getBlogFeed = vi.fn(async () => []);
+    const { fromUI, transport } = harness({ env: { getBlogFeed, postBlogComment: async () => ({ ok: true, threads: [] }) } });
+    fromUI(comment({ sage: true }));
+    await waitForType(transport, "blogCommentResult");
+    fromUI({ type: "wallet" });
+    await waitForType(transport, "wallet");
+    expect(getBlogFeed).not.toHaveBeenCalled();
+  });
+
+  it("a failed comment never re-primes", async () => {
+    const getBlogFeed = vi.fn(async () => []);
+    const { fromUI, transport } = harness({ env: { getBlogFeed, postBlogComment: async () => ({ ok: false, error: "rpc" }) } });
+    fromUI(comment());
+    await waitForType(transport, "blogCommentResult");
+    fromUI({ type: "wallet" });
+    await waitForType(transport, "wallet");
+    expect(getBlogFeed).not.toHaveBeenCalled();
+  });
+
+  it("getBlogFeed request threads fresh through to the env", async () => {
+    const getBlogFeed = vi.fn(async () => []);
+    const { fromUI, transport } = harness({ env: { getBlogFeed } });
+    fromUI({ type: "getBlogFeed", sort: "latest", fresh: true });
+    await waitForType(transport, "blogFeed");
+    expect(getBlogFeed).toHaveBeenCalledWith(undefined, "latest", true);
+  });
+});

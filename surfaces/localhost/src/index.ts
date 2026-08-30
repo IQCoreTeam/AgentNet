@@ -1023,7 +1023,7 @@ function attachMarketHandlers(c: Client) {
       // newest first, one read of the feed anchor.
       case "getBlogFeed": {
         try {
-          c.send({ type: "blogFeed", posts: await mkt.getBlogFeed(m.limit, m.sort) });
+          c.send({ type: "blogFeed", posts: await mkt.getBlogFeed(m.limit, m.sort, m.fresh) });
         } catch {
           c.send({ type: "blogFeed", posts: [] });
         }

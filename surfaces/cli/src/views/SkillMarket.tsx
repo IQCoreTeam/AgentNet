@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Box, Text, useInput, useStdout } from "ink";
 import type { SkillCard, SkillDetail, Note } from "@iqlabs-official/agent-sdk";
 import type { Reputation, AgentProfile } from "@iqlabs-official/agent-sdk";
@@ -123,7 +123,9 @@ function feedPostLines(post: Note, body: Note | null, threads: FeedThread[] | nu
   if (real.image) out.push(<Text key="img" dimColor>[image: {truncateEnd(real.image, Math.max(4, w - 9))}]</Text>);
   if (real.gitLink) out.push(<Text key="git" color={colors.ok}>{glyph.sparkle} {truncateEnd(real.gitLink, Math.max(4, w - 2))}</Text>);
   out.push(<Text key="sp1"> </Text>);
-  const count = threads ? threads.reduce((s, t) => s + 1 + t.replies.length, 0) : (post.feedReplies ?? 0);
+  // top-level thread count, the same number the webview reader shows; before the
+  // thread settles, feedReplies (anchor bump rows) stands in
+  const count = threads ? threads.length : (post.feedReplies ?? 0);
   out.push(
     <Text key="ch">
       <Text color={colors.ok}>{">"}</Text>
@@ -320,6 +322,9 @@ export function SkillMarket({
   // loading convention as results/agents); [] only ever means a settled empty feed.
   const [feedPosts, setFeedPosts] = useState<Note[] | null>(null);
   const [feedSort, setFeedSort] = useState<"active" | "latest">("active");
+  // fetch sequence: only the newest feed read may land, or a slow older fetch
+  // (a cold fresh read, a pre-toggle sort) would overwrite newer rows
+  const feedSeq = useRef(0);
   const [feedIdx, setFeedIdx] = useState(0);
   const [feedPost, setFeedPost] = useState<Note | null>(null);      // the opened post (mirror row)
   const [feedBody, setFeedBody] = useState<Note | null>(null);      // authoritative body once fetched
@@ -603,15 +608,19 @@ export function SkillMarket({
 
   // ── feed (issue #210): load / open / comment ──────────────────────────────
   async function loadFeed(sort: "active" | "latest" = feedSort, fresh = false) {
+    const seq = ++feedSeq.current;
     setLoading(true);
     setError(null); // the error branch must only ever show a failure of THIS fetch
     try {
-      setFeedPosts(await api.getBlogFeed(undefined, sort, fresh));
+      const rows = await api.getBlogFeed(undefined, sort, fresh);
+      if (seq !== feedSeq.current) return;
+      setFeedPosts(rows);
       setFeedIdx(0);
     } catch (e) {
+      if (seq !== feedSeq.current) return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (seq === feedSeq.current) setLoading(false);
     }
   }
 
@@ -647,7 +656,14 @@ export function SkillMarket({
       // a bumping reply must re-prime the gateway's feed anchor cache: one fresh read
       // cold-fetches the new mirror row (same as every other host), and reloading the
       // held list here means the bump ordering is already right when esc lands on it.
-      if (!sage) void api.getBlogFeed(undefined, feedSort, true).then(setFeedPosts).catch(() => {});
+      // The sequence token keeps this slow cold read from clobbering a list the user
+      // has re-sorted or refreshed in the meantime.
+      if (!sage) {
+        const seq = ++feedSeq.current;
+        void api.getBlogFeed(undefined, feedSort, true).then((rows) => {
+          if (seq === feedSeq.current) setFeedPosts(rows);
+        }).catch(() => {});
+      }
       setFlash("comment posted");
       setStage("feedPost");
     } else {
@@ -1229,7 +1245,7 @@ export function SkillMarket({
                 const i = fStart + wi;
                 const on = i === feedIdx;
                 const bumped = (p.feedLastActivity ?? 0) > (p.timestamp ?? 0);
-                const when = bumped ? `bumped ${agoShort(p.feedLastActivity)}` : `${agoShort(p.timestamp)} ago`;
+                const when = bumped ? `bumped ${agoShort(p.feedLastActivity)}` : agoShort(p.timestamp) ? `${agoShort(p.timestamp)} ago` : "";
                 const preview = (p.title || p.text || "").trim();
                 return (
                   <Box key={p.id} flexDirection="column">
@@ -1269,7 +1285,7 @@ export function SkillMarket({
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={colors.iqViolet}>
         <Box justifyContent="space-between">
           <Text bold color={colors.bone}><Text color={colors.ok}>{">"}</Text>POST</Text>
-          {flash ? <Text color={colors.ok}>{flash}</Text> : null}
+          {flash ? <Text color={flash.startsWith("comment failed") ? colors.err : colors.ok}>{flash}</Text> : null}
         </Box>
         <Box flexDirection="column" marginTop={1}>
           <ScrollView lines={lines} height={height} offset={feedScroll} />
@@ -1314,6 +1330,9 @@ export function SkillMarket({
           })}
         </Box>
         {busy ? <Box marginTop={1}><Text dimColor>posting…</Text></Box> : null}
+        {/* a failed post keeps the draft on screen; the error has to show HERE, not
+            only on the post view the user has not returned to yet */}
+        {!busy && flash?.startsWith("comment failed") ? <Box marginTop={1}><Text color={colors.err}>{flash}</Text></Box> : null}
         <Box marginTop={1}><Text dimColor>↑/↓/[tab] field · space toggles sage · ↵ next / post on sage · esc cancel</Text></Box>
       </Box>
     );
