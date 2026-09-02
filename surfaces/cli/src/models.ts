@@ -1,7 +1,9 @@
 import {
   CHAT_MODEL_OPTIONS,
+  customModelOption,
   listClaudeModelOptions,
   listCodexModelOptions,
+  loadCustomEngineConfig,
   type ChatModelOption,
   type EngineKey,
 } from "@iqlabs-official/agent-sdk";
@@ -15,6 +17,14 @@ export const MODELS = CHAT_MODEL_OPTIONS;
 const cache = new Map<EngineKey, Promise<ChatModelOption[]>>();
 
 export function loadModelOptions(cli: EngineKey): Promise<ChatModelOption[]> {
+  // The custom catalog is whatever model the saved endpoint config names. Re-read every
+  // time (a tiny local json) instead of caching, so a reconnect with a different model
+  // shows up without relaunching; empty when no model is set (endpoint default).
+  if (cli === "custom") {
+    return loadCustomEngineConfig().then((cfg) =>
+      cfg ? customModelOption(cfg.model, cfg.label) : MODELS.custom,
+    );
+  }
   let cached = cache.get(cli);
   if (!cached) {
     const probe =

@@ -1,5 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
+import type { EngineKey } from "@iqlabs-official/agent-sdk";
 import { colors } from "../theme.js";
 import { basename } from "node:path";
 
@@ -18,13 +19,14 @@ export function Header({
   cwd,
   version = "0.1.0",
 }: {
-  cli: "claude" | "codex";
+  cli: EngineKey;
   model?: string;
   cwd: string;
   version?: string;
 }) {
-  const tint = cli === "codex" ? colors.codex : colors.claude;
-  const modelLabel = model ?? (cli === "claude" ? "claude sonnet" : "codex");
+  // custom wears the theme's violet accent; claude/codex stay monochrome bone.
+  const tint = cli === "custom" ? colors.iqViolet : cli === "codex" ? colors.codex : colors.claude;
+  const modelLabel = model ?? (cli === "claude" ? "claude sonnet" : cli);
 
   return (
     <Box flexDirection="row" marginBottom={1} paddingX={1}>

@@ -22,6 +22,13 @@ export const modelValue = (opt) => (opt && opt.value) ? opt.value : 'default';
 // sandbox+approval preset (mapped host-side in spawn). Like MODELS this is just a
 // wrapper label table — when a CLI changes its modes, only this list needs editing.
 // English labels mirror what each CLI calls these modes natively.
+// The custom engine runs through the codex binary, so codex's sandbox modes are its modes:
+// one list, referenced twice, instead of a copy that could drift.
+const CODEX_MODES = [
+  { value: 'readonly', label: 'Read only',   title: 'Read-only sandbox; ask before edits, commands, network' },
+  { value: 'auto',     label: 'Auto accept', title: 'Auto-accept edits + run inside the workspace; approve on failure (default)' },
+  { value: 'full',     label: 'Full access', title: 'Full disk + network access, never ask (use with care)' },
+];
 export const MODES = {
   claude: [
     { value: 'default',     label: 'Ask edits',    title: 'Ask before each file edit (default)' },
@@ -29,11 +36,8 @@ export const MODES = {
     { value: 'plan',        label: 'Plan',         title: 'Plan mode: read-only until you approve the plan' },
     { value: 'bypassPermissions', label: 'Bypass', title: 'Bypass all permission prompts (--dangerously-skip-permissions). Auto-runs every command, edit, and on-chain spend. Use with care.' },
   ],
-  codex: [
-    { value: 'readonly', label: 'Read only',   title: 'Read-only sandbox; ask before edits, commands, network' },
-    { value: 'auto',     label: 'Auto accept', title: 'Auto-accept edits + run inside the workspace; approve on failure (default)' },
-    { value: 'full',     label: 'Full access', title: 'Full disk + network access, never ask (use with care)' },
-  ],
+  codex: CODEX_MODES,
+  custom: CODEX_MODES,
 };
 // reasoning effort levels (applies to both engines; labels mirror CLI EffortPicker)
 export const EFFORTS = [
@@ -47,9 +51,9 @@ export const EFFORTS = [
 // remember the chosen mode + model + effort per engine so switching tabs restores them.
 // model starts null (not 'default') so currentModel() falls to the first real model and
 // the chip shows its actual name (e.g. "Opus 4.8") instead of an opaque "default".
-export const modeByCli = { claude: 'acceptEdits', codex: 'auto' };
-export const modelByCli = { claude: null, codex: null };
-export const effortByCli = { claude: 'default', codex: 'default' };
+export const modeByCli = { claude: 'acceptEdits', codex: 'auto', custom: 'auto' };
+export const modelByCli = { claude: null, codex: null, custom: null };
+export const effortByCli = { claude: 'default', codex: 'default', custom: 'default' };
 
 // ---- platform tabs + model picker (chip + popover, mirroring the mode picker) ----
 export function currentModel() {
@@ -177,8 +181,30 @@ export function openModeMenu() {
   placeMenuAbove(modeMenu, modeBtn.getBoundingClientRect());
 }
 export function currentEffort() { return effortByCli[S.cli] || 'default'; }
+// The custom tab (issue #209) ships hidden in the shell: this panel has no connect form, so
+// the tab only appears once the host announces a saved endpoint config (customEngine, or
+// the custom modelOptions that exist only with a config).
+export function showCustomTab() {
+  S.customEngineOn = true;
+  const t = tabs.find((t) => t.dataset.cli === 'custom');
+  if (t) t.style.display = '';
+}
+// The endpoint config is gone (cleared host-side, or never existed): hide the tab. If the
+// user was ON it, land them on the codex tab, because a custom session can no longer
+// spawn; selectTab also surfaces codex's own sign-in state if needed.
+export function hideCustomTab() {
+  S.customEngineOn = false;
+  const t = tabs.find((t) => t.dataset.cli === 'custom');
+  if (t) t.style.display = 'none';
+  if (S.cli === 'custom') {
+    renderNotice('Custom engine was removed. Switched to the Codex tab.');
+    selectTab('codex');
+  }
+}
 export function setTab(next) {
-  if (next !== 'claude' && next !== 'codex') return;
+  if (next !== 'claude' && next !== 'codex' && next !== 'custom') return;
+  // the host only lands here with a config, so an active-but-hidden tab cannot happen
+  if (next === 'custom') showCustomTab();
   S.cli = next;
   tabs.forEach(t => t.classList.toggle('active', t.dataset.cli === S.cli));
   composer.dataset.cli = S.cli;                       // tints the input (claude=orange/codex=green)

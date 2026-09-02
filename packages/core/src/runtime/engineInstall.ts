@@ -4,20 +4,24 @@
 //
 // Pure data on purpose: browser surfaces (webview) import this module directly, so it
 // must stay free of node imports (detect.ts, which reports the statuses, is node-only).
+import type { EngineKey } from "./engineRegistry.js";
+
 export const NODE_REQUIRED_MESSAGE = "This engine is installed, but Node.js is missing. Install Node.js, restart AgentNet, then retry.";
 export const NODE_DOWNLOAD_URL = "https://nodejs.org/en/download";
 
-export const ENGINE_INSTALL_COMMAND: Record<"claude" | "codex", string> = {
+export const ENGINE_INSTALL_COMMAND: Record<EngineKey, string> = {
   codex: "npm install -g @openai/codex",
   claude: "npm install -g @anthropic-ai/claude-code",
+  custom: "npm install -g @openai/codex", // custom runs through the codex binary
 };
 
 // Official npm update command per engine, the same channel as the install commands.
 // updateEngine in engineVersions.ts runs it only for a missing engine; an installed engine
 // updates itself.
-export const ENGINE_UPDATE_COMMAND: Record<"claude" | "codex", string> = {
+export const ENGINE_UPDATE_COMMAND: Record<EngineKey, string> = {
   codex: "npm install -g @openai/codex@latest",
   claude: "npm install -g @anthropic-ai/claude-code@latest",
+  custom: "npm install -g @openai/codex@latest", // custom runs through the codex binary
 };
 
 // An outdated codex silently hides new models (its models cache uses fields the old

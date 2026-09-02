@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, type ReactNode, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { walletAvatarSvg } from "../market/walletAvatar";
-import { useStore } from "../state/store";
+import { useStore, engineStatus } from "../state/store";
+import type { Cli, CustomEnginePreset } from "../transport/protocol";
 import { IqLogo, AgentIcon, LockIcon, SkillIcon } from "../icons";
 import { useOnline } from "../layoutEffects";
 import agentnetWordmark from "../assets/agentnet.png";
@@ -36,6 +37,8 @@ import { forgetAndroidWallet } from "../onboarding/androidWallet";
 import { openExternalUrl } from "../platform/openExternalUrl";
 import { useAutoOpenExternalUrl } from "../platform/useAutoOpenExternalUrl";
 import { HeliusKeyForm } from "../settings/HeliusKeyForm";
+// Leaf subpath (browser-safe, no node imports) so the bundle stays free of the Node SDK.
+import { CUSTOM_ENGINE_EGRESS_WARNING, CUSTOM_ENGINE_TOOL_WARNING } from "@iqlabs-official/agent-sdk/account/customEngineMeta";
 import { ConnectGithub } from "../onboarding/ConnectGithub";
 import { isVersionOlder } from "@iqlabs-official/agent-sdk/runtime/engineInstall";
 import {
@@ -133,6 +136,116 @@ function StorageOption({ active, title, subtitle, onClick }: { active: boolean; 
   );
 }
 
+// Custom engine row for AI Connections (issue #209): an OpenAI-compatible endpoint the
+// host runs through the codex binary. Shows the host's masked config summary and a
+// connect form (preset picker + endpoint + key + model). The raw key travels UI to host
+// once, on save; the host only ever reports back the masked view.
+function CustomEngineRow() {
+  const { state, send } = useStore();
+  const t = useT();
+  const masked = state.customEngine?.masked ?? null;
+  const presets = state.customEngine?.presets ?? [];
+  // Start with the form open when the user is ON the custom engine without a saved
+  // endpoint (the customAuth route lands here to fix exactly that); otherwise closed.
+  const [open, setOpen] = useState(state.cli === "custom" && engineStatus(state, "custom") === "no-login");
+  const [presetId, setPresetId] = useState("manual");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [model, setModel] = useState("");
+  const inputCls = "w-full rounded-lg bg-zinc-900 border border-zinc-850 px-2.5 py-2 text-xs text-white outline-none focus:border-an-green/50";
+  function pickPreset(p: CustomEnginePreset) {
+    setPresetId(p.id);
+    setBaseUrl(p.baseUrl);
+    setModel(p.defaultModel);
+  }
+  function save() {
+    const preset = presets.find((p) => p.id === presetId);
+    send({
+      type: "saveCustomEngine",
+      baseUrl: baseUrl.trim(),
+      apiKey: apiKey.trim(),
+      model: model.trim(),
+      presetId,
+      label: preset && preset.id !== "manual" ? preset.label : undefined,
+    });
+    setOpen(false);
+    setApiKey("");
+  }
+  return (
+    <>
+      <div className="flex items-center gap-3.5 rounded-2xl px-2.5 py-3">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center" style={{ color: masked ? "var(--an-violet)" : "var(--an-fg-dim)" }}>
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"><path d="M11 3v7" /><path d="M6.2 6.2a7 7 0 1 0 9.6 0" /></svg>
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-fg)" }}>custom</span>
+          <span className="block truncate text-[0.72rem] leading-tight" style={{ color: masked ? "var(--an-violet)" : "var(--an-fg-mute)" }}>
+            {masked ? `${t(M.storagePicker.connected)} · ${masked}` : "Bring your own OpenAI-compatible endpoint"}
+          </span>
+        </span>
+        {masked && (
+          <button
+            onClick={() => send({ type: "clearCustomEngine" })}
+            className="an-term-mono shrink-0 text-[11px] font-bold uppercase tracking-wide transition active:opacity-70"
+            style={{ color: "var(--an-red, #e55)", border: "1px solid var(--an-line)", padding: "8px 12px" }}
+          >
+            Remove
+          </button>
+        )}
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="an-term-mono shrink-0 text-[11px] font-bold uppercase tracking-wide transition active:opacity-70"
+          style={{ color: "var(--an-violet)", border: "1px solid color-mix(in srgb, var(--an-violet) 45%, var(--an-line))", padding: "8px 12px" }}
+        >
+          {masked ? "Edit" : t(M.engines.connect)}
+        </button>
+      </div>
+      {open && (
+        <div className="flex flex-col gap-2.5 px-2.5 pb-3">
+          {presets.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {presets.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => pickPreset(p)}
+                  className="an-term-mono text-[10px] font-bold uppercase tracking-wide transition active:opacity-70"
+                  style={p.id === presetId
+                    ? { color: "var(--an-violet)", border: "1px solid color-mix(in srgb, var(--an-violet) 45%, var(--an-line))", padding: "6px 10px" }
+                    : { color: "var(--an-fg-mute)", border: "1px solid var(--an-term-line-2)", padding: "6px 10px" }}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          )}
+          <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="Base URL, https://..." className={inputCls} />
+          <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} type="password" placeholder="API key (leave blank for local endpoints)" className={inputCls} />
+          <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="Model id (required)" className={inputCls} />
+          <p className="text-[0.68rem] leading-snug" style={{ color: "var(--an-amber, #e90)" }}>
+            {CUSTOM_ENGINE_EGRESS_WARNING}
+          </p>
+          <p className="text-[0.68rem] leading-snug" style={{ color: "var(--an-fg-mute)" }}>
+            {CUSTOM_ENGINE_TOOL_WARNING}
+          </p>
+          {masked && (
+            <p className="text-[0.68rem] leading-snug" style={{ color: "var(--an-fg-mute)" }}>
+              Saving replaces the stored endpoint. The saved key is only ever shown masked, so re-enter it if the endpoint needs one.
+            </p>
+          )}
+          <button
+            disabled={!baseUrl.trim() || !model.trim()}
+            onClick={save}
+            className="an-term-mono w-full text-[11px] font-bold uppercase tracking-wide transition active:opacity-70 disabled:cursor-not-allowed disabled:opacity-40"
+            style={{ color: "var(--an-bg-0)", background: "var(--an-violet)", padding: "10px 12px" }}
+          >
+            Save custom engine
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
 type SettingsMode = "list" | "configure" | "wallet" | "connect" | "gdrive" | "custom" | "helius" | "github" | "engines" | "language";
 
 // The server runs on the host this page came from, so its OS decides whether an
@@ -163,7 +276,7 @@ export function Sessions({
   const { storage, cloudSync, googleLoginUrl, googleLoginError } = state;
   const online = useOnline();
   // Which engines hold live credentials — drives the AI Connections menu (row subtitle + sub-screen).
-  const connectedEngines = (["claude", "codex"] as const).filter((c) => state.cliReport?.[c] === "ok");
+  const connectedEngines = (["claude", "codex", "custom"] as Cli[]).filter((c) => engineStatus(state, c) === "ok");
 
   const rootMode: SettingsMode = settingsRoot ? "configure" : "list";
   const [settingsMode, setSettingsMode] = useState<SettingsMode>(initialMode ?? rootMode);
@@ -183,6 +296,8 @@ export function Sessions({
   // no boot-time check — this is the only send site.
   useEffect(() => {
     if (settingsMode === "engines" && !state.engineVersions) send({ type: "getEngineVersions" });
+    // Same on-demand rule for the custom-engine summary; the host re-pushes after save/clear.
+    if (settingsMode === "engines" && !state.customEngine) send({ type: "getCustomEngine" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingsMode]);
   const [showManualCode, setShowManualCode] = useState(false);
@@ -769,6 +884,7 @@ export function Sessions({
                   </div>
                 );
               })}
+              <CustomEngineRow />
               <p className="px-2.5 pt-1 text-[0.68rem] leading-snug" style={{ color: "var(--an-fg-mute)" }}>
                 {t(M.engines.note)}
               </p>
