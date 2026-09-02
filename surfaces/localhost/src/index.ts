@@ -43,6 +43,13 @@ import {
   startCodexLogin,
   markCodexConnected,
   saveCodexApiKey,
+  saveCustomEngineConfig,
+  loadCustomEngineConfig,
+  clearCustomEngineConfig,
+  maskedCustomEngine,
+  CUSTOM_ENGINE_PRESETS,
+  customModelOption,
+  messageBinary,
   logoutClaude,
   logoutCodex,
   getEngineVersions,
@@ -537,6 +544,12 @@ async function pushCliStatus(c: Client) {
   c.send({ type: "cliStatus", claude: cli.claude, codex: cli.codex });
 }
 
+// Masked custom-engine summary + core's preset catalog (issue #209). The raw key/URL
+// stay host-side; the UI only ever sees this view.
+async function pushCustomEngine(c: Client) {
+  c.send({ type: "customEngine", masked: await maskedCustomEngine(), presets: CUSTOM_ENGINE_PRESETS });
+}
+
 // Engines with an npm update in flight — a second tap must not start a parallel install.
 const enginesUpdating = new Set<"claude" | "codex">();
 
@@ -606,8 +619,36 @@ function attachAuthHandlers(c: Client) {
           c.send({ type: "codexLoginStatus", status: "error", error: (e as Error).message });
         }
         return;
+      case "getCustomEngine":
+        await pushCustomEngine(c);
+        return;
+      case "saveCustomEngine":
+        if (typeof m.baseUrl !== "string" || !m.baseUrl.trim()) return;
+        try {
+          await saveCustomEngineConfig({
+            baseUrl: m.baseUrl.trim(),
+            apiKey: typeof m.apiKey === "string" ? m.apiKey.trim() : "",
+            model: typeof m.model === "string" ? m.model.trim() : "",
+            presetId: typeof m.presetId === "string" && m.presetId ? m.presetId : "manual",
+            label: typeof m.label === "string" && m.label ? m.label : undefined,
+          });
+          c.send({ type: "toast", text: "Custom engine saved." });
+          await pushCustomEngine(c);
+        } catch (e) {
+          c.send({ type: "toast", text: `Custom engine save failed: ${(e as Error).message}` });
+        }
+        return;
+      case "clearCustomEngine":
+        try {
+          await clearCustomEngineConfig();
+          c.send({ type: "toast", text: "Custom engine removed." });
+          await pushCustomEngine(c);
+        } catch (e) {
+          c.send({ type: "toast", text: `Custom engine remove failed: ${(e as Error).message}` });
+        }
+        return;
       case "logoutEngine": {
-        const engine = m.cli === "codex" ? "codex" : "claude";
+        const engine = messageBinary(m.cli);
         try {
           if (engine === "codex") await logoutCodex();
           else await logoutClaude();
@@ -625,7 +666,7 @@ function attachAuthHandlers(c: Client) {
         // Trusted update path: run the official npm command host-side on the user's tap.
         // No browser, no link — see engineVersions.ts for why. One update at a time per
         // engine; the UI disables its button on "running".
-        const engine = m.cli === "codex" ? "codex" : "claude";
+        const engine = messageBinary(m.cli);
         if (enginesUpdating.has(engine)) return;
         enginesUpdating.add(engine);
         c.send({ type: "engineUpdateStatus", cli: engine, status: "running" });
@@ -1081,11 +1122,15 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
     approval,
     // Live model catalog from the installed CLI (same auth, no extra cost); the picker
     // falls back to the static baseline when the probe returns null. Cached per engine so
-    // the subprocess spins up once, not on every picker open.
+    // the subprocess spins up once, not on every picker open. The custom engine has no
+    // probe: its one model is whatever the stored endpoint config names (uncached, so a
+    // re-save shows up on the next picker open).
     modelOptions: async (cli) =>
-      cli === "codex"
-        ? await (codexModelOptionsPromise ??= listCodexModelOptions().then((r) => r.options).catch(() => null))
-        : await (claudeModelOptionsPromise ??= listClaudeModelOptions(process.cwd()).catch(() => null)),
+      cli === "custom"
+        ? await loadCustomEngineConfig().then((cfg) => (cfg ? customModelOption(cfg.model, cfg.label) : null)).catch(() => null)
+        : cli === "codex"
+          ? await (codexModelOptionsPromise ??= listCodexModelOptions().then((r) => r.options).catch(() => null))
+          : await (claudeModelOptionsPromise ??= listClaudeModelOptions(process.cwd()).catch(() => null)),
     walletAddress: () => walletAddress,
     storageInfo: async () => ({ info: await getStorageInfo(), options: STORAGE_OPTIONS, googleCredsConfigured: await hasGoogleCreds() }),
     connectCloud: async (cfg) => {
@@ -1128,6 +1173,9 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
       c.send({ type: "init", defaultPath: null, cloudKind: null, hasWallet: !!walletAddress });
       c.send({ type: "wallet", address: walletAddress });
       await pushCliStatus(c);
+      // The composer shows the custom chip only when a config exists, so its state
+      // must land at boot, not just when AI Connections opens.
+      await pushCustomEngine(c);
     }
   });
   attachMarketHandlers(c);

@@ -44,6 +44,7 @@ export const PANEL_INBOUND_PAYLOADS: Array<{ type: string } & Record<string, unk
   { type: "publishProgress", phase: "mint", signed: 1, total: 3 },
   { type: "publishResult", ok: false, error: "publish failed" },
   { type: "platform", cli: "claude" },
+  { type: "customEngine", masked: null, presets: [] },
   { type: "cliStatus", claude: "ok", codex: "ok" },
   { type: "engineUpdate", cli: "codex" },
   { type: "claudeLoginUrl", url: "https://example.invalid/claude-login" },

@@ -280,6 +280,7 @@ export function chatHtml(): string {
   /* engine accent for the unread state — keyed off data-cli, same source the send button uses */
   #jumpBtn[data-cli="claude"] { --eng: var(--claude); }
   #jumpBtn[data-cli="codex"]  { --eng: var(--an-green); }
+  #jumpBtn[data-cli="custom"] { --eng: var(--an-violet); }
   /* when there's a NEW message while scrolled up: outline + icon glow in the engine accent
      (claude=orange / codex=green), background stays black/white per theme. */
   #jumpBtn.hasNew { color: var(--eng); border-color: color-mix(in srgb, var(--eng) 88%, transparent);
@@ -340,6 +341,9 @@ export function chatHtml(): string {
                             box-shadow: 0 0 0 3px var(--an-green-dim); }
   .node.assistant.claude::before { background: var(--claude); border-color: var(--claude);
                                    box-shadow: 0 0 0 3px rgba(233,136,58,0.16); }
+  /* custom rides the codex binary but marks its replies violet so they don't read as codex */
+  .node.assistant.custom::before { background: var(--an-violet); border-color: var(--an-violet);
+                                   box-shadow: 0 0 0 3px var(--an-violet-dim); }
   .node.thinking::before  { background: transparent; }
   .msg { white-space: pre-wrap; line-height: 1.55; font-size: 0.95em; overflow-wrap: anywhere; }
   /* rendered markdown inside an assistant message: tame the default browser margins
@@ -631,6 +635,7 @@ export function chatHtml(): string {
   .badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
   .badge.claude { color: #e9883a; border-color: #e9883a44; background: #e9883a14; }
   .badge.codex  { color: var(--an-green); border-color: var(--an-green-line); background: var(--an-green-dim); }
+  .badge.custom { color: var(--an-violet); border-color: var(--an-violet-line); background: var(--an-violet-dim); }
 
   /* ── COMPOSER: engine folder-tabs + input + controls ─────────────────────
      The engine (claude/codex) is chosen by FOLDER TABS at the top-right of the
@@ -642,6 +647,7 @@ export function chatHtml(): string {
   /* per-engine accent: a single var the composer themes off of */
   #composer { --eng: var(--an-green); --engSoft: var(--an-green-dim); --engLine: var(--an-green-line); }
   #composer[data-cli="claude"] { --eng: var(--claude); --engSoft: rgba(233,136,58,0.12); --engLine: rgba(233,136,58,0.45); }
+  #composer[data-cli="custom"] { --eng: var(--an-violet); --engSoft: var(--an-violet-dim); --engLine: var(--an-violet-line); }
 
   /* composer top row: skills (left) ←→ engine tabs (right) */
   #composerTop { display: flex; align-items: flex-end; justify-content: space-between; }
@@ -1058,6 +1064,7 @@ export function chatHtml(): string {
   .etab .ed { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.5; }
   .etab[data-cli="claude"] { color: var(--claude); }
   .etab[data-cli="codex"]  { color: var(--an-green); }
+  .etab[data-cli="custom"] { color: var(--an-violet); }
   /* the ACTIVE tab pops forward: full opacity, raised, merged into the input box */
   .etab.active { opacity: 1; background: var(--an-bg-2); border-color: var(--engLine);
                  border-bottom: 1px solid var(--an-bg-2); top: 2px; z-index: 2; font-weight: 600; }
@@ -1976,6 +1983,8 @@ export function chatHtml(): string {
           <div id="engineTabs">
             <div class="etab active" data-cli="claude"><span class="ed"></span>claude</div>
             <div class="etab" data-cli="codex"><span class="ed"></span>codex</div>
+            <!-- hidden until the host announces a saved custom-endpoint config -->
+            <div class="etab" data-cli="custom" style="display:none"><span class="ed"></span>custom</div>
           </div>
         </div>
         <div id="inputWrap">

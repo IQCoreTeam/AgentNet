@@ -141,6 +141,12 @@ export function send() {
     switch (cmd) {
       case 'login': {
         const target = (arg === 'claude' || arg === 'codex') ? arg : S.cli;
+        // The custom engine signs in by saving an endpoint config, not an account login;
+        // falling through would start a Codex device auth the user never asked for.
+        if (target === 'custom') {
+          renderNotice('Custom endpoints have no login. Connect one from the AgentNet app settings.');
+          input.value = ''; return;
+        }
         if (target === 'claude' && arg && arg !== 'claude' && arg !== 'codex') {
           vscode.postMessage({ type: 'claudeAuthCode', code: arg });
           renderNotice('Submitted Claude sign-in code.');
@@ -151,7 +157,13 @@ export function send() {
         input.value = ''; return;
       }
       case 'logout': {
-        const target = (arg === 'claude' || arg === 'codex') ? arg : S.cli;
+        const target = (arg === 'claude' || arg === 'codex' || arg === 'custom') ? arg : S.cli;
+        // Custom holds no account: logoutEngine resolves to the codex BINARY, so forwarding
+        // it would sign the user out of their real Codex login.
+        if (target === 'custom') {
+          renderNotice('Custom endpoints have no login to sign out of. Remove the endpoint from the AgentNet app settings.');
+          input.value = ''; return;
+        }
         vscode.postMessage({ type: 'logoutEngine', cli: target });
         renderNotice('Signing out of ' + (target === 'claude' ? 'Claude' : 'Codex') + '...');
         input.value = ''; return;
@@ -196,7 +208,13 @@ export function send() {
         input.value = ''; return;
       }
       case 'engine':
-        if (arg === 'claude' || arg === 'codex') selectTab(arg);
+        // No saved endpoint config: this panel has no connect form, so switching would land
+        // on a tab that cannot spawn. Point at where the config lives instead.
+        if (arg === 'custom' && !S.customEngineOn) {
+          renderNotice('Custom engine is not configured. Connect it from the AgentNet app settings.');
+          input.value = ''; return;
+        }
+        if (arg === 'claude' || arg === 'codex' || arg === 'custom') selectTab(arg);
         input.value = ''; return;
       case 'model':
         if (arg) { modelByCli[S.cli] = arg; fillModels(); vscode.postMessage({ type: 'model', model: arg }); }

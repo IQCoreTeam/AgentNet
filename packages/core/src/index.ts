@@ -102,6 +102,10 @@ export {
 export type { SkillOrigin, ClassifiedSkill, SkillManifest, NftSkillRecord } from "./skill-market/registry.js";
 
 export { createRuntime } from "./runtime/index.js";
+export { CUSTOM_ENGINE_KEYLESS_PLACEHOLDER } from "./runtime/spawn.js";
+// engine behavior registry: claude/codex/custom descriptors + the coercion helpers
+export { ENGINE_KEYS, ENGINE_REGISTRY, engineBinary, coerceEngineKey, messageBinary } from "./runtime/engineRegistry.js";
+export type { EngineDescriptor } from "./runtime/engineRegistry.js";
 export { detectCli } from "./runtime/detect.js";
 export { resolveEngineBin } from "./runtime/engineBin.js";
 export { ENGINE_INSTALL_COMMAND, ENGINE_UPDATE_COMMAND, CODEX_UPDATE_COMMAND } from "./runtime/engineInstall.js";
@@ -140,6 +144,21 @@ export {
   logoutCodex,
 } from "./account/codexAuth.js";
 export type { CodexLogin } from "./account/codexAuth.js";
+// custom engine (issue #209): endpoint config store + presets + connect-UI copy.
+// customEngineStatus is the one readiness answer (binary + config) every host uses
+// instead of re-deriving it from detectCli + hasCustomEngine.
+export {
+  saveCustomEngineConfig,
+  loadCustomEngineConfig,
+  clearCustomEngineConfig,
+  hasCustomEngine,
+  maskedCustomEngine,
+  customEngineStatus,
+  CUSTOM_ENGINE_PRESETS,
+  CUSTOM_ENGINE_EGRESS_WARNING,
+  CUSTOM_ENGINE_TOOL_WARNING,
+} from "./account/customEngineAuth.js";
+export type { CustomEngineConfig, CustomEnginePreset, CustomEngineStatus } from "./account/customEngineAuth.js";
 export {
   initialize,
   isInitialized,
@@ -187,7 +206,7 @@ export { autoApprove, withTimeout } from "./runtime/approval/channel.js";
 export { createChatSession } from "./chat/session.js";
 export type { ChatTransport, ChatEnv } from "./chat/session.js";
 export { TransportApprovalChannel } from "./chat/approvalChannel.js";
-export { CHAT_MODEL_OPTIONS, findChatModelOption } from "./chat/modelOptions.js";
+export { CHAT_MODEL_OPTIONS, findChatModelOption, customModelOption } from "./chat/modelOptions.js";
 export type { ChatModelOption, EngineKey } from "./chat/modelOptions.js";
 export { CHAT_SLASH_COMMANDS } from "./chat/slashCommands.js";
 export type { SlashCommandSpec, SlashEngine } from "./chat/slashCommands.js";

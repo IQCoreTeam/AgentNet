@@ -32,14 +32,19 @@ export function makeUtext(userText) {
   }
   return wrap;
 }
+// Engine badge text per persisted cli. Old logs can carry a cli this build does not know;
+// those engines ran the codex passthrough, so their marks fall back to codex (mirrors
+// core's coerceEngineKey).
+export const ENGINE_BADGE = { claude: 'claude', codex: 'codex · gpt', custom: 'custom' };
+export const engineMark = (c) => ENGINE_BADGE[c] ? c : 'codex';
 export function startTurn(userText, badgeCli, imageInfo) {
   const turn = document.createElement('div'); turn.className = 'turn';
   const head = document.createElement('div'); head.className = 'turnHead';
   head.innerHTML = '<span class="uq">&gt;</span>';
   const ut = makeUtext(userText);
   head.appendChild(ut);
-  if (badgeCli) { const b = document.createElement('span'); b.className = 'badge ' + badgeCli;
-    b.textContent = badgeCli === 'codex' ? 'codex · gpt' : 'claude'; head.appendChild(b); }
+  if (badgeCli) { const b = document.createElement('span'); b.className = 'badge ' + engineMark(badgeCli);
+    b.textContent = ENGINE_BADGE[engineMark(badgeCli)]; head.appendChild(b); }
   // Thumbnails go INSIDE the text column, below the text — not as a flex sibling of it in
   // turnHead. As a sibling they competed with .utext for the row's width, so two 168px
   // images starved the text down to a one-character-per-line vertical sliver. insertBefore
@@ -61,8 +66,8 @@ export function startTurnTop(userText, badgeCli) {
   const head = document.createElement('div'); head.className = 'turnHead';
   head.innerHTML = '<span class="uq">&gt;</span>';
   head.appendChild(makeUtext(userText));
-  if (badgeCli) { const b = document.createElement('span'); b.className = 'badge ' + badgeCli;
-    b.textContent = badgeCli === 'codex' ? 'codex · gpt' : 'claude'; head.appendChild(b); }
+  if (badgeCli) { const b = document.createElement('span'); b.className = 'badge ' + engineMark(badgeCli);
+    b.textContent = ENGINE_BADGE[engineMark(badgeCli)]; head.appendChild(b); }
   const body = document.createElement('div'); body.className = 'turnBody';
   turn.appendChild(head); turn.appendChild(body);
   log.insertBefore(turn, log.firstChild);
@@ -95,8 +100,8 @@ export function appendNode(el, dir) {
 // prepend=true → goes on the prepended (older) head turn; else the bottom tail turn.
 export function bubble(role, prepend, badgeCli) {
   const node = document.createElement('div');
-  // the engine class (claude/codex) tints the timeline dot into an engine mark
-  node.className = 'node ' + role + (badgeCli ? ' ' + badgeCli : '');
+  // the engine class (claude/codex/custom) tints the timeline dot into an engine mark
+  node.className = 'node ' + role + (badgeCli ? ' ' + engineMark(badgeCli) : '');
   const el = document.createElement('div');
   el.className = 'msg ' + role;
   node.appendChild(el);

@@ -6,6 +6,7 @@
 // This file is the single source of the storage format — change it here only.
 
 import type { ChatMessage, CanonicalSession } from "../runtime/contract.js";
+import { coerceEngineKey, type EngineKey } from "../runtime/engineRegistry.js";
 import { encryptForWallet, decryptForWallet, type SessionKey } from "../core/crypto.js";
 
 // A log record: either session meta (first line) or one chat message.
@@ -45,7 +46,7 @@ export async function decodeLog(
   if (!text) return null;
 
   let sessionId = "";
-  let cli: "claude" | "codex" = "claude";
+  let cli: EngineKey = "claude";
   let title = "";
   let ts = 0;
   let lastDevice: { id: string; label: string } | undefined = undefined;
@@ -59,7 +60,7 @@ export async function decodeLog(
     const rec = JSON.parse(new TextDecoder().decode(plain)) as LogRecord;
     if (rec.kind === "meta") {
       sessionId = rec.sessionId;
-      cli = rec.cli as "claude" | "codex";
+      cli = coerceEngineKey(rec.cli); // unknown cli strings read as codex-like
       title = rec.title;
       ts = rec.ts;
       lastDevice = rec.lastDevice;

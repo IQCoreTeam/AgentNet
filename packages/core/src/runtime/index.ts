@@ -22,6 +22,8 @@ import { readSkillManifest, skillOrigin, type SkillManifest } from "../skill-mar
 import { slugifyName } from "../skill-market/ingest/convert.js";
 import { resolveRpcUrl, hasDasRpc, loadGithubToken } from "../core/rpc.js";
 import { getCodexApiKey } from "../account/codexAuth.js";
+import { loadCustomEngineConfig } from "../account/customEngineAuth.js";
+import { engineBinary, type EngineKey } from "./engineRegistry.js";
 import type { ApprovalChannel } from "./approval/channel.js";
 import type {
   AgentRuntime,
@@ -59,7 +61,7 @@ function nftSkillActivation(name: string, manifest: SkillManifest): SkillActivat
 // surface has bundled the standalone entry and points AGENTNET_MCP_STDIO at it. Trading
 // (buy/publish) stays Claude-only until Codex's MCP-tool approval is routed to the card.
 async function buildPassiveSpawn(
-  cli: "claude" | "codex",
+  cli: EngineKey,
   wallet: Wallet,
   onMarketEvent?: (e: import("../chat/marketMessages.js").MarketEvent) => void,
 ): Promise<{ mcpServers?: Record<string, unknown>; allowedTools?: string[]; codexMcp?: { name: string; command: string; args: string[] } }> {
@@ -82,7 +84,8 @@ async function buildPassiveSpawn(
 
   // Codex (Phase 1): a separate `node <entry>` stdio MCP server, read-only. Needs the
   // surface to have bundled the entry (AGENTNET_MCP_STDIO) AND a readable catalog (DAS).
-  if (cli === "codex") {
+  // Custom rides the codex binary, so it takes the codex path here too.
+  if (engineBinary(cli) === "codex") {
     const entry = process.env.AGENTNET_MCP_STDIO;
     if (!entry || !(await hasDasRpc())) return {};
     // command = "node" (PATH-resolved by codex when it spawns the server), NOT
@@ -132,13 +135,17 @@ export function createRuntime(
   return {
     async startSession(opts): Promise<SessionHandle> {
       const device = await getDeviceProfile();
+      // Everything that speaks to the CLI process itself (resume jsonl, memory files,
+      // MCP wiring) keys on the BINARY, so "custom" behaves exactly like codex there
+      // while opts.cli stays the persisted engine identity.
+      const binary = engineBinary(opts.cli);
       // RESUME: opts.sessionId is the CANONICAL id. Rewrite its history into the
       // target cli's native jsonl and resume under the NATIVE id (claude/codex only
       // accept their own ids) — this is what lets a session cross between CLIs.
       // FRESH: no sessionId; the cli mints its own, which becomes the canonical id.
       const resuming = !!opts.sessionId;
       const resumeResult = resuming
-        ? await prepareResume(store, opts.cli, opts.cwd, opts.sessionId!, opts.ephemeral)
+        ? await prepareResume(store, binary, opts.cwd, opts.sessionId!, opts.ephemeral)
         : undefined;
       const nativeId = resumeResult?.nativeId;
 
@@ -163,19 +170,19 @@ export function createRuntime(
       // effort — a memory/storage hiccup must not block starting the session.
       let enabledSkills: string[] | undefined;
       try {
-        await memory.injectAtStart(opts.cli, opts.cwd);
+        await memory.injectAtStart(binary, opts.cwd);
         // Soul rides the same best-effort inject: a stored persona lands in the CLI's
         // global instruction file (fenced block); no soul stored → no-op.
-        await injectSoulNative(opts.cli, souls);
+        await injectSoulNative(binary, souls);
         // After memory is written, refresh the managed "your skills" line so the agent
         // passively knows which skills are installed (no system-prompt nudge, no RPC).
         // Must run AFTER injectAtStart, which regenerates MEMORY.md / AGENTS.md.
-        const skills = await updateSkillsSection(opts.cli, opts.cwd);
-        if (opts.cli === "claude" && skills.length) enabledSkills = skills.map((s) => s.name);
+        const skills = await updateSkillsSection(binary, opts.cwd);
+        if (binary === "claude" && skills.length) enabledSkills = skills.map((s) => s.name);
         // Same managed-block machinery: on a surface that hands back browser links (gated on
         // AGENTNET_PREVIEW_HINT inside), tell the agent to serve web apps on a loopback port
         // and reply with the http://localhost:PORT link; elsewhere the block self-removes.
-        await updatePreviewSection(opts.cli, opts.cwd);
+        await updatePreviewSection(binary, opts.cwd);
       } catch (e) {
         console.warn("[memory] inject failed:", e);
       }
@@ -192,11 +199,19 @@ export function createRuntime(
       // per-session approval channel (each panel passes its own) wins; fall back to
       // the runtime-level default channel.
       const apiKey = opts.apiKey || (opts.cli === "codex" ? (await getCodexApiKey().catch(() => undefined)) ?? undefined : undefined);
+      // Custom engine (issue #209): hand the saved endpoint config to spawn, which turns
+      // it into -c model_providers overrides + CUSTOM_ENGINE_API_KEY on the codex binary.
+      // A missing config must fail LOUDLY: swallowing it into undefined would spawn stock
+      // codex, silently sending the user's prompts to their own OpenAI account.
+      const custom = opts.cli === "custom" ? (await loadCustomEngineConfig().catch(() => null)) ?? undefined : undefined;
+      if (opts.cli === "custom" && !custom) {
+        throw new Error("Custom engine is not configured. Connect an endpoint before starting a custom session.");
+      }
       // Hand the configured GitHub token to the agent so its git can clone/push private repos
       // (e.g. on mobile, where the proot guest has no credentials). spawn.ts turns it into a
       // github.com-scoped, process-scoped credential helper — the user's global git is untouched.
       const githubToken = (await loadGithubToken().catch(() => null))?.token || undefined;
-      const cli = spawnCli({ ...opts, sessionId: nativeId, approval: opts.approval ?? approval, apiKey, githubToken, enabledSkills, ...passive });
+      const cli = spawnCli({ ...opts, sessionId: nativeId, approval: opts.approval ?? approval, apiKey, custom, githubToken, enabledSkills, ...passive });
 
       // Storage key stays the CANONICAL id while resuming; the cli's emitted (native)
       // id must NOT overwrite it, or appended turns land in the wrong log.
@@ -264,7 +279,7 @@ export function createRuntime(
         });
         // Capture any memory Claude wrote this turn back to Drive (stock Codex never
         // writes memory, so only Claude is captured). Fire-and-forget; best effort.
-        if (opts.cli === "claude") {
+        if (binary === "claude") {
           void memory.captureFromClaude(opts.cwd).catch((e) =>
             console.warn("[memory] capture failed:", e),
           );

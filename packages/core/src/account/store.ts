@@ -31,7 +31,7 @@ const PERF = !!process.env.AGENTNET_PERF;
 function toSessionMeta(
   sessionId: string,
   title: string,
-  cli: "claude" | "codex",
+  cli: SessionMeta["cli"],
   ts: number,
   lastDevice?: SessionMeta["lastDevice"],
   model?: string,

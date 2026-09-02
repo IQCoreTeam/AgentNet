@@ -4,17 +4,21 @@
 //
 // Pure data on purpose: browser surfaces (webview) import this module directly, so it
 // must stay free of node imports (detect.ts, which reports the statuses, is node-only).
-export const ENGINE_INSTALL_COMMAND: Record<"claude" | "codex", string> = {
+import type { EngineKey } from "./engineRegistry.js";
+
+export const ENGINE_INSTALL_COMMAND: Record<EngineKey, string> = {
   codex: "npm install -g @openai/codex",
   claude: "npm install -g @anthropic-ai/claude-code",
+  custom: "npm install -g @openai/codex", // custom runs through the codex binary
 };
 
 // Official update command per engine — the same npm channel as the install commands.
 // Claude can self-update on desktop, but inside the Android guest (and for a uniform
 // mobile Update button) the npm path is the one trusted route for both engines.
-export const ENGINE_UPDATE_COMMAND: Record<"claude" | "codex", string> = {
+export const ENGINE_UPDATE_COMMAND: Record<EngineKey, string> = {
   codex: "npm install -g @openai/codex@latest",
   claude: "npm install -g @anthropic-ai/claude-code@latest",
+  custom: "npm install -g @openai/codex@latest", // custom runs through the codex binary
 };
 
 // An outdated codex silently hides new models (its models cache uses fields the old

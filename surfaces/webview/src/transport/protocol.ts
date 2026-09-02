@@ -6,11 +6,13 @@
 
 // Market types are defined once in packages/core and re-exported here so every surface
 // that imports from this file gets compile-time checking on the market message contract.
-export type { SkillCard, SkillDetail, MarketRequest, MarketEvent, RpcStatus, AgentProfile, Reputation } from "@iqlabs-official/agent-sdk";
+export type { SkillCard, SkillDetail, MarketRequest, MarketEvent, RpcStatus, AgentProfile, Reputation, CustomEnginePreset } from "@iqlabs-official/agent-sdk";
 
 // ── shared payload shapes ──
 
-export type Cli = "claude" | "codex";
+// Mirrors core's EngineKey: "custom" is an OpenAI-compatible endpoint run through the
+// codex binary (issue #209), configured host-side via the customEngine messages below.
+export type Cli = "claude" | "codex" | "custom";
 
 // Version report for one engine: installed comes from the binary, latest from the npm
 // registry. Requested on demand only (opening AI Connections), never polled.
@@ -140,6 +142,12 @@ export type ClientMessage =
   | { type: "startCodexLogin" }
   | { type: "cancelCodexLogin" }
   | { type: "submitCodexApiKey"; key: string }
+  // custom engine (issue #209): read/save/clear the host-stored endpoint config.
+  // The API key only travels UI→host on save; the host answers with `customEngine`
+  // (masked summary + the preset catalog), never the raw key.
+  | { type: "getCustomEngine" }
+  | { type: "saveCustomEngine"; baseUrl: string; apiKey: string; model: string; presetId: string; label?: string }
+  | { type: "clearCustomEngine" }
   | { type: "logoutEngine"; cli?: Cli }
   | { type: "startGoogleLogin" }
   | { type: "googleAuthCode"; code: string }
@@ -244,6 +252,10 @@ export type ServerMessage =
   // codex device-auth: server streams the URL + one-time code; CLI auto-polls (no code submittal).
   | { type: "codexLoginChallenge"; url: string; code: string }
   | { type: "codexLoginStatus"; status: "done" | "error"; error?: string }
+  // custom engine state: masked = endpoint host + dotted key tail (null = no config
+  // stored). Presets ride along like STORAGE_OPTIONS so the connect form's picker
+  // shares core's one catalog. Pushed on ready and after save/clear.
+  | { type: "customEngine"; masked: string | null; presets: import("@iqlabs-official/agent-sdk").CustomEnginePreset[] }
   | { type: "googleLoginUrl"; url: string }
   | { type: "googleLoginStatus"; status: "done" | "error"; error?: string }
   // result of saving user-supplied Google OAuth client credentials (setGoogleCredentials).

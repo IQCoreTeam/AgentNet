@@ -1,5 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
+import type { EngineKey } from "@iqlabs-official/agent-sdk";
 import { colors } from "../theme.js";
 
 // Bottom hint row — left: keyboard shortcuts, right: engine + model pill.
@@ -11,7 +12,7 @@ export function Footer({
   model,
   busy,
 }: {
-  cli: "claude" | "codex";
+  cli: EngineKey;
   model?: string;
   busy: boolean;
 }) {
@@ -50,7 +51,8 @@ export function Footer({
       <Box paddingLeft={1}>
         <Box flexShrink={0}>
           <Text color={busy ? colors.warn : colors.ok} bold>{"● "}</Text>
-          <Text color={colors.bone} bold>{cli.toUpperCase()}</Text>
+          {/* custom wears the theme's violet accent so the pill says which brain answers */}
+          <Text color={cli === "custom" ? colors.iqViolet : colors.bone} bold>{cli.toUpperCase()}</Text>
         </Box>
         <Text dimColor wrap="truncate-end"> · {modelLabel}</Text>
       </Box>

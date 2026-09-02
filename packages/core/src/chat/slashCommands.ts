@@ -1,4 +1,6 @@
-export type SlashEngine = "claude" | "codex";
+import type { EngineKey } from "../runtime/engineRegistry.js";
+
+export type SlashEngine = EngineKey;
 
 export interface SlashCommandSpec {
   name: string;
@@ -9,10 +11,14 @@ export interface SlashCommandSpec {
 
 const both = ["claude", "codex"] as SlashEngine[];
 
+// The custom engine runs through the codex binary, so it speaks every codex command.
+const withCustom = (c: SlashCommandSpec): SlashCommandSpec =>
+  c.engines.includes("codex") ? { ...c, engines: [...c.engines, "custom"] } : c;
+
 // Curated from the public Claude Code commands reference and Codex CLI/IDE slash
 // command references. AgentNet-local commands are included where this surface owns
 // the behavior instead of the native CLI.
-export const CHAT_SLASH_COMMANDS: SlashCommandSpec[] = [
+export const CHAT_SLASH_COMMANDS: SlashCommandSpec[] = ([
   { name: "login", desc: "sign in to the active engine", engines: both, args: "[code]" },
   { name: "logout", desc: "sign out of the active engine", engines: both },
   { name: "new", desc: "start a fresh chat", engines: both },
@@ -139,4 +145,4 @@ export const CHAT_SLASH_COMMANDS: SlashCommandSpec[] = [
   { name: "quit", desc: "exit the native CLI session", engines: ["codex"] },
   { name: "debug-config", desc: "inspect Codex config layers", engines: ["codex"] },
   { name: "title", desc: "configure terminal title fields", engines: ["codex"] },
-];
+] as SlashCommandSpec[]).map(withCustom);

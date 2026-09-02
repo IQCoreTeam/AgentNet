@@ -34,6 +34,8 @@ import type {
 } from "./approval/channel.js";
 import { autoApprove } from "./approval/channel.js";
 import { resolveEngineBin } from "./engineBin.js";
+import { engineBinary, type EngineKey } from "./engineRegistry.js";
+import type { CustomEngineConfig } from "../account/customEngineAuth.js";
 
 // Loosely-typed view of AskUserQuestion's raw input (the SDK hands us `unknown`-ish data).
 type ApprovalQuestionInput = {
@@ -86,7 +88,7 @@ export interface Engine {
 }
 
 export interface SpawnOpts {
-  cli: "claude" | "codex";
+  cli: EngineKey;
   cwd: string;
   sessionId?: string; // NATIVE resume id (inject/prepareResume resolved it already)
   model?: string;
@@ -108,6 +110,10 @@ export interface SpawnOpts {
   codexMcp?: { name: string; command: string; args: string[] };
   stream?: boolean; // emit partial assistant deltas (claude includePartialMessages)
   apiKey?: string; // Stage 1 Codex API Key
+  // Custom engine (issue #209): the saved endpoint config. Turned into -c
+  // model_providers overrides on the codex binary (customProviderFlags); the key
+  // rides CUSTOM_ENGINE_API_KEY in the child env, never argv.
+  custom?: CustomEngineConfig;
   githubToken?: string; // configured GitHub PAT, injected into the agent's git env (see gitCredentialEnv)
   ephemeral?: boolean; // If true, disable tools / auto-deny approvals
   effort?: "low" | "medium" | "high" | "xhigh" | "max";
@@ -167,7 +173,15 @@ function codexSandbox(mode: string | undefined, envSandbox: string | undefined):
 }
 
 export function spawnCli(opts: SpawnOpts): Engine {
-  return opts.cli === "claude" ? claudeEngine(opts) : codexEngine(opts);
+  // Last gate against silent egress: a "custom" spawn without its endpoint config
+  // would run stock codex against the user's own OpenAI login. The runtime throws
+  // earlier too (startSession); this catches any caller that skips it.
+  if (opts.cli === "custom" && !opts.custom) {
+    throw new Error("Custom engine is not configured. Connect an endpoint before starting a custom session.");
+  }
+  // Registry-driven: the descriptor's binary picks the engine implementation, so
+  // "custom" runs through codexEngine (a provider passthrough, see opts.custom).
+  return engineBinary(opts.cli) === "claude" ? claudeEngine(opts) : codexEngine(opts);
 }
 
 // Coalesce partial assistant/thinking snapshots to ~frame rate. Partials arrive at token
@@ -226,8 +240,8 @@ function callbacks() {
 // Codex carries the authoritative `modelContextWindow` per turn (we prefer it when
 // present); Claude's SDK exposes no window field, so we fall back to the published
 // model limit. Keep in sync with the constants the surfaces used to hardcode.
-function defaultWindow(cli: "claude" | "codex", _model?: string): number {
-  return cli === "codex" ? 256_000 : 200_000;
+function defaultWindow(cli: EngineKey, _model?: string): number {
+  return cli === "claude" ? 200_000 : 256_000;
 }
 
 function loadPersistentWhitelist(): Set<string> {
@@ -534,6 +548,37 @@ export function codexMcpFlags(m: { name: string; command: string; args: string[]
   ];
 }
 
+// Build the `-c model_providers.custom.*` overrides that point the codex binary at a
+// custom OpenAI-compatible endpoint (issue #209). Same process-scoped mechanism as
+// codexMcpFlags; the API key stays out of argv (env_key names CUSTOM_ENGINE_API_KEY,
+// which codexEngine sets in the child env). Keyless endpoints (ollama/lmstudio) get
+// no env_key at all, so codex sends unauthenticated requests instead of tripping over
+// an env var that was never set.
+export function customProviderFlags(cfg: CustomEngineConfig): string[] {
+  // With no model override codex quietly falls back to its own global default model
+  // name, which the endpoint almost certainly does not serve. saveCustomEngineConfig
+  // already rejects a blank model; this guards configs saved before that rule.
+  if (!cfg.model) {
+    throw new Error("The custom engine needs a model id; codex would otherwise silently use its own default model.");
+  }
+  return [
+    "-c", `model_providers.custom.name=${JSON.stringify(cfg.label ?? cfg.presetId)}`,
+    "-c", `model_providers.custom.base_url=${JSON.stringify(cfg.baseUrl)}`,
+    // env_key is ALWAYS declared, even keyless: without it codex falls back to its
+    // own login and sends the user's real ChatGPT bearer token to the custom
+    // endpoint (verified live against a logging endpoint). A keyless config gets
+    // the harmless placeholder below instead of the user's identity.
+    "-c", `model_providers.custom.env_key=${JSON.stringify("CUSTOM_ENGINE_API_KEY")}`,
+    "-c", `model_provider=${JSON.stringify("custom")}`,
+    "-c", `model=${JSON.stringify(cfg.model)}`,
+  ];
+}
+
+// What a keyless custom endpoint receives as its bearer value. Codex refuses an
+// empty env var and, with no env_key at all, substitutes the user's own ChatGPT
+// token, so keyless MUST mean "harmless constant", never "codex decides".
+export const CUSTOM_ENGINE_KEYLESS_PLACEHOLDER = "keyless";
+
 // ── codex: app-server JSON-RPC over stdio. Spawns `codex app-server --stdio`
 // and processes requests and notifications, routing approvals to the ApprovalChannel.
 function codexEngine(opts: SpawnOpts): Engine {
@@ -563,6 +608,13 @@ function codexEngine(opts: SpawnOpts): Engine {
   if (opts.apiKey) {
     childEnv.OPENAI_API_KEY = opts.apiKey;
   }
+  // Always set for a custom spawn: the saved key when there is one, else the
+  // keyless placeholder. Leaving the var unset or empty makes codex substitute
+  // the user's own ChatGPT bearer token on requests to the custom endpoint,
+  // which is exactly the credential egress a custom slot must never cause.
+  if (opts.custom) {
+    childEnv.CUSTOM_ENGINE_API_KEY = opts.custom.apiKey || CUSTOM_ENGINE_KEYLESS_PLACEHOLDER;
+  }
   const mcpFlags = opts.codexMcp ? codexMcpFlags(opts.codexMcp) : [];
   const codexArgs = ["app-server", "--stdio"];
   if (childEnv.AGENTNET_CODEX_DISABLE_PLUGINS === "1") {
@@ -571,6 +623,7 @@ function codexEngine(opts: SpawnOpts): Engine {
     codexArgs.push("--disable", "plugins");
   }
   codexArgs.push(...mcpFlags);
+  if (opts.custom) codexArgs.push(...customProviderFlags(opts.custom));
   const child = spawn(codexPath, codexArgs, {
     env: childEnv,
     stdio: ["pipe", "pipe", "pipe"],
@@ -839,7 +892,9 @@ function codexEngine(opts: SpawnOpts): Engine {
         if (params.command) {
           cmdStr = Array.isArray(params.command) ? params.command.join(" ") : String(params.command);
         }
-        const req = toApprovalRequest("codex", sessionId, "Bash", { command: cmdStr }, params.cwd);
+        // opts.cli, not a hardcoded "codex": the custom engine rides this same path and
+        // its approval cards must badge as "custom".
+        const req = toApprovalRequest(opts.cli, sessionId, "Bash", { command: cmdStr }, params.cwd);
         const key = `bash:${cmdStr}`;
         if (allowed.has(key)) return sendResponse(msg.id, { decision: verbs.always });
         const decision = await approval.request(req);
@@ -865,7 +920,7 @@ function codexEngine(opts: SpawnOpts): Engine {
             }
           }
           
-          const req = toApprovalRequest("codex", sessionId, tool, { file_path: filePath }, opts.cwd);
+          const req = toApprovalRequest(opts.cli, sessionId, tool, { file_path: filePath }, opts.cwd);
           if (diff) req.diff = diff;
 
           const key = `${tool}:${filePath}`;
@@ -875,7 +930,7 @@ function codexEngine(opts: SpawnOpts): Engine {
           if (decision.outcome === "deny") deliverDenyReason(decision.reason);
         } else {
           const pathStr = params.grantRoot || "";
-          const req = toApprovalRequest("codex", sessionId, "Edit", { file_path: pathStr }, opts.cwd);
+          const req = toApprovalRequest(opts.cli, sessionId, "Edit", { file_path: pathStr }, opts.cwd);
           req.title = `Allow file changes under ${pathStr || "workspace"}`;
           if (params.reason) {
             req.title += ` (${params.reason})`;
@@ -888,7 +943,7 @@ function codexEngine(opts: SpawnOpts): Engine {
           if (decision.outcome === "deny") deliverDenyReason(decision.reason);
         }
       } else if (msg.method === "item/permissions/requestApproval") {
-        const req = toApprovalRequest("codex", sessionId, "Permissions", { reason: params.reason }, opts.cwd);
+        const req = toApprovalRequest(opts.cli, sessionId, "Permissions", { reason: params.reason }, opts.cwd);
         req.title = `Grant permissions: ${params.reason || "sandbox access"}`;
         
         const decision = await approval.request(req);
@@ -914,7 +969,7 @@ function codexEngine(opts: SpawnOpts): Engine {
         );
         const req: ApprovalRequest = {
           id: randomId(),
-          cli: "codex",
+          cli: opts.cli,
           sessionId,
           tool: "request_user_input",
           kind: "question",
@@ -1122,7 +1177,7 @@ function codexEngine(opts: SpawnOpts): Engine {
 // Build a neutral ApprovalRequest from a raw tool name + input (claude tools, or a
 // codex turn). `kind`/fields let a surface render a good card without re-parsing.
 function toApprovalRequest(
-  cli: "claude" | "codex",
+  cli: EngineKey,
   sessionId: string,
   tool: string,
   input: Record<string, unknown>,

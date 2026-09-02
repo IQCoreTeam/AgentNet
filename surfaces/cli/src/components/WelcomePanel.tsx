@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Text, useInput } from "ink";
-import { HELIUS_QUICKSTART_URL } from "@iqlabs-official/agent-sdk";
+import { HELIUS_QUICKSTART_URL, type EngineKey } from "@iqlabs-official/agent-sdk";
 import { colors, glyph, rule, tag } from "../theme.js";
 import { displayWidth, truncateStart, truncateEnd } from "../format.js";
 
@@ -36,12 +36,14 @@ function Band({
   label,
   value,
   dim,
+  tint,
   focused,
 }: {
   width: number;
   label: string;
   value: string;
   dim?: boolean;
+  tint?: string; // accent for the value (the engine band's custom violet); dim wins
   focused: boolean;
 }) {
   const left = ` ${tag(label)}`;
@@ -57,7 +59,7 @@ function Band({
   return (
     <Box width={width} justifyContent="space-between">
       <Text bold color={dim ? colors.dim : colors.bone}>{left}</Text>
-      <Text color={dim ? colors.dim : undefined}>{fitted + " "}</Text>
+      <Text color={dim ? colors.dim : tint}>{fitted + " "}</Text>
     </Box>
   );
 }
@@ -120,7 +122,7 @@ export function WelcomePanel({
 }: {
   walletAddr: string;
   cloud: { kind: string; account?: string } | null;
-  engine: "claude" | "codex";
+  engine: EngineKey;
   heliusMasked: string | null;
   skills: OwnedSkill[] | null;
   passive?: string[];
@@ -223,6 +225,7 @@ export function WelcomePanel({
       width={bandW}
       label="engine"
       value={engine.toUpperCase()}
+      tint={engine === "custom" ? colors.iqViolet : undefined}
       focused={active && focus === 2}
     />,
     keyInput !== null ? (

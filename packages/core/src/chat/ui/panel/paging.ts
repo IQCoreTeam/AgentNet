@@ -7,7 +7,7 @@ import { vscode } from "./host.js";
 import { log } from "./dom.js";
 import { renderMd } from "./markdown.js";
 import { nearBottom, updateJump } from "./shell.js";
-import { addFooter, addMsgCopy, makeUtext, renderToolInto } from "./turns.js";
+import { ENGINE_BADGE, addFooter, addMsgCopy, engineMark, makeUtext, renderToolInto } from "./turns.js";
 import { userImagesEl } from "./composer.js";
 
 // ---- scroll-to-top → load older page ----
@@ -28,8 +28,8 @@ export function prependOlder(messages) {
     const head = document.createElement('div'); head.className = 'turnHead';
     head.innerHTML = '<span class="uq">&gt;</span>';
     head.appendChild(makeUtext(userText));
-    if (badge) { const b = document.createElement('span'); b.className = 'badge ' + badge;
-      b.textContent = badge === 'codex' ? 'codex · gpt' : 'claude'; head.appendChild(b); }
+    if (badge) { const b = document.createElement('span'); b.className = 'badge ' + engineMark(badge);
+      b.textContent = ENGINE_BADGE[engineMark(badge)]; head.appendChild(b); }
     const imgEl = userImagesEl(imageCount ? { count: imageCount } : undefined);
     if (imgEl) head.appendChild(imgEl);
     const b = document.createElement('div'); b.className = 'turnBody';
@@ -46,7 +46,7 @@ export function prependOlder(messages) {
       const sb = document.createElement('div'); sb.className = 'summaryBody'; sb.textContent = m.text; n.appendChild(sb);
       continue;
     }
-    const n = node(m.role + (m.role === 'assistant' && m.cli ? ' ' + m.cli : ''));
+    const n = node(m.role + (m.role === 'assistant' && m.cli ? ' ' + engineMark(m.cli) : ''));
     const el = document.createElement('div'); el.className = 'msg ' + m.role;
     if (m.role === 'assistant') renderMd(el, m.text); else { el.textContent = m.text; el.dataset.md = m.text; }
     n.appendChild(el);

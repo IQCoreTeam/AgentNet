@@ -97,6 +97,7 @@ export const PANEL_INBOUND_TYPES: string[] = [
   "publishProgress",
   "publishResult",
   "platform",
+  "customEngine",
   "cliStatus",
   "engineUpdate",
   "claudeLoginUrl",
