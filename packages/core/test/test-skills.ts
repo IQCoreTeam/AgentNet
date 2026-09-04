@@ -58,8 +58,9 @@ console.log("2. Preserve publisher-authored frontmatter");
   };
   const md = toSkillMd(meta, MINT);
   check("no second frontmatter block", (md.match(/^---/gm) || []).length === 2);
-  check("authored name kept", md.includes("name: my-skill"));
-  check("authored user-invocable kept", md.includes("user-invocable: true"));
+  // quote-agnostic: normalizeFrontmatter re-emits plain scalars quoted so codex's strict YAML loads them
+  check("authored name kept", /^name: ["']?my-skill["']?$/m.test(md));
+  check("authored user-invocable kept", /^user-invocable: ["']?true["']?$/m.test(md));
   check("synthesized description NOT injected", !md.includes('description: "ignored"'));
 }
 
@@ -116,10 +117,11 @@ console.log("5. codex skill-firing detection from the output stream");
   check("plain message → no skill signal", msgOnly.skill === undefined);
 }
 
-// 6. Message contract ↔ VSCode webview agreement. The webview is an HTML string
-//    (no compile-time typecheck), so guard that every marketplace `type` it emits/
-//    handles is a real message in the shared contract — a typo or a removed message
-//    fails here instead of silently no-op'ing on that surface.
+// 6. Message contract ↔ VSCode webview agreement. The panel script is a typechecked module
+//    bundle now (chat/ui/panel/), but its message types are still string literals inlined
+//    into the HTML, so guard that every marketplace `type` it emits/handles is a real message
+//    in the shared contract: a typo or a removed message fails here instead of silently
+//    no-op'ing on that surface. Quote-agnostic, because esbuild emits double quotes.
 console.log("6. webview market messages match the shared contract");
 {
   const html = chatHtml();
@@ -127,10 +129,10 @@ console.log("6. webview market messages match the shared contract");
   const REQUESTS = ["searchSkills", "buySkill", "buyAllSkills", "ownedSkills"];
   const EVENTS = ["searchResults", "buyResult", "buyAllResult", "ownedSkills", "skillActive"];
   for (const t of REQUESTS) {
-    check(`webview sends '${t}'`, html.includes(`type: '${t}'`));
+    check(`webview sends '${t}'`, new RegExp(`type: ['"]${t}['"]`).test(html));
   }
   for (const t of EVENTS) {
-    check(`webview handles '${t}'`, html.includes(`m.type === '${t}'`));
+    check(`webview handles '${t}'`, new RegExp(`m\\.type === ['"]${t}['"]`).test(html));
   }
 }
 
