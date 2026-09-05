@@ -1,6 +1,6 @@
 // Custom engine (issue #209) safety rails. Each of these is a silent-failure class:
-// a missing config would run stock codex on the user's OpenAI account, a phantom
-// env_key handling protects keyless local endpoints, and a blank model makes codex quietly use
+// a missing config would run stock codex on the user's OpenAI account,
+// explicit env_key handling isolates custom credentials, and a blank model makes codex quietly use
 // its own global default model. Pin all three to throw or emit correctly.
 import { describe, it, expect } from "vitest";
 import { spawnCli, customProviderFlags } from "./spawn.js";
@@ -22,7 +22,7 @@ describe("runtime/spawn — custom engine gates", () => {
     expect(() => spawnCli({ cli: "custom", cwd: "/tmp" })).toThrow(NOT_CONFIGURED);
   });
 
-  it("customProviderFlags declares env_key even keyless: without it codex sends the user's own ChatGPT token to the endpoint", () => {
+  it("customProviderFlags declares an explicit credential even for keyless endpoints", () => {
     const flags = customProviderFlags(cfg());
     expect(flags).toContain(`model_providers.custom.env_key=${JSON.stringify("CUSTOM_ENGINE_API_KEY")}`);
   });
@@ -36,6 +36,11 @@ describe("runtime/spawn — custom engine gates", () => {
 
   it("customProviderFlags throws on a blank model instead of letting codex pick its default", () => {
     expect(() => customProviderFlags(cfg({ model: "" }))).toThrow(NEEDS_MODEL);
+    expect(() => customProviderFlags(cfg({ model: "   " }))).toThrow(NEEDS_MODEL);
+  });
+
+  it("trims legacy model values before sending them to the endpoint", () => {
+    expect(customProviderFlags(cfg({ model: "  llama3  " }))).toContain('model="llama3"');
   });
 });
 
@@ -48,5 +53,10 @@ describe("account/customEngineAuth — saveCustomEngineConfig validation", () =>
   it("rejects a base URL that is not http(s)", async () => {
     await expect(saveCustomEngineConfig(cfg({ baseUrl: "not a url" }))).rejects.toThrow(/not a valid URL/);
     await expect(saveCustomEngineConfig(cfg({ baseUrl: "ftp://host/v1" }))).rejects.toThrow(/must be http or https/);
+  });
+
+  it("does not echo credentials from an invalid URL into a surfaced error", async () => {
+    await expect(saveCustomEngineConfig(cfg({ baseUrl: "http://[invalid]?key=synthetic-secret-209" })))
+      .rejects.toThrow(/^The custom engine base URL is not a valid URL\.$/);
   });
 });

@@ -551,32 +551,28 @@ export function codexMcpFlags(m: { name: string; command: string; args: string[]
 // Build the `-c model_providers.custom.*` overrides that point the codex binary at a
 // custom OpenAI-compatible endpoint (issue #209). Same process-scoped mechanism as
 // codexMcpFlags; the API key stays out of argv (env_key names CUSTOM_ENGINE_API_KEY,
-// which codexEngine sets in the child env). Keyless endpoints (ollama/lmstudio) get
-// no env_key at all, so codex sends unauthenticated requests instead of tripping over
-// an env var that was never set.
+// which codexEngine sets in the child env). Keyless endpoints receive the harmless
+// placeholder below so authentication stays explicit and independent of stock login.
 export function customProviderFlags(cfg: CustomEngineConfig): string[] {
   // With no model override codex quietly falls back to its own global default model
   // name, which the endpoint almost certainly does not serve. saveCustomEngineConfig
   // already rejects a blank model; this guards configs saved before that rule.
-  if (!cfg.model) {
+  if (!cfg.model.trim()) {
     throw new Error("The custom engine needs a model id; codex would otherwise silently use its own default model.");
   }
   return [
     "-c", `model_providers.custom.name=${JSON.stringify(cfg.label ?? cfg.presetId)}`,
     "-c", `model_providers.custom.base_url=${JSON.stringify(cfg.baseUrl)}`,
-    // env_key is ALWAYS declared, even keyless: without it codex falls back to its
-    // own login and sends the user's real ChatGPT bearer token to the custom
-    // endpoint (verified live against a logging endpoint). A keyless config gets
-    // the harmless placeholder below instead of the user's identity.
+    // Always select the custom credential, including the keyless placeholder,
+    // rather than relying on version-dependent default authentication behavior.
     "-c", `model_providers.custom.env_key=${JSON.stringify("CUSTOM_ENGINE_API_KEY")}`,
     "-c", `model_provider=${JSON.stringify("custom")}`,
-    "-c", `model=${JSON.stringify(cfg.model)}`,
+    "-c", `model=${JSON.stringify(cfg.model.trim())}`,
   ];
 }
 
-// What a keyless custom endpoint receives as its bearer value. Codex refuses an
-// empty env var and, with no env_key at all, substitutes the user's own ChatGPT
-// token, so keyless MUST mean "harmless constant", never "codex decides".
+// What a keyless custom endpoint receives as its bearer value. Keep the declared
+// credential nonempty without borrowing the user's stock Codex credentials.
 export const CUSTOM_ENGINE_KEYLESS_PLACEHOLDER = "keyless";
 
 // ── codex: app-server JSON-RPC over stdio. Spawns `codex app-server --stdio`
@@ -597,7 +593,7 @@ function codexEngine(opts: SpawnOpts): Engine {
   // Make the codex mode chips real: derive the approval policy + sandbox from opts.mode.
   // A mode change restages the session (session.ts), so the next spawn picks these up.
   // When the OS sandbox is FORCED by env (Android proot can't run bubblewrap → danger-full-access),
-  // a non-"full" mode must NOT weaken to on-failure: the sandbox isn't really constraining there, so
+  // a non-"full" mode must retain approval requests: the sandbox isn't really constraining there, so
   // the approval gate is the only real control and must keep asking. Only "full" opts out. Desktop
   // (no env override) uses the mode's own policy.
   const codexApproval = sandbox
@@ -609,9 +605,7 @@ function codexEngine(opts: SpawnOpts): Engine {
     childEnv.OPENAI_API_KEY = opts.apiKey;
   }
   // Always set for a custom spawn: the saved key when there is one, else the
-  // keyless placeholder. Leaving the var unset or empty makes codex substitute
-  // the user's own ChatGPT bearer token on requests to the custom endpoint,
-  // which is exactly the credential egress a custom slot must never cause.
+  // keyless placeholder. Do not leave authentication to the user's stock login.
   if (opts.custom) {
     childEnv.CUSTOM_ENGINE_API_KEY = opts.custom.apiKey || CUSTOM_ENGINE_KEYLESS_PLACEHOLDER;
   }

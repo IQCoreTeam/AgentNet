@@ -54,7 +54,7 @@ function normalizeBaseUrl(raw: string): string {
   try {
     url = new URL(raw.trim());
   } catch {
-    throw new Error(`The custom engine base URL is not a valid URL: ${raw.trim() || "(empty)"}`);
+    throw new Error("The custom engine base URL is not a valid URL.");
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error(`The custom engine base URL must be http or https, got "${url.protocol.slice(0, -1)}".`);
