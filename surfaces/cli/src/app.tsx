@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Box, Text, useApp, useInput } from "ink";
 import type { AgentRuntime, SessionMeta } from "@iqlabs-official/agent-sdk/runtime/contract";
-import { autoApprove, hasCustomEngine, ENGINE_KEYS, engineBinary, type EngineKey, type StorageConfig, type CliReport } from "@iqlabs-official/agent-sdk";
+import { autoApprove, customEngineStatus, ENGINE_KEYS, engineBinary, type EngineKey, type StorageConfig, type CliReport } from "@iqlabs-official/agent-sdk";
 import type { CloudStatus } from "@iqlabs-official/agent-sdk/account/storage/mirror";
 import { InkApprovalChannel } from "./InkApprovalChannel.js";
 import { Banner } from "./components/Banner.js";
@@ -142,12 +142,10 @@ export function App({ options }: { options: AppOptions }) {
           // back to ANOTHER engine that is (start with what works, no gate), and
           // only gate on the login screen when nothing is usable. An explicit --cli
           // flag skips the silent fallback: the user asked for that engine, so gate.
-          // custom is usable once the codex binary (which it runs through) exists and
-          // an endpoint config is saved; its login state lives outside CliReport.
+          // custom's status lives outside CliReport (its sign-in is a saved endpoint
+          // config), so core answers it in the same vocabulary.
           const usable = async (e: EngineKey) =>
-            e === "custom"
-              ? rep.codex !== "missing" && (await hasCustomEngine())
-              : rep[e] === "ok";
+            (e === "custom" ? await customEngineStatus(rep) : rep[e]) === "ok";
           // savedPrefs.lastCli is already coerced by readPrefs, so eff is always a
           // registry key even when the prefs file was hand-edited.
           const eff = options.cli ?? savedPrefs.lastCli ?? "claude";

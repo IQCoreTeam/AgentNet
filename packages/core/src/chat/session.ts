@@ -560,7 +560,7 @@ export function createChatSession(
         // saved AND codex binary present). A config without the binary would reveal a
         // tab that can only die with a raw spawn error.
         void (async () => {
-          if (!(await customEngineStatus()).ready) return;
+          if ((await customEngineStatus()) !== "ok") return;
           const cfg = await loadCustomEngineConfig();
           if (cfg) transport.send({ type: "modelOptions", cli: "custom", options: customModelOption(cfg.model, cfg.label || ENGINE_REGISTRY.custom.label) });
         })().catch(() => {});

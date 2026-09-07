@@ -6,7 +6,7 @@
 import { readFile, writeFile, rm } from "node:fs/promises";
 import { tokenFile, tokensDir, ensureDir } from "../core/paths.js";
 import { engineBinary } from "../runtime/engineRegistry.js";
-import { detectCli, type CliReport } from "../runtime/detect.js";
+import { detectCli, type CliReport, type CliStatus } from "../runtime/detect.js";
 
 export interface CustomEngineConfig {
   baseUrl: string;
@@ -95,22 +95,17 @@ export async function hasCustomEngine(): Promise<boolean> {
   return (await loadCustomEngineConfig()) !== null;
 }
 
-export interface CustomEngineStatus {
-  binaryOk: boolean; // the codex binary (custom's passthrough) is on this machine
-  configured: boolean; // an endpoint config is saved
-  ready: boolean; // both: a custom session can actually spawn
-}
-
-// One readiness answer for every host, instead of each surface re-deriving
-// "codex present AND config saved" on its own. Pass a CliReport when one is already
-// in hand; without one detectCli runs, the same probe behind every host's engine
-// status line (it resolves the binary through engineBin.ts, so a GUI-launched host
-// without a shell PATH still finds it), so binaryOk mirrors whether a custom spawn
-// could actually start.
-export async function customEngineStatus(report?: CliReport): Promise<CustomEngineStatus> {
-  const binaryOk = (report ?? await detectCli())[engineBinary("custom")] !== "missing";
-  const configured = await hasCustomEngine();
-  return { binaryOk, configured, ready: binaryOk && configured };
+// The custom engine's status in CliReport's own vocabulary, so a custom row reads like the
+// claude and codex rows everywhere: "missing" = no codex binary (custom runs through it),
+// "no-login" = the binary is there but no endpoint is saved (the saved config IS its
+// sign-in), "ok" = a custom session can actually spawn. One derivation for every host
+// and surface instead of each re-deriving "codex present AND config saved". Pass a
+// CliReport when one is already in hand; without one detectCli runs, the same probe
+// behind every engine status line (it resolves the binary through engineBin.ts, so a
+// GUI-launched host without a shell PATH still finds it).
+export async function customEngineStatus(report?: CliReport): Promise<CliStatus> {
+  if ((report ?? await detectCli())[engineBinary("custom")] === "missing") return "missing";
+  return (await hasCustomEngine()) ? "ok" : "no-login";
 }
 
 // Masked view for the UI: endpoint host + last 4 chars of the key, rest dotted (like

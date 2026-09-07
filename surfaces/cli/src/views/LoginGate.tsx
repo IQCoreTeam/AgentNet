@@ -15,6 +15,7 @@ import {
   CUSTOM_ENGINE_TOOL_WARNING,
   saveCustomEngineConfig,
   clearCustomEngineConfig,
+  customEngineStatus,
   maskedCustomEngine,
   type CustomEnginePreset,
   type EngineKey,
@@ -149,11 +150,14 @@ export function LoginGate({
   const [codexCode, setCodexCode] = useState("");
   const [waiting, setWaiting] = useState(false);
   // masked view of the saved custom endpoint (host + dotted key tail); null when no
-  // config exists, which doubles as the configured/not-configured flag.
+  // config exists, which doubles as the configured/not-configured flag. The status row
+  // comes from core's one derivation, in the same vocabulary as the claude/codex rows.
   const [customMasked, setCustomMasked] = useState<string | null>(null);
+  const [customStatus, setCustomStatus] = useState<CliStatus>("no-login");
   useEffect(() => {
     void maskedCustomEngine().then(setCustomMasked);
-  }, []);
+    void customEngineStatus(report).then(setCustomStatus);
+  }, [report]);
   const customConfigured = customMasked !== null;
   const claudeRef = useRef<ClaudeLogin | null>(null);
   const codexRef = useRef<CodexLogin | null>(null);
@@ -183,8 +187,9 @@ export function LoginGate({
   // recovered once the file is gone, so a stray Enter must not be able to delete it.
   useInput((input) => {
     if (input !== "y" && input !== "Y") return;
-    void clearCustomEngineConfig().then(() => {
+    void clearCustomEngineConfig().then(async () => {
       setCustomMasked(null);
+      setCustomStatus(await customEngineStatus(report));
       setStep("pick");
     });
   }, { isActive: step === "customRemove" });
@@ -283,10 +288,11 @@ export function LoginGate({
 
   const claudeS = statusText(report.claude);
   const codexS = statusText(report.codex);
+  // custom's "no-login" is "no endpoint saved": the config is its sign-in.
   const customS =
-    report.codex === "missing"
+    customStatus === "missing"
       ? { text: "needs the codex binary", color: colors.err }
-      : customConfigured
+      : customStatus === "ok"
         ? { text: `${glyph.ok} configured`, color: colors.ok }
         : { text: "not configured", color: colors.warn };
 

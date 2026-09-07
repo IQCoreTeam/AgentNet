@@ -8,8 +8,7 @@ export type EngineKey = "claude" | "codex" | "custom";
 
 // key names the row it sits in, binary drives engine dispatch, label names the
 // engine where a surface needs a display name, memoryFile picks the native
-// project-instructions file. loginKind and modelSource used to live here too but
-// nothing ever read them, so they are gone (CODE-RULES: no dead data).
+// project-instructions file. Only fields something reads live here.
 export interface EngineDescriptor {
   key: EngineKey;
   label: string;

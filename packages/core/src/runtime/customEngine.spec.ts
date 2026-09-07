@@ -17,7 +17,7 @@ const cfg = (over: Partial<CustomEngineConfig> = {}): CustomEngineConfig => ({
   ...over,
 });
 
-describe("runtime/spawn — custom engine gates", () => {
+describe("runtime/spawn: custom engine gates", () => {
   it("spawnCli throws loudly on a custom spawn with no config (never silently runs stock codex)", () => {
     expect(() => spawnCli({ cli: "custom", cwd: "/tmp" })).toThrow(NOT_CONFIGURED);
   });
@@ -44,7 +44,7 @@ describe("runtime/spawn — custom engine gates", () => {
   });
 });
 
-describe("account/customEngineAuth — saveCustomEngineConfig validation", () => {
+describe("account/customEngineAuth: saveCustomEngineConfig validation", () => {
   it("rejects a blank model before anything reaches disk", async () => {
     await expect(saveCustomEngineConfig(cfg({ model: "" }))).rejects.toThrow(NEEDS_MODEL);
     await expect(saveCustomEngineConfig(cfg({ model: "   " }))).rejects.toThrow(NEEDS_MODEL);
