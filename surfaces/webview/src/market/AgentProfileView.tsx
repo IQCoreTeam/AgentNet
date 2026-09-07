@@ -179,7 +179,7 @@ export function noteDate(timestamp?: number) {
 function VerifiedRepoRow({ repo }: { repo: VRepo }) {
   return (
     <a
-      href={safeExternalUrl(repo.url) ?? repo.url}
+      href={safeExternalUrl(repo.url) ?? undefined}
       target="_blank"
       rel="noreferrer"
       className="flex items-center justify-between rounded-xl border px-3 py-2.5 active:opacity-80"
