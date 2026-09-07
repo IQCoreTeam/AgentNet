@@ -14,7 +14,10 @@
     "test": "vitest run",
     "test:run": "tsx test/test-runtime.ts",
     "test:memory": "tsx test/test-memory.ts",
-    "test:skills": "tsx test/test-skills.ts"
+    "test:skills": "tsx test/test-skills.ts",
+    "build:panel": "tsx scripts/buildPanel.ts",
+    "typecheck:panel": "tsc -p src/chat/ui/panel/tsconfig.json",
+    "test:panel:chrome": "PANEL_CHROME_REQUIRED=1 vitest run src/chat/ui/panel.chrome.spec.ts"
   },
   "peerDependencies": {
     "@iqlabs-official/solana-sdk": "^0.1.28",
@@ -23,7 +26,9 @@
   "devDependencies": {
     "@iqlabs-official/solana-sdk": "^0.1.28",
     "@solana/web3.js": "^1.98.0",
+    "@types/jsdom": "^30.0.0",
     "@types/node": "^20.0.0",
+    "jsdom": "^30.0.1",
     "tsup": "^8.0.0",
     "tsx": "^4.19.2",
     "tweetnacl": "^1.0.3",

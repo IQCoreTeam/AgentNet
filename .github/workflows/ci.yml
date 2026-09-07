@@ -26,6 +26,9 @@ jobs:
 
       - name: Test (agent-sdk vitest suite)
         run: pnpm --filter @iqlabs-official/agent-sdk test
+        env:
+          # the panel Chrome layout pass must run here; a missing browser is a failure, never a skip
+          PANEL_CHROME_REQUIRED: "1"
 
       # The runtime smoke test (pnpm run test:run) is intentionally NOT run here:
       # it drives the real claude + codex CLIs and needs them installed and logged
@@ -33,6 +36,10 @@ jobs:
 
       - name: Typecheck agent-sdk
         run: pnpm --filter @iqlabs-official/agent-sdk exec tsc --noEmit
+      # the panel modules need the DOM lib, which the root tsconfig excludes (cli/localhost typecheck
+      # core with lib ES2022 only), so they get their own tsconfig and their own gate
+      - name: Typecheck panel (DOM)
+        run: pnpm --filter @iqlabs-official/agent-sdk typecheck:panel
       - name: Typecheck CLI
         run: pnpm --filter agentnet-cli exec tsc --noEmit
       - name: Typecheck localhost

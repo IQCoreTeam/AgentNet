@@ -11,5 +11,6 @@
     "outDir": "dist",
     "types": ["node"]
   },
-  "include": ["src", "test"]
+  "include": ["src", "test"],
+  "exclude": ["src/chat/ui/panel"]
 }

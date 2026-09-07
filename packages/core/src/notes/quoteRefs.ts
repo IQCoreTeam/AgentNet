@@ -17,8 +17,7 @@
 // but shorter when the random tail is, so 4-6 (slice(2, 8) caps at 6). The trailing lookahead refuses a
 // ref glued to alphanumeric text: a corrupted id would fetch a nonexistent post
 // and render a deadlink for a ref that actually resolves, so no match is safer.
-// The VS Code panel template cannot import this (it is emitted browser JS), so
-// webview.ts carries a byte-identical copy: change BOTH or the surfaces diverge.
+// The VS Code panel (chat/ui/panel/quotes.ts) imports this module, so there is one grammar.
 const QUOTE_REF = />>(note:([1-9A-HJ-NP-Za-km-z]{32,44}):(\d{10,16}):([a-z0-9]{4,6}))(?![A-Za-z0-9])/g;
 
 export interface QuoteRef {
@@ -49,4 +48,21 @@ export function parseNoteRef(id: string | undefined): QuoteRef | null {
   if (!id) return null;
   const refs = extractQuoteRefs(`>>${id}`);
   return refs.length === 1 && refs[0].ref === id ? refs[0] : null;
+}
+
+/**
+ * The text as alternating text and ref segments, in order, so a renderer can interleave text
+ * nodes and quote markers. No cap and no dedupe: those are per-view policies (extractQuoteRefs
+ * caps the reads; the panel counts unique cards per render pass). Empty text runs are skipped.
+ */
+export function splitQuoteRefs(text: string): Array<{ text: string } | QuoteRef> {
+  const out: Array<{ text: string } | QuoteRef> = [];
+  let last = 0;
+  for (const m of text.matchAll(QUOTE_REF)) {
+    if (m.index > last) out.push({ text: text.slice(last, m.index) });
+    out.push({ ref: m[1], author: m[2] });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push({ text: text.slice(last) });
+  return out;
 }
