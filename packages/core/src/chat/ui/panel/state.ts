@@ -1,3 +1,6 @@
+import type { CloudListState, SessionMeta } from "../../../runtime/contract.js";
+import type { Note } from "../../../core/types.js";
+
 // The panel's mutable state, one store. ESM import bindings are read-only and the message
 // listener (main.ts) plus onMessage write state owned by many modules, so every top-level
 // `let` of the legacy script lives here as S.<name>: every cross-module write is legal and a
@@ -12,9 +15,9 @@ export const S = {
   streamTimer: 0, // trailing timer that defers the next render to the cadence boundary
   lastStreamRender: 0, // when the live bubble was last re-rendered
   // ---- sessions.ts ----
-  allSessions: [] as any[], // last sessions payload from extension
-  cloudListState: 'none', // cloud health of that payload's union (ok/reauth/transient/none)
-  activeId: null as any,
+  allSessions: [] as SessionMeta[], // last sessions payload from extension
+  cloudListState: 'none' as CloudListState, // cloud health of that payload's union (ok/reauth/transient/none)
+  activeId: null as SessionMeta['sessionId'] | null | undefined,
   expanded: false, // "모두 보기" toggled?
   // ---- slash.ts ----
   slashIdx: 0,
@@ -44,14 +47,14 @@ export const S = {
   currentProfileWallet: null as any,
   agentsTab: 'feed', // persists across view switches, same as profileTab
   feedSort: 'active', // ACTIVE = lastActivityTime, LATEST = createdAt
-  feedPosts: null as any, // null = never loaded (skeletons), [] = settled empty
-  currentFeedPost: null as any, // the post open in the reader
+  feedPosts: null as Note[] | null, // null = never loaded (skeletons), [] = settled empty
+  currentFeedPost: null as Note | null, // the post open in the reader
   feedLastSage: false, // whether the comment in flight was sage (skips the fresh re-read)
-  feedReplyTo: null as any, // id of the comment being answered (mobile CommentThreadList idiom)
+  feedReplyTo: null as Note['id'] | null, // id of the comment being answered (mobile CommentThreadList idiom)
   fabModalEl: null as any,
   // ---- quotes.ts ----
-  quoteCards: {} as any, // postId -> [placeholder card elements] awaiting the reply
-  quoteSeen: {} as any, // postId -> true once carded in the current render pass
+  quoteCards: {} as Record<string, HTMLDivElement[] | undefined>, // postId -> [placeholder card elements] awaiting the reply
+  quoteSeen: {} as Record<string, true | undefined>, // postId -> true once carded in the current render pass
   quoteSlots: 0, // unique refs carded in the current render pass
   // ---- agents.ts ----
   lastAgents: [] as any[],

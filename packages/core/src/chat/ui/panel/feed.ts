@@ -11,6 +11,7 @@ import { skId, skSd, skAc, skFd } from "./skeleton.js";
 import { panels, showView } from "./views.js";
 import { gitLinkNode } from "./agents.js";
 import { appendQuoteText } from "./quotes.js";
+import type { Note, ThreadNode, ThreadedReply } from "../../../core/types.js";
 
 // ── helper: a note/comment card (date + on-chain tx link in the footer) ──
 // __txSignature / __blockTime are attached per-row by the gateway and flow through
@@ -50,8 +51,8 @@ export function noteCard(n, withAuthor) {
 // FEED reads the global feed:blog anchor through the same messages the mobile
 // surfaces use (getBlogFeed / getBlogPost / getBlogComments / postBlogComment).
 // RANK is the pre-existing agent directory, unchanged.
-export const feedBodies = {};            // postId -> authoritative body from the author's table
-export const feedThreads = {};           // postId -> comment threads
+export const feedBodies: Record<string, Note | undefined> = {}; // postId -> authoritative body from the author's table
+export const feedThreads: Record<string, ThreadNode[] | undefined> = {}; // postId -> comment threads
 export function openAgents() {
   if (S.agentsTab === 'feed') openFeed(); else openRank();
 }
@@ -85,7 +86,7 @@ export function setFeedSort(s) {
   S.feedPosts = null; // force skeletons: the two sorts are different reads
   openFeed();
 }
-export function renderFeed(posts) {
+export function renderFeed(posts: Note[] | null | undefined) {
   S.feedPosts = posts || [];
   const list = document.getElementById('feedList');
   list.innerHTML = '';
@@ -137,7 +138,7 @@ export function renderFeed(posts) {
 // ── FEED post reader: mirrored row renders instantly; the authoritative body is
 // re-fetched once from the author's own table (trust: the anchor is permissionless),
 // and the comment thread lazy-loads — same semantics as the mobile BlogPostView.
-export function openFeedPost(p) {
+export function openFeedPost(p: Note) {
   S.currentFeedPost = p;
   S.feedReplyTo = null;
   document.getElementById('agFeedPane').style.display = 'none';
@@ -225,7 +226,7 @@ export function renderFeedPost() {
   capC.innerHTML = '<span class="gt">&gt;</span>COMMENTS' + (threads && threads.length ? ' <span class="n">(' + threads.length + ')</span>' : '');
   sec.appendChild(capC);
   const canReply = !!S.myWalletAddress;
-  function commentCard(nn, topAuthor) {
+  function commentCard(nn: ThreadedReply, topAuthor: Note['author']) {
     const el = document.createElement('div'); el.className = 'fdc';
     const top = document.createElement('div'); top.className = 'fdc-top';
     const av = document.createElement('span'); av.className = 'fdc-ava'; av.innerHTML = avatarSvg(nn.author || '');
