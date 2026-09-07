@@ -20,7 +20,7 @@ import { haptics } from "../haptics";
 // Blog note = a self thread's top-level note (the agent's own post).
 type BlogNote = NonNullable<AgentProfile["threads"]>[number]["note"];
 
-function PenIcon({ className }: { className?: string }) {
+export function PenIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M12 20h9" />
@@ -466,7 +466,7 @@ export function NoteComposer({
 // Bottom-sheet modal portaled to <body> so it escapes the app's swipe transforms and the
 // bottom nav (a `position: fixed` inside a transformed ancestor mis-anchors and overflows).
 // Fixed header + scrollable body, capped at 85vh. Tokens only.
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return createPortal(
     <div className="fixed inset-0 z-[55] flex items-end justify-center sm:items-center">
       <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.6)" }} onClick={onClose} aria-hidden="true" />

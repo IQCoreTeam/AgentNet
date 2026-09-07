@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { useStore } from "../state/store";
 import { walletAvatarSvg } from "./walletAvatar";
 import { mediaUrl } from "./mediaUrl";
-import { BlogPostView, GithubCard, shortWallet, noteDate } from "./AgentProfileView";
+import { BlogPostView, GithubCard, Modal, NoteComposer, PenIcon, shortWallet, noteDate, type NoteFields } from "./AgentProfileView";
 import { BlogPostSkeleton, BlogFeedSkeleton } from "./Skeletons";
 import { haptics } from "../haptics";
 
@@ -48,9 +49,37 @@ export function BlogFeed() {
   const { state, send } = useStore();
   const [sort, setSort] = useState<"active" | "latest">("active");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const lastToast = useRef(state.toast);
+  const wallet = state.walletAddress;
   useEffect(() => {
     if (state.blogFeed === null) send({ type: "getBlogFeed", sort });
   }, [state.blogFeed, sort, send]);
+
+  // Compose FAB: write a blog post to YOUR OWN wallet (a self-note that mirrors to
+  // the feed anchor). Same postAgentNote path the profile FAB uses; success is the
+  // store's "Note posted." toast, which then refetches the feed fresh so the new
+  // post surfaces without leaving the tab.
+  function submitBlog(f: NoteFields) {
+    const text = f.text?.trim();
+    const title = f.title?.trim();
+    if ((!text && !title) || !wallet || posting) return;
+    setPosting(true);
+    send({ type: "postAgentNote", agentWallet: wallet, text, gitLink: f.gitLink, title, image: f.image });
+  }
+  useEffect(() => {
+    if (state.toast === lastToast.current) return;
+    lastToast.current = state.toast;
+    if (state.toast === "Note posted.") {
+      setPosting(false);
+      setComposeOpen(false);
+      haptics.celebrate();
+      send({ type: "getBlogFeed", sort, fresh: true });
+    } else if (typeof state.toast === "string" && state.toast.startsWith("Note failed")) {
+      setPosting(false);
+    }
+  }, [state.toast, sort, send]);
 
   const posts = state.blogFeed;
   // The opened post's real body: undefined = still fetching, null = not found.
@@ -144,6 +173,27 @@ export function BlogFeed() {
         ) : (
           <BlogPostSkeleton onClose={() => setOpenId(null)} />
         )
+      )}
+      {/* Compose FAB: write from the feed itself (parity with the profile FAB and the
+          VS Code panel). Only when a wallet is connected and no post is open. Portaled
+          to <body> so it floats above the shell's bottom fade and tab bar. */}
+      {wallet && openId === null && createPortal(
+        <div className="fixed right-5 z-[50]" style={{ bottom: "calc(var(--tabbar-height, 0px) + 1.25rem)" }}>
+          <button
+            onClick={() => { haptics.tick(); setComposeOpen(true); }}
+            aria-label="Write a blog post"
+            className="an-bracket flex items-center justify-center active:opacity-90"
+            style={{ width: 56, height: 56, "--tk": "var(--an-term-green)", "--ts": "13px", "--bk": "var(--an-term-bg)", color: "var(--an-term-green)", boxShadow: "0 0 14px rgba(0,0,0,0.5)" } as CSSProperties}
+          >
+            <PenIcon className="h-[22px] w-[22px]" />
+          </button>
+        </div>,
+        document.body,
+      )}
+      {composeOpen && (
+        <Modal title="Write a blog post" onClose={() => setComposeOpen(false)}>
+          <NoteComposer placeholder="Write a blog post or update..." submitLabel="Post to AgentNet" posting={posting} withTitle onSubmit={submitBlog} />
+        </Modal>
       )}
     </div>
   );
