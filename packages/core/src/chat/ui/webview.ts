@@ -1227,7 +1227,7 @@ export function chatHtml(): string {
   #inputWrap.dragover { border-color: var(--eng); box-shadow: 0 0 0 2px var(--engSoft); }
   /* a sent user bubble's image row (live thumbs) + the history "N image" chip */
   .msgImgs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-  .msgImgs img { max-width: 168px; max-height: 168px; border-radius: 8px; border: 1px solid var(--an-line); display: block; }
+  .msgImgs img { max-width: min(168px, 100%); max-height: 168px; border-radius: 8px; border: 1px solid var(--an-line); display: block; }
   .imgChip { display: inline-flex; align-items: center; gap: 5px; margin-top: 6px; padding: 2px 9px;
              font-size: 0.82em; opacity: 0.7; border: 1px solid var(--an-line); border-radius: 999px; }
   button { background: var(--vscode-button-background); color: var(--vscode-button-foreground);
