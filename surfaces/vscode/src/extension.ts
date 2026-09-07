@@ -208,6 +208,11 @@ async function pushCliStatus(transport: WebviewTransport) {
   transport.send({ type: "cliStatus", claude: cli.claude, codex: cli.codex });
 }
 
+// Engines whose "out of date" banner the user dismissed. Session-scoped (module-level, so
+// it spans every panel): once dismissed, the codex-stale probe stops re-sending engineUpdate,
+// so a new chat does not re-surface the banner. Reset naturally on the next VS Code restart.
+const engineUpdateDismissed = new Set<"claude" | "codex">();
+
 // After an install was launched from the notice button, re-check until the engine stops
 // reporting "missing" (bounded: ~5 min), then push the fresh status so the webview moves
 // on to the sign-in guidance by itself. One watcher per engine; a second click reuses it.
@@ -388,6 +393,11 @@ function openOnboarding(context: vscode.ExtensionContext) {
 
   panel.webview.onDidReceiveMessage(async (m) => {
     switch (m?.type) {
+      case "dismissEngineUpdate":
+        // The user closed the "engine out of date" banner: stop re-sending it for the
+        // rest of this VS Code session so new chats do not flash it again.
+        if (m.cli === "claude" || m.cli === "codex") engineUpdateDismissed.add(m.cli);
+        break;
       case "ready":
         panel.webview.postMessage({
           type: "init",
@@ -636,7 +646,7 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
   // Engine health, outdated leg: the codex probe flags a stale models cache (binary too
   // old to parse it, so newer models exist but stay hidden). Tell the panel once.
   void codexModelOptionsPromise.then((r) => {
-    if (r?.staleModelsCache) transport.send({ type: "engineUpdate", cli: "codex" });
+    if (r?.staleModelsCache && !engineUpdateDismissed.has("codex")) transport.send({ type: "engineUpdate", cli: "codex" });
   });
   const chat = createChatSession(runtime!, transport, {
     cwd: getCwd,

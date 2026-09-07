@@ -18,5 +18,6 @@ export const modeLabel = document.getElementById('modeLabel') as HTMLSpanElement
 export const modeEffortTag = document.getElementById('modeEffortTag') as HTMLSpanElement;
 export const ctxMeter = document.getElementById('ctxMeter') as HTMLSpanElement;
 export const approvalDock = document.getElementById('approvalDock') as HTMLDivElement;
+export const engineBanner = document.getElementById('engineBanner') as HTMLDivElement;
 export const slashMenu = document.getElementById('slashMenu') as HTMLDivElement;
 export const tabs = Array.from(document.querySelectorAll('.etab')) as HTMLElement[];

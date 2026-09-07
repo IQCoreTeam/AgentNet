@@ -476,6 +476,19 @@ export function chatHtml(): string {
      is always in reach. Empty = collapsed (no border/padding). */
   #approvalDock { display: flex; flex-direction: column; gap: 6px; }
   #approvalDock:not(:empty) { padding: 8px 12px 0; }
+  /* engine-update banner: a slim caution bar (amber left rule, the design's context-boundary
+     accent) pinned above the composer. Not inside #log, so a repaint never clears it. */
+  #engineBanner { margin: 6px 12px 0; padding: 8px 8px 8px 11px; display: flex; align-items: flex-start; gap: 10px;
+    background: var(--an-bg-2); border: 1px solid var(--an-line); border-left: 2px solid var(--an-amber);
+    border-radius: var(--an-radius-sm); font-size: 0.8em; }
+  #engineBanner .eb-body { flex: 1; color: var(--an-fg-mute); line-height: 1.4; }
+  #engineBanner .eb-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  #engineBanner .eb-btn { padding: 3px 10px; font-size: 0.95em; background: transparent;
+    border: 1px solid var(--an-line); border-radius: var(--an-radius-sm); color: var(--an-green); cursor: pointer; }
+  #engineBanner .eb-btn:hover { border-color: var(--an-green); background: color-mix(in srgb, var(--an-green) 10%, transparent); }
+  #engineBanner .eb-close { flex-shrink: 0; background: transparent; border: none; color: var(--an-fg-mute);
+    font-size: 1.15em; line-height: 1; cursor: pointer; padding: 0 2px; opacity: 0.7; }
+  #engineBanner .eb-close:hover { opacity: 1; color: var(--an-fg); }
 
   /* tool-APPROVAL card: like a tool card but actionable — green ring + buttons. */
   .approvalCard { border: 1px solid var(--an-green-line); border-radius: var(--an-radius-sm);
@@ -1903,6 +1916,10 @@ export function chatHtml(): string {
       <!-- pending tool approvals dock just above the composer (Claude-Code style:
            "the thing you must answer" sits right where you'd reply) -->
       <div id="approvalDock"></div>
+      <!-- engine-update banner: persistent + dismissible, a SIBLING of the log so a
+           chat repaint (which clears #log and #approvalDock) never wipes it. This is
+           what fixed the "update flashes on every new chat, cannot be clicked" bug. -->
+      <div id="engineBanner" style="display:none"></div>
       <!-- equipped-skills panel (toggled by #skillsBtn) — the agent's "magic items".
            Real now: a header + empty grey slots that say drops aren't live yet. -->
       <!-- inventory-only panel: shows just the skills THIS wallet owns (on-chain is the

@@ -7,7 +7,7 @@ import { vscode } from "./host.js";
 import { S } from "./state.js";
 import { log, ctxMeter, approvalDock } from "./dom.js";
 import { escapeHtml } from "./markdown.js";
-import { syncWatermark, renderNotice, renderActionNotice, copyAction, renderEngineMissing, renderStatus, showLoading, hideLoading, wireShell } from "./shell.js";
+import { syncWatermark, renderNotice, renderEngineBanner, copyAction, renderEngineMissing, renderStatus, showLoading, hideLoading, wireShell } from "./shell.js";
 import { wireSlash } from "./slash.js";
 import { CODEX_UPDATE_CMD, applyModelOptions, setTab, wireEngine } from "./engine.js";
 import "./format.js";
@@ -345,12 +345,14 @@ window.addEventListener('message', (event) => {
   else if (m.type === 'engineUpdate' && m.cli === 'codex') {
     // Host-side codex probe saw the stale-models-cache signal: the installed codex is
     // too old to read the server's model list, so new models exist but stay hidden.
-    renderActionNotice(
-      'Codex is out of date, so new models are hidden from the picker.\n$ ' + CODEX_UPDATE_CMD + '\nAfter it finishes, reload this window to refresh the model list.',
+    // A persistent, dismissible banner (not a log notice that a repaint would wipe).
+    renderEngineBanner(
+      'Codex is out of date, so new models are hidden. Update it, then reload this window.',
       [
         ['Update in terminal', () => vscode.postMessage({ type: 'installEngine', cli: 'codex', update: true })],
         copyAction(CODEX_UPDATE_CMD),
-      ]
+      ],
+      'codex'
     );
   }
   else if (m.type === 'claudeLoginUrl') {

@@ -6,7 +6,7 @@ import { S } from "./state.js";
 // The core table directly: engine.ts imports this module, so no alias lives there.
 import { ENGINE_INSTALL_COMMAND } from "../../../runtime/engineInstall.js";
 import { vscode } from "./host.js";
-import { jumpBtn, loadingEl, log, mainEl } from "./dom.js";
+import { engineBanner, jumpBtn, loadingEl, log, mainEl } from "./dom.js";
 import { renderMdStreaming } from "./markdown.js";
 import { tailBody } from "./turns.js";
 
@@ -43,6 +43,38 @@ export function copyAction(command) {
     if (navigator.clipboard) navigator.clipboard.writeText(command).catch(() => {});
     btn.textContent = 'Copied';
   }];
+}
+// Engine-update banner: a persistent, dismissible bar rendered OUTSIDE #log (so a chat
+// repaint never clears it) with the action buttons kept clickable. Closing it tells the
+// host to stop re-sending the update for this session (dismissKey = the cli), so a new
+// chat does not flash it again.
+export function renderEngineBanner(text, actions, dismissKey) {
+  engineBanner.innerHTML = '';
+  const body = document.createElement('div');
+  body.className = 'eb-body';
+  body.textContent = text;
+  const row = document.createElement('div');
+  row.className = 'eb-actions';
+  for (const a of actions) {
+    const btn = document.createElement('button');
+    btn.className = 'eb-btn';
+    btn.textContent = a[0];
+    btn.addEventListener('click', () => a[1](btn));
+    row.appendChild(btn);
+  }
+  const close = document.createElement('button');
+  close.className = 'eb-close';
+  close.setAttribute('aria-label', 'Dismiss');
+  close.textContent = '×';
+  close.addEventListener('click', () => {
+    engineBanner.style.display = 'none';
+    engineBanner.innerHTML = '';
+    vscode.postMessage({ type: 'dismissEngineUpdate', cli: dismissKey });
+  });
+  engineBanner.appendChild(body);
+  engineBanner.appendChild(row);
+  engineBanner.appendChild(close);
+  engineBanner.style.display = 'flex';
 }
 // Missing engine: show how to get it instead of a dead-end "not installed" line.
 // "Install in terminal" runs the command visibly host-side (user watches it run).
