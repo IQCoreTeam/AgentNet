@@ -168,7 +168,7 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
               )}
               {screen === "advanced" && (
                 <StepScreen step={3} title={t(M.unlock.rpc.title)} status={t(M.unlock.rpc.status)} detail={t(M.unlock.rpc.detail)} icon={ICON_RPC}>
-                  <div className="mt-6"><HeliusKeyForm onDone={enterGranted} skipLabel={t(M.unlock.skipForNow)} /></div>
+                  <div className="mt-6"><HeliusKeyForm onDone={enterGranted} skipLabel={t(M.unlock.skipForNow)} emphasis="skip" /></div>
                 </StepScreen>
               )}
               {screen === "done" && (

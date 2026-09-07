@@ -108,6 +108,11 @@ export const M = {
         "완전 선택사항입니다. 기본은 퍼블릭 RPC로 그대로 동작해요. 더 빠른 마켓 인덱싱을 원하면 Helius 키를 붙여넣으세요.",
         "Полностью опционально. По умолчанию работает публичный RPC. Вставьте ключ Helius для более быстрой индексации маркета.",
       ),
+      skipNote: m(
+        "Skipping changes nothing. Everything works on the public RPC, and you can add a key later in Settings.",
+        "건너뛰어도 달라지는 건 없어요. 퍼블릭 RPC로 모든 기능이 그대로 동작하고, 키는 나중에 설정에서 추가할 수 있어요.",
+        "Пропуск ничего не меняет. Всё работает через публичный RPC, а ключ можно добавить позже в настройках.",
+      ),
     },
     skipForNow: m("Skip for now", "지금은 건너뛰기", "Пока пропустить"),
     fundControls: {

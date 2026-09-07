@@ -1,11 +1,21 @@
 import { useEffect, useState } from "react";
 import { useStore } from "../state/store";
+import { useT } from "../i18n";
+import { M } from "../i18n/messages";
 
-export function HeliusKeyForm({ onDone, skipLabel = "Use Default" }: { onDone?: () => void; skipLabel?: string }) {
+// `emphasis` decides which action reads as primary. Settings > Helius and the market retry
+// prompt exist to save a key, so "key" (the default) keeps Save Key green. The unlock
+// tutorial's step 03 is optional and most users will never hold a Helius plan, so "skip"
+// puts the green button on skipping, above the key path, with one reassurance line under
+// it, and turns the link and Save Key gray (issue #219). Both variants call the same
+// handlers; the layout and copy change, not the behavior.
+export function HeliusKeyForm({ onDone, skipLabel = "Use Default", emphasis = "key" }: { onDone?: () => void; skipLabel?: string; emphasis?: "key" | "skip" }) {
   const { state, send } = useStore();
+  const t = useT();
   const [key, setKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [expectedTail, setExpectedTail] = useState<string | null>(null);
+  const skipFirst = emphasis === "skip";
 
   useEffect(() => {
     if (saving && expectedTail && state.rpcStatus?.hasKey && state.rpcStatus.masked?.endsWith(expectedTail)) {
@@ -30,6 +40,14 @@ export function HeliusKeyForm({ onDone, skipLabel = "Use Default" }: { onDone?: 
 
   return (
     <div className="flex flex-col gap-3">
+      {skipFirst && (
+        <>
+          <button onClick={clear} className="an-btn an-btn-green w-full">
+            {skipLabel}
+          </button>
+          <p className="text-center text-caption leading-relaxed text-[color:var(--an-fg-mute)]">{t(M.unlock.rpc.skipNote)}</p>
+        </>
+      )}
       <p className="text-xs leading-relaxed text-zinc-500">
         Stored locally, never synced. Speeds up NFT indexing, agent lists, and skill search.
       </p>
@@ -52,23 +70,25 @@ export function HeliusKeyForm({ onDone, skipLabel = "Use Default" }: { onDone?: 
         href="https://www.helius.dev/docs/quickstart"
         target="_blank"
         rel="noreferrer"
-        className="an-term-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--an-green)] active:opacity-70"
+        className={`an-term-mono text-[10px] font-bold uppercase tracking-[0.12em] active:opacity-70 ${skipFirst ? "text-[color:var(--an-fg-dim)]" : "text-[color:var(--an-green)]"}`}
       >
         &gt; Get_your_key · helius.dev
       </a>
       <button
         onClick={save}
         disabled={saving || !key.trim()}
-        className="an-btn an-btn-green mt-1 w-full disabled:opacity-50"
+        className={`an-btn mt-1 w-full disabled:opacity-50 ${skipFirst ? "an-btn-outline" : "an-btn-green"}`}
       >
         {saving ? "Saving…" : "Save Key"}
       </button>
-      <button
-        onClick={clear}
-        className="an-term-mono min-h-11 w-full text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--an-fg-dim)] active:opacity-70"
-      >
-        &gt; {skipLabel}
-      </button>
+      {!skipFirst && (
+        <button
+          onClick={clear}
+          className="an-term-mono min-h-11 w-full text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--an-fg-dim)] active:opacity-70"
+        >
+          &gt; {skipLabel}
+        </button>
+      )}
     </div>
   );
 }
