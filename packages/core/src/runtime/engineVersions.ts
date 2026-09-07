@@ -6,10 +6,10 @@
 
 import { spawn } from "node:child_process";
 import { ENGINE_UPDATE_COMMAND } from "./engineInstall.js";
-import { resolveEngineBin } from "./detect.js";
+import { resolveEngineBin, type EngineName } from "./engineBin.js";
 export { isVersionOlder } from "./engineInstall.js";
 
-export type EngineName = "claude" | "codex";
+export type { EngineName };
 
 // npm package per engine — the single trusted distribution channel for both CLIs.
 const ENGINE_PACKAGE: Record<EngineName, string> = {
@@ -29,7 +29,7 @@ function firstSemver(text: string): string | null {
 }
 
 async function installedVersion(engine: EngineName): Promise<string | null> {
-  const bin = await resolveEngineBin(engine);
+  const bin = resolveEngineBin(engine);
   return new Promise((resolve) => {
     let out = "";
     const p = spawn(bin, ["--version"], { stdio: ["ignore", "pipe", "pipe"] });

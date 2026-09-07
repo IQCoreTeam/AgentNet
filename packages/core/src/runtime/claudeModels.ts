@@ -1,7 +1,7 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { ModelInfo } from "@anthropic-ai/claude-agent-sdk";
 import type { ChatModelOption } from "../chat/modelOptions.js";
-import { resolveExecutable } from "./resolveExecutable.js";
+import { resolveEngineBin } from "./engineBin.js";
 
 // Live model catalog for the "claude" engine, pulled from the Claude Code CLI the user
 // already runs. The agent SDK's query() exposes supportedModels() over its control
@@ -74,7 +74,7 @@ export async function listClaudeModelOptions(cwd?: string): Promise<ChatModelOpt
       // falls back to its unresolvable bundle-relative binary, the probe fails to spawn,
       // and the picker silently drops to the static baseline (no Fable/Sonnet-1M). This
       // is why codex synced but claude didn't: codexModels resolves its path, we didn't.
-      pathToClaudeCodeExecutable: resolveExecutable("claude"),
+      pathToClaudeCodeExecutable: resolveEngineBin("claude"),
     },
   });
 

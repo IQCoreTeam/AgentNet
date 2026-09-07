@@ -4,7 +4,7 @@ import type { ChatModelOption } from "../chat/modelOptions.js";
 import type { Model } from "./codex_bindings/v2/Model.js";
 import type { ModelListResponse } from "./codex_bindings/v2/ModelListResponse.js";
 import { getCodexApiKey } from "../account/codexAuth.js";
-import { resolveExecutable } from "./resolveExecutable.js";
+import { resolveEngineBin } from "./engineBin.js";
 
 export interface CodexModelsResult {
   options: ChatModelOption[];
@@ -32,7 +32,7 @@ function modelToOption(model: Model): ChatModelOption {
 }
 
 export async function listCodexModelOptions(): Promise<CodexModelsResult> {
-  const codexPath = resolveExecutable("codex") || "codex";
+  const codexPath = resolveEngineBin("codex");
   const apiKey = await getCodexApiKey().catch(() => null);
   const childEnv = { ...process.env };
   if (apiKey) childEnv.OPENAI_API_KEY = apiKey;

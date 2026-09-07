@@ -79,12 +79,34 @@ function backfillCloud(): void {
     .catch(() => { /* best-effort; a later write or reconnect re-syncs */ });
 }
 
+// agentnet.claudePath / agentnet.codexPath -> the env vars core's engineBin.ts reads.
+function applyEnginePathSettings() {
+  const cfg = vscode.workspace.getConfiguration("agentnet");
+  for (const [engine, envVar] of [["claude", "AGENTNET_CLAUDE_PATH"], ["codex", "AGENTNET_CODEX_PATH"]] as const) {
+    const custom = cfg.get<string>(`${engine}Path`)?.trim();
+    if (custom) process.env[envVar] = custom;
+    else delete process.env[envVar];
+  }
+}
+
 export function activate(context: vscode.ExtensionContext) {
   // Point the runtime at our bundled stdio MCP server (dist/mcp-stdio.js, beside this
   // file) so Codex can load the read-only marketplace tools as a child process. Core
   // reads this path in buildPassiveSpawn; absent → Codex MCP simply stays off.
   process.env.AGENTNET_MCP_STDIO = path.join(__dirname, "mcp-stdio.js");
+  // Escape hatch for engines core's own lookup can't predict (nix, a custom npm prefix,
+  // a corporate image). Core reads these env vars in engineBin.ts; an empty setting
+  // leaves auto-detection alone. Applied before anything resolves a binary.
+  applyEnginePathSettings();
   context.subscriptions.push(
+    // A path setting only takes effect on the next resolve, and core caches its hit,
+    // so a change needs a reload. Tell the user rather than silently doing nothing.
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (!e.affectsConfiguration("agentnet.claudePath") && !e.affectsConfiguration("agentnet.codexPath")) return;
+      applyEnginePathSettings();
+      vscode.window.showInformationMessage("AgentNet: reload the window to use the new engine path.", "Reload")
+        .then((pick) => { if (pick === "Reload") vscode.commands.executeCommand("workbench.action.reloadWindow"); });
+    }),
     vscode.commands.registerCommand("agentnet.openChat", () => boot(context)),
     // open ANOTHER chat panel (a new tab). VSCode handles the tab/split/drag; each
     // panel is an independent chat sharing the one wallet+runtime. Needs the runtime

@@ -39,6 +39,21 @@
     "onStartupFinished"
   ],
   "contributes": {
+    "configuration": {
+      "title": "AgentNet",
+      "properties": {
+        "agentnet.claudePath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Absolute path to the `claude` executable. Leave empty to detect it automatically. Set this only if AgentNet reports Claude as missing while `which claude` works in your terminal."
+        },
+        "agentnet.codexPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Absolute path to the `codex` executable. Leave empty to detect it automatically. Set this only if AgentNet reports Codex as missing while `which codex` works in your terminal."
+        }
+      }
+    },
     "commands": [
       {
         "command": "agentnet.openChat",

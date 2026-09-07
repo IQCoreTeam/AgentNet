@@ -33,7 +33,7 @@ import type {
   ApprovalRequest,
 } from "./approval/channel.js";
 import { autoApprove } from "./approval/channel.js";
-import { resolveExecutable } from "./resolveExecutable.js";
+import { resolveEngineBin } from "./engineBin.js";
 
 // Loosely-typed view of AskUserQuestion's raw input (the SDK hands us `unknown`-ish data).
 type ApprovalQuestionInput = {
@@ -55,7 +55,8 @@ type CodexRequestUserInputQuestion = {
 // The SDK bundles its own native CLI binary, but when we BUNDLE the extension the
 // SDK can't resolve that binary's path (it's outside the bundle) → "Native CLI binary
 // not found". The fix: point the SDK at the user's installed `claude` (which they're
-// already logged into), resolved from PATH — see resolveExecutable.js.
+// already logged into), resolved by engineBin.js — which handles the GUI-launch case
+// where PATH alone can't find it.
 
 // The runtime-facing engine handle. Callbacks are registered once; send() feeds a
 // user turn; stop() ends the session. sessionId(cb) fires when the engine reveals
@@ -396,6 +397,9 @@ function claudeEngine(opts: SpawnOpts): Engine {
   // --dangerously-skip-permissions (bypassPermissions) when running as root "for security
   // reasons"; the proot guest IS root AND sandboxed (Android app sandbox + proot), so signal
   // IS_SANDBOX to let YOLO actually work on-device. Guarded to root + bypass — a no-op elsewhere.
+  // Resolve BEFORE the env spread: resolveEngineBin repairs process.env.PATH as a side
+  // effect (see engineBin.ts), and the agent's Bash tool needs that repaired PATH.
+  const claudeBin = resolveEngineBin("claude");
   const claudeEnv: NodeJS.ProcessEnv = {
     ...process.env,
     ...(opts.githubToken ? gitCredentialEnv(opts.githubToken) : {}),
@@ -430,7 +434,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
       systemPrompt: { type: "preset", preset: "claude_code" },
       // use the user's installed claude (logged in) so the bundled extension doesn't
       // need the SDK's own native binary on its (unresolvable) bundle-relative path.
-      pathToClaudeCodeExecutable: resolveExecutable("claude"),
+      pathToClaudeCodeExecutable: claudeBin,
       stderr: (d: string) => { if (d.trim()) cb.emitErr(`[claude] ${d.trim()}`); },
       // Passive skill-shopping wiring (issue #21): the MCP marketplace server + its
       // allowed tools, when the toggle is ON. The "which skills you have" directive is
@@ -533,7 +537,7 @@ function codexEngine(opts: SpawnOpts): Engine {
   let knownWindow = defaultWindow("codex", opts.model);
   const approval = opts.approval ?? autoApprove();
 
-  const codexPath = resolveExecutable("codex") || "codex";
+  const codexPath = resolveEngineBin("codex");
   // Codex's OS-level sandbox uses bubblewrap, which can't run inside proot (no Linux
   // namespaces — that's why proot exists). On Android the launcher sets
   // AGENTNET_CODEX_SANDBOX=danger-full-access so Codex skips its own sandbox and relies on

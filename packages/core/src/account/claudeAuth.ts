@@ -19,6 +19,7 @@
 import { spawn } from "node:child_process";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { tokenFile, tokensDir, ensureDir } from "../core/paths.js";
+import { resolveEngineBin } from "../runtime/engineBin.js";
 
 // A login session in flight: the spawned `claude auth login` process + the URL we parsed
 // from its output. Held while we wait for the user to paste the code back.
@@ -32,7 +33,7 @@ export interface ClaudeLogin {
 // Start `claude auth login --claudeai` and resolve once we've parsed the OAuth URL from
 // its stdout. The returned handle lets the caller relay the user's pasted code and await
 // the result. Rejects if the process dies or no URL appears before it exits.
-export function startClaudeLogin(claudeBin = "claude"): Promise<ClaudeLogin> {
+export function startClaudeLogin(claudeBin = resolveEngineBin("claude")): Promise<ClaudeLogin> {
   return new Promise((resolve, reject) => {
     const child = spawn(claudeBin, ["auth", "login", "--claudeai"], {
       stdio: ["pipe", "pipe", "pipe"],
@@ -80,7 +81,7 @@ export function startClaudeLogin(claudeBin = "claude"): Promise<ClaudeLogin> {
 
 // Whether the claude CLI reports an active subscription/login. Parses `claude auth status`
 // JSON ({ loggedIn, authMethod, apiProvider }); exit code is 1 when logged out.
-export async function isClaudeLoggedIn(claudeBin = "claude"): Promise<boolean> {
+export async function isClaudeLoggedIn(claudeBin = resolveEngineBin("claude")): Promise<boolean> {
   return new Promise((resolve) => {
     let out = "";
     const p = spawn(claudeBin, ["auth", "status"], { stdio: ["ignore", "pipe", "pipe"] });
@@ -131,7 +132,7 @@ function runClaudeAuthCommand(claudeBin: string, args: string[]): Promise<string
   });
 }
 
-export async function logoutClaude(claudeBin = "claude"): Promise<void> {
+export async function logoutClaude(claudeBin = resolveEngineBin("claude")): Promise<void> {
   await runClaudeAuthCommand(claudeBin, ["auth", "logout"]);
   await rm(tokenFile("claude"), { force: true });
 }

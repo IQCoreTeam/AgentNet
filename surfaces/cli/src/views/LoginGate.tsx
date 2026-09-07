@@ -73,8 +73,7 @@ export function LoginGate({
     let cancelled = false;
     setErr(null);
     setUrl("");
-    resolveEngineBin("claude")
-      .then((bin) => startClaudeLogin(bin))
+    startClaudeLogin(resolveEngineBin("claude"))
       .then((login) => {
         if (cancelled) return login.cancel();
         claudeRef.current = login;
@@ -109,8 +108,7 @@ export function LoginGate({
     setErr(null);
     setUrl("");
     setCodexCode("");
-    resolveEngineBin("codex")
-      .then((bin) => startCodexLogin(bin))
+    startCodexLogin(resolveEngineBin("codex"))
       .then((login) => {
         if (cancelled) return login.cancel();
         codexRef.current = login;

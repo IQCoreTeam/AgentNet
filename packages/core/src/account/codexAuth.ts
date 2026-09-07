@@ -15,6 +15,7 @@
 import { spawn } from "node:child_process";
 import { readFile, writeFile, rm } from "node:fs/promises";
 import { tokenFile, tokensDir, ensureDir } from "../core/paths.js";
+import { resolveEngineBin } from "../runtime/engineBin.js";
 
 export interface CodexLogin {
   url: string;
@@ -33,7 +34,7 @@ function codexLoginStartupError(buf: string): Error {
   return new Error(clean ? `codex login exited before showing a device code:\n${clean}` : "codex login exited before showing a device code");
 }
 
-export function startCodexLogin(codexBin = "codex"): Promise<CodexLogin> {
+export function startCodexLogin(codexBin = resolveEngineBin("codex")): Promise<CodexLogin> {
   return new Promise((resolve, reject) => {
     const child = spawn(codexBin, ["login", "--device-auth"], {
       stdio: ["ignore", "pipe", "pipe"],
@@ -99,7 +100,7 @@ export async function deleteCodexApiKey(): Promise<void> {
   await rm(tokenFile("codex-key"), { force: true });
 }
 
-export async function isCodexLoggedIn(codexBin = "codex"): Promise<boolean> {
+export async function isCodexLoggedIn(codexBin = resolveEngineBin("codex")): Promise<boolean> {
   if (await getCodexApiKey()) return true;
 
   return new Promise((resolve) => {
@@ -147,7 +148,7 @@ function runCodexAuthCommand(codexBin: string, args: string[]): Promise<string> 
   });
 }
 
-export async function logoutCodex(codexBin = "codex"): Promise<void> {
+export async function logoutCodex(codexBin = resolveEngineBin("codex")): Promise<void> {
   await deleteCodexApiKey();
   await runCodexAuthCommand(codexBin, ["logout"]);
   await rm(tokenFile("codex"), { force: true });
