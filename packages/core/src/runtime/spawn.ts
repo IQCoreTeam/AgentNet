@@ -145,12 +145,11 @@ function claudePermissionMode(
 
 // Codex approval policy per UI mode. The picker sends "auto" | "readonly" | "full"; the
 // codex app-server takes an approvalPolicy. (Sandbox is a separate axis — see codexSandbox.)
-// Previously the app hardcoded "on-request" and ignored the mode, so the codex chips did
-// nothing; this makes them real.
-function codexApprovalPolicy(mode?: string): "on-request" | "on-failure" | "never" {
+// Auto permits workspace writes through its sandbox; escalation still needs approval.
+// Current app-server versions no longer accept the old "on-failure" policy.
+function codexApprovalPolicy(mode?: string): "on-request" | "never" {
   if (mode === "full") return "never"; // full access, never ask
-  if (mode === "auto") return "on-failure"; // auto-run in the workspace; ask only on failure/escalation
-  return "on-request"; // readonly + default: ask before edits, commands, network
+  return "on-request";
 }
 
 // Codex OS sandbox per UI mode. AGENTNET_CODEX_SANDBOX wins when set (Android forces
