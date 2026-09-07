@@ -33,6 +33,7 @@ import {
   CUSTOM_ENGINE_PRESETS,
   customModelOption,
   messageBinary,
+  type CliReport,
   logoutClaude,
   logoutCodex,
   marketplaceEnv,
@@ -210,9 +211,12 @@ function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-async function pushCliStatus(transport: WebviewTransport) {
+// Returns the report so a caller that needs it next (the custom-engine push at boot) does
+// not pay for a second probe.
+async function pushCliStatus(transport: WebviewTransport): Promise<CliReport> {
   const cli = await detectCli();
   transport.send({ type: "cliStatus", claude: cli.claude, codex: cli.codex });
+  return cli;
 }
 
 // Engines whose "out of date" banner the user dismissed. Session-scoped (module-level, so
@@ -224,9 +228,9 @@ const engineUpdateDismissed = new Set<"claude" | "codex">();
 // stay host-side; the webview only ever sees this view. The chat panel uses `masked`
 // as its custom-tab gate and has no connect form, so a null rides out unless a custom
 // session could actually spawn (binary + config, core's one readiness answer).
-async function pushCustomEngine(transport: WebviewTransport) {
-  const status = await customEngineStatus();
-  transport.send({ type: "customEngine", masked: status.ready ? await maskedCustomEngine() : null, presets: CUSTOM_ENGINE_PRESETS });
+async function pushCustomEngine(transport: WebviewTransport, report?: CliReport) {
+  const ready = (await customEngineStatus(report)) === "ok";
+  transport.send({ type: "customEngine", masked: ready ? await maskedCustomEngine() : null, presets: CUSTOM_ENGINE_PRESETS });
 }
 
 // After an install was launched from the notice button, re-check until the engine stops
@@ -254,14 +258,15 @@ function watchEngineInstall(transport: WebviewTransport, engine: "claude" | "cod
 function attachAuthHandlers(transport: WebviewTransport) {
   transport.onRecv(async (m: any) => {
     switch (m?.type) {
-      case "ready":
-        await pushCliStatus(transport);
+      case "ready": {
         // The chat panel shows the custom tab only while a config exists (it handles
         // the customEngine push both ways), so its state must land at boot too. The
         // panel carries no connect form in this spike, so the host handles no
         // getCustomEngine/saveCustomEngine: connecting happens in the AgentNet app.
-        await pushCustomEngine(transport);
+        const report = await pushCliStatus(transport);
+        await pushCustomEngine(transport, report);
         return;
+      }
       case "getCliStatus":
         await pushCliStatus(transport);
         return;

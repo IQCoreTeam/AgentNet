@@ -33,6 +33,7 @@ import {
   NODE_DOWNLOAD_URL,
   ENGINE_KEYS,
   engineBinary,
+  customEngineStatus,
   hasCustomEngine,
   maskedCustomEngine,
   type EngineKey,
@@ -830,10 +831,7 @@ export function Chat({
   const [engineLogin, setEngineLogin] = useState<{ target: EngineKey; report: CliReport } | null>(null);
   function requestEngine(next: EngineKey) {
     void detectCli().then(async (rep) => {
-      const status =
-        next === "custom"
-          ? rep.codex === "missing" ? "missing" : (await hasCustomEngine()) ? "ok" : "no-login"
-          : rep[next];
+      const status = next === "custom" ? await customEngineStatus(rep) : rep[next];
       if (status === "ok") {
         if (next === "custom" && chat.cli === "custom") {
           // re-picking the engine already in use is a manage request, not a switch:

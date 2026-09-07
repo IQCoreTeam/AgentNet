@@ -102,7 +102,6 @@ export {
 export type { SkillOrigin, ClassifiedSkill, SkillManifest, NftSkillRecord } from "./skill-market/registry.js";
 
 export { createRuntime } from "./runtime/index.js";
-export { CUSTOM_ENGINE_KEYLESS_PLACEHOLDER } from "./runtime/spawn.js";
 // engine behavior registry: claude/codex/custom descriptors + the coercion helpers
 export { ENGINE_KEYS, ENGINE_REGISTRY, engineBinary, coerceEngineKey, messageBinary } from "./runtime/engineRegistry.js";
 export type { EngineDescriptor } from "./runtime/engineRegistry.js";
@@ -145,8 +144,8 @@ export {
 } from "./account/codexAuth.js";
 export type { CodexLogin } from "./account/codexAuth.js";
 // custom engine (issue #209): endpoint config store + presets + connect-UI copy.
-// customEngineStatus is the one readiness answer (binary + config) every host uses
-// instead of re-deriving it from detectCli + hasCustomEngine.
+// customEngineStatus is the one readiness answer (binary + config, in CliStatus terms)
+// every host and surface uses instead of re-deriving it from detectCli + hasCustomEngine.
 export {
   saveCustomEngineConfig,
   loadCustomEngineConfig,
@@ -158,7 +157,7 @@ export {
   CUSTOM_ENGINE_EGRESS_WARNING,
   CUSTOM_ENGINE_TOOL_WARNING,
 } from "./account/customEngineAuth.js";
-export type { CustomEngineConfig, CustomEnginePreset, CustomEngineStatus } from "./account/customEngineAuth.js";
+export type { CustomEngineConfig, CustomEnginePreset } from "./account/customEngineAuth.js";
 export {
   initialize,
   isInitialized,
