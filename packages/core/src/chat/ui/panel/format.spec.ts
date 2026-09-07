@@ -96,22 +96,15 @@ describe("panel/format: explorerTxUrl follows S.rpcNetwork", () => {
   });
 });
 
-describe("panel/format: feedImgUrl, pinned as it shipped", () => {
-  // The intended /^https?:\/\//i lost its backslashes inside the old template literal, so the
-  // shipped line is `return v && /^https?:/` with the rest of the line a comment. This pins what
-  // the panel does today, not what the comment above the function intends; changing which covers
-  // render is a follow-up, not part of the port.
-  it("passes falsy input through unchanged", () => {
-    expect(feedImgUrl("")).toBe("");
-    expect(feedImgUrl(null)).toBe(null);
-    expect(feedImgUrl(undefined)).toBe(undefined);
+describe("panel/format: feedImgUrl", () => {
+  it("returns the original HTTP(S) image URL", () => {
+    for (const url of ["https://example.com/cover.png", "http://example.com/a.jpg?size=2", "HTTPS://example.com/cover.png"]) {
+      expect(feedImgUrl(url)).toBe(url);
+    }
   });
-  it("returns the bare /^https?:/ RegExp for any truthy input, http or not", () => {
-    for (const v of ["https://x/a.png", "http://x", "ipfs://x", W]) {
-      const out = feedImgUrl(v);
-      expect(out).toBeInstanceOf(RegExp);
-      expect(out.source).toBe("^https?:");
-      expect(out.flags).toBe("");
+  it("omits missing images and values the panel cannot resolve", () => {
+    for (const value of ["", null, undefined, "ipfs://x", "git://example.com/x", "data:image/png;base64,AA==", "javascript:alert(1)", "//example.com/x", "/cover.png", "https:/example.com/x", W]) {
+      expect(feedImgUrl(value)).toBeNull();
     }
   });
 });

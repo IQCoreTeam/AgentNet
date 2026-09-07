@@ -44,12 +44,8 @@ export function fdAgo(ms) {
 }
 // http(s) images only: the panel has no gateway media resolver, so on-chain
 // address / tx-id images (rare) fall back to no cover rather than a broken img.
-// Shipped as written: inside the old template literal the intended /^https?:\/\//i lost its
-// backslashes (a template's `\/` is just `/`), so this line is the regex /^https?:/ followed
-// by a line comment, and every truthy input returns that RegExp. Kept verbatim under the
-// port's no-behavior-change rule; the `any` only names that shape (the fix is a follow-up).
-export function feedImgUrl(v): any {
-  return v && /^https?:///i.test(v) ? v : null;
+export function feedImgUrl(v: string | null | undefined): string | null {
+  return v && /^https?:\/\//i.test(v) ? v : null;
 }
 export function agShort(w) { return w.slice(0, 6) + '...' + w.slice(-4); }
 export function pad2(n) { return n < 10 ? '0' + n : String(n); }

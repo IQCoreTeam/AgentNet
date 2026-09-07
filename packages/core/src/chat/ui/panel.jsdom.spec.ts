@@ -152,6 +152,27 @@ describe("panel.jsdom: streaming", () => {
   });
 });
 
+describe("panel.jsdom: feed images", () => {
+  it("uses HTTP(S) URLs for list covers and reader heroes, and omits unsupported images", () => {
+    const p = boot();
+    const image = "https://example.com/cover.png";
+    p.$("#agentsBtn")!.click();
+    p.host({ type: "blogFeed", posts: [
+      { id: NOTE_ID, author: WALLET, timestamp: 1725400000000, title: "Cover", image },
+      { id: "unsupported", author: WALLET, timestamp: 1725400000001, title: "No cover", image: "ipfs://cover" },
+    ] });
+    const rows = p.$$("#feedList .fd-row");
+    expect(rows[0].querySelector(".fd-cover img")!.getAttribute("src")).toBe(image);
+    expect(rows[1].querySelector(".fd-cover")).toBeNull();
+    rows[0].click();
+    expect(p.$("#agFeedPost .fdp-hero img")!.getAttribute("src")).toBe(image);
+    p.$("#agFeedPost .fdp-bar .bk")!.click();
+    p.$$("#feedList .fd-row")[1].click();
+    expect(p.$("#agFeedPost .fdp-hero")).toBeNull();
+    expect(p.errors).toEqual([]);
+  });
+});
+
 describe("panel.jsdom: feed quote cards", () => {
   const QUOTED = noteId(OTHER_WALLET, 1725400000001, "q9z2ab");
   const DEAD = noteId(OTHER_WALLET, 1725400000002, "dead01");
