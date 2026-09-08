@@ -1078,17 +1078,8 @@ export function chatHtml(): string {
   #composer.locked #inputWrap { opacity: 0.6; }
   #composer.locked #send { opacity: 0.4; cursor: not-allowed; }
 
-  #controls { display: flex; flex-wrap: wrap; row-gap: 6px; gap: 8px; align-items: center; padding: 4px 8px 7px; font-size: 0.82em; }
-  /* Narrow composer: the model + mode chips are the widest things in the toolbar, so on a
-     cramped panel they drop onto their own line below the attach/send row instead of being
-     squeezed or clipped (the Claude composer does the same). #send already carries
-     margin-left:auto, so ordering the chips after it keeps attach + send on the top row and
-     wraps the chips underneath. Wider panels never match this rule, so the single-row layout
-     stays exactly as it was. */
-  @media (max-width: 460px) {
-    #controls #send { order: 4; }
-    #controls #modelWrap, #controls #modeWrap { order: 5; }
-  }
+  /* Keep DOM order when wrapping: send stays last, aligned right on the final row. */
+  #controls { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 4px 8px 7px; font-size: 0.82em; }
   #model { background: var(--an-bg-1); color: var(--vscode-foreground);
            border: 1px solid var(--an-line); border-radius: 6px; padding: 3px 7px; font-size: 0.92em; }
   /* permission-mode picker, modelled on the mode pickers in Claude Code / Codex
