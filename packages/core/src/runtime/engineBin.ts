@@ -119,8 +119,17 @@ function putOnPath(dir: string): void {
 
 // Absolute path to the engine, or the bare name when it genuinely isn't installed.
 export function resolveEngineBin(name: EngineName): string {
+  // Validate the cache on read instead of trusting it for the whole process life. A global
+  // upgrade (nvm/brew/pnpm) or an interrupted `npm install -g` — the same one that leaves a
+  // half-linked package — can delete or replace the bin symlink we resolved earlier. Without
+  // this stat we'd keep spawning a now-dangling absolute path and fail every turn with a bare
+  // ENOENT until the app was reloaded, even after the user reinstalled the engine. existsSync
+  // follows symlinks, so a dangling link reads as missing too; dropping the stale entry lets
+  // the lookup below re-resolve (and re-runs putOnPath for the new bin dir). One filesystem
+  // stat on the hot path, in keeping with this module's stat-per-step design.
   const cached = resolved.get(name);
-  if (cached) return cached;
+  if (cached && existsSync(cached)) return cached;
+  if (cached) resolved.delete(name);
 
   const override = process.env[OVERRIDE_ENV[name]]?.trim();
   if (override && !existsSync(override)) {

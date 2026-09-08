@@ -36,11 +36,17 @@ export function startTurn(userText, badgeCli, imageInfo) {
   const turn = document.createElement('div'); turn.className = 'turn';
   const head = document.createElement('div'); head.className = 'turnHead';
   head.innerHTML = '<span class="uq">&gt;</span>';
-  head.appendChild(makeUtext(userText));
+  const ut = makeUtext(userText);
+  head.appendChild(ut);
   if (badgeCli) { const b = document.createElement('span'); b.className = 'badge ' + badgeCli;
     b.textContent = badgeCli === 'codex' ? 'codex · gpt' : 'claude'; head.appendChild(b); }
+  // Thumbnails go INSIDE the text column, below the text — not as a flex sibling of it in
+  // turnHead. As a sibling they competed with .utext for the row's width, so two 168px
+  // images starved the text down to a one-character-per-line vertical sliver. insertBefore
+  // a present "Show more" toggle keeps order text -> images -> toggle (toggle is null when
+  // the message is short, so this also just appends in the common case).
   const imgEl = userImagesEl(imageInfo);
-  if (imgEl) head.appendChild(imgEl);
+  if (imgEl) ut.insertBefore(imgEl, ut.querySelector('.utextToggle'));
   const body = document.createElement('div'); body.className = 'turnBody';
   turn.appendChild(head); turn.appendChild(body);
   log.appendChild(turn);
