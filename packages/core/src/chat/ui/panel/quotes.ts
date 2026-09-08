@@ -7,6 +7,7 @@ import { vscode } from "./host.js";
 import { agShort, fmtNoteDate } from "./format.js";
 import { quoteCardModel } from "./quoteCard.js";
 import { openFeedPost } from "./feed.js";
+import type { Note } from "../../../core/types.js";
 
 // ── quote refs: ">>note:<wallet>:<ts>:<rand>" in a post body or comment is an
 // on-chain quote-tweet, hydrated through the EXISTING getBlogPost/blogPost pair
@@ -14,9 +15,9 @@ import { openFeedPost } from "./feed.js";
 // and the postId (the whole "note:..." string after the ">>").
 // The grammar and the read cap (QUOTE_REFS_MAX) are core's, so every surface resolves the
 // same refs; the per-view accounting (quoteSeen/quoteSlots in S) is the panel's own.
-export const quoteCache = {};     // postId -> { post: Note|null } once resolved (null = deadlink)
-export const quoteInflight = {};  // postId -> true while its getBlogPost is out
-export function fillQuoteCard(el, id, post) {
+export const quoteCache: Record<string, { post: Note | null } | undefined> = {}; // postId -> resolved post (null = deadlink)
+export const quoteInflight: Record<string, true | undefined> = {}; // postId -> true while its getBlogPost is out
+export function fillQuoteCard(el: HTMLDivElement, id: Note['id'], post: Note | null) {
   el.textContent = '';
   el.classList.remove('fdq-loading');
   if (!post) {
@@ -41,7 +42,7 @@ export function fillQuoteCard(el, id, post) {
 // (post text is attacker-controlled, never innerHTML), each ref becomes a
 // compact inline marker, and per unique ref (capped) a quote card is appended
 // directly under the paragraph.
-export function appendQuoteText(parent, text, cls) {
+export function appendQuoteText(parent: HTMLElement, text: string, cls: string) {
   const p = document.createElement('p'); p.className = cls;
   const cards = [];
   for (const seg of splitQuoteRefs(String(text))) {
