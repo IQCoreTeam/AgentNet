@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { chatHtml } from "./webview.js";
 import { PANEL_BOOT_POSTS } from "../../../test/fixtures/panel/contract.js";
 import { NOTE_ID, WALLET } from "../../../test/fixtures/panel/inbound.js";
+import { stopChrome } from "../../../test/chrome-process.js";
 
 const STEP_MS = 30_000;
 const CANDIDATES = [
@@ -95,7 +96,7 @@ class Cdp {
   close(): void { this.ws.close(); }
 }
 
-function launch(binary: string, profile: string): Promise<{ proc: ChildProcess; wsUrl: string }> {
+function launch(binary: string, profile: string, onSpawn: (proc: ChildProcess) => void): Promise<string> {
   const proc = spawn(binary, [
     "--headless=new",
     "--remote-debugging-port=0",
@@ -105,14 +106,15 @@ function launch(binary: string, profile: string): Promise<{ proc: ChildProcess; 
     "--disable-gpu",
     "--host-resolver-rules=MAP * ~NOTFOUND", // the shell links Google Fonts; never touch the network
     "about:blank",
-  ], { stdio: ["ignore", "ignore", "pipe"] });
+  ], { stdio: ["ignore", "ignore", "pipe"], detached: process.platform !== "win32" });
+  onSpawn(proc); // Keep ownership even if startup fails before printing its endpoint.
   return new Promise((resolve, reject) => {
     let err = "";
     const timer = setTimeout(() => reject(new Error("Chrome printed no DevTools endpoint within 30s:\n" + err)), STEP_MS);
     proc.stderr!.on("data", (d) => {
       err += String(d);
       const m = /DevTools listening on (ws:\/\/\S+)/.exec(err);
-      if (m) { clearTimeout(timer); resolve({ proc, wsUrl: m[1] }); }
+      if (m) { clearTimeout(timer); resolve(m[1]); }
     });
     proc.on("error", (e) => { clearTimeout(timer); reject(e); });
     proc.on("exit", (code) => { clearTimeout(timer); reject(new Error(`Chrome exited early (${code}):\n${err}`)); });
@@ -131,6 +133,7 @@ describe("panel.chrome: real Chromium layout of chatHtml()", () => {
   const layout = it.skipIf(!CHROME);
 
   let proc: ChildProcess | null = null;
+  let closed: Promise<void> = Promise.resolve();
   let cdp: Cdp | null = null;
   let sessionId = "";
   let workDir = "";
@@ -151,9 +154,12 @@ describe("panel.chrome: real Chromium layout of chatHtml()", () => {
     workDir = mkdtempSync(join(tmpdir(), "agentnet-panel-chrome-"));
     const htmlPath = join(workDir, "panel.html");
     writeFileSync(htmlPath, chatHtml(), "utf8");
-    const launched = await launch(CHROME, join(workDir, "profile"));
-    proc = launched.proc;
-    cdp = await Cdp.connect(launched.wsUrl);
+    const wsUrl = await launch(CHROME, join(workDir, "profile"), (child) => {
+      proc = child;
+      // close waits for inherited stderr as well as the launcher to exit.
+      closed = new Promise<void>((resolve) => child.once("close", () => resolve()));
+    });
+    cdp = await Cdp.connect(wsUrl);
     const { targetId } = await cdp.send("Target.createTarget", { url: "about:blank" });
     sessionId = (await cdp.send("Target.attachToTarget", { targetId, flatten: true })).sessionId;
     await cdp.send("Page.enable", {}, sessionId);
@@ -171,16 +177,13 @@ describe("panel.chrome: real Chromium layout of chatHtml()", () => {
   }, STEP_MS * 2);
 
   afterAll(async () => {
-    cdp?.close();
-    if (proc && proc.exitCode === null) {
-      const exited = new Promise<void>((r) => proc!.once("exit", () => r()));
-      proc.kill();
-      await Promise.race([exited, new Promise<void>((r) => setTimeout(r, 5_000))]);
-    }
+    try {
+      if (proc) await stopChrome(proc, closed, cdp ? () => cdp!.send("Browser.close") : undefined);
+    } finally { cdp?.close(); }
     // Chrome helpers can still be finishing profile writes after the main process exits.
     // Retry transient ENOTEMPTY/EBUSY errors; persistent cleanup failures still fail the suite.
     if (workDir) rmSync(workDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-  });
+  }, STEP_MS);
 
   layout("boots with no uncaught exception and posts the boot messages in the legacy order", async () => {
     expect(exceptions).toEqual([]);
