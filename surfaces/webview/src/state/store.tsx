@@ -134,6 +134,12 @@ export interface State {
   lastBuyError: { at: number } | null; // dedup-able signal so the UI can buzz an error once per failed buy
   contextTokens?: number;
   contextWindow?: number;
+  // account-wide plan rate-limit utilization (claude.ai), for the "running low" gauge.
+  // Unlike context, this is NOT reset on a new chat — it tracks the plan, not the session.
+  limitPct?: number; // 0-100 utilization of the active window
+  limitWindow?: string; // 'five_hour' | 'seven_day' | ...
+  limitResetsAt?: number; // epoch (s or ms) when the active window resets
+  limitStatus?: string; // 'allowed' | 'allowed_warning' | 'rejected'
   isCompacting: boolean;
   currentModel?: string;
   // live model catalog per engine, seeded from the static baseline and upgraded when the
@@ -384,6 +390,14 @@ function reducer(state: State, ev: Action): State {
         ...state,
         contextTokens: ev.contextTokens,
         contextWindow: ev.contextWindow ?? state.contextWindow,
+      };
+    case "rateLimit":
+      return {
+        ...state,
+        limitPct: ev.utilization,
+        limitWindow: ev.window,
+        limitResetsAt: ev.resetsAt,
+        limitStatus: ev.status,
       };
     case "__compactStart":
       return { ...state, isCompacting: true };

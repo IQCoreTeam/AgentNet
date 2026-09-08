@@ -85,6 +85,65 @@ function CtxDot({ tokens, window: win, compacting }: { tokens: number; window: n
   );
 }
 
+// ── Plan-limit dot ("running low" gauge, mirrors Claude's "N% of your limit") ──
+// Account-wide plan usage (claude.ai), shown only from 50% up so it stays out of the way
+// until it matters. Green 50-80, amber 80-95, red past that (or when the plan rejects).
+// Tapping opens a readout of which window it is and when it resets, same pattern as CtxDot.
+const LIMIT_WINDOW_LABEL: Record<string, string> = {
+  five_hour: "5-hour", seven_day: "weekly", seven_day_opus: "weekly Opus",
+  seven_day_sonnet: "weekly Sonnet", overage: "overage",
+};
+function LimitDot({ pct, window: win, resetsAt, status }: { pct: number; window?: string; resetsAt?: number; status?: string }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [open]);
+  const p = Math.max(0, Math.min(100, Math.round(pct)));
+  const danger = p >= 95 || status === "rejected";
+  const warn = danger || p >= 80 || status === "allowed_warning";
+  const color = danger ? "var(--an-red, #e55)" : warn ? "var(--an-amber, #e90)" : "var(--an-term-green, #6f6)";
+  const label = LIMIT_WINDOW_LABEL[win || ""] || "usage";
+  // resetsAt may arrive as seconds or ms depending on the engine build; normalize to ms.
+  const resetTxt = typeof resetsAt === "number" && resetsAt > 0
+    ? new Date(resetsAt < 1e12 ? resetsAt * 1000 : resetsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : null;
+  return (
+    <span ref={rootRef} className="relative flex items-center" title={`Used ${p}% of your ${label} limit${resetTxt ? ` · resets ${resetTxt}` : ""}`}>
+      {open && (
+        <div
+          className="an-term-mono absolute bottom-full right-0 z-30 mb-2 whitespace-nowrap px-3 py-2.5 text-[10px] font-bold tracking-wider"
+          style={{ background: "var(--an-bg-1)", border: "1px solid var(--an-line)", color: "var(--an-fg-dim)", boxShadow: "0 10px 30px rgba(0,0,0,0.5)" }}
+        >
+          <div className="mb-1 uppercase" style={{ color: "var(--an-fg-mute)" }}>{label} limit</div>
+          <div className="flex items-center gap-1.5">
+            <span style={{ color }}>{p}%</span>
+            <span style={{ color: "var(--an-fg-mute)" }}>used{resetTxt ? ` · resets ${resetTxt}` : ""}</span>
+          </div>
+        </div>
+      )}
+      <button
+        type="button"
+        aria-label={`Plan usage ${p} percent`}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 active:opacity-80"
+        style={{ background: "none", border: 0, padding: 0 }}
+      >
+        <span className="an-term-mono text-[10px] font-bold" style={{ color }}>{p}%</span>
+        <span className="block h-[5px] w-[34px] overflow-hidden rounded-full" style={{ background: "var(--an-line, #333)" }}>
+          <span className="block h-full rounded-full" style={{ width: `${p}%`, background: color, transition: "width .3s ease" }} />
+        </span>
+      </button>
+    </span>
+  );
+}
+
 // Map the shared model catalog (state.modelCatalog — static baseline, upgraded live from
 // the installed CLI) into the picker's {value,label,desc} rows. No bare "default": the
 // first real model is the default, shown by its actual name (Opus 4.8, GPT-5.5 Codex…).
@@ -507,6 +566,11 @@ export function Composer() {
           <span className="max-w-[7rem] truncate">{MODES[state.cli].find((m) => m.value === mode)?.label ?? mode}</span>
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" style={{ transform: controlsOpen ? "rotate(180deg)" : "none", transition: "transform .15s" }}><path d="M2.5 4l2.5 2.5L7.5 4" /></svg>
         </button>
+        {state.limitPct !== undefined && state.limitPct >= 50 && (
+          <span className="ml-auto mr-2 flex items-center">
+            <LimitDot pct={state.limitPct} window={state.limitWindow} resetsAt={state.limitResetsAt} status={state.limitStatus} />
+          </span>
+        )}
         {(state.contextTokens !== undefined || state.isCompacting) && (() => {
           const tokens = state.contextTokens ?? 0;
           const win = state.contextWindow ?? (state.cli === "codex" ? 256_000 : 200_000);
