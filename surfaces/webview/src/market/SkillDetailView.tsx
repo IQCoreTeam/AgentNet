@@ -8,6 +8,7 @@ import { walletAvatarSvg } from "./walletAvatar";
 import { CompleteCelebration } from "./CompleteCelebration";
 import { CommentThreadList, GithubCard, NoteComposer, type NoteFields } from "./AgentProfileView";
 import { LockedGate } from "../unlock/UnlockProvider";
+import { safeExternalUrl } from "@iqlabs-official/agent-sdk/links/github.js";
 
 function shortAddr(w?: string) {
   return w ? `${w.slice(0, 4)}…${w.slice(-4)}` : "";
@@ -276,7 +277,7 @@ export function SkillDetailView({ detail, owned, onBack, onOpenSkill }: Props) {
           <Section label="Used_by">
             <div className="space-y-1.5">
               {detail.repos.map((r) => (
-                <a key={r.url} href={r.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 p-2.5 active:opacity-80" style={{ border: "1px solid var(--an-term-line)", background: "var(--an-bg-1)" }}>
+                <a key={r.url} href={safeExternalUrl(r.url) ?? undefined} target="_blank" rel="noreferrer" className="flex items-center gap-2 p-2.5 active:opacity-80" style={{ border: "1px solid var(--an-term-line)", background: "var(--an-bg-1)" }}>
                   <span className="an-term-mono min-w-0 flex-1 truncate text-[12px]" style={{ color: "var(--an-fg-dim)" }}>{r.owner}/{r.name}</span>
                   <span className="an-term-mono shrink-0 text-[11px]" style={{ color: "var(--an-amber)" }}>★{r.stars}</span>
                 </a>
