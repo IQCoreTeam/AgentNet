@@ -941,38 +941,56 @@ function codexEngine(opts: SpawnOpts): Engine {
     }
   }
 
+  // Open a fresh codex thread and adopt its id. Shared by the no-session path and the
+  // resume-failed fallback so both stay in sync.
+  const startThread = async () => {
+    const res = await sendRequest("thread/start", {
+      model: opts.model,
+      cwd: opts.cwd,
+      approvalPolicy: codexApproval,
+      approvalsReviewer: "user",
+      ...(effectiveSandbox ? { sandbox: effectiveSandbox } : {}),
+      ...(opts.effort ? { reasoning_effort: opts.effort } : {}),
+    });
+    const threadId = res?.thread?.id;
+    if (threadId) {
+      sessionId = threadId;
+      cb.emitSid(threadId);
+    }
+  };
+
   const initPromise = (async () => {
     try {
       await sendRequest("initialize", {
         clientInfo: { name: "AgentNet", title: "AgentNet VSCode", version: "0.1.0" },
         capabilities: { experimentalApi: true, requestAttestation: false },
       });
-      
+
       if (opts.sessionId) {
-        await sendRequest("thread/resume", {
-          threadId: opts.sessionId,
-          model: opts.model,
-          cwd: opts.cwd,
-          approvalPolicy: codexApproval,
-          approvalsReviewer: "user",
-          ...(effectiveSandbox ? { sandbox: effectiveSandbox } : {}),
-          ...(opts.effort ? { reasoning_effort: opts.effort } : {}),
-        });
-        cb.emitSid(opts.sessionId);
-      } else {
-        const res = await sendRequest("thread/start", {
-          model: opts.model,
-          cwd: opts.cwd,
-          approvalPolicy: codexApproval,
-          approvalsReviewer: "user",
-          ...(effectiveSandbox ? { sandbox: effectiveSandbox } : {}),
-          ...(opts.effort ? { reasoning_effort: opts.effort } : {}),
-        });
-        const threadId = res?.thread?.id;
-        if (threadId) {
-          sessionId = threadId;
-          cb.emitSid(threadId);
+        // A resume can be rejected in ways that leave the thread unusable: the on-disk
+        // rollout is gone, or an OLDER build of this app persisted a request field the
+        // current app-server no longer accepts. The retired "on-failure" approval variant
+        // is exactly that — it fails the whole resume, and because sessionId still points at
+        // the never-loaded thread, every following turn then dies "thread not found". Rather
+        // than surface that cascade, recover by opening a fresh thread so codex stays usable;
+        // the visible history lives in the AgentNet session store either way.
+        try {
+          await sendRequest("thread/resume", {
+            threadId: opts.sessionId,
+            model: opts.model,
+            cwd: opts.cwd,
+            approvalPolicy: codexApproval,
+            approvalsReviewer: "user",
+            ...(effectiveSandbox ? { sandbox: effectiveSandbox } : {}),
+            ...(opts.effort ? { reasoning_effort: opts.effort } : {}),
+          });
+          cb.emitSid(opts.sessionId);
+        } catch {
+          cb.emitErr("[codex] previous thread unavailable, continuing in a new one");
+          await startThread();
         }
+      } else {
+        await startThread();
       }
     } catch (e: any) {
       cb.emitErr(`[codex init] ${e.message}`);
