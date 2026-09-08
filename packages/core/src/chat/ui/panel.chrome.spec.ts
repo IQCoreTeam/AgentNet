@@ -177,7 +177,9 @@ describe("panel.chrome: real Chromium layout of chatHtml()", () => {
       proc.kill();
       await Promise.race([exited, new Promise<void>((r) => setTimeout(r, 5_000))]);
     }
-    if (workDir) rmSync(workDir, { recursive: true, force: true });
+    // Chrome helpers can still be finishing profile writes after the main process exits.
+    // Retry transient ENOTEMPTY/EBUSY errors; persistent cleanup failures still fail the suite.
+    if (workDir) rmSync(workDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   layout("boots with no uncaught exception and posts the boot messages in the legacy order", async () => {
