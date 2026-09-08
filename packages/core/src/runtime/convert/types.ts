@@ -1,7 +1,7 @@
 // Shared shape returned by every CLI event mapper (claude.ts, codex.ts).
 // Keeping it here lets runtime treat all CLIs uniformly.
 
-import type { ChatMessage } from "../contract.js";
+import type { ChatMessage, RateLimitInfo } from "../contract.js";
 
 export interface ParseResult {
   sessionId?: string; // set when the engine reveals its session/thread id
@@ -12,4 +12,7 @@ export interface ParseResult {
   // tokens occupying the context window after this event (input + cached + cache-create).
   // Set on a turn-final/result frame; lets a surface show a real context-left meter.
   contextTokens?: number;
+  // plan rate-limit utilization from a rate_limit_event (claude.ai accounts). Lets a
+  // surface draw a "used N% of your limit" gauge. Absent on ordinary frames.
+  rateLimit?: RateLimitInfo;
 }

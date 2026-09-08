@@ -15,6 +15,7 @@ export const PANEL_INBOUND_PAYLOADS: Array<{ type: string } & Record<string, unk
   { type: "turnEnd" },
   { type: "modelOptions", cli: "claude", options: [{ value: "opus", label: "Opus" }] },
   { type: "usage", contextTokens: 12000 },
+  { type: "rateLimit", utilization: 72, window: "five_hour", resetsAt: 1893456000000, status: "allowed" },
   { type: "skillActive", origin: "nft", mint: MINT, name: "code-review" },
   { type: "rpcStatus", status: { dasReady: true, hasKey: true, masked: "...ab12", network: "devnet" } },
   { type: "skillShopping", on: true },

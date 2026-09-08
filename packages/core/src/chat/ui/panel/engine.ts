@@ -96,13 +96,20 @@ export function applyModelOptions(engine, options) {
     if (changed) vscode.postMessage({ type: 'model', model: currentModel() });
   }
 }
-// open the model popover anchored above its chip (composer is at the bottom, so it
-// opens upward); position:fixed keeps it out of #inputWrap's overflow clip.
+// Float a popover just above its anchor chip (composer sits at the bottom, so menus open
+// upward) and center it horizontally in the viewport, clamped to an 8px margin. A left-
+// anchored menu clips off the right edge in a narrow panel; centering keeps a wide popover
+// fully on-screen, and the selected row's highlight already shows the active choice, so it
+// need not stay pinned to the chip. Width is measured after display:block (0 while hidden).
+function placeMenuAbove(menu: HTMLElement, anchor: DOMRect) {
+  const mw = menu.getBoundingClientRect().width;
+  const left = Math.max(8, Math.min((window.innerWidth - mw) / 2, window.innerWidth - mw - 8));
+  menu.style.left = left + 'px';
+  menu.style.bottom = (window.innerHeight - anchor.top + 6) + 'px';
+}
 export function openModelMenu() {
-  const r = modelBtn.getBoundingClientRect();
   modelMenu.style.display = 'block';
-  modelMenu.style.left = r.left + 'px';
-  modelMenu.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+  placeMenuAbove(modelMenu, modelBtn.getBoundingClientRect());
 }
 // the currently selected permission mode for the active engine
 export function currentMode() {
@@ -166,10 +173,8 @@ export function fillModes() {
 // open the popover anchored above the chip (composer sits at the bottom of the
 // panel, so it opens upward); position:fixed keeps it out of #inputWrap's clip.
 export function openModeMenu() {
-  const r = modeBtn.getBoundingClientRect();
   modeMenu.style.display = 'block';
-  modeMenu.style.left = r.left + 'px';
-  modeMenu.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+  placeMenuAbove(modeMenu, modeBtn.getBoundingClientRect());
 }
 export function currentEffort() { return effortByCli[S.cli] || 'default'; }
 export function setTab(next) {

@@ -25,12 +25,12 @@ function modelToOption(model: ModelInfo): ChatModelOption {
   const lead = desc?.split(" · ")[0]?.trim(); // "Fable 5" or "Opus 5 with 1M context"
   if (model.value === "default" && lead) {
     // The CLI's "Default (recommended)" hides the real model name in its description.
-    // Keep the "Default" identity (this entry auto-follows the CLI's recommendation) but
-    // reveal the model it currently resolves to — "Default · Opus 5". Without the "Default ·"
-    // prefix the chip reads as a bare "Opus 5", which collides with the separate explicit
-    // "Opus (1M context)" entry (the same underlying model) and looks like a duplicate.
+    // This entry auto-follows the CLI's recommendation, so "default" is implied by it
+    // being the first/selected entry — we don't spell it out. Show the plain resolved
+    // model name ("Opus 5") instead of a "Default · " prefix; the picker highlight already
+    // marks which entry is active.
     full = lead;
-    chip = `Default · ${lead.split(" with ")[0].trim()}`; // "Default · Opus 5"
+    chip = lead.split(" with ")[0].trim(); // "Opus 5"
   } else if (lead && lead.toLowerCase().startsWith(displayName.toLowerCase())) {
     // Relabel ONLY when the lead is "<family> <version>" — a version token being digits with
     // optional dotted minors ("Fable" → "Fable 5", "Haiku" → "Haiku 4.5"). Anything else after

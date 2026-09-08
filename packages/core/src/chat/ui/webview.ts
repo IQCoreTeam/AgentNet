@@ -1137,6 +1137,13 @@ export function chatHtml(): string {
   #modeEffortTag { opacity: 0.65; font-weight: 500; }
   /* usage context meter: small text chip near the composer chips */
   #ctxMeter { font-size: 0.82em; opacity: 0.55; display: inline-flex; align-items: center; }
+  /* plan rate-limit gauge: a thin bar + percent, shown only from 50% up. Amber past 80%. */
+  #limitMeter { font-size: 0.82em; display: inline-flex; align-items: center; gap: 5px; }
+  #limitMeter .lm-track { width: 42px; height: 5px; border-radius: 999px; background: var(--an-line); overflow: hidden; }
+  #limitMeter .lm-fill { display: block; height: 100%; width: 0; background: var(--an-green); transition: width .3s ease; }
+  #limitMeter .lm-pct { opacity: 0.6; }
+  #limitMeter.warn .lm-fill { background: var(--an-amber); }
+  #limitMeter.warn .lm-pct { color: var(--an-amber); opacity: 0.9; }
   /* slash command dropdown menu */
   .slashMenu {
     position: absolute;
@@ -1989,6 +1996,7 @@ export function chatHtml(): string {
               <div id="modeMenu" style="display:none"></div>
             </span>
             <span id="ctxMeter" style="display:none"></span>
+            <span id="limitMeter" style="display:none"><span class="lm-track"><span class="lm-fill"></span></span><span class="lm-pct"></span></span>
             <button id="send" title="Send" aria-label="Send"><svg class="ic-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg><svg class="ic-stop" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="1.5"/></svg><span class="lbl">Send</span></button>
           </div>
         </div>

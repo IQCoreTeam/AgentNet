@@ -121,6 +121,16 @@ export interface SkillActivation {
   mint: string;
 }
 
+// Plan rate-limit utilization for claude.ai subscription accounts, reported by the engine
+// when the SDK emits a rate_limit_event. Lets a surface draw a "used N% of your limit" gauge
+// like the Claude CLI. Only the claude engine produces this (API-key/codex users never do).
+export interface RateLimitInfo {
+  utilization: number; // percent of the active window used, 0-100
+  window?: string; // which limit reset: 'five_hour' | 'seven_day' | 'seven_day_opus' | ...
+  resetsAt?: number; // epoch ms when the active window resets, when known
+  status?: string; // 'allowed' | 'allowed_warning' | 'rejected'
+}
+
 // ── a running session (the handle the UI drives) ────────
 export interface SessionHandle {
   readonly sessionId: string; // from the CLI's system/init
@@ -134,6 +144,10 @@ export interface SessionHandle {
   // model's window size (contextWindow) when known — so the UI can render a percentage
   // meter, not just a raw count. Optional for the UI to use; surfaces may ignore it.
   onUsage(cb: (contextTokens: number, contextWindow?: number) => void): void;
+  // plan rate-limit utilization changed (claude.ai accounts only). Optional: surfaces that
+  // don't draw a limit gauge simply never subscribe, and engines that never emit it (codex,
+  // API-key claude) just leave it silent.
+  onRateLimit?(cb: (info: RateLimitInfo) => void): void;
   // the engine compacted the conversation (history summarized to reclaim context).
   onCompact(cb: () => void): void;
   // interrupt the CURRENT turn but keep the session alive (claude q.interrupt / codex

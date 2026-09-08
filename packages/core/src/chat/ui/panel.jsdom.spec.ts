@@ -132,6 +132,38 @@ describe("panel.jsdom: composer", () => {
   });
 });
 
+describe("panel.jsdom: rate-limit gauge", () => {
+  it("shows the limit meter only from 50% up, fills to the utilization, and turns amber past 80%", () => {
+    const p = boot();
+    const meter = p.$("#limitMeter") as HTMLElement;
+    const fill = () => p.$("#limitMeter .lm-fill") as HTMLElement;
+    const pct = () => p.$("#limitMeter .lm-pct") as HTMLElement;
+
+    // below 50%: stays hidden
+    p.host({ type: "rateLimit", utilization: 30, window: "five_hour" });
+    expect(meter.style.display).toBe("none");
+
+    // 72%: visible, filled, not warning
+    p.host({ type: "rateLimit", utilization: 72, window: "five_hour", resetsAt: 1893456000000 });
+    expect(meter.style.display).toBe("inline-flex");
+    expect(fill().style.width).toBe("72%");
+    expect(pct().textContent).toBe("72%");
+    expect(meter.classList.contains("warn")).toBe(false);
+    expect(meter.title).toContain("72%");
+    expect(meter.title).toContain("5-hour");
+
+    // 91%: warning tint
+    p.host({ type: "rateLimit", utilization: 91, window: "seven_day" });
+    expect(meter.classList.contains("warn")).toBe(true);
+    expect(pct().textContent).toBe("91%");
+
+    // dropping back below 50% hides it again
+    p.host({ type: "rateLimit", utilization: 10, window: "five_hour" });
+    expect(meter.style.display).toBe("none");
+    expect(p.errors).toEqual([]);
+  });
+});
+
 describe("panel.jsdom: streaming", () => {
   it("replaces the live bubble on each cumulative partial and finalizes exactly one assistant bubble", async () => {
     const p = boot();

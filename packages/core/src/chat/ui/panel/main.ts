@@ -7,7 +7,7 @@ import { vscode } from "./host.js";
 import { S } from "./state.js";
 import { log, ctxMeter, approvalDock } from "./dom.js";
 import { escapeHtml } from "./markdown.js";
-import { syncWatermark, renderNotice, renderEngineBanner, copyAction, renderEngineMissing, renderStatus, showLoading, hideLoading, wireShell } from "./shell.js";
+import { syncWatermark, renderNotice, renderEngineBanner, renderLimitMeter, copyAction, renderEngineMissing, renderStatus, showLoading, hideLoading, wireShell } from "./shell.js";
 import { wireSlash } from "./slash.js";
 import { CODEX_UPDATE_CMD, applyModelOptions, setTab, wireEngine } from "./engine.js";
 import "./format.js";
@@ -66,6 +66,10 @@ window.addEventListener('message', (event) => {
       ctxMeter.textContent = 'ctx: ' + label;
       ctxMeter.style.display = 'inline-flex';
     }
+  }
+  else if (m.type === 'rateLimit') {
+    // account-wide plan usage gauge (claude.ai) — shows from 50% up, next to the ctx meter
+    renderLimitMeter({ utilization: m.utilization, window: m.window, resetsAt: m.resetsAt, status: m.status });
   }
   else if (m.type === 'skillActive' && m.origin === 'nft' && m.mint) flashSkill(m.name, m.mint);
   else if (m.type === 'rpcStatus') renderRpcStatus(m.status);

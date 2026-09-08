@@ -30,6 +30,7 @@ import type {
   SessionHandle,
   SessionMeta,
   StorageAdapter,
+  RateLimitInfo,
   Wallet,
 } from "./contract.js";
 
@@ -205,6 +206,7 @@ export function createRuntime(
       const turnCbs: Array<() => void> = [];
       const skillCbs: Array<(skill: SkillActivation) => void> = [];
       const usageCbs: Array<(n: number, window?: number) => void> = [];
+      const rateLimitCbs: Array<(info: RateLimitInfo) => void> = [];
       const compactCbs: Array<() => void> = [];
       const pending: ChatMessage[] = []; // messages awaiting a known sessionId
 
@@ -250,6 +252,7 @@ export function createRuntime(
         });
       });
       cli.onUsage((n: number, window?: number) => { for (const cb of usageCbs) cb(n, window); });
+      cli.onRateLimit?.((info: RateLimitInfo) => { for (const cb of rateLimitCbs) cb(info); });
       cli.onCompact(() => { for (const cb of compactCbs) cb(); });
       cli.onTurnEnd(() => {
         if (opts.ephemeral) {
@@ -308,6 +311,9 @@ export function createRuntime(
         },
         onUsage(cb) {
           usageCbs.push(cb);
+        },
+        onRateLimit(cb) {
+          rateLimitCbs.push(cb);
         },
         onCompact(cb) {
           compactCbs.push(cb);

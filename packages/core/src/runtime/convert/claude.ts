@@ -125,6 +125,12 @@ export function mapClaudeMessage(m: unknown): ParseResult {
       cache_read_input_tokens?: number;
       cache_creation_input_tokens?: number;
     };
+    rate_limit_info?: {
+      status?: string;
+      utilization?: number;
+      rateLimitType?: string;
+      resetsAt?: number;
+    };
   };
 
   // system/init and any assistant/result frame carries the session id.
@@ -140,6 +146,22 @@ export function mapClaudeMessage(m: unknown): ParseResult {
     const ev = msg.event;
     if (ev?.type === "content_block_delta" && ev.delta?.type === "text_delta" && ev.delta.text) {
       out.messages.push({ role: "assistant", text: ev.delta.text, ts: Date.now(), partial: true });
+    }
+    return out;
+  }
+
+  // a rate_limit_event carries the claude.ai plan's window utilization (0-100). Surface it
+  // so a UI can draw a "used N% of your limit" gauge; it arrives out-of-band, not tied to a
+  // turn, and only for subscription accounts (never API-key/Bedrock/Vertex).
+  if (msg.type === "rate_limit_event" && msg.rate_limit_info) {
+    const rl = msg.rate_limit_info;
+    if (typeof rl.utilization === "number") {
+      out.rateLimit = {
+        utilization: rl.utilization,
+        window: rl.rateLimitType,
+        resetsAt: rl.resetsAt,
+        status: rl.status,
+      };
     }
     return out;
   }

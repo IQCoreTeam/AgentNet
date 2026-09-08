@@ -6,7 +6,7 @@ import { S } from "./state.js";
 // The core table directly: engine.ts imports this module, so no alias lives there.
 import { ENGINE_INSTALL_COMMAND } from "../../../runtime/engineInstall.js";
 import { vscode } from "./host.js";
-import { engineBanner, jumpBtn, loadingEl, log, mainEl } from "./dom.js";
+import { engineBanner, jumpBtn, limitMeter, loadingEl, log, mainEl } from "./dom.js";
 import { renderMdStreaming } from "./markdown.js";
 import { tailBody } from "./turns.js";
 
@@ -105,6 +105,36 @@ export function renderStatus(status) {
   pre.style.cssText = 'margin:8px 0;padding:8px 12px;background:var(--an-bg-1);border-radius:6px;font-size:0.82em;opacity:0.85;white-space:pre-wrap';
   pre.textContent = text;
   log.appendChild(pre); syncWatermark(); stickToBottom();
+}
+
+// The plan rate-limit windows the SDK reports, mapped to a short human label for the gauge
+// tooltip. Anything unrecognized falls back to a plain "usage".
+const LIMIT_WINDOW_LABEL: Record<string, string> = {
+  five_hour: '5-hour', seven_day: 'weekly', seven_day_opus: 'weekly Opus',
+  seven_day_sonnet: 'weekly Sonnet', overage: 'overage',
+};
+// Draw the "used N% of your limit" gauge in the composer chip row, but only once the active
+// window crosses 50% — below that it stays hidden so it's not noise. The bar turns amber past
+// 80% (or when the plan reports a warning/rejected status) as an approaching-limit cue. Unlike
+// the context meter this is account-wide, so it is NOT reset on a new chat.
+export function renderLimitMeter(info: { utilization?: number; window?: string; resetsAt?: number; status?: string }) {
+  const u = typeof info.utilization === 'number' ? Math.max(0, Math.min(100, info.utilization)) : null;
+  if (u === null || u < 50) { limitMeter.style.display = 'none'; return; }
+  const fill = limitMeter.querySelector('.lm-fill') as HTMLElement | null;
+  const pct = limitMeter.querySelector('.lm-pct') as HTMLElement | null;
+  if (fill) fill.style.width = u + '%';
+  if (pct) pct.textContent = Math.round(u) + '%';
+  const warn = u >= 80 || info.status === 'rejected' || info.status === 'allowed_warning';
+  limitMeter.classList.toggle('warn', warn);
+  const windowLabel = LIMIT_WINDOW_LABEL[info.window || ''] || 'usage';
+  // resetsAt may arrive as seconds or ms depending on the engine build; normalize to ms.
+  let resets = '';
+  if (typeof info.resetsAt === 'number' && info.resetsAt > 0) {
+    const ms = info.resetsAt < 1e12 ? info.resetsAt * 1000 : info.resetsAt;
+    resets = ' · resets ' + new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  limitMeter.title = 'Used ' + Math.round(u) + '% of your ' + windowLabel + ' limit' + resets;
+  limitMeter.style.display = 'inline-flex';
 }
 
 // ---- stick-to-bottom + jump-to-latest (normal chat-app feel) ----

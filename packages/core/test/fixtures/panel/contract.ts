@@ -68,6 +68,7 @@ export const PANEL_INBOUND_TYPES: string[] = [
   "turnEnd",
   "modelOptions",
   "usage",
+  "rateLimit",
   "skillActive",
   "rpcStatus",
   "skillShopping",

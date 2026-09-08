@@ -21,7 +21,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { configFile, rootDir } from "../core/paths.js";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import type { ChatMessage, ImageInput } from "./contract.js";
+import type { ChatMessage, ImageInput, RateLimitInfo } from "./contract.js";
 import { mapClaudeMessage } from "./convert/claude.js";
 import { skillFromPath } from "./convert/codex.js";
 import { codexFileChangeMessage } from "./convert/toolFormatting.js";
@@ -72,6 +72,9 @@ export interface Engine {
   // engine reports it (codex modelContextWindow), else a sensible default — so the UI can
   // render a percentage/meter instead of a bare token count.
   onUsage(cb: (contextTokens: number, contextWindow?: number) => void): void;
+  // plan rate-limit utilization changed (claude.ai accounts only; codex never fires it).
+  // Optional so engine doubles/other implementations that never emit it can omit the hook.
+  onRateLimit?(cb: (info: RateLimitInfo) => void): void;
   // the engine compacted the conversation (history summarized to reclaim context). The
   // next onUsage will reflect the reclaimed space; this fires the UI's compaction cue.
   onCompact(cb: () => void): void;
@@ -182,6 +185,7 @@ function callbacks() {
   const err: Array<(t: string) => void> = [];
   const skill: Array<(name: string) => void> = [];
   const use: Array<(n: number, window?: number) => void> = [];
+  const rl: Array<(info: RateLimitInfo) => void> = [];
   const comp: Array<() => void> = [];
   const rawEmitMsg = (m: ChatMessage) => { for (const c of msg) c(m); };
 
@@ -198,7 +202,7 @@ function callbacks() {
   };
 
   return {
-    msg, sid, turn, err, skill, use, comp,
+    msg, sid, turn, err, skill, use, rl, comp,
     // Non-partial events ALWAYS flush pending partials first, so text→tool-card→final
     // ordering is preserved even though partials are delayed.
     emitMsg: (m: ChatMessage) => { flushPartials(); rawEmitMsg(m); },
@@ -211,6 +215,7 @@ function callbacks() {
     emitErr: (t: string) => { flushPartials(); for (const c of err) c(t); },
     emitSkill: (n: string) => { for (const c of skill) c(n); },
     emitUsage: (n: number, window?: number) => { for (const c of use) c(n, window); },
+    emitRateLimit: (info: RateLimitInfo) => { for (const c of rl) c(info); },
     emitCompact: () => { flushPartials(); for (const c of comp) c(); },
     // Drop any queued partial + timer without emitting (session stop / interrupt teardown).
     stopPartials: () => { if (partialTimer) { clearTimeout(partialTimer); partialTimer = null; } pendingPartial.clear(); },
@@ -485,6 +490,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
           }
         }
         if (r.contextTokens !== undefined) cb.emitUsage(r.contextTokens, defaultWindow("claude", opts.model));
+        if (r.rateLimit) cb.emitRateLimit(r.rateLimit);
         // claude surfaces a compaction as a "summary" record (compact_boundary); mirror it
         // as the explicit compaction cue so the UI behaves the same as it does for codex.
         if (r.messages.some((cm) => cm.role === "summary")) cb.emitCompact();
@@ -503,6 +509,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
     onError: (c) => cb.err.push(c),
     onSkill: (c) => cb.skill.push(c),
     onUsage: (c) => cb.use.push(c),
+    onRateLimit: (c) => cb.rl.push(c),
     onCompact: (c) => cb.comp.push(c),
     send: (t, images) => push(t, images),
     runSlashCommand: (command, arg) => {
@@ -1065,6 +1072,7 @@ function codexEngine(opts: SpawnOpts): Engine {
     // codex has no per-tool hook, so the raw skill candidate comes from the stream.
     onSkill: (c) => cb.skill.push(c),
     onUsage: (c) => cb.use.push(c),
+    onRateLimit: (c) => cb.rl.push(c),
     onCompact: (c) => cb.comp.push(c),
     send: (t, images) => {
       void initPromise.then(() => runTurn(t, images));
