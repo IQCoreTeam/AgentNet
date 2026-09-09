@@ -127,6 +127,6 @@ Workflow body here, long enough to pass the body length check easily.`;
 
     const dummyIx = new TransactionInstruction({ programId: PublicKey.default, keys: [], data: Buffer.from([]) });
     await expect(sendTx(mockConn as any, signer, [dummyIx])).rejects.toThrow(/failed on-chain/);
-    expect(mockConn.getTransaction).toHaveBeenCalled();
+    expect(mockConn.getTransaction).toHaveBeenCalledWith("mockTxSig", expect.objectContaining({ maxSupportedTransactionVersion: 1 }));
   });
 });

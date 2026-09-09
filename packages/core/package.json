@@ -21,11 +21,11 @@
   },
   "peerDependencies": {
     "@iqlabs-official/solana-sdk": "^0.1.28",
-    "@solana/web3.js": "^1.98.0"
+    "@solana/web3.js": "^1.99.0"
   },
   "devDependencies": {
     "@iqlabs-official/solana-sdk": "^0.1.28",
-    "@solana/web3.js": "^1.98.0",
+    "@solana/web3.js": "^1.99.0",
     "@types/jsdom": "^30.0.0",
     "@types/node": "^20.0.0",
     "jsdom": "^30.0.1",

@@ -211,7 +211,7 @@ export async function sendTx(
 async function txErrorDetail(conn: Connection, sig: string): Promise<string> {
   try {
     const tx = await conn.getTransaction(sig, {
-      maxSupportedTransactionVersion: 0,
+      maxSupportedTransactionVersion: 1,
       commitment: "confirmed",
     });
     const err = JSON.stringify(tx?.meta?.err);
