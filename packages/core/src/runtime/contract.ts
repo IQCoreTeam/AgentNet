@@ -14,6 +14,7 @@
 // (Phantom, Ledger, a local Keypair, mobile wallet) can satisfy it.
 import type { WalletSigner } from "@iqlabs-official/solana-sdk/utils";
 import type { ApprovalChannel } from "./approval/channel.js";
+import type { EngineKey } from "./engineRegistry.js";
 import type { MarketEvent } from "../chat/marketMessages.js";
 
 export interface Wallet extends WalletSigner {
@@ -75,7 +76,7 @@ export interface ChatMessage {
   // which CLI produced this message. Stored per-message so a session continued
   // across CLIs renders each turn with the RIGHT engine badge — independent of
   // which tab is currently open. Optional for back-compat with older logs.
-  cli?: "claude" | "codex";
+  cli?: EngineKey;
   // For role:"tool" — structured action so the UI can render it nicely (a bash
   // block, a diff, a file op) instead of opaque text. `text` still holds a short
   // human summary for fallback/older readers. All fields optional per tool kind.
@@ -134,7 +135,7 @@ export interface RateLimitInfo {
 // ── a running session (the handle the UI drives) ────────
 export interface SessionHandle {
   readonly sessionId: string; // from the CLI's system/init
-  readonly cli: "claude" | "codex";
+  readonly cli: EngineKey;
   send(userText: string, images?: ImageInput[]): void; // user input (+ attached images) → CLI
   runSlashCommand?(command: string, arg?: string): void; // native CLI slash command, not a chat turn
   onMessage(cb: (msg: ChatMessage) => void): void; // CLI output (UI renders)
@@ -163,7 +164,7 @@ export interface AgentRuntime {
   // spawn claude/codex and start a session. Pass sessionId to resume an old one.
   // The runtime auto-saves (encrypt → storage) on every turn end — the UI does nothing.
   startSession(opts: {
-    cli: "claude" | "codex";
+    cli: EngineKey;
     cwd: string;
     sessionId?: string; // present = resume, absent = new
     model?: string;
@@ -252,7 +253,7 @@ export interface PageResult {
 export interface SessionMeta {
   sessionId: string;
   title: string; // derived (e.g. first user line)
-  cli: "claude" | "codex";
+  cli: EngineKey;
   ts: number; // last updated
   lastDevice?: { id: string; label: string };
   // the model/effort the session last ran with (absent = engine default), so a
@@ -264,7 +265,7 @@ export interface SessionMeta {
 // what gets encrypted to storage (CLI-neutral, so codex↔claude + cross-device)
 export interface CanonicalSession {
   sessionId: string;
-  cli: "claude" | "codex";
+  cli: EngineKey;
   title: string;
   messages: ChatMessage[];
   ts: number;

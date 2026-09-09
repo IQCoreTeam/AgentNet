@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Box, Text, useApp, useInput } from "ink";
 import type { AgentRuntime, SessionMeta } from "@iqlabs-official/agent-sdk/runtime/contract";
-import { autoApprove, type StorageConfig, type CliReport } from "@iqlabs-official/agent-sdk";
+import { autoApprove, customEngineStatus, ENGINE_KEYS, engineBinary, type EngineKey, type StorageConfig, type CliReport } from "@iqlabs-official/agent-sdk";
 import type { CloudStatus } from "@iqlabs-official/agent-sdk/account/storage/mirror";
 import { InkApprovalChannel } from "./InkApprovalChannel.js";
 import { Banner } from "./components/Banner.js";
@@ -17,12 +17,12 @@ import {
   buildRuntime,
   chooseStorage,
 } from "./bootstrap.js";
-import { readPrefs, savePrefs, type Prefs } from "./prefs.js";
+import { readPrefs, savePrefs, LAST_MODEL_PREF, type Prefs } from "./prefs.js";
 
 type Phase = "boot" | "onboard" | "login" | "chat" | "error";
 
 export interface AppOptions {
-  cli?: "claude" | "codex";
+  cli?: EngineKey;
   cwd?: string;
   keypair?: string;
   model?: string;
@@ -139,16 +139,33 @@ export function App({ options }: { options: AppOptions }) {
         if (savedPrefs.onboarded || (await isInitialized())) {
           if (!alive) return;
           // returning user: if the engine chat would open with isn't signed in, fall
-          // back to the OTHER engine when it is (start with what works — no gate), and
+          // back to ANOTHER engine that is (start with what works, no gate), and
           // only gate on the login screen when nothing is usable. An explicit --cli
           // flag skips the silent fallback: the user asked for that engine, so gate.
+          // custom's status lives outside CliReport (its sign-in is a saved endpoint
+          // config), so core answers it in the same vocabulary.
+          const usable = async (e: EngineKey) =>
+            (e === "custom" ? await customEngineStatus(rep) : rep[e]) === "ok";
+          // savedPrefs.lastCli is already coerced by readPrefs, so eff is always a
+          // registry key even when the prefs file was hand-edited.
           const eff = options.cli ?? savedPrefs.lastCli ?? "claude";
-          const other: "claude" | "codex" = eff === "claude" ? "codex" : "claude";
-          if (rep[eff] === "ok") {
+          // custom never joins the silent fallback scan: auto-routing a claude/codex
+          // user onto a third-party endpoint would send their prompts and files
+          // somewhere they never opted into. It boots only when it was ALREADY the
+          // chosen engine (flag or lastCli) and its config exists; otherwise the
+          // fallback stays claude/codex, or the login gate shows, as before custom.
+          const others = ENGINE_KEYS.filter((k) => k !== eff && k !== "custom");
+          let fallback: EngineKey | undefined;
+          if (!options.cli) {
+            for (const k of others) {
+              if (await usable(k)) { fallback = k; break; }
+            }
+          }
+          if (await usable(eff)) {
             await go(addr, wallet);
-          } else if (!options.cli && rep[other] === "ok") {
-            setPrefs((p) => ({ ...p, lastCli: other }));
-            void savePrefs({ lastCli: other });
+          } else if (fallback) {
+            setPrefs((p) => ({ ...p, lastCli: fallback }));
+            void savePrefs({ lastCli: fallback });
             await go(addr, wallet);
           } else {
             loginDone.current = (rep2, logged) => {
@@ -159,14 +176,16 @@ export function App({ options }: { options: AppOptions }) {
               }
               void go(addr, wallet);
             };
-            setLoginPrefer(rep[eff] === "missing" && rep[other] !== "missing" ? other : eff);
+            // preselect the wanted engine unless its binary is missing while another's isn't.
+            const alt = others.find((k) => rep[engineBinary(k)] !== "missing");
+            setLoginPrefer(rep[engineBinary(eff)] === "missing" && alt ? alt : eff);
             setPhase("login");
           }
         } else {
           if (!alive) return;
           set(3, { status: "ok", label: "storage: pick on next screen", detail: "PICK NEXT" });
           setPhase("onboard");
-          onboardFinish.current = async (engine: "claude" | "codex", cfg?: StorageConfig) => {
+          onboardFinish.current = async (engine: EngineKey, cfg?: StorageConfig) => {
             if (cfg) await chooseStorage(cfg);
             await savePrefs({ onboarded: true, lastCli: engine });
             await go(addr, wallet, !!cfg && cfg.kind !== "local");
@@ -185,10 +204,10 @@ export function App({ options }: { options: AppOptions }) {
   }, []);
 
   // set by the boot effect so Onboarding can finish with the live wallet in scope.
-  const onboardFinish = React.useRef<(engine: "claude" | "codex", cfg?: StorageConfig) => void>(() => {});
+  const onboardFinish = React.useRef<(engine: EngineKey, cfg?: StorageConfig) => void>(() => {});
   // login-gate continuation + which engine its picker should preselect.
-  const loginDone = React.useRef<(rep: CliReport, logged?: "claude" | "codex") => void>(() => {});
-  const [loginPrefer, setLoginPrefer] = useState<"claude" | "codex">("claude");
+  const loginDone = React.useRef<(rep: CliReport, logged?: EngineKey) => void>(() => {});
+  const [loginPrefer, setLoginPrefer] = useState<EngineKey>("claude");
 
   if (phase === "error") {
     return (
@@ -226,7 +245,7 @@ export function App({ options }: { options: AppOptions }) {
   const effective: AppOptions = {
     ...options,
     cli: effectiveCli,
-    model: options.model ?? sessionModel ?? (effectiveCli === "codex" ? prefs.lastModelCodex : prefs.lastModelClaude),
+    model: options.model ?? sessionModel ?? prefs[LAST_MODEL_PREF[effectiveCli]],
     effort: options.effort ?? resumed?.effort ?? prefs.lastEffort,
     resume: options.resume ?? (options.continue ? prefs.lastSessionId : undefined),
   };

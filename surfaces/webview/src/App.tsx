@@ -24,9 +24,10 @@ import { haptics } from "./haptics";
 //   connecting   → opening SSE stream / sent `ready`, waiting for init|sessions
 //   claudeAuth   → connect the Claude subscription; dismissable back to chat
 //   codexAuth    → device-auth (open URL, enter code); dismissable back to chat
+//   customAuth   → AI Connections endpoint form (custom has no account login); dismissable
 //   chat         → runtime ready → the tab shell
 export function App() {
-  const { state, getClientId, send, closeMarket, clearCelebrate } = useStore();
+  const { state, getClientId, send, closeMarket, clearCelebrate, dismissAuth } = useStore();
   useVisualViewportVars();
   useKeyboardChrome();
 
@@ -138,6 +139,9 @@ export function App() {
         {(state.phase === "connecting" || state.phase === "restoring") && <Splash />}
         {state.phase === "claudeAuth" && <ConnectClaude />}
         {state.phase === "codexAuth" && <ConnectCodex />}
+        {/* custom engine's "sign-in" is the AI Connections endpoint form, so the phase
+            mounts Sessions straight on that screen instead of a device-auth flow. */}
+        {state.phase === "customAuth" && <Sessions onClose={dismissAuth} initialMode="engines" />}
         {state.phase === "chat" && <TabShell />}
       </div>
       <Alert />

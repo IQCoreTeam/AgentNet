@@ -11,7 +11,7 @@ import type {
 import type { AppOptions } from "../app.js";
 import type { InkApprovalChannel } from "../InkApprovalChannel.js";
 import { SLASH_COMMANDS } from "../commands.js";
-import { useChat, type Engine } from "../hooks/useChat.js";
+import { useChat } from "../hooks/useChat.js";
 import { useFrameLoop } from "../hooks/useFrameLoop.js";
 import {
   getStorageInfo,
@@ -29,6 +29,12 @@ import {
   type GoogleLogin,
   detectCli,
   ENGINE_INSTALL_COMMAND,
+  ENGINE_KEYS,
+  engineBinary,
+  customEngineStatus,
+  hasCustomEngine,
+  maskedCustomEngine,
+  type EngineKey,
 } from "@iqlabs-official/agent-sdk";
 import { Select, TextInput } from "@inkjs/ui";
 import open from "open";
@@ -331,6 +337,9 @@ export function Chat({
   const [market, setMarket] = useState<Awaited<ReturnType<typeof marketplaceEnv>> | null>(null);
   // installed skill slugs (dir names) — drives the market's "owned" badge.
   const [installed, setInstalled] = useState<string[]>([]);
+  // whether a custom-engine endpoint config is saved on this device; the engine cycle
+  // offers "custom" only when it is (connecting one flips this via the login gate).
+  const [customReady, setCustomReady] = useState(false);
   // bundled/built-in skills present on disk (skill-shopping, make-skill) — split out of the
   // installed set so the panel can list them plainly, apart from owned NFT skills.
   const passive = useMemo(() => installed.filter((s) => BUNDLED_SKILLS.includes(s)), [installed]);
@@ -338,6 +347,7 @@ export function Chat({
     void getStorageInfo().then((info) => setCloud(info ?? null));
     void maskedHeliusKey().then(setHeliusMasked);
     void hasDasRpc().then(setDasReady);
+    void hasCustomEngine().then(setCustomReady);
     // owned-skills needs a DAS RPC; best-effort, leave empty on failure.
     setSkills(null);
     void ownedSkills(address).then(setSkills).catch(() => setSkills([]));
@@ -814,14 +824,28 @@ export function Chat({
   // Switch engines only when the target is actually usable — a missing engine gets the
   // official install command, a logged-out one gets the inline login gate. Both call
   // sites (panel toggle, /engine) funnel through here so the guard can't be bypassed.
-  const [engineLogin, setEngineLogin] = useState<{ target: Engine; report: CliReport } | null>(null);
-  function requestEngine(next: Engine) {
-    void detectCli().then((rep) => {
-      if (rep[next] === "ok") {
+  // "custom" runs through the codex binary and is signed in once an endpoint config is
+  // saved, so its no-login state routes to the same gate, which shows the connect form.
+  const [engineLogin, setEngineLogin] = useState<{ target: EngineKey; report: CliReport } | null>(null);
+  function requestEngine(next: EngineKey) {
+    void detectCli().then(async (rep) => {
+      const status = next === "custom" ? await customEngineStatus(rep) : rep[next];
+      if (status === "ok") {
+        if (next === "custom" && chat.cli === "custom") {
+          // re-picking the engine already in use is a manage request, not a switch:
+          // the gate is the one place a configured endpoint can be reconfigured or
+          // removed (the stored key cannot be shown back for in-place editing).
+          setEngineLogin({ target: next, report: rep });
+          return;
+        }
         chat.switchEngine(next);
         setNotice(`switched to ${next} (session carries over)`);
-      } else if (rep[next] === "missing") {
-        setNotice(`${next} is not installed · run: ${ENGINE_INSTALL_COMMAND[next]}`);
+      } else if (status === "missing") {
+        setNotice(
+          next === "custom"
+            ? `custom engines run through the codex binary · run: ${ENGINE_INSTALL_COMMAND.custom}`
+            : `${next} is not installed · run: ${ENGINE_INSTALL_COMMAND[next]}`,
+        );
       } else {
         setEngineLogin({ target: next, report: rep });
       }
@@ -832,7 +856,9 @@ export function Chat({
   // storage picker; wallet copies the address; github is not wired yet.
   function editPanelField(field: PanelField) {
     if (field === "engine") {
-      requestEngine(chat.cli === "claude" ? "codex" : "claude");
+      // cycle claude -> codex -> custom; custom joins only once an endpoint is connected.
+      const order = customReady ? ENGINE_KEYS : ENGINE_KEYS.filter((k) => k !== "custom");
+      requestEngine(order[(order.indexOf(chat.cli) + 1) % order.length]);
       setPanelFocused(false);
       return;
     }
@@ -1002,9 +1028,9 @@ export function Chat({
         setNotice("fresh session... say hi");
         return;
       case "engine":
-        if (arg === "claude" || arg === "codex") {
-          requestEngine(arg as Engine);
-        } else setNotice("usage: /engine claude|codex");
+        if ((ENGINE_KEYS as string[]).includes(arg)) {
+          requestEngine(arg as EngineKey);
+        } else setNotice("usage: /engine claude|codex|custom");
         return;
       case "model":
         if (!arg) {
@@ -1069,7 +1095,7 @@ export function Chat({
         return;
       }
       case "context": {
-        const win = chat.contextWindow ?? (chat.cli === "codex" ? 256_000 : 200_000);
+        const win = chat.contextWindow ?? (engineBinary(chat.cli) === "codex" ? 256_000 : 200_000);
         if (chat.contextTokens === undefined) {
           setNotice(`Context: 0 / ${win.toLocaleString()} tokens. Send a message to measure usage.`);
           return;
@@ -1170,11 +1196,15 @@ export function Chat({
             const key = await getCodexApiKey();
             lines.push(`engine    codex`);
             lines.push(`auth      ${key ? "API key" : "ChatGPT plan (device auth)"}`);
+          } else if (chat.cli === "custom") {
+            lines.push(`engine    custom`);
+            lines.push(`auth      ${(await maskedCustomEngine()) ?? "not configured"}`);
+            lines.push(`manage    /engine custom  to reconfigure or remove the endpoint`);
           } else {
             lines.push(`engine    claude`);
             lines.push(`auth      subscription`);
           }
-          const win = chat.contextWindow ?? (chat.cli === "codex" ? 256_000 : 200_000);
+          const win = chat.contextWindow ?? (engineBinary(chat.cli) === "codex" ? 256_000 : 200_000);
           const used = chat.contextTokens ?? Math.round(chat.messages.reduce((n, m) => n + m.text.length, 0) / 4);
           lines.push(`model     ${chat.model ?? "default"}`);
           lines.push(`ctx used  ${used.toLocaleString()} / ${win.toLocaleString()} tokens`);
@@ -1223,7 +1253,7 @@ export function Chat({
   const mood: Mood = eggMood ?? (pendingApproval ? "tool" : chat.busy ? "thinking" : idle ? "sleeping" : "idle");
   // context-left: prefer the engine's REAL per-turn usage; before the first turn reports,
   // fall back to a rough chars/4 estimate so the meter isn't blank.
-  const WINDOW = chat.contextWindow ?? (chat.cli === "codex" ? 256_000 : 200_000);
+  const WINDOW = chat.contextWindow ?? (engineBinary(chat.cli) === "codex" ? 256_000 : 200_000);
   // Only fall back to char-count estimate when there are actual messages — otherwise
   // the bar shows 0/200k on every fresh session which is meaningless noise.
   const usedTokens =
@@ -1290,7 +1320,7 @@ export function Chat({
           <Text dimColor>{`effort    ${chat.effort ?? "default"}`}</Text>
           <Text dimColor>{`cwd       ${cwd}`}</Text>
           <Box marginTop={1}>
-            <Text dimColor>{"/engine claude|codex  ·  /model <name>  ·  /models  ·  /effort <level>  ·  /efforts  to change"}</Text>
+            <Text dimColor>{"/engine claude|codex|custom  ·  /model <name>  ·  /models  ·  /effort <level>  ·  /efforts  to change"}</Text>
           </Box>
           <Box marginTop={1}><Text dimColor>Esc / Enter  close</Text></Box>
         </Box>
@@ -1426,6 +1456,9 @@ export function Chat({
         prefer={engineLogin.target}
         onDone={(_rep, logged) => {
           setEngineLogin(null);
+          // re-check instead of trusting `logged`: the gate can also have removed or
+          // replaced the custom config, and the engine cycle must reflect that.
+          void hasCustomEngine().then(setCustomReady);
           if (logged) {
             chat.switchEngine(logged);
             setNotice(`switched to ${logged} (session carries over)`);

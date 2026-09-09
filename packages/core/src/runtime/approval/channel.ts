@@ -7,6 +7,8 @@
 // This is deliberately CLI/SDK-neutral (no claude/codex types leak in) so the same
 // request can be rendered on any surface and answered from anywhere.
 
+import type { EngineKey } from "../engineRegistry.js";
+
 // A multiple-choice question (claude's AskUserQuestion): one or more questions, each with
 // options the user picks from. NOT a yes/no permission — the user's CHOICE becomes the
 // tool result, so the decision carries `answers` rather than just allow/deny.
@@ -34,7 +36,7 @@ export interface ApprovalQuestionResponse {
 // parsing input.
 export interface ApprovalRequest {
   id: string;             // unique per request; the decision must echo it back
-  cli: "claude" | "codex";
+  cli: EngineKey;
   sessionId: string;      // canonical session this belongs to
   tool: string;           // tool name as the engine reports it (Bash, Edit, Write…)
   kind: "bash" | "edit" | "write" | "read" | "question" | "plan" | "other";

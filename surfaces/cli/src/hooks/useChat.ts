@@ -8,8 +8,8 @@ import type {
   SkillActivation,
 } from "@iqlabs-official/agent-sdk/runtime/contract";
 import type { ApprovalChannel } from "@iqlabs-official/agent-sdk/runtime/approval/channel";
-import type { ChatModelOption } from "@iqlabs-official/agent-sdk";
-import { readPrefs, savePrefs, type EffortLevel } from "../prefs.js";
+import type { ChatModelOption, EngineKey } from "@iqlabs-official/agent-sdk";
+import { readPrefs, savePrefs, LAST_MODEL_PREF, type EffortLevel } from "../prefs.js";
 import { loadModelOptions, MODELS } from "../models.js";
 
 // What the status band should CALL the current model. `model` is undefined whenever the
@@ -19,12 +19,11 @@ import { loadModelOptions, MODELS } from "../models.js";
 // CLI's "default" entry with its real name, e.g. "Opus 4.8"), so resolve through it.
 // The static baseline answers synchronously so the band never flashes a placeholder;
 // the live probe upgrades it once the installed CLI reports its real catalog.
-function labelFor(cli: Engine, model: string | undefined, catalog: ChatModelOption[]): string | undefined {
+function labelFor(model: string | undefined, catalog: ChatModelOption[]): string | undefined {
   const chosen = model ? catalog.find((o) => o.value === model) : catalog[0];
   return chosen?.chipLabel ?? model;
 }
 
-export type Engine = "claude" | "codex";
 export type { EffortLevel };
 
 // What a /more actually did. "exhausted" = no page to fetch (no cursor, or history fully
@@ -40,7 +39,7 @@ export type LoadOlderResult =
 // resume — the runtime re-injects history into the new cli on the next send).
 export function useChat(
   runtime: AgentRuntime,
-  opts: { cli: Engine; model?: string; effort?: EffortLevel; cwd: string; resume?: string; approval?: ApprovalChannel },
+  opts: { cli: EngineKey; model?: string; effort?: EffortLevel; cwd: string; resume?: string; approval?: ApprovalChannel },
 ) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   // null = the first listSessions has not settled (the WelcomePanel null-means-loading
@@ -50,7 +49,7 @@ export function useChat(
   const [sessions, setSessions] = useState<SessionMeta[] | null>(null);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [cli, setCli] = useState<Engine>(opts.cli);
+  const [cli, setCli] = useState<EngineKey>(opts.cli);
   const [model, setModel] = useState<string | undefined>(opts.model);
   const [effort, setEffort] = useState<EffortLevel | undefined>(opts.effort);
   const [pendingId, setPendingId] = useState<string | undefined>(opts.resume);
@@ -73,16 +72,16 @@ export function useChat(
   const [turnError, setTurnError] = useState<string | null>(null);
   const [firingSkill, setFiringSkill] = useState<SkillActivation | null>(null);
   const [modelLabel, setModelLabel] = useState<string | undefined>(() =>
-    labelFor(opts.cli, opts.model, MODELS[opts.cli]),
+    labelFor(opts.model, MODELS[opts.cli]),
   );
 
   // Re-resolve the display name whenever the engine or the override changes.
   useEffect(() => {
     let live = true;
-    setModelLabel(labelFor(cli, model, MODELS[cli])); // instant, from the static baseline
+    setModelLabel(labelFor(model, MODELS[cli])); // instant, from the static baseline
     void loadModelOptions(cli)
       .then((catalog) => {
-        if (live) setModelLabel(labelFor(cli, model, catalog));
+        if (live) setModelLabel(labelFor(model, catalog));
       })
       .catch(() => {
         /* probe failed — the baseline label already on screen is the right fallback */
@@ -339,7 +338,7 @@ export function useChat(
   }, [dropHandle]);
 
   const switchEngine = useCallback(
-    (next: Engine) => {
+    (next: EngineKey) => {
       if (next === cliRef.current) return;
       dropHandle();
       setCli(next);
@@ -349,7 +348,7 @@ export function useChat(
       // a model id is engine-specific (claude's "sonnet" is a 400 on codex's API and vice
       // versa) — load whatever the NEW engine last used (or its own default) instead of
       // carrying over the previous engine's model string.
-      void readPrefs().then((p) => setModel(next === "codex" ? p.lastModelCodex : p.lastModelClaude));
+      void readPrefs().then((p) => setModel(p[LAST_MODEL_PREF[next]]));
     },
     [dropHandle],
   );
@@ -360,7 +359,7 @@ export function useChat(
       setModel(m);
       setContextTokens(undefined);
       setContextWindow(undefined);
-      void savePrefs(cliRef.current === "codex" ? { lastModelCodex: m } : { lastModelClaude: m });
+      void savePrefs({ [LAST_MODEL_PREF[cliRef.current]]: m });
     },
     [dropHandle],
   );

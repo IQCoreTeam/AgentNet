@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useStore, isApprovalForView } from "../state/store";
+import { useStore, isApprovalForView, engineStatus } from "../state/store";
 import { enqueueLiveImages } from "./liveImages";
 import type { Cli, ImageInput } from "../transport/protocol";
 import { AttachIcon } from "../icons";
@@ -161,6 +161,14 @@ const EFFORTS = [
   { value: "max",    label: "max" },
 ];
 
+// Codex's modes serve the custom engine too: custom IS the codex binary pointed at
+// another endpoint, so its sandbox/approval chips are identical.
+const CODEX_MODES = [
+  { value: "readonly", label: "Read only",   title: "Read-only sandbox; ask before edits, commands, network" },
+  { value: "auto",     label: "Auto accept", title: "Auto-accept edits + run inside the workspace; approve on failure (default)" },
+  { value: "full",     label: "Full access", title: "Full disk + network access, never ask (use with care)" },
+];
+
 const MODES: Record<Cli, { value: string; label: string; title: string }[]> = {
   // Kept in the SAME order + wording as the VSCode surface (webview.ts) so the modes read
   // identically everywhere — the SDK's native permission-mode order.
@@ -170,11 +178,16 @@ const MODES: Record<Cli, { value: string; label: string; title: string }[]> = {
     { value: "plan",        label: "Plan",        title: "Plan mode: read-only until you approve the plan" },
     { value: "bypassPermissions", label: "Bypass", title: "Bypass all permission prompts (--dangerously-skip-permissions). Auto-runs every command, edit, and on-chain spend. Use with care." },
   ],
-  codex: [
-    { value: "readonly", label: "Read only",   title: "Read-only sandbox; ask before edits, commands, network" },
-    { value: "auto",     label: "Auto accept", title: "Auto-accept edits + run inside the workspace; approve on failure (default)" },
-    { value: "full",     label: "Full access", title: "Full disk + network access, never ask (use with care)" },
-  ],
+  codex: CODEX_MODES,
+  custom: CODEX_MODES,
+};
+
+// The active engine tints the composer border + chip (claude = orange, codex = green,
+// custom = violet) so the input itself shows which platform you're talking to.
+const ENGINE_ACCENTS: Record<Cli, string> = {
+  claude: "var(--claude)",
+  codex: "var(--an-green)",
+  custom: "var(--an-violet)",
 };
 
 function slashCommandsForCli(cli: Cli): { name: string; desc: string; insert: string }[] {
@@ -235,9 +248,9 @@ export function Composer() {
   // the first real model when `model` isn't in the list (initial, or after a live upgrade).
   const models = toModelRows(state.modelCatalog[state.cli]);
   const selectedModel = models.some((m) => m.value === model) ? model : (models[0]?.value ?? "default");
-  // The active engine tints the composer border (claude = orange, codex = green) so the
-  // input itself shows which platform you're talking to — vscode's folder-tab idea.
-  const engineAccent = state.cli === "claude" ? "var(--claude)" : "var(--an-green)";
+  const engineAccent = ENGINE_ACCENTS[state.cli];
+  // The custom chip appears only once the host reports a stored endpoint config.
+  const engines: Cli[] = state.customEngine?.masked ? ["claude", "codex", "custom"] : ["claude", "codex"];
 
   // Voice dictation via the platform Web Speech API (Android WebView / Chrome support it).
   // Interim results stream into the textarea; a second tap stops. Silent no-op if absent.
@@ -283,7 +296,7 @@ export function Composer() {
   // Tapping it opens the login screen; everything else in the app stays reachable. No
   // report yet (boot) counts as unlocked so the composer doesn't flash locked for
   // signed-in users.
-  const engineLocked = !!state.cliReport && state.cliReport[state.cli] !== "ok";
+  const engineLocked = !!state.cliReport && engineStatus(state, state.cli) !== "ok";
 
   const [slashIdx, setSlashIdx] = useState(0);
   const [suppressSlash, setSuppressSlash] = useState(false);
@@ -302,7 +315,8 @@ export function Composer() {
       const prefix = (m[1] || '').toLowerCase();
       const options = [
         { name: 'claude', desc: 'switch to Claude engine', insert: '/engine claude' },
-        { name: 'codex',  desc: 'switch to Codex engine',  insert: '/engine codex' }
+        { name: 'codex',  desc: 'switch to Codex engine',  insert: '/engine codex' },
+        ...(state.customEngine?.masked ? [{ name: 'custom', desc: 'switch to your custom endpoint', insert: '/engine custom' }] : [])
       ];
       activeMatches = options.filter(opt => opt.name.toLowerCase().startsWith(prefix));
     }
@@ -454,7 +468,7 @@ export function Composer() {
           setText(""); return;
         }
         case "engine":
-          if (arg === "claude" || arg === "codex") switchEngine(arg);
+          if (arg === "claude" || arg === "codex" || arg === "custom") switchEngine(arg);
           setText(""); return;
         case "model":
           if (arg) send({ type: "model", model: arg });
@@ -466,13 +480,26 @@ export function Composer() {
           if (arg) { setEffort(arg); send({ type: "effort", effort: arg === "default" ? undefined : arg }); }
           setText(""); return;
         case "login": {
-          const target = arg === "claude" || arg === "codex" ? arg : state.cli;
+          // Only the two binaries hold accounts. On the custom engine, "signing in"
+          // means saving an endpoint config, so point at the form instead of starting
+          // a Codex device auth the user never asked for.
+          if (state.cli === "custom" && arg !== "claude" && arg !== "codex") {
+            setSlashNotice("Custom endpoints have no login. Connect one under Settings, AI Connections.");
+            setText(""); return;
+          }
+          const target = arg === "claude" || arg === "codex" ? arg : state.cli === "claude" ? "claude" : "codex";
           if (target === "claude" && arg && arg !== "claude" && arg !== "codex") send({ type: "claudeAuthCode", code: arg });
           else send({ type: target === "claude" ? "startClaudeLogin" : "startCodexLogin" });
           setText(""); return;
         }
         case "logout": {
-          const target = arg === "claude" || arg === "codex" ? arg : state.cli;
+          // Same guard: falling through would resolve custom to the codex BINARY and
+          // sign the user out of their real Codex account.
+          if (state.cli === "custom" && arg !== "claude" && arg !== "codex") {
+            setSlashNotice("Custom endpoints have no login to sign out of. Remove the endpoint under Settings, AI Connections.");
+            setText(""); return;
+          }
+          const target = arg === "claude" || arg === "codex" ? arg : state.cli === "claude" ? "claude" : "codex";
           send({ type: "logoutEngine", cli: target });
           setText(""); return;
         }
@@ -540,9 +567,9 @@ export function Composer() {
           live in the popover so the bar stays clean on a phone) */}
       <div className="relative mb-2 flex items-center gap-1.5 text-xs">
         <div className="an-term-seg">
-          {(["claude", "codex"] as Cli[]).map((c) => {
+          {engines.map((c) => {
             const on = state.cli === c;
-            const accent = c === "claude" ? "var(--claude)" : "var(--an-green)";
+            const accent = ENGINE_ACCENTS[c];
             return (
               <button
                 key={c}
@@ -573,7 +600,7 @@ export function Composer() {
         )}
         {(state.contextTokens !== undefined || state.isCompacting) && (() => {
           const tokens = state.contextTokens ?? 0;
-          const win = state.contextWindow ?? (state.cli === "codex" ? 256_000 : 200_000);
+          const win = state.contextWindow ?? (state.cli === "claude" ? 200_000 : 256_000);
           return <CtxDot tokens={tokens} window={win} compacting={state.isCompacting} />;
         })()}
         {queueCount > 0 && (

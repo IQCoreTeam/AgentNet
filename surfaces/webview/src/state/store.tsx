@@ -22,6 +22,7 @@ import type {
   ChatMessage,
   Cli,
   ClientMessage,
+  CustomEnginePreset,
   EngineVersionInfo,
   ImageInput,
   ServerMessage,
@@ -55,6 +56,7 @@ export interface State {
     | "restoring" // Android cold boot: attempting a silent Keystore reconnect (shows Splash, not the signup screen)
     | "claudeAuth"
     | "codexAuth"
+    | "customAuth" // custom engine picked with no saved endpoint: the AI Connections form, not a login
     | "chat";
   // market overlay (accessible from chat phase via "Markets" button)
   marketOpen: boolean;
@@ -92,7 +94,11 @@ export interface State {
   googleLoginError: string | null;
   // per-engine install/login status from the post-wallet `cliStatus` event, kept so the
   // engine picker can show a live badge next to each choice (null until it arrives).
+  // "custom" is derived from customEngine + the codex binary report (see engineStatus).
   cliReport: { claude: EngineStatus; codex: EngineStatus } | null;
+  // custom engine (issue #209): the host's masked config summary (null = none stored)
+  // plus core's preset catalog for the connect form. null until the host pushes it.
+  customEngine: { masked: string | null; presets: CustomEnginePreset[] } | null;
   // Fetched once per session, on first open of AI Connections (server re-pushes after an
   // update). Never polled — see the getEngineVersions send site.
   engineVersions: { claude: EngineVersionInfo; codex: EngineVersionInfo } | null;
@@ -165,11 +171,22 @@ export function isApprovalForView(a: { sessionId?: string }, activeSessionId?: s
   return !a.sessionId || !activeSessionId || a.sessionId === activeSessionId;
 }
 
+// Per-engine readiness, custom included. Custom rides the codex binary with its own
+// stored key, so it has no login probe: the codex binary must be installed, and a saved
+// endpoint config is its sign-in ("no-login" until one exists). undefined = no report yet.
+export function engineStatus(state: State, cli: Cli): EngineStatus | undefined {
+  if (!state.cliReport) return undefined;
+  if (cli !== "custom") return state.cliReport[cli];
+  if (state.cliReport.codex === "missing") return "missing";
+  return state.customEngine?.masked != null ? "ok" : "no-login";
+}
+
 const initialState: State = {
   phase: "connecting",
   walletAddress: null,
   cli: "claude",
   cliReport: null,
+  customEngine: null,
   engineVersions: null,
   engineUpdating: {},
   claudeLoginUrl: null,
@@ -218,7 +235,7 @@ const initialState: State = {
   publishKind: null,
   firingSkills: [],
   currentModel: undefined,
-  modelCatalog: { claude: CHAT_MODEL_OPTIONS.claude, codex: CHAT_MODEL_OPTIONS.codex },
+  modelCatalog: { claude: CHAT_MODEL_OPTIONS.claude, codex: CHAT_MODEL_OPTIONS.codex, custom: CHAT_MODEL_OPTIONS.custom },
   queuePending: 0,
   agents: [],
   agentProfile: null,
@@ -233,6 +250,7 @@ const initialState: State = {
   modeByCli: {
     claude: "acceptEdits",
     codex: "auto",
+    custom: "auto",
   },
 };
 
@@ -328,8 +346,12 @@ function reducer(state: State, ev: Action): State {
       // wait (the action requests getCliStatus). ok -> chat; otherwise (no-login or
       // missing) -> the engine's own auth screen handles sign-in / install.
       if (!state.cliReport) return state;
-      const status = state.cliReport[ev.cli];
+      const status = engineStatus(state, ev.cli);
       if (status === "ok") return { ...state, cli: ev.cli, phase: "chat" };
+      // custom has no account login: its "sign-in" is a saved endpoint config, so it
+      // routes to the AI Connections form. Sending it to the Codex device auth (as it
+      // once did) looped users through a login that could never make custom ready.
+      if (ev.cli === "custom") return { ...state, cli: ev.cli, phase: "customAuth" };
       return { ...state, cli: ev.cli, phase: ev.cli === "claude" ? "claudeAuth" : "codexAuth" };
     }
     case "__switchEngine":
@@ -357,6 +379,15 @@ function reducer(state: State, ev: Action): State {
       // Authentication is progressive too. Stay in chat until a send or explicit engine
       // switch asks selectEngine() to route to the matching login surface.
       return { ...state, cliReport: { claude: ev.claude, codex: ev.codex } };
+    case "customEngine":
+      // A non-null masked summary while sitting on the customAuth form means the
+      // endpoint just got saved (or already existed): custom is usable, drop into chat
+      // on it, mirroring the claude/codex "login done" routing.
+      return {
+        ...state,
+        customEngine: { masked: ev.masked, presets: ev.presets },
+        phase: state.phase === "customAuth" && ev.masked != null ? "chat" : state.phase,
+      };
     case "engineVersions":
       return { ...state, engineVersions: { claude: ev.claude, codex: ev.codex } };
     case "engineUpdateStatus":
@@ -507,7 +538,7 @@ function reducer(state: State, ev: Action): State {
       return { ...state, toast: ev.text };
     case "status": {
       const s = ev.status;
-      const win = state.contextWindow ?? (s.cli === "codex" ? 256_000 : 200_000);
+      const win = state.contextWindow ?? (s.cli === "claude" ? 200_000 : 256_000);
       const fmtK = (n: number) => n >= 1000 ? Math.round(n / 1000) + "k" : String(n);
       const ctx = s.contextTokens === undefined
         ? ""
@@ -884,7 +915,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const actions = useMemo<Actions>(() => {
     const selectEngine = (cli: Cli) => {
       const st = stateRef.current;
-      const status = st.cliReport?.[cli];
+      const status = engineStatus(st, cli);
       raw({ type: "__selectEngine", cli });
       if (!st.cliReport) {
         void transportRef.current?.post({ type: "getCliStatus" });
@@ -903,7 +934,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         void transportRef.current?.post({ type: "getCliStatus" });
         return;
       }
-      if (st.cliReport[cli] === "ok" && st.phase === "chat") {
+      if (engineStatus(st, cli) === "ok" && st.phase === "chat") {
         void transportRef.current?.post({ type: "platform", cli });
       }
     };
@@ -914,7 +945,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (msg.type === "send") {
-        if (!st.cliReport || st.cliReport[st.cli] !== "ok") {
+        if (engineStatus(st, st.cli) !== "ok") {
           selectEngine(st.cli);
           return;
         }
