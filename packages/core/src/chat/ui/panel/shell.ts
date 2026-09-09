@@ -6,7 +6,7 @@ import { S } from "./state.js";
 // The core table directly: engine.ts imports this module, so no alias lives there.
 import { ENGINE_INSTALL_COMMAND } from "../../../runtime/engineInstall.js";
 import { vscode } from "./host.js";
-import { engineBanner, jumpBtn, limitMeter, loadingEl, log, mainEl } from "./dom.js";
+import { ctxMeter, engineBanner, jumpBtn, limitMeter, loadingEl, log, mainEl } from "./dom.js";
 import { renderMdStreaming } from "./markdown.js";
 import { tailBody } from "./turns.js";
 
@@ -113,19 +113,23 @@ const LIMIT_WINDOW_LABEL: Record<string, string> = {
   five_hour: '5-hour', seven_day: 'weekly', seven_day_opus: 'weekly Opus',
   seven_day_sonnet: 'weekly Sonnet', overage: 'overage',
 };
-// Draw the "used N% of your limit" gauge in the composer chip row, but only once the active
-// window crosses 50% — below that it stays hidden so it's not noise. The bar turns amber past
-// 80% (or when the plan reports a warning/rejected status) as an approaching-limit cue. Unlike
-// the context meter this is account-wide, so it is NOT reset on a new chat.
+// The two composer usage chips share one slot: the plan-limit GAUGE is the primary face (the
+// number the user actually watches), and the raw context-token count is secondary — revealed
+// only when they click the gauge. State lives here; the 'rateLimit' and 'usage' host messages
+// feed it and paintMeters() draws. The gauge is account-wide (never reset on a new chat); ctx
+// is per-chat and cleared by clearCtx() on a new session.
+let ctxLabel: string | null = null;
+let usage: { pct: number; warn: boolean; title: string } | null = null;
+let usageExpanded = false; // user clicked the gauge to also reveal the ctx tail
+
+// Feed the plan rate-limit gauge. utilization arrives as either a 0-100 percentage or a 0-1
+// fraction depending on the engine build, so a value at or below 1 is read as a fraction —
+// without this, a real 73% sent as 0.73 renders as "1%" (or, under the old >=50 gate, hidden).
 export function renderLimitMeter(info: { utilization?: number; window?: string; resetsAt?: number; status?: string }) {
-  const u = typeof info.utilization === 'number' ? Math.max(0, Math.min(100, info.utilization)) : null;
-  if (u === null || u < 50) { limitMeter.style.display = 'none'; return; }
-  const fill = limitMeter.querySelector('.lm-fill') as HTMLElement | null;
-  const pct = limitMeter.querySelector('.lm-pct') as HTMLElement | null;
-  if (fill) fill.style.width = u + '%';
-  if (pct) pct.textContent = Math.round(u) + '%';
+  const raw = typeof info.utilization === 'number' ? info.utilization : null;
+  if (raw === null) { usage = null; paintMeters(); return; }
+  const u = Math.max(0, Math.min(100, raw <= 1 ? raw * 100 : raw));
   const warn = u >= 80 || info.status === 'rejected' || info.status === 'allowed_warning';
-  limitMeter.classList.toggle('warn', warn);
   const windowLabel = LIMIT_WINDOW_LABEL[info.window || ''] || 'usage';
   // resetsAt may arrive as seconds or ms depending on the engine build; normalize to ms.
   let resets = '';
@@ -133,8 +137,41 @@ export function renderLimitMeter(info: { utilization?: number; window?: string; 
     const ms = info.resetsAt < 1e12 ? info.resetsAt * 1000 : info.resetsAt;
     resets = ' · resets ' + new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
-  limitMeter.title = 'Used ' + Math.round(u) + '% of your ' + windowLabel + ' limit' + resets;
-  limitMeter.style.display = 'inline-flex';
+  usage = { pct: u, warn, title: 'Used ' + Math.round(u) + '% of your ' + windowLabel + ' limit' + resets };
+  paintMeters();
+}
+
+// Record the per-chat context-token count (the secondary chip).
+export function setCtxTokens(contextTokens?: number) {
+  if (typeof contextTokens !== 'number') return;
+  ctxLabel = contextTokens >= 1000 ? Math.round(contextTokens / 1000) + 'k' : String(contextTokens);
+  paintMeters();
+}
+
+// New chat: ctx is per-conversation so it resets; the account-wide usage gauge is untouched.
+export function clearCtx() { ctxLabel = null; usageExpanded = false; paintMeters(); }
+
+function paintMeters() {
+  // Primary: the usage gauge, shown whenever the plan reports any utilization.
+  if (usage) {
+    const fill = limitMeter.querySelector('.lm-fill') as HTMLElement | null;
+    const pct = limitMeter.querySelector('.lm-pct') as HTMLElement | null;
+    if (fill) fill.style.width = usage.pct + '%';
+    if (pct) pct.textContent = Math.round(usage.pct) + '%';
+    limitMeter.classList.toggle('warn', usage.warn);
+    limitMeter.title = usage.title + ' · click to show context tokens';
+    limitMeter.style.display = 'inline-flex';
+  } else {
+    limitMeter.style.display = 'none';
+  }
+  // Secondary: ctx, shown when the user expanded the gauge, OR as a fallback when there is no
+  // plan gauge at all (codex/API-key accounts never report usage — the slot still shows ctx).
+  if (ctxLabel !== null && (usageExpanded || !usage)) {
+    ctxMeter.textContent = 'ctx: ' + ctxLabel;
+    ctxMeter.style.display = 'inline-flex';
+  } else {
+    ctxMeter.style.display = 'none';
+  }
 }
 
 // ---- stick-to-bottom + jump-to-latest (normal chat-app feel) ----
@@ -204,4 +241,7 @@ export function cancelStreamRender() {
 
 export function wireShell() {
   if (jumpBtn) jumpBtn.addEventListener('click', scrollToLatest);
+  // click the usage gauge to reveal/hide the secondary context-token chip
+  limitMeter.style.cursor = 'pointer';
+  limitMeter.addEventListener('click', () => { usageExpanded = !usageExpanded; paintMeters(); });
 }

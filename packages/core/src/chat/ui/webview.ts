@@ -1136,9 +1136,11 @@ export function chatHtml(): string {
   /* the "· high" tail on the mode chip — only rendered when effort is off its default,
      so the chip stays short until there's actually something to report */
   #modeEffortTag { opacity: 0.65; font-weight: 500; }
-  /* usage context meter: small text chip near the composer chips */
+  /* context-token chip: secondary, revealed by clicking the usage gauge (or shown as a
+     fallback when the account reports no plan usage at all) */
   #ctxMeter { font-size: 0.82em; opacity: 0.55; display: inline-flex; align-items: center; }
-  /* plan rate-limit gauge: a thin bar + percent, shown only from 50% up. Amber past 80%. */
+  /* plan rate-limit gauge: the primary usage chip — a thin bar + percent, shown whenever the
+     plan reports utilization. Amber past 80%. Click to also reveal the context-token chip. */
   #limitMeter { font-size: 0.82em; display: inline-flex; align-items: center; gap: 5px; }
   #limitMeter .lm-track { width: 42px; height: 5px; border-radius: 999px; background: var(--an-line); overflow: hidden; }
   #limitMeter .lm-fill { display: block; height: 100%; width: 0; background: var(--an-green); transition: width .3s ease; }

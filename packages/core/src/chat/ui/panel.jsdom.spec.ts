@@ -133,33 +133,56 @@ describe("panel.jsdom: composer", () => {
 });
 
 describe("panel.jsdom: rate-limit gauge", () => {
-  it("shows the limit meter only from 50% up, fills to the utilization, and turns amber past 80%", () => {
+  it("shows the gauge at any utilization, normalizes 0-1 fractions, and turns amber past 80%", () => {
     const p = boot();
     const meter = p.$("#limitMeter") as HTMLElement;
     const fill = () => p.$("#limitMeter .lm-fill") as HTMLElement;
     const pct = () => p.$("#limitMeter .lm-pct") as HTMLElement;
 
-    // below 50%: stays hidden
+    // any percentage shows now (the gauge is the primary usage chip, not a >=50% warning)
     p.host({ type: "rateLimit", utilization: 30, window: "five_hour" });
-    expect(meter.style.display).toBe("none");
+    expect(meter.style.display).toBe("inline-flex");
+    expect(pct().textContent).toBe("30%");
 
     // 72%: visible, filled, not warning
     p.host({ type: "rateLimit", utilization: 72, window: "five_hour", resetsAt: 1893456000000 });
-    expect(meter.style.display).toBe("inline-flex");
     expect(fill().style.width).toBe("72%");
     expect(pct().textContent).toBe("72%");
     expect(meter.classList.contains("warn")).toBe(false);
     expect(meter.title).toContain("72%");
     expect(meter.title).toContain("5-hour");
 
+    // a 0-1 fraction is read as a percentage: 0.73 -> 73%, not 1%
+    p.host({ type: "rateLimit", utilization: 0.73, window: "five_hour" });
+    expect(pct().textContent).toBe("73%");
+
     // 91%: warning tint
     p.host({ type: "rateLimit", utilization: 91, window: "seven_day" });
     expect(meter.classList.contains("warn")).toBe(true);
     expect(pct().textContent).toBe("91%");
+    expect(p.errors).toEqual([]);
+  });
 
-    // dropping back below 50% hides it again
-    p.host({ type: "rateLimit", utilization: 10, window: "five_hour" });
-    expect(meter.style.display).toBe("none");
+  it("keeps context tokens secondary: hidden behind the gauge until clicked, shown as a fallback without it", () => {
+    const p = boot();
+    const meter = p.$("#limitMeter") as HTMLElement;
+    const ctx = p.$("#ctxMeter") as HTMLElement;
+
+    // no plan gauge yet: ctx shows as the fallback so the slot isn't empty
+    p.host({ type: "usage", contextTokens: 12000 });
+    expect(ctx.style.display).toBe("inline-flex");
+    expect(ctx.textContent).toBe("ctx: 12k");
+
+    // once the gauge has data it takes the slot and ctx hides
+    p.host({ type: "rateLimit", utilization: 60, window: "five_hour" });
+    expect(meter.style.display).toBe("inline-flex");
+    expect(ctx.style.display).toBe("none");
+
+    // clicking the gauge reveals ctx alongside it; clicking again hides it
+    p.fire(meter, "click");
+    expect(ctx.style.display).toBe("inline-flex");
+    p.fire(meter, "click");
+    expect(ctx.style.display).toBe("none");
     expect(p.errors).toEqual([]);
   });
 });

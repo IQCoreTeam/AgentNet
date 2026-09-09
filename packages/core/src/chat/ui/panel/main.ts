@@ -5,9 +5,9 @@
 // the bundle keeps every module at its legacy section position, which keeps the artifact diffable.
 import { vscode } from "./host.js";
 import { S } from "./state.js";
-import { log, ctxMeter, approvalDock } from "./dom.js";
+import { log, approvalDock } from "./dom.js";
 import { escapeHtml } from "./markdown.js";
-import { syncWatermark, renderNotice, renderEngineBanner, renderLimitMeter, copyAction, renderEngineMissing, renderStatus, showLoading, hideLoading, wireShell } from "./shell.js";
+import { syncWatermark, renderNotice, renderEngineBanner, renderLimitMeter, setCtxTokens, clearCtx, copyAction, renderEngineMissing, renderStatus, showLoading, hideLoading, wireShell } from "./shell.js";
 import { wireSlash } from "./slash.js";
 import { CODEX_UPDATE_CMD, applyModelOptions, setTab, wireEngine } from "./engine.js";
 import "./format.js";
@@ -55,20 +55,15 @@ window.addEventListener('message', (event) => {
   else if (m.type === 'notice') renderNotice(m.text || '');
   else if (m.type === 'status') renderStatus(m.status || {});
   else if (m.type === 'loading') showLoading();
-  else if (m.type === 'clear') { log.innerHTML = ''; approvalDock.innerHTML = ''; ctxMeter.style.display = 'none'; syncComposerLock(); S.streaming = null; S.openBash = null; S.tailTurn = null; S.headTurn = null; hideTyping(); hideActivity(); resetPaging(); syncWatermark(); hideLoading(); }
+  else if (m.type === 'clear') { log.innerHTML = ''; approvalDock.innerHTML = ''; clearCtx(); syncComposerLock(); S.streaming = null; S.openBash = null; S.tailTurn = null; S.headTurn = null; hideTyping(); hideActivity(); resetPaging(); syncWatermark(); hideLoading(); }
   else if (m.type === 'turnEnd') { hideTyping(); hideActivity(); }
   else if (m.type === 'modelOptions') { applyModelOptions(m.cli, m.options); }
   else if (m.type === 'usage') {
-    // update the context token meter near the composer chips
-    const n = m.contextTokens;
-    if (typeof n === 'number') {
-      const label = n >= 1000 ? Math.round(n / 1000) + 'k' : String(n);
-      ctxMeter.textContent = 'ctx: ' + label;
-      ctxMeter.style.display = 'inline-flex';
-    }
+    // per-chat context tokens — the secondary chip, revealed by clicking the usage gauge
+    setCtxTokens(m.contextTokens);
   }
   else if (m.type === 'rateLimit') {
-    // account-wide plan usage gauge (claude.ai) — shows from 50% up, next to the ctx meter
+    // account-wide plan usage gauge (claude.ai) — the primary composer chip; click reveals ctx
     renderLimitMeter({ utilization: m.utilization, window: m.window, resetsAt: m.resetsAt, status: m.status });
   }
   else if (m.type === 'skillActive' && m.origin === 'nft' && m.mint) flashSkill(m.name, m.mint);
