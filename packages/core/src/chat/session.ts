@@ -318,9 +318,10 @@ export function createChatSession(
     // draw a "used N% of your limit" gauge. Optional on the handle — codex/API-key engines
     // never emit it, so this simply never fires for them.
     // The message is the contract's RateLimitInfo as-is: utilization 0-100 (absent when the
-    // plan rejects the turn), resetsAt epoch ms.
+    // plan rejects the turn), resetsAt epoch ms, plus cli so the UI files a frame under the
+    // engine that reported even when it lands after a tab switch.
     h.onRateLimit?.((info) => {
-      if (isVisibleHandle(forCli, h)) transport.send({ type: "rateLimit", ...info });
+      if (isVisibleHandle(forCli, h)) transport.send({ type: "rateLimit", cli: forCli, ...info });
     });
     // compaction: the engine condensed history to reclaim context. Cue the active surface
     // (a notice + the next usage update reflects the reclaimed space).

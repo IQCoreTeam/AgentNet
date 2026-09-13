@@ -114,21 +114,23 @@ const LIMIT_WINDOW_LABEL: Record<string, string> = {
   seven_day_sonnet: 'weekly Sonnet', overage: 'overage',
 };
 // The two composer usage chips share one slot: the plan-limit GAUGE is the primary face (the
-// number the user actually watches), and the raw context-token count is secondary — revealed
+// number the user actually watches), and the raw context-token count is secondary, revealed
 // only when they click the gauge. State lives here; the 'rateLimit' and 'usage' host messages
-// feed it and paintMeters() draws. The gauge is account-wide (never reset on a new chat); ctx
-// is per-chat and cleared by clearCtx() on a new session.
+// feed it and paintMeters() draws. The gauge is per engine and account-level (a new chat never
+// resets it); only claude reports one, so the codex tab paints ctx. ctx is per-chat, cleared by
+// clearCtx() on a new session.
 let ctxLabel: string | null = null;
-let usage: { pct: number; warn: boolean; title: string } | null = null;
+const usageByCli: Record<string, { pct: number; warn: boolean; title: string } | null> = { claude: null, codex: null };
 let usageExpanded = false; // user clicked the gauge to also reveal the ctx tail
 
 // Feed the plan rate-limit gauge. utilization is 0-100 and resetsAt epoch ms as the host sends
-// them (core normalizes the engine's units and reports a rejected window as 100). A frame
-// without a reading keeps the last percentage and repaints the tint from the status, so the
-// gauge never freezes green or vanishes on a status change. Before any percentage has arrived
-// there is nothing to draw, and the slot stays on the ctx fallback.
-export function renderLimitMeter(info: { utilization?: number; window?: string; resetsAt?: number; status?: string }) {
-  const pct = typeof info.utilization === 'number' ? info.utilization : usage?.pct;
+// them (core normalizes the engine's units and reports a rejected window as 100). Filed under
+// info.cli, the engine that reported: a frame can land after a tab switch. A frame without a
+// reading keeps the last percentage and repaints the tint from the status, so the gauge never
+// freezes green or vanishes on a status change. Before any percentage has arrived there is
+// nothing to draw, and the slot stays on the ctx fallback.
+export function renderLimitMeter(info: { cli: string; utilization?: number; window?: string; resetsAt?: number; status?: string }) {
+  const pct = typeof info.utilization === 'number' ? info.utilization : usageByCli[info.cli]?.pct;
   if (pct === undefined) return;
   const warn = pct >= 80 || info.status === 'rejected' || info.status === 'allowed_warning';
   const windowLabel = LIMIT_WINDOW_LABEL[info.window || ''] || 'usage';
@@ -136,7 +138,7 @@ export function renderLimitMeter(info: { utilization?: number; window?: string; 
   if (typeof info.resetsAt === 'number' && info.resetsAt > 0) {
     resets = ' · resets ' + new Date(info.resetsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
-  usage = { pct, warn, title: 'Used ' + Math.round(pct) + '% of your ' + windowLabel + ' limit' + resets };
+  usageByCli[info.cli] = { pct, warn, title: 'Used ' + Math.round(pct) + '% of your ' + windowLabel + ' limit' + resets };
   paintMeters();
 }
 
@@ -150,8 +152,10 @@ export function setCtxTokens(contextTokens?: number) {
 // New chat: ctx is per-conversation so it resets; the account-wide usage gauge is untouched.
 export function clearCtx() { ctxLabel = null; usageExpanded = false; paintMeters(); }
 
-function paintMeters() {
-  // Primary: the usage gauge, shown whenever the plan reports any utilization.
+// Draw the slot for the current tab: its gauge, else ctx.
+export function paintMeters() {
+  const usage = usageByCli[S.cli];
+  // Primary: the usage gauge, shown whenever this engine's plan reported any utilization.
   if (usage) {
     const fill = limitMeter.querySelector('.lm-fill') as HTMLElement | null;
     const pct = limitMeter.querySelector('.lm-pct') as HTMLElement | null;
@@ -163,8 +167,8 @@ function paintMeters() {
   } else {
     limitMeter.style.display = 'none';
   }
-  // Secondary: ctx, shown when the user expanded the gauge, OR as a fallback when there is no
-  // plan gauge at all (codex/API-key accounts never report usage — the slot still shows ctx).
+  // Secondary: ctx, shown when the user expanded the gauge, OR as a fallback when this engine
+  // has no plan gauge (codex/API-key accounts never report usage, so the slot shows ctx).
   if (ctxLabel !== null && (usageExpanded || !usage)) {
     ctxMeter.textContent = 'ctx: ' + ctxLabel;
     ctxMeter.style.display = 'inline-flex';

@@ -133,6 +133,10 @@ describe("panel.jsdom: composer", () => {
 });
 
 describe("panel.jsdom: rate-limit gauge", () => {
+  const tab = (p: Page, cli: string) => p.$(`.etab[data-cli="${cli}"]`)!;
+  // the host stamps every frame with the engine that reported; only claude reports one
+  const rate = (p: Page, info: object) => p.host({ type: "rateLimit", cli: "claude", ...info });
+
   it("shows the gauge at any utilization, fills to 100 on an over-cap window, and turns amber past 80%", () => {
     const p = boot();
     const meter = p.$("#limitMeter") as HTMLElement;
@@ -140,12 +144,12 @@ describe("panel.jsdom: rate-limit gauge", () => {
     const pct = () => p.$("#limitMeter .lm-pct") as HTMLElement;
 
     // any percentage shows now (the gauge is the primary usage chip, not a >=50% warning)
-    p.host({ type: "rateLimit", utilization: 30, window: "five_hour" });
+    rate(p, { utilization: 30, window: "five_hour" });
     expect(meter.style.display).toBe("inline-flex");
     expect(pct().textContent).toBe("30%");
 
     // 72%: visible, filled, not warning
-    p.host({ type: "rateLimit", utilization: 72, window: "five_hour", resetsAt: 1893456000000 });
+    rate(p, { utilization: 72, window: "five_hour", resetsAt: 1893456000000 });
     expect(fill().style.width).toBe("72%");
     expect(pct().textContent).toBe("72%");
     expect(meter.classList.contains("warn")).toBe(false);
@@ -153,12 +157,12 @@ describe("panel.jsdom: rate-limit gauge", () => {
     expect(meter.title).toContain("5-hour");
 
     // the host sends the contract's 0-100 percentage; core clamps an over-cap window to 100
-    p.host({ type: "rateLimit", utilization: 100, window: "five_hour", status: "allowed_warning" });
+    rate(p, { utilization: 100, window: "five_hour", status: "allowed_warning" });
     expect(pct().textContent).toBe("100%");
     expect(fill().style.width).toBe("100%");
 
     // 91%: warning tint
-    p.host({ type: "rateLimit", utilization: 91, window: "seven_day" });
+    rate(p, { utilization: 91, window: "seven_day" });
     expect(meter.classList.contains("warn")).toBe(true);
     expect(pct().textContent).toBe("91%");
     expect(p.errors).toEqual([]);
@@ -168,11 +172,11 @@ describe("panel.jsdom: rate-limit gauge", () => {
     const p = boot();
     const meter = p.$("#limitMeter") as HTMLElement;
     const pct = () => p.$("#limitMeter .lm-pct") as HTMLElement;
-    p.host({ type: "rateLimit", utilization: 72, window: "five_hour", status: "allowed" });
+    rate(p, { utilization: 72, window: "five_hour", status: "allowed" });
     expect(meter.classList.contains("warn")).toBe(false);
 
     // a status change without a reading: keep the last percentage and repaint the tint
-    p.host({ type: "rateLimit", window: "five_hour", resetsAt: 1893456000000, status: "allowed_warning" });
+    rate(p, { window: "five_hour", resetsAt: 1893456000000, status: "allowed_warning" });
     expect(meter.style.display).toBe("inline-flex");
     expect(pct().textContent).toBe("72%");
     expect(meter.classList.contains("warn")).toBe(true);
@@ -184,10 +188,10 @@ describe("panel.jsdom: rate-limit gauge", () => {
     const p = boot();
     const meter = p.$("#limitMeter") as HTMLElement;
     const pct = () => p.$("#limitMeter .lm-pct") as HTMLElement;
-    p.host({ type: "rateLimit", utilization: 72, window: "five_hour", status: "allowed" });
+    rate(p, { utilization: 72, window: "five_hour", status: "allowed" });
     expect(pct().textContent).toBe("72%");
     // core reports the exhausted window as 100: the weekly cap blocks, not the 5-hour reading
-    p.host({ type: "rateLimit", utilization: 100, window: "seven_day", resetsAt: 1893456000000, status: "rejected" });
+    rate(p, { utilization: 100, window: "seven_day", resetsAt: 1893456000000, status: "rejected" });
     expect(meter.style.display).toBe("inline-flex");
     expect(pct().textContent).toBe("100%");
     expect(meter.classList.contains("warn")).toBe(true);
@@ -197,7 +201,7 @@ describe("panel.jsdom: rate-limit gauge", () => {
   it("shows a rejection that arrives before any reading", () => {
     const p = boot();
     const meter = p.$("#limitMeter") as HTMLElement;
-    p.host({ type: "rateLimit", utilization: 100, window: "five_hour", status: "rejected" });
+    rate(p, { utilization: 100, window: "five_hour", status: "rejected" });
     expect(meter.style.display).toBe("inline-flex");
     expect((p.$("#limitMeter .lm-pct") as HTMLElement).textContent).toBe("100%");
     expect(meter.classList.contains("warn")).toBe(true);
@@ -215,7 +219,7 @@ describe("panel.jsdom: rate-limit gauge", () => {
     expect(ctx.textContent).toBe("ctx: 12k");
 
     // once the gauge has data it takes the slot and ctx hides
-    p.host({ type: "rateLimit", utilization: 60, window: "five_hour" });
+    rate(p, { utilization: 60, window: "five_hour" });
     expect(meter.style.display).toBe("inline-flex");
     expect(ctx.style.display).toBe("none");
 
@@ -224,6 +228,59 @@ describe("panel.jsdom: rate-limit gauge", () => {
     expect(ctx.style.display).toBe("inline-flex");
     p.fire(meter, "click");
     expect(ctx.style.display).toBe("none");
+    expect(p.errors).toEqual([]);
+  });
+
+  it("keeps the gauge per engine: the codex tab paints ctx, and the claude tab gets its reading back", () => {
+    const p = boot();
+    p.host({ type: "cliStatus", claude: "ok", codex: "ok" });
+    const meter = p.$("#limitMeter") as HTMLElement;
+    const ctx = p.$("#ctxMeter") as HTMLElement;
+
+    // a claude turn reports plan usage: the gauge takes the slot
+    rate(p, { utilization: 60, window: "five_hour" });
+    expect(meter.style.display).toBe("inline-flex");
+
+    // the codex tab: codex never reports a plan limit, so the gauge leaves the slot on the
+    // switch itself, before the host has repainted
+    tab(p, "codex").click();
+    expect(meter.style.display).toBe("none");
+    // the host repaints the switched tab (clear) and codex reports context tokens: ctx is the chip
+    p.host({ type: "clear" });
+    p.host({ type: "usage", contextTokens: 12000 });
+    expect(ctx.style.display).toBe("inline-flex");
+    expect(ctx.textContent).toBe("ctx: 12k");
+    expect(meter.style.display).toBe("none");
+
+    // back on claude: its reading was kept, not thrown away, and ctx is secondary again
+    tab(p, "claude").click();
+    p.host({ type: "clear" });
+    expect(meter.style.display).toBe("inline-flex");
+    expect((p.$("#limitMeter .lm-pct") as HTMLElement).textContent).toBe("60%");
+    expect(ctx.style.display).toBe("none");
+    expect(p.errors).toEqual([]);
+  });
+
+  it("files a frame under the engine the host stamped on it, not the tab it lands on", () => {
+    const p = boot();
+    p.host({ type: "cliStatus", claude: "ok", codex: "ok" });
+    const meter = p.$("#limitMeter") as HTMLElement;
+    const ctx = p.$("#ctxMeter") as HTMLElement;
+    tab(p, "codex").click();
+    p.host({ type: "clear" });
+    p.host({ type: "usage", contextTokens: 12000 });
+    expect(ctx.style.display).toBe("inline-flex");
+
+    // the claude handle emitted just before the click and the host's switch: the frame lands on
+    // the codex tab carrying cli: "claude", so it belongs to claude and the codex slot keeps ctx
+    p.host({ type: "rateLimit", cli: "claude", utilization: 60, window: "five_hour" });
+    expect(meter.style.display).toBe("none");
+    expect(ctx.style.display).toBe("inline-flex");
+
+    tab(p, "claude").click();
+    p.host({ type: "clear" });
+    expect(meter.style.display).toBe("inline-flex");
+    expect((p.$("#limitMeter .lm-pct") as HTMLElement).textContent).toBe("60%");
     expect(p.errors).toEqual([]);
   });
 });
