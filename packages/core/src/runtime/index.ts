@@ -22,7 +22,7 @@ import { readSkillManifest, skillOrigin, type SkillManifest } from "../skill-mar
 import { slugifyName } from "../skill-market/ingest/convert.js";
 import { resolveRpcUrl, hasDasRpc, loadGithubToken } from "../core/rpc.js";
 import { getCodexApiKey } from "../account/codexAuth.js";
-import type { ApprovalChannel } from "./approval/channel.js";
+import type { ApprovalChannel, ApprovalRequest } from "./approval/channel.js";
 import type {
   AgentRuntime,
   ChatMessage,
@@ -196,7 +196,15 @@ export function createRuntime(
       // (e.g. on mobile, where the proot guest has no credentials). spawn.ts turns it into a
       // github.com-scoped, process-scoped credential helper — the user's global git is untouched.
       const githubToken = (await loadGithubToken().catch(() => null))?.token || undefined;
-      const cli = spawnCli({ ...opts, sessionId: nativeId, approval: opts.approval ?? approval, apiKey, githubToken, enabledSkills, ...passive });
+      // An approval carries the CANONICAL id (approval/channel.ts), which is what the
+      // surfaces map to a session. The engine only knows its native thread id, and on a
+      // resume that differs from the canonical one (cross-CLI, or recovered under a fresh
+      // id), so stamp it here. A fresh session has no canonical id yet: the native id IS it.
+      const channel = opts.approval ?? approval;
+      const stamped = channel && {
+        request: (req: ApprovalRequest) => channel.request({ ...req, sessionId: opts.sessionId || req.sessionId }),
+      };
+      const cli = spawnCli({ ...opts, sessionId: nativeId, reinject: resumeResult?.reinject, approval: stamped, apiKey, githubToken, enabledSkills, ...passive });
 
       // Storage key stays the CANONICAL id while resuming; the cli's emitted (native)
       // id must NOT overwrite it, or appended turns land in the wrong log.

@@ -65,31 +65,42 @@ export async function prepareResume(
   lastDevice?: { id: string; label: string };
   title?: string;
   hasMessages: boolean;
+  reinject: () => Promise<string>;
 }> {
   const canon = await store.load(canonicalId);
   const messages = replayable(canon?.messages ?? []);
   const hasMessages = messages.length > 0;
 
-  // The canonical id IS the native id for the cli that birthed the session.
+  // The canonical id IS the native id for the cli that birthed the session, unless the
+  // map recorded a replacement (reinject below): a thread the engine refused to resume
+  // must not be retried on every respawn.
   const birthCli = canon?.cli;
   let nativeId = ephemeral
     ? randomUUID()
-    : (birthCli === cli ? canonicalId : await getNativeId(canonicalId, cli));
+    : (await getNativeId(canonicalId, cli)) ?? (birthCli === cli ? canonicalId : undefined);
   if (!ephemeral && !nativeId) {
     nativeId = randomUUID(); // codex accepts a v4 uuid; claude uses it as the filename
     await setNativeId(canonicalId, cli, nativeId);
   }
   const resolvedId = nativeId!;
 
-  if (cli === "claude") {
-    await injectClaude({ nativeUuid: resolvedId, cwd, messages });
-  } else {
-    await injectCodex({ threadId: resolvedId, cwd, messages });
-  }
+  const inject = (id: string) => cli === "claude"
+    ? injectClaude({ nativeUuid: id, cwd, messages })
+    : injectCodex({ threadId: id, cwd, messages });
+  await inject(resolvedId);
   return {
     nativeId: resolvedId,
     lastDevice: canon?.lastDevice,
     title: canon?.title,
     hasMessages,
+    // For the engine when resuming nativeId is rejected: the same history under a fresh
+    // id, recorded as the pairing once its rollout is on disk so every later resume
+    // targets the recovered thread.
+    reinject: async () => {
+      const fresh = randomUUID();
+      await inject(fresh);
+      if (!ephemeral) await setNativeId(canonicalId, cli, fresh);
+      return fresh;
+    },
   };
 }
