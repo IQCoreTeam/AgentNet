@@ -314,6 +314,9 @@ function attachAuthHandlers(transport: WebviewTransport) {
         if (!m.update) watchEngineInstall(transport, engine);
         return;
       }
+      case "dismissEngineUpdate":
+        if (m.cli === "claude" || m.cli === "codex") engineUpdateDismissed.add(m.cli);
+        return;
       case "logoutEngine": {
         const engine = m.cli === "codex" ? "codex" : "claude";
         try {
@@ -393,11 +396,6 @@ function openOnboarding(context: vscode.ExtensionContext) {
 
   panel.webview.onDidReceiveMessage(async (m) => {
     switch (m?.type) {
-      case "dismissEngineUpdate":
-        // The user closed the "engine out of date" banner: stop re-sending it for the
-        // rest of this VS Code session so new chats do not flash it again.
-        if (m.cli === "claude" || m.cli === "codex") engineUpdateDismissed.add(m.cli);
-        break;
       case "ready":
         panel.webview.postMessage({
           type: "init",
