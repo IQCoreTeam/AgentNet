@@ -622,7 +622,8 @@ function attachAuthHandlers(c: Client) {
         c.send({ type: "engineVersions", ...(await getEngineVersions()) });
         return;
       case "updateEngine": {
-        // Trusted update path: run the official npm command host-side on the user's tap.
+        // Trusted update path: the engine's own updater, or the official npm command when the
+        // engine is missing, host-side on the user's tap.
         // No browser, no link — see engineVersions.ts for why. One update at a time per
         // engine; the UI disables its button on "running".
         const engine = m.cli === "codex" ? "codex" : "claude";

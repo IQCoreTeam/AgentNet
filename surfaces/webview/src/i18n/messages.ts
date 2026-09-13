@@ -308,9 +308,9 @@ export const M = {
     logOut: m("Log out", "로그아웃", "Выйти"),
     connect: m("Connect", "연결", "Подключить"),
     note: m(
-      "Connect opens that engine's sign-in. Signing out removes its credentials from this device; chat locks until an engine is connected again. Updates install straight from the official npm registry.",
-      "연결을 누르면 해당 엔진의 로그인이 열려요. 로그아웃하면 이 기기에서 자격 증명이 제거되고, 엔진을 다시 연결할 때까지 채팅이 잠깁니다. 업데이트는 공식 npm 레지스트리에서 바로 설치돼요.",
-      "Подключение открывает вход этого движка. Выход удаляет его учётные данные с устройства; чат блокируется, пока движок не подключён снова. Обновления ставятся прямо из официального реестра npm.",
+      "Connect opens that engine's sign-in. Signing out removes its credentials from this device; chat locks until an engine is connected again. Update runs the engine's own updater, or installs from the official npm registry when it is not installed.",
+      "연결을 누르면 해당 엔진의 로그인이 열려요. 로그아웃하면 이 기기에서 자격 증명이 제거되고, 엔진을 다시 연결할 때까지 채팅이 잠깁니다. 업데이트는 엔진 자체 업데이터로 실행되고, 설치되지 않은 엔진은 공식 npm 레지스트리에서 설치돼요.",
+      "Подключение открывает вход этого движка. Выход удаляет его учётные данные с устройства; чат блокируется, пока движок не подключён снова. Обновление запускает собственный апдейтер движка, а не установленный движок ставится из официального реестра npm.",
     ),
   },
 
