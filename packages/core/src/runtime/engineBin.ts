@@ -22,7 +22,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
-import { delimiter, dirname, join } from "node:path";
+import { basename, delimiter, dirname, join } from "node:path";
 
 export type EngineName = "claude" | "codex";
 
@@ -35,6 +35,7 @@ const OVERRIDE_ENV: Record<EngineName, string> = {
 };
 
 const resolved = new Map<EngineName, string>();
+let nodeBin: string | undefined;
 
 function fromPath(name: string): string | undefined {
   try {
@@ -75,13 +76,13 @@ function versionedBins(root: string, tail: string[], exe: string): string[] {
 }
 
 // The install homes worth checking when PATH comes up empty, in preference order.
-function candidates(name: EngineName): string[] {
+function candidates(name: EngineName | "node"): string[] {
   const home = homedir();
   const win = process.platform === "win32";
-  const exe = win ? `${name}.cmd` : name;
+  const exe = win ? (name === "node" ? "node.exe" : `${name}.cmd`) : name;
   return [
-    // the official native installer
-    ...(name === "claude" ? [join(home, ".claude", "local", "claude")] : []),
+    // the official native installer: ~/.local/bin/claude is a symlink to
+    // ~/.local/share/claude/versions/<ver>
     join(home, ".local", "bin", exe),
     // node version managers: one global-bin dir per runtime version, newest first
     ...versionedBins(join(home, ".nvm", "versions", "node"), ["bin"], exe),
@@ -98,13 +99,21 @@ function candidates(name: EngineName): string[] {
     `/opt/homebrew/bin/${name}`,
     `/usr/local/bin/${name}`,
     ...(win ? [join(process.env.APPDATA ?? "", "npm", exe)] : []),
+    // the old `claude migrate-installer` launcher (bash exec into
+    // ~/.claude/local/node_modules/.bin/claude). Last on purpose: a user who never moved to
+    // the native install still resolves, while every home that ships a current binary
+    // outranks it. Ranked higher it would pin migrated users to the stale npm claude, and
+    // ensureNode makes that launcher runnable again.
+    ...(name === "claude" ? [join(home, ".claude", "local", "claude")] : []),
   ];
 }
 
-// Finding the binary is only half the job: `codex` ships as a `#!/usr/bin/env node`
-// shim, so an absolute path still dies with "env: node: No such file or directory"
-// when node isn't on PATH — and the agent's own Bash tool calls would likewise find no
-// node/npm/git. Both live in the bin dir we just resolved, so put it on PATH.
+// Finding the binary is only half the job: `codex` ships as a `#!/usr/bin/env node` shim,
+// so an absolute path still dies with "env: node: No such file or directory" when node is
+// not on PATH, and the agent's own Bash tool calls would likewise find no node/npm/git. So
+// the bin dir we resolved goes on PATH. Node is NOT always in that dir: ~/.bun/bin, the
+// standalone pnpm home, ~/.local/bin and the legacy ~/.claude/local launcher hold the engine
+// and no node, which ensureNode below covers.
 //
 // Mutating process.env is deliberate. Every spawn site in core (detect, engineVersions,
 // claudeAuth, codexAuth, the two model listers, both engines) inherits process.env, so
@@ -115,6 +124,29 @@ function putOnPath(dir: string): void {
   const parts = (process.env.PATH ?? "").split(delimiter).filter(Boolean);
   if (parts.includes(dir)) return;
   process.env.PATH = [dir, ...parts].join(delimiter);
+}
+
+// Node is not always beside the engine: ~/.bun/bin, standalone pnpm, ~/.local/bin and the
+// legacy launcher hold no node, and `#!/usr/bin/env node` then dies with 127 under the bare
+// launchd PATH. Reuse the same install homes in the same order, then the runtime running
+// this very check: it is a node in the CLI, in localhost and under the desktop app, which
+// spawns localhost with its bundled Resources/nodebin/node on a PATH that does not carry
+// that dir; it is Electron in the VS Code extension host. Last, so a node the user
+// installed wins over ours wherever one exists. A hit is validated with one stat per call,
+// like the engine cache above, so a removed runtime is hunted again; while it exists it is
+// kept, so a node the user installs later displaces it only on a fresh hunt. A miss is not
+// cached, for the same reason an engine miss is not: the user installs node and retries.
+// That miss costs one `which` plus the version-manager readdirs on every resolve, including
+// for a native binary that never needs node, until a node appears.
+function ensureNode(): boolean {
+  if (nodeBin && existsSync(nodeBin)) return true;
+  nodeBin =
+    fromPath("node") ??
+    candidates("node").find(existsSync) ??
+    (/^node(\.exe)?$/.test(basename(process.execPath)) ? process.execPath : undefined);
+  if (!nodeBin) return false;
+  putOnPath(dirname(nodeBin));
+  return true;
 }
 
 // Absolute path to the engine, or the bare name when it genuinely isn't installed.
@@ -128,7 +160,10 @@ export function resolveEngineBin(name: EngineName): string {
   // the lookup below re-resolve (and re-runs putOnPath for the new bin dir). One filesystem
   // stat on the hot path, in keeping with this module's stat-per-step design.
   const cached = resolved.get(name);
-  if (cached && existsSync(cached)) return cached;
+  if (cached && existsSync(cached)) {
+    ensureNode();
+    return cached;
+  }
   if (cached) resolved.delete(name);
 
   const override = process.env[OVERRIDE_ENV[name]]?.trim();
@@ -146,6 +181,15 @@ export function resolveEngineBin(name: EngineName): string {
   // detectCli, so a sticky "not found" would keep reporting missing until a reload.
   if (!bin) return name;
   resolved.set(name, bin);
+  // Node first, then the engine dir, so the engine dir ends up ahead on PATH: the agent's
+  // Bash tool and the other engine's `which` then find this bin by name, not an older one
+  // living beside node. A node found on a later cache-hit resolve lands ahead of it, since
+  // putOnPath does not move an entry. Still return bin: where the engine lives is this
+  // module's answer, whether it runs is detect.ts's, so the line states only the node miss
+  // and not whether this bin needs one (the native claude does not). Logged here, on the
+  // fresh resolve, rather than in ensureNode, which would print once per spawn while node
+  // is absent.
+  if (!ensureNode()) console.error(`[agentnet] ${bin}: no node on PATH or in a known install home`);
   putOnPath(dirname(bin));
   return bin;
 }
