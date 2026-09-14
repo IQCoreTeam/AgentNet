@@ -179,7 +179,7 @@ function CustomEngineRow() {
         </span>
         <span className="min-w-0 flex-1">
           <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-fg)" }}>custom</span>
-          <span className="block truncate text-[0.72rem] leading-tight" style={{ color: masked ? "var(--an-violet)" : "var(--an-fg-mute)" }}>
+          <span className="block break-words text-[0.72rem] leading-snug" style={{ color: masked ? "var(--an-violet)" : "var(--an-fg-mute)" }}>
             {masked ? `${t(M.storagePicker.connected)} · ${masked}` : "Bring your own OpenAI-compatible endpoint"}
           </span>
         </span>
