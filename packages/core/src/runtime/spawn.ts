@@ -576,7 +576,7 @@ export function customProviderFlags(cfg: CustomEngineConfig): string[] {
 
 // What a keyless custom endpoint receives as its bearer value. Keep the declared
 // credential nonempty without borrowing the user's stock Codex credentials.
-export const CUSTOM_ENGINE_KEYLESS_PLACEHOLDER = "keyless";
+const CUSTOM_ENGINE_KEYLESS_PLACEHOLDER = "keyless";
 
 // ── codex: app-server JSON-RPC over stdio. Spawns `codex app-server --stdio`
 // and processes requests and notifications, routing approvals to the ApprovalChannel.
@@ -795,13 +795,13 @@ function codexEngine(opts: SpawnOpts): Engine {
         }
       }
     } else if (msg.method === "thread/tokenUsage/updated") {
-      // Authoritative usage notification: carries the running total AND the real model
-      // context window. Prefer it over the turn/completed estimate when present.
+      // The last request measures current context. The running total includes previous
+      // turns and must not be shown as context occupancy.
       const tu = params?.tokenUsage;
       if (tu) {
         if (typeof tu.modelContextWindow === "number") knownWindow = tu.modelContextWindow;
-        const total = tu.total?.totalTokens;
-        if (typeof total === "number") cb.emitUsage(total, knownWindow);
+        const last = tu.last?.totalTokens;
+        if (typeof last === "number") cb.emitUsage(last, knownWindow);
       }
     } else if (msg.method === "thread/compacted") {
       // history was condensed to reclaim context — fire the compaction cue. The following
@@ -939,6 +939,24 @@ function codexEngine(opts: SpawnOpts): Engine {
           sendResponse(msg.id, { decision: codexDecisionVerb(decision, key, ITEM_VERBS) });
           if (decision.outcome === "deny") deliverDenyReason(decision.reason);
         }
+      } else if (msg.method === "mcpServer/elicitation/request") {
+        // Codex uses an empty form for MCP tool consent. Other elicitation forms
+        // need structured user input and cannot be treated as a yes/no approval.
+        const schema = params.requestedSchema;
+        if (params.mode !== "form" || params._meta?.codex_approval_kind !== "mcp_tool_call"
+          || schema?.type !== "object" || Object.keys(schema.properties ?? {}).length || schema.required?.length) {
+          sendError(msg.id, { code: -32602, message: "This MCP input form is not supported." });
+          return;
+        }
+        const req = toApprovalRequest(opts.cli, sessionId, `MCP ${params.serverName}`, params._meta.tool_params ?? {});
+        req.title = params.message;
+        const decision = await approval.request(req);
+        sendResponse(msg.id, {
+          action: decision.outcome === "deny" ? "decline" : "accept",
+          content: decision.outcome === "deny" ? null : {},
+          _meta: decision.outcome === "always" && params._meta.persist?.includes("always") ? { persist: "always" } : null,
+        });
+        if (decision.outcome === "deny") deliverDenyReason(decision.reason);
       } else if (msg.method === "item/permissions/requestApproval") {
         const req = toApprovalRequest(opts.cli, sessionId, "Permissions", { reason: params.reason }, opts.cwd);
         req.title = `Grant permissions: ${params.reason || "sandbox access"}`;
