@@ -89,6 +89,9 @@ export interface SpawnOpts {
   cli: "claude" | "codex";
   cwd: string;
   sessionId?: string; // NATIVE resume id (inject/prepareResume resolved it already)
+  // codex: called when thread/resume of sessionId is rejected. Returns a fresh native id
+  // whose history is already written and recorded (inject/prepareResume) to resume instead.
+  reinject?: () => Promise<string>;
   model?: string;
   // permission/approval mode. claude → SDK permissionMode; codex → a sandbox+approval
   // preset key (readonly | auto | full). Omit → the engine's safe default.
@@ -941,8 +944,31 @@ function codexEngine(opts: SpawnOpts): Engine {
     }
   }
 
+  // Resume an existing codex thread and adopt its id. A rejection is logged and reported
+  // as false so the caller can recover. Shared by the injected native id and the fresh id
+  // a rejected resume recovers under.
+  const resumeThread = async (threadId: string): Promise<boolean> => {
+    try {
+      await sendRequest("thread/resume", {
+        threadId,
+        model: opts.model,
+        cwd: opts.cwd,
+        approvalPolicy: codexApproval,
+        approvalsReviewer: "user",
+        ...(effectiveSandbox ? { sandbox: effectiveSandbox } : {}),
+        ...(opts.effort ? { reasoning_effort: opts.effort } : {}),
+      });
+    } catch (e: any) {
+      console.error(`[codex] thread/resume ${threadId} rejected: ${e.message}`);
+      return false;
+    }
+    sessionId = threadId;
+    cb.emitSid(threadId);
+    return true;
+  };
+
   // Open a fresh codex thread and adopt its id. Shared by the no-session path and the
-  // resume-failed fallback so both stay in sync.
+  // last resort of a rejected resume so both stay in sync.
   const startThread = async () => {
     const res = await sendRequest("thread/start", {
       model: opts.model,
@@ -969,25 +995,20 @@ function codexEngine(opts: SpawnOpts): Engine {
       if (opts.sessionId) {
         // A resume can be rejected in ways that leave the thread unusable: the on-disk
         // rollout is gone, or an OLDER build of this app persisted a request field the
-        // current app-server no longer accepts. The retired "on-failure" approval variant
-        // is exactly that — it fails the whole resume, and because sessionId still points at
-        // the never-loaded thread, every following turn then dies "thread not found". Rather
-        // than surface that cascade, recover by opening a fresh thread so codex stays usable;
-        // the visible history lives in the AgentNet session store either way.
-        try {
-          await sendRequest("thread/resume", {
-            threadId: opts.sessionId,
-            model: opts.model,
-            cwd: opts.cwd,
-            approvalPolicy: codexApproval,
-            approvalsReviewer: "user",
-            ...(effectiveSandbox ? { sandbox: effectiveSandbox } : {}),
-            ...(opts.effort ? { reasoning_effort: opts.effort } : {}),
-          });
-          cb.emitSid(opts.sessionId);
-        } catch {
-          cb.emitErr("[codex] previous thread unavailable, continuing in a new one");
-          await startThread();
+        // current app-server no longer accepts (the retired "on-failure" approval variant).
+        // Because sessionId would still point at the never-loaded thread, every following
+        // turn then dies "thread not found". Recover under a fresh id that carries the same
+        // history: the reinject hook writes it and records the pairing, so later respawns
+        // resume the recovered thread instead of retrying the dead one.
+        if (!(await resumeThread(opts.sessionId))) {
+          // A notice, not emitErr: the runtime ends a turn on every error, and no turn has
+          // started yet, so the UI would unlock under the real turn.
+          cb.emitMsg({ role: "tool", text: "[codex] previous thread unavailable, continuing in a new one", ts: Date.now() });
+          // The runtime passes the hook on every resume; only a direct spawnCli caller has
+          // none. Without one, or when the injected rollout is refused too, an empty thread
+          // keeps codex usable.
+          const fresh = await opts.reinject?.();
+          if (!fresh || !(await resumeThread(fresh))) await startThread();
         }
       } else {
         await startThread();
