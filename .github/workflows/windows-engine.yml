@@ -1,0 +1,28 @@
+name: Windows engine launch
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'packages/core/src/runtime/**'
+      - 'packages/core/src/account/**'
+      - 'packages/core/package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/windows-engine.yml'
+  pull_request:
+    paths:
+      - 'packages/core/src/runtime/**'
+      - 'packages/core/src/account/**'
+      - 'packages/core/package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/windows-engine.yml'
+jobs:
+  launch:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @iqlabs-official/agent-sdk exec vitest run src/runtime/engineProcess.spec.ts

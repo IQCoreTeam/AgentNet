@@ -1,12 +1,12 @@
 import { EventEmitter } from "node:events";
 import { PassThrough, Writable } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { spawn } from "node:child_process";
+import { spawnEngine as spawn } from "./engineProcess.js";
 import { spawnCli } from "./spawn.js";
 
-vi.mock("node:child_process", async (importOriginal) => ({
-  ...await importOriginal<typeof import("node:child_process")>(),
-  spawn: vi.fn(),
+vi.mock("./engineProcess.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./engineProcess.js")>(),
+  spawnEngine: vi.fn(),
 }));
 
 afterEach(() => {

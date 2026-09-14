@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawnEngine as spawn } from "./engineProcess.js";
 import readline from "node:readline";
 import type { ChatModelOption } from "../chat/modelOptions.js";
 import type { Model } from "./codex_bindings/v2/Model.js";

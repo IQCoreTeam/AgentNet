@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough, Writable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { spawn } from "node:child_process";
+import { spawnEngine as spawn } from "./engineProcess.js";
 import { spawnCli } from "./spawn.js";
 import { createRuntime } from "./index.js";
 import { getNativeId } from "./inject/idmap.js";
@@ -16,9 +16,9 @@ import { codexSessionsDir } from "../core/paths.js";
 import type { ApprovalRequest } from "./approval/channel.js";
 import type { ChatMessage } from "./contract.js";
 
-vi.mock("node:child_process", async (importOriginal) => ({
-  ...await importOriginal<typeof import("node:child_process")>(),
-  spawn: vi.fn(),
+vi.mock("./engineProcess.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./engineProcess.js")>(),
+  spawnEngine: vi.fn(),
 }));
 
 afterEach(() => {

@@ -40,13 +40,15 @@ let nodeBin: string | undefined;
 function fromPath(name: string): string | undefined {
   try {
     const cmd = process.platform === "win32" ? "where" : "which";
-    const hit = execFileSync(cmd, [name], {
+    const hits = execFileSync(cmd, [name], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     })
-      .split("\n")[0]
-      ?.trim();
-    return hit && existsSync(hit) ? hit : undefined;
+      .split("\n").map((hit) => hit.trim()).filter((hit) => hit && existsSync(hit));
+    // `where` may list npm's extensionless POSIX shim before its Windows launcher.
+    return process.platform === "win32"
+      ? hits.find((hit) => /\.(exe|com|cmd|bat)$/i.test(hit))
+      : hits[0];
   } catch {
     return undefined;
   }
@@ -83,6 +85,7 @@ function candidates(name: EngineName | "node"): string[] {
   return [
     // the official native installer: ~/.local/bin/claude is a symlink to
     // ~/.local/share/claude/versions/<ver>
+    ...(win && name !== "node" ? [join(home, ".local", "bin", `${name}.exe`)] : []),
     join(home, ".local", "bin", exe),
     // node version managers: one global-bin dir per runtime version, newest first
     ...versionedBins(join(home, ".nvm", "versions", "node"), ["bin"], exe),

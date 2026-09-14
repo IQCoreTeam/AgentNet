@@ -1,7 +1,7 @@
 // CLI availability check for onboarding. Standalone (no wallet/storage) —
 // answers "is codex/claude installed, and logged in?" so the UI can guide setup.
 
-import { spawn } from "node:child_process";
+import { spawnEngine as spawn } from "./engineProcess.js";
 import { isClaudeLoggedIn } from "../account/claudeAuth.js";
 import { isCodexLoggedIn } from "../account/codexAuth.js";
 import { resolveEngineBin } from "./engineBin.js";
