@@ -23,7 +23,9 @@ export const ENGINE_UPDATE_COMMAND: Record<EngineKey, string> = {
 
 // An outdated codex silently hides new models (its models cache uses fields the old
 // binary can't parse), so it gets its own update notice in the VS Code surface.
-export const CODEX_UPDATE_COMMAND = ENGINE_UPDATE_COMMAND.codex;
+// Let Codex select the updater for its install method instead of installing a second
+// npm copy beside a standalone or Homebrew installation.
+export const CODEX_UPDATE_COMMAND = "codex update";
 
 // True when a < b, comparing dotted numeric parts; a prerelease suffix is ignored on
 // purpose (both CLIs ship plain x.y.z releases). Lives here (not engineVersions.ts)
