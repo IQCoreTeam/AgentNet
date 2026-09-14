@@ -88,7 +88,9 @@ export async function isClaudeLoggedIn(claudeBin = resolveEngineBin("claude")): 
     p.stdout.on("data", (d) => (out += d.toString()));
     p.stderr.on("data", (d) => (out += d.toString()));
     p.on("error", () => resolve(false));
-    p.on("exit", () => {
+    // close, not exit: on Linux exit can fire before the stdout text has been read, and an
+    // empty buffer reads as signed out.
+    p.on("close", () => {
       try {
         resolve(JSON.parse(out.match(/\{[\s\S]*\}/)?.[0] ?? "{}").loggedIn === true);
       } catch {

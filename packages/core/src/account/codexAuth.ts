@@ -109,7 +109,9 @@ export async function isCodexLoggedIn(codexBin = resolveEngineBin("codex")): Pro
     p.stdout.on("data", (d) => (out += d.toString()));
     p.stderr.on("data", (d) => (out += d.toString()));
     p.on("error", () => resolve(false));
-    p.on("exit", (code) => {
+    // close, not exit: on Linux exit can fire before the stdout text has been read, and an
+    // empty buffer reads as signed out.
+    p.on("close", (code) => {
       // "Logged in using ChatGPT" / "Logged in using API key" = ok
       // "not logged in" / "logged out" = false
       resolve(code === 0 && /logged in|authenticated|api key/i.test(out) && !/not logged in|logged out|no auth|not authenticated/i.test(out));
