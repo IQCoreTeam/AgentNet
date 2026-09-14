@@ -51,6 +51,14 @@ describe("engine process launch", () => {
 });
 
 describe.skipIf(process.platform !== "win32")("Windows npm launcher", () => {
+  it("rejects unknown batch wrappers instead of forwarding arguments through a shell", () => {
+    for (const ext of ['cmd', 'bat']) {
+      const wrapper = join(binDir, `unknown.${ext}`);
+      writeFileSync(wrapper, '@echo off\r\necho %*\r\n');
+      expect(() => spawnEngine(wrapper, ['a"b&c'], { stdio: 'pipe' })).toThrow(/doesn't appear to be a cmd-shim/);
+    }
+  });
+
   it("runs a cmd shim in a spaced path with quoted and shell-special arguments", async () => {
     const args = ['two words', 'a"b', '(paren)', 'x&y', '%PATH%', 'semi;colon'];
     const child = spawnEngine(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });

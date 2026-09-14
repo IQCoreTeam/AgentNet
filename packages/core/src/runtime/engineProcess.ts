@@ -10,7 +10,7 @@ export const spawnEngine = ((command, args, options) => {
   // Global npm shims require another cmd parsing pass, which can reinterpret
   // quoted arguments. Resolve their target as npm does for a symlink instead.
   // cross-spawn then follows the target's shebang without passing through cmd.
-  if (process.platform === "win32" && /\.cmd$/i.test(command)) {
+  if (process.platform === "win32" && /\.(?:cmd|bat)$/i.test(command)) {
     command = resolve(dirname(command), readCmdShim.sync(command));
   }
   return crossSpawn(command, args, options);
