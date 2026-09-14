@@ -82,7 +82,7 @@ program
   .description("AgentNet: a playful, wallet-synced terminal for claude/codex")
   .version("0.1.7")
   .option("--calm", "disable animations (also honors NO_COLOR / non-TTY)")
-  .option("--cli <engine>", "start on claude or codex (default: last used)")
+  .option("--cli <engine>", "start on claude, codex, or custom (default: last used)")
   .option("--cwd <path>", "working directory for the agent")
   .option("--keypair <path>", "Solana keypair file (default: ~/.config/solana/id.json)")
   .option("--model <model>", "model to use")

@@ -23,18 +23,9 @@ export interface CustomEnginePreset {
   defaultModel: string;
 }
 
-// Starting points so connecting is a pick + key paste instead of a URL hunt. Only "manual"
-// (a loopback endpoint) and "lmstudio" have carried a real turn; the hosted entries are the
-// advertised base URLs and must speak the Responses wire to work through codex. "manual" is the escape hatch: any endpoint, all fields typed by hand.
-// A defaultModel of "" does NOT mean the endpoint picks one: saveCustomEngineConfig
-// rejects a blank model, so the connect form must require a model id for those presets.
+// OpenRouter has been exercised through the Responses API. Other compatible local
+// or hosted endpoints can be configured manually without implying provider support.
 export const CUSTOM_ENGINE_PRESETS: CustomEnginePreset[] = [
-  { id: "deepseek", label: "DeepSeek", baseUrl: "https://api.deepseek.com/v1", defaultModel: "deepseek-chat" },
-  { id: "qwen", label: "Qwen", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", defaultModel: "qwen-max" },
-  { id: "glm", label: "GLM", baseUrl: "https://open.bigmodel.cn/api/paas/v4", defaultModel: "glm-4-plus" },
-  { id: "kimi", label: "Kimi", baseUrl: "https://api.moonshot.cn/v1", defaultModel: "kimi-k2" },
-  { id: "ollama", label: "Ollama", baseUrl: "http://localhost:11434/v1", defaultModel: "" },
-  { id: "lmstudio", label: "LM Studio", baseUrl: "http://localhost:1234/v1", defaultModel: "" },
   { id: "openrouter", label: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1", defaultModel: "" },
   { id: "manual", label: "Manual", baseUrl: "", defaultModel: "" },
 ];

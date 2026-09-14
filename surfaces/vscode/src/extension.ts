@@ -27,10 +27,8 @@ import {
   startCodexLogin,
   markCodexConnected,
   loadCustomEngineConfig,
-  clearCustomEngineConfig,
   maskedCustomEngine,
   customEngineStatus,
-  CUSTOM_ENGINE_PRESETS,
   customModelOption,
   messageBinary,
   type CliReport,
@@ -230,7 +228,7 @@ const engineUpdateDismissed = new Set<"claude" | "codex">();
 // session could actually spawn (binary + config, core's one readiness answer).
 async function pushCustomEngine(transport: WebviewTransport, report?: CliReport) {
   const ready = (await customEngineStatus(report)) === "ok";
-  transport.send({ type: "customEngine", masked: ready ? await maskedCustomEngine() : null, presets: CUSTOM_ENGINE_PRESETS });
+  transport.send({ type: "customEngine", masked: ready ? await maskedCustomEngine() : null });
 }
 
 // After an install was launched from the notice button, re-check until the engine stops
@@ -261,7 +259,7 @@ function attachAuthHandlers(transport: WebviewTransport) {
       case "ready": {
         // The chat panel shows the custom tab only while a config exists (it handles
         // the customEngine push both ways), so its state must land at boot too. The
-        // panel carries no connect form in this spike, so the host handles no
+        // panel carries no connect form, so the host handles no
         // getCustomEngine/saveCustomEngine: connecting happens in the AgentNet app.
         const report = await pushCliStatus(transport);
         await pushCustomEngine(transport, report);
@@ -269,15 +267,6 @@ function attachAuthHandlers(transport: WebviewTransport) {
       }
       case "getCliStatus":
         await pushCliStatus(transport);
-        return;
-      case "clearCustomEngine":
-        try {
-          await clearCustomEngineConfig();
-          transport.send({ type: "toast", text: "Custom engine removed." });
-          await pushCustomEngine(transport);
-        } catch (e) {
-          transport.send({ type: "toast", text: `Custom engine remove failed: ${errorMessage(e)}` });
-        }
         return;
       case "startClaudeLogin":
         try {

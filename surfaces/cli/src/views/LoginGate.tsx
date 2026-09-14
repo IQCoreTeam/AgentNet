@@ -4,6 +4,7 @@ import { PasswordInput, Select, TextInput } from "@inkjs/ui";
 import open from "open";
 import {
   detectCli,
+  engineBinary,
   resolveEngineBin,
   startClaudeLogin,
   startCodexLogin,
@@ -273,7 +274,7 @@ export function LoginGate({
     }
     if (engine === "custom") {
       // custom rides the codex binary; the config store is its login.
-      if (report.codex === "missing") {
+      if (report[engineBinary(engine)] === "missing") {
         setErr(`custom engines run through the codex binary · run: ${ENGINE_INSTALL_COMMAND.custom}`);
         return;
       }
