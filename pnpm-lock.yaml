@@ -37,6 +37,9 @@ importers:
       marked:
         specifier: ^18.0.5
         version: 18.0.5
+      read-cmd-shim:
+        specifier: ^5.0.0
+        version: 5.0.0
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -2294,6 +2297,10 @@ packages:
   react@19.2.7:
     resolution: {integrity: sha512-HNe9WslTbXmFK8o8cmwgAeJFSBvt1bPdHCVKtaaV+WlAN36mpT4hcRpwbf3fY56ar2oIXzsBpOAiIRHAdY0OlQ==}
     engines: {node: '>=0.10.0'}
+
+  read-cmd-shim@5.0.0:
+    resolution: {integrity: sha512-SEbJV7tohp3DAAILbEMPXavBjAnMN0tVnh4+9G8ihV4Pq3HYF9h8QNez9zkJ1ILkv9G2BjdzwctznGZXgu/HGw==}
+    engines: {node: ^18.17.0 || >=20.5.0}
 
   readdirp@4.1.2:
     resolution: {integrity: sha512-GDhwkLfywWL2s6vEjyhri+eXmfH6j1L7JE27WhqLeYzoh/A3DBaYGEj2H/HFZCn/kMfim73FXxEJTw06WtxQwg==}
@@ -4726,6 +4733,8 @@ snapshots:
       loose-envify: 1.4.0
 
   react@19.2.7: {}
+
+  read-cmd-shim@5.0.0: {}
 
   readdirp@4.1.2: {}
 

@@ -8,7 +8,7 @@ const home = mkdtempSync(join(tmpdir(), "agentnet-launch-"));
 const binDir = join(home, "engine install (226)");
 mkdirSync(binDir);
 const entry = join(binDir, "probe.cjs");
-writeFileSync(entry, `
+writeFileSync(entry, `#!/usr/bin/env node
 const args = process.argv.slice(2);
 if (args[0] === '--version') console.log('codex 0.154.0');
 else if (args[0] === 'login') console.log('Logged in using ChatGPT');
@@ -17,13 +17,12 @@ else if (args[0] === 'wait') process.stdin.resume();
 else console.log(JSON.stringify(args));
 `);
 const cmd = join(binDir, "codex.cmd");
-// Match npm/cmd-shim's dispatch: its goto/endLocal sequence avoids a second
-// batch context interpreting forwarded arguments. A plain `%*` wrapper does not.
+// Match npm/cmd-shim's dispatch instead of a hand-written batch wrapper.
 writeFileSync(cmd, [
   '@ECHO off', 'GOTO start', ':find_dp0', 'SET dp0=%~dp0', 'EXIT /b',
   ':start', 'SETLOCAL', 'CALL :find_dp0',
   `SET "_prog=${process.execPath}"`,
-  'endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%" "%dp0%probe.cjs" %*',
+  'endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%" "%dp0%\\probe.cjs" %*',
   '',
 ].join('\r\n'));
 afterAll(() => { vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true }); });
@@ -87,6 +86,6 @@ describe.skipIf(process.platform !== "win32")("Windows npm launcher", () => {
     writeFileSync(join(binDir, "codex"), "#!/bin/sh\nexit 1\n");
     vi.resetModules();
     const { resolveEngineBin } = await import("./engineBin.js");
-    expect(realpathSync(resolveEngineBin("codex"))).toBe(realpathSync(cmd));
+    expect(realpathSync.native(resolveEngineBin("codex"))).toBe(realpathSync.native(cmd));
   });
 });
