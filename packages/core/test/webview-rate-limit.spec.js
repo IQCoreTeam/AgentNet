@@ -34,3 +34,10 @@ describe("webview plan limits", () => {
     expect(state.rateLimits.claude?.utilization).toBe(100);
   });
 });
+
+it("keeps a late Claude quota out of Custom when that engine is available", () => {
+  let state = reducer(initialState, { type: "platform", cli: "custom" });
+  state = reducer(state, { type: "rateLimit", cli: "claude", utilization: 91, status: "allowed" });
+  expect(state.rateLimits[state.cli]).toBeUndefined();
+  expect(state.rateLimits.claude.utilization).toBe(91);
+});
