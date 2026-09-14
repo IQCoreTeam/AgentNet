@@ -730,7 +730,7 @@ export function Sessions({
                     <span className="min-w-0 flex-1">
                       <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-fg)" }}>{c}</span>
                       <span className="block text-[0.72rem] leading-tight" style={{ color: connected ? accent : "var(--an-fg-mute)" }}>
-                        {connected ? t(M.storagePicker.connected) : t(M.settings.notSignedIn)}
+                        {state.cliReport?.[c] === "node-missing" ? "Node.js required" : connected ? t(M.storagePicker.connected) : t(M.settings.notSignedIn)}
                         {version?.installed ? ` · v${version.installed}` : ""}
                       </span>
                       {outdated && (

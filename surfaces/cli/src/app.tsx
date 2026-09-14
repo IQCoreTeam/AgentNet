@@ -129,7 +129,7 @@ export function App({ options }: { options: AppOptions }) {
         if (!alive) return;
         setReport(rep);
         const engineDetail = (s: CliReport["claude"]) =>
-          s === "ok" ? "OK" : s === "no-login" ? "NEEDS LOGIN" : "NOT INSTALLED";
+          s === "ok" ? "OK" : s === "no-login" ? "NEEDS LOGIN" : s === "node-missing" ? "NODE.JS REQUIRED" : "NOT INSTALLED";
         set(1, { status: rep.claude === "ok" ? "ok" : "fail", label: `claude ${rep.claude}`, detail: engineDetail(rep.claude) });
         set(2, { status: rep.codex === "ok" ? "ok" : "fail", label: `codex ${rep.codex}`, detail: engineDetail(rep.codex) });
 

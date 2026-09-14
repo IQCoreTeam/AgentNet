@@ -10,6 +10,8 @@ import {
   markClaudeConnected,
   markCodexConnected,
   ENGINE_INSTALL_COMMAND,
+  NODE_REQUIRED_MESSAGE,
+  NODE_DOWNLOAD_URL,
   type CliReport,
   type CliStatus,
   type ClaudeLogin,
@@ -22,6 +24,7 @@ type Step = "pick" | "claude" | "codex";
 function statusText(s: CliStatus): { text: string; color: string } {
   if (s === "ok") return { text: `${glyph.ok} logged in`, color: colors.ok };
   if (s === "no-login") return { text: "not logged in", color: colors.warn };
+  if (s === "node-missing") return { text: "Node.js required", color: colors.err };
   return { text: "not installed", color: colors.err };
 }
 
@@ -137,6 +140,10 @@ export function LoginGate({
   }, [step]);
 
   function pick(engine: "claude" | "codex") {
+    if (report[engine] === "node-missing") {
+      setErr(`${NODE_REQUIRED_MESSAGE} ${NODE_DOWNLOAD_URL}`);
+      return;
+    }
     if (report[engine] === "missing") {
       setErr(`${engine} is not installed · run: ${ENGINE_INSTALL_COMMAND[engine]}`);
       return;
