@@ -132,6 +132,23 @@ describe("panel.jsdom: composer", () => {
   });
 });
 
+describe("panel.jsdom: engine update notice", () => {
+  it("copies the installed Codex updater and sends the terminal update request", () => {
+    const p = boot();
+    const copied: string[] = [];
+    Object.defineProperty(p.window.navigator, "clipboard", {
+      value: { writeText: (text: string) => { copied.push(text); return Promise.resolve(); } },
+    });
+    p.host({ type: "engineUpdate", cli: "codex" });
+    const buttons = p.$$("#engineBanner button");
+    buttons.find((b) => b.textContent === "Copy command")!.click();
+    expect(copied).toEqual(["codex update"]);
+    buttons.find((b) => b.textContent === "Update in terminal")!.click();
+    expect(p.posted.at(-1)).toEqual({ type: "installEngine", cli: "codex", update: true });
+    expect(p.errors).toEqual([]);
+  });
+});
+
 describe("panel.jsdom: rate-limit gauge", () => {
   const tab = (p: Page, cli: string) => p.$(`.etab[data-cli="${cli}"]`)!;
   // the host stamps every frame with the engine that reported; only claude reports one
