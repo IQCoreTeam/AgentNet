@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
@@ -17,7 +17,15 @@ else if (args[0] === 'wait') process.stdin.resume();
 else console.log(JSON.stringify(args));
 `);
 const cmd = join(binDir, "codex.cmd");
-writeFileSync(cmd, `@echo off\r\n"${process.execPath}" "%~dp0probe.cjs" %*\r\n`);
+// Match npm/cmd-shim's dispatch: its goto/endLocal sequence avoids a second
+// batch context interpreting forwarded arguments. A plain `%*` wrapper does not.
+writeFileSync(cmd, [
+  '@ECHO off', 'GOTO start', ':find_dp0', 'SET dp0=%~dp0', 'EXIT /b',
+  ':start', 'SETLOCAL', 'CALL :find_dp0',
+  `SET "_prog=${process.execPath}"`,
+  'endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%" "%dp0%probe.cjs" %*',
+  '',
+].join('\r\n'));
 afterAll(() => { vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true }); });
 
 describe("engine process launch", () => {
@@ -48,9 +56,11 @@ describe.skipIf(process.platform !== "win32")("Windows npm launcher", () => {
     const args = ['two words', 'a"b', '(paren)', 'x&y', '%PATH%', 'semi;colon'];
     const child = spawnEngine(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
     let output = "";
+    let stderr = "";
     child.stdout.on("data", (data) => { output += data; });
+    child.stderr.on("data", (data) => { stderr += data; });
     const code = await new Promise((resolve, reject) => { child.on("error", reject); child.on("close", resolve); });
-    expect(code).toBe(0);
+    expect(code, stderr).toBe(0);
     expect(JSON.parse(output)).toEqual(args);
   });
 
@@ -77,6 +87,6 @@ describe.skipIf(process.platform !== "win32")("Windows npm launcher", () => {
     writeFileSync(join(binDir, "codex"), "#!/bin/sh\nexit 1\n");
     vi.resetModules();
     const { resolveEngineBin } = await import("./engineBin.js");
-    expect(resolveEngineBin("codex")).toBe(cmd);
+    expect(realpathSync(resolveEngineBin("codex"))).toBe(realpathSync(cmd));
   });
 });
