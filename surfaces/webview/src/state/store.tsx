@@ -174,7 +174,8 @@ export function isApprovalForView(a: { sessionId?: string }, activeSessionId?: s
 export function engineStatus(state: State, cli: Cli): EngineStatus | undefined {
   if (!state.cliReport) return undefined;
   if (cli !== "custom") return state.cliReport[cli];
-  if (state.cliReport.codex === "missing" || state.cliReport.codex === "node-missing") return state.cliReport.codex;
+  const status = state.cliReport.codex;
+  if (status === "missing" || status === "node-missing") return status;
   return state.customEngine?.masked != null ? "ok" : "no-login";
 }
 

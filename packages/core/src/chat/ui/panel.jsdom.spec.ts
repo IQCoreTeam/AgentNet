@@ -325,6 +325,21 @@ describe("panel.jsdom: custom engine tab (issue #209)", () => {
     p.key(input, "Enter");
   };
 
+  it("gates Custom on its runtime without requiring Codex sign-in", () => {
+    const p = boot();
+    p.host({ type: "customEngine", masked: "fixture.invalid", presets: [] });
+    p.host({ type: "cliStatus", claude: "ok", codex: "node-missing" });
+    const before = p.posted.length;
+    p.$(CUSTOM_TAB)!.click();
+    expect(p.types().slice(before)).not.toContain("platform");
+    expect(p.$("#log")!.textContent).toContain("Node.js is missing");
+    p.host({ type: "platform", cli: "claude" });
+    p.host({ type: "cliStatus", claude: "ok", codex: "no-login" });
+    p.$(CUSTOM_TAB)!.click();
+    expect(p.posted).toContainEqual({ type: "platform", cli: "custom" });
+    expect(p.errors).toEqual([]);
+  });
+
   it("ships hidden, refuses /engine custom without a config, and appears once the host announces one", () => {
     const p = boot();
     p.host({ type: "cliStatus", claude: "ok", codex: "ok" });

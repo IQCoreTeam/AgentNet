@@ -123,7 +123,7 @@ export function Onboarding({
   const [installErr, setInstallErr] = useState<string | null>(null);
 
   function runInstall() {
-    if (rep[engine] === "node-missing") return;
+    if (rep[engineBinary(engine)] === "node-missing") return;
     setInstalling(true);
     setInstallErr(null);
     setInstallLog([]);

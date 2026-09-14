@@ -22,6 +22,8 @@ import {
   maskedCustomEngine,
   type CustomEnginePreset,
   type EngineKey,
+  NODE_REQUIRED_MESSAGE,
+  NODE_DOWNLOAD_URL,
   type CliReport,
   type CliStatus,
   type ClaudeLogin,
@@ -268,7 +270,7 @@ export function LoginGate({
   }, [step]);
 
   function pick(engine: EngineKey) {
-    if (report[engine === "custom" ? "codex" : engine] === "node-missing") {
+    if (report[engineBinary(engine)] === "node-missing") {
       setErr(`${NODE_REQUIRED_MESSAGE} ${NODE_DOWNLOAD_URL}`);
       return;
     }

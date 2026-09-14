@@ -5,6 +5,7 @@
 // the bundle keeps every module at its legacy section position, which keeps the artifact diffable.
 import { vscode } from "./host.js";
 import { S } from "./state.js";
+import { messageBinary } from "../../../runtime/engineRegistry.js";
 import { log, approvalDock } from "./dom.js";
 import { escapeHtml } from "./markdown.js";
 import { syncWatermark, renderNotice, renderEngineBanner, renderLimitMeter, setCtxTokens, clearCtx, copyAction, renderEngineMissing, renderStatus, showLoading, hideLoading, wireShell } from "./shell.js";
@@ -347,10 +348,10 @@ window.addEventListener('message', (event) => {
     else hideCustomTab();
   }
   else if (m.type === 'cliStatus') {
-    const previousStatus = S.cliReport?.[S.cli];
+    const previousStatus = S.cliReport?.[messageBinary(S.cli)];
     S.cliReport = { claude: m.claude, codex: m.codex };
-    const status = S.cliReport[S.cli];
-    if (status === 'no-login') renderNotice((S.cli === 'claude' ? 'Claude' : 'Codex') + ' is not signed in. Type /login to connect it.');
+    const status = S.cliReport[messageBinary(S.cli)];
+    if (status === 'no-login' && S.cli !== 'custom') renderNotice((S.cli === 'claude' ? 'Claude' : 'Codex') + ' is not signed in. Type /login to connect it.');
     else if (status === 'missing' || status === 'node-missing') renderEngineMissing(S.cli);
     else if (status === 'ok' && previousStatus === 'node-missing') renderNotice((S.cli === 'claude' ? 'Claude' : 'Codex') + ' is ready.');
   }

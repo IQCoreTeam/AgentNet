@@ -6,6 +6,7 @@ import { IqLogo, AgentIcon, LockIcon, SkillIcon } from "../icons";
 import { useOnline } from "../layoutEffects";
 import agentnetWordmark from "../assets/agentnet.png";
 import { haptics } from "../haptics";
+import { EngineMissingNotice } from "../onboarding/EngineMissingNotice";
 
 // wifi-off mark for the offline states (no emoji; inline SVG per the design rules).
 function WifiOffIcon({ className, style }: { className?: string; style?: CSSProperties }) {
@@ -180,7 +181,7 @@ function CustomEngineRow() {
         <span className="min-w-0 flex-1">
           <span className="an-term-mono block text-[1.12rem] font-bold uppercase leading-tight" style={{ color: "var(--an-fg)" }}>custom</span>
           <span className="block break-words text-[0.72rem] leading-snug" style={{ color: masked ? "var(--an-violet)" : "var(--an-fg-mute)" }}>
-            {masked ? `${t(M.storagePicker.connected)} · ${masked}` : "Bring your own OpenAI-compatible endpoint"}
+            {engineStatus(state, "custom") === "node-missing" ? "Node.js required" : masked ? `${t(M.storagePicker.connected)} · ${masked}` : "Bring your own OpenAI-compatible endpoint"}
           </span>
         </span>
         {masked && (
@@ -200,6 +201,7 @@ function CustomEngineRow() {
           {masked ? "Edit" : t(M.engines.connect)}
         </button>
       </div>
+      <EngineMissingNotice cli="codex" />
       {open && (
         <div className="flex flex-col gap-2.5 px-2.5 pb-3">
           {presets.length > 0 && (
