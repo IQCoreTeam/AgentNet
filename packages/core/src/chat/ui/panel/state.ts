@@ -60,8 +60,8 @@ export const S = {
   // ---- agents.ts ----
   lastAgents: [] as any[],
   recentlyPosted: [] as any[], // [{ wallet, note, ts }]
-  pendingPost: null as any, // { wallet, text, gitLink, self } — stashed at submit for agentNoteResult
-  postFeedback: null as any, // { wallet, text, ok, ts } — survives the immediate profile re-render
+  pendingPost: null as any, // { wallet, text, gitLink, self } - stashed at submit for agentNoteResult
+  postFeedback: null as any, // { wallet, text, ok, ts } - survives the immediate profile re-render
   profileTab: 'agent',
   // ---- profile.ts ----
   repoModalEl: null as any,
@@ -74,7 +74,7 @@ export const S = {
   // ---- market.ts ----
   lastMarketResults: [] as any[], // last search results, kept to re-render on owned-list change
   currentKind: 'skill', // active tab: Skills | Workflows
-  currentDetail: null as any, // { id, type } of the open detail — for comments refresh
+  currentDetail: null as any, // { id, type } of the open detail - for comments refresh
   hideOwnedMarket: undefined as any,
   mktSort: undefined as any,
   skillModalOpen: false,

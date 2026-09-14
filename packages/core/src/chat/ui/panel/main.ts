@@ -69,7 +69,7 @@ window.addEventListener('message', (event) => {
   }
   else if (m.type === 'rateLimit') {
     // account-wide plan usage gauge (claude.ai) — the primary composer chip; click reveals ctx
-    renderLimitMeter({ utilization: m.utilization, window: m.window, resetsAt: m.resetsAt, status: m.status });
+    renderLimitMeter({ cli: m.cli, utilization: m.utilization, window: m.window, resetsAt: m.resetsAt, status: m.status });
   }
   else if (m.type === 'skillActive' && m.origin === 'nft' && m.mint) flashSkill(m.name, m.mint);
   else if (m.type === 'rpcStatus') renderRpcStatus(m.status);
@@ -290,7 +290,7 @@ window.addEventListener('message', (event) => {
           ts: Date.now(),
           // author must be OUR wallet (the writer), not the profile owner's
           // (pendingPost.wallet): mergeOptimistic dedupes the ghost against the real
-          // on-chain note by author+text, and the real note's author is the writer —
+          // on-chain note by author+text, and the real note's author is the writer:
           // a profile-owner author only matches on self-posts, so comments on OTHER
           // agents rendered twice once the chain read caught up.
           note: { author: S.myWalletAddress || S.pendingPost.wallet, text: S.pendingPost.text, gitLink: S.pendingPost.gitLink, isSelfNote: S.pendingPost.self, parentId: S.pendingPost.parentId, timestamp: Date.now() },

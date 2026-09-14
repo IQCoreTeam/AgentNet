@@ -201,8 +201,9 @@ export type ClientMessage =
 export type ServerMessage =
   | { type: "clear" }
   | { type: "usage"; contextTokens: number; contextWindow?: number }
-  // the contract's RateLimitInfo: utilization 0-100 (absent when the plan rejects the turn), resetsAt epoch ms
-  | { type: "rateLimit"; utilization?: number; window?: string; resetsAt?: number; status?: string }
+  // the contract's RateLimitInfo: utilization 0-100 (absent when the plan rejects the turn), resetsAt epoch ms;
+  // cli is the engine that reported, so a frame that lands after a tab switch is filed under it
+  | { type: "rateLimit"; cli: Cli; utilization?: number; window?: string; resetsAt?: number; status?: string }
   | { type: "compacted" }
   | { type: "notice"; text: string }
   | {

@@ -1,10 +1,12 @@
 // Engine version report + trusted updater. The whole point is that surfaces never show
 // the user an external "download here" link (stale CLIs and search results routinely
 // point at lookalike/phishing sites); the installed version comes from the binary itself,
-// the latest version comes from the official npm registry, and the update runs the same
-// official npm command the install docs use — all host-side, on an explicit user tap.
+// the latest version comes from the official npm registry, and the update runs the
+// engine's own updater, or the official npm command when the engine is missing. All
+// host-side, on an explicit user tap.
 
 import { spawn } from "node:child_process";
+import { basename } from "node:path";
 import { ENGINE_UPDATE_COMMAND } from "./engineInstall.js";
 import { resolveEngineBin, type EngineName } from "./engineBin.js";
 export { isVersionOlder } from "./engineInstall.js";
@@ -28,16 +30,30 @@ function firstSemver(text: string): string | null {
   return text.match(SEMVER)?.[0] ?? null;
 }
 
-async function installedVersion(engine: EngineName): Promise<string | null> {
-  const bin = resolveEngineBin(engine);
-  return new Promise((resolve) => {
+function tail(text: string): string {
+  return text.trim().split("\n").slice(-3).join("\n"); // 3 lines fit a toast
+}
+
+// One command to completion, resolved on close, not exit: exit can fire before stdout is
+// drained. Stdout on exit 0; otherwise the tail of stderr, or of stdout when stderr is
+// empty (claude's updater explains itself on stdout), or the basename and the code.
+function run(cmd: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
     let out = "";
-    const p = spawn(bin, ["--version"], { stdio: ["ignore", "pipe", "pipe"] });
+    let err = "";
+    const p = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
     p.stdout.on("data", (d) => (out += d.toString()));
-    p.stderr.on("data", (d) => (out += d.toString()));
-    p.on("error", () => resolve(null));
-    p.on("exit", () => resolve(firstSemver(out)));
+    p.stderr.on("data", (d) => (err += d.toString()));
+    p.on("error", reject);
+    p.on("close", (code) => {
+      if (code === 0) resolve(out);
+      else reject(new Error(tail(err) || tail(out) || `${basename(cmd)} exited with code ${code}`));
+    });
   });
+}
+
+function installedVersion(engine: EngineName): Promise<string | null> {
+  return run(resolveEngineBin(engine), ["--version"]).then(firstSemver, () => null);
 }
 
 async function latestVersion(engine: EngineName): Promise<string | null> {
@@ -69,18 +85,19 @@ export async function getEngineVersions(): Promise<Record<EngineName, EngineVers
   };
 }
 
-// Run the official npm update command for one engine. Resolves on success, rejects with
-// the stderr tail on failure so the surface can show a real reason.
-export function updateEngine(engine: EngineName): Promise<void> {
-  return new Promise((resolve, reject) => {
+// An installed engine updates itself (claude update, codex update; each picks npm, brew or
+// its own installer). One that declines can still exit 0 (claude under Homebrew prints the
+// brew command), so the version is read before and after; unchanged is fine only when the
+// updater says it is already up to date. A missing engine gets the npm command.
+export async function updateEngine(engine: EngineName): Promise<void> {
+  const bin = resolveEngineBin(engine);
+  if (bin === engine) {
     const [cmd, ...args] = ENGINE_UPDATE_COMMAND[engine].split(" ");
-    let err = "";
-    const p = spawn(cmd, args, { stdio: ["ignore", "ignore", "pipe"] });
-    p.stderr.on("data", (d) => (err += d.toString()));
-    p.on("error", (e) => reject(new Error(e.message)));
-    p.on("exit", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(err.trim().split("\n").slice(-3).join("\n") || `npm exited with code ${code}`));
-    });
-  });
+    await run(cmd, args);
+    return;
+  }
+  const before = await installedVersion(engine);
+  const said = await run(bin, ["update"]);
+  if ((await installedVersion(engine)) !== before || /up.to.date|latest/i.test(said)) return;
+  throw new Error(tail(said) || `${basename(bin)} update left ${before ?? "the version"} unchanged`);
 }

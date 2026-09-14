@@ -16,7 +16,10 @@ function isInstalled(cmd: string): Promise<boolean> {
   return new Promise((resolve) => {
     const p = spawn(cmd, ["--version"], { stdio: ["ignore", "ignore", "ignore"] });
     p.on("error", () => resolve(false));
-    p.on("exit", () => resolve(true));
+    // A launcher that starts and dies nonzero (127 from `env: node`, 126 or 127 from its exec
+    // target, a --version that crashes) is not installed for this host, and a signal exit (code
+    // null) is not either. A missing file or a wrong-arch binary already took the error path.
+    p.on("exit", (code) => resolve(code === 0));
   });
 }
 

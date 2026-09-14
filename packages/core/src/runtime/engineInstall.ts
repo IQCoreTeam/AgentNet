@@ -12,9 +12,9 @@ export const ENGINE_INSTALL_COMMAND: Record<EngineKey, string> = {
   custom: "npm install -g @openai/codex", // custom runs through the codex binary
 };
 
-// Official update command per engine — the same npm channel as the install commands.
-// Claude can self-update on desktop, but inside the Android guest (and for a uniform
-// mobile Update button) the npm path is the one trusted route for both engines.
+// Official npm update command per engine, the same channel as the install commands.
+// updateEngine in engineVersions.ts runs it only for a missing engine; an installed engine
+// updates itself.
 export const ENGINE_UPDATE_COMMAND: Record<EngineKey, string> = {
   codex: "npm install -g @openai/codex@latest",
   claude: "npm install -g @anthropic-ai/claude-code@latest",

@@ -71,6 +71,14 @@ describe("panel.generated: the host contract survives the cut", () => {
     expect(missing).toEqual([]);
   });
 
+  it("the fixture lists every literal post site, so a new outbound type cannot ship unguarded", () => {
+    // Converse of the check above. Skips the three sites that post a prebuilt object (msg, out,
+    // out) and the login ternary; the check above still pins those types.
+    const posted = [...js.matchAll(/postMessage\(\{\s*type: ["']([A-Za-z]+)["']/g)].map((m) => m[1]);
+    expect(posted).toContain("ready"); // the regex still sees the bundle's literal shape
+    expect(posted.filter((t) => !PANEL_OUTBOUND_TYPES.includes(t))).toEqual([]);
+  });
+
   it("handles every inbound type in the legacy chain order", () => {
     let prev = -1;
     for (const t of PANEL_INBOUND_TYPES) {
