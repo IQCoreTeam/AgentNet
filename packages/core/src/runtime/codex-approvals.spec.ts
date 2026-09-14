@@ -16,7 +16,12 @@ afterEach(() => {
 
 // Exercise the production engine through its JSON-RPC boundary. Only the child
 // transport is simulated; no Codex process, model request or wallet is involved.
-describe.each([undefined, "existing-thread"])("Codex approvals (session %s)", (sessionId) => {
+describe.each([
+  { cli: "codex", sessionId: undefined },
+  { cli: "codex", sessionId: "existing-thread" },
+  { cli: "custom", sessionId: undefined },
+  { cli: "custom", sessionId: "existing-thread" },
+] as const)("Codex approvals ($cli, session $sessionId)", ({ cli, sessionId }) => {
   it.each([
     { mode: "auto", override: "", policy: "on-request", sandbox: "workspace-write" },
     { mode: "readonly", override: "", policy: "on-request", sandbox: "read-only" },
@@ -54,7 +59,7 @@ describe.each([undefined, "existing-thread"])("Codex approvals (session %s)", (s
       },
     });
     vi.mocked(spawn).mockReturnValue(child as unknown as ReturnType<typeof spawn>);
-    const engine = spawnCli({ cli: "codex", cwd: process.cwd(), mode, sessionId });
+    const engine = spawnCli({ cli, cwd: process.cwd(), mode, sessionId, ...(cli === "custom" ? { custom: { baseUrl: "http://127.0.0.1:11669/v1", model: "mock-model", apiKey: "", presetId: "manual" } } : {}) });
     const opened = vi.fn();
     engine.onSessionId(opened);
     try {
@@ -64,6 +69,7 @@ describe.each([undefined, "existing-thread"])("Codex approvals (session %s)", (s
       ]);
       expect(requests[1].params).toMatchObject({ approvalPolicy: policy, approvalsReviewer: "user" });
       expect(requests[1].params.sandbox).toBe(sandbox);
+      expect(requests[1].params.modelProvider).toBe(cli === "custom" ? "custom" : undefined);
     } finally {
       engine.stop?.();
     }

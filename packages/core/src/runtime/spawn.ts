@@ -995,6 +995,7 @@ function codexEngine(opts: SpawnOpts): Engine {
   const startThread = async () => {
     const res = await sendRequest("thread/start", {
       model: opts.model,
+      ...(opts.custom ? { modelProvider: "custom" } : {}),
       cwd: opts.cwd,
       approvalPolicy: codexApproval,
       approvalsReviewer: "user",
@@ -1027,6 +1028,7 @@ function codexEngine(opts: SpawnOpts): Engine {
           await sendRequest("thread/resume", {
             threadId: opts.sessionId,
             model: opts.model,
+            ...(opts.custom ? { modelProvider: "custom" } : {}),
             cwd: opts.cwd,
             approvalPolicy: codexApproval,
             approvalsReviewer: "user",
