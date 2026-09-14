@@ -4,6 +4,7 @@
 // message listener handles in chain order, and the boot posts in the order they leave.
 export const PANEL_OUTBOUND_TYPES: string[] = [
   "installEngine",
+  "dismissEngineUpdate",
   "model",
   "mode",
   "effort",
