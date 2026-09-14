@@ -136,10 +136,7 @@ export interface State {
   contextWindow?: number;
   // account-wide plan rate-limit utilization (claude.ai), for the "running low" gauge.
   // Unlike context, this is NOT reset on a new chat — it tracks the plan, not the session.
-  limitPct?: number; // 0-100 utilization of the active window
-  limitWindow?: string; // 'five_hour' | 'seven_day' | ...
-  limitResetsAt?: number; // epoch ms when the active window resets
-  limitStatus?: string; // 'allowed' | 'allowed_warning' | 'rejected'
+  rateLimits: Partial<Record<Cli, Extract<ServerMessage, { type: "rateLimit" }>>>;
   isCompacting: boolean;
   currentModel?: string;
   // live model catalog per engine, seeded from the static baseline and upgraded when the
@@ -165,7 +162,8 @@ export function isApprovalForView(a: { sessionId?: string }, activeSessionId?: s
   return !a.sessionId || !activeSessionId || a.sessionId === activeSessionId;
 }
 
-const initialState: State = {
+export const initialState: State = {
+  rateLimits: {},
   phase: "connecting",
   walletAddress: null,
   cli: "claude",
@@ -313,7 +311,7 @@ type LocalAction =
   | { type: "__clearCelebrate" };
 type Action = ServerMessage | LocalAction;
 
-function reducer(state: State, ev: Action): State {
+export function reducer(state: State, ev: Action): State {
   switch (ev.type) {
     case "__typing":
       return { ...state, typing: true };
@@ -396,10 +394,10 @@ function reducer(state: State, ev: Action): State {
       // percentage so the gauge never unmounts on a status change.
       return {
         ...state,
-        limitPct: ev.utilization ?? state.limitPct,
-        limitWindow: ev.window,
-        limitResetsAt: ev.resetsAt,
-        limitStatus: ev.status,
+        rateLimits: {
+          ...state.rateLimits,
+          [ev.cli]: { ...ev, utilization: ev.utilization ?? state.rateLimits[ev.cli]?.utilization },
+        },
       };
     case "__compactStart":
       return { ...state, isCompacting: true };
