@@ -95,7 +95,8 @@ export async function hasCustomEngine(): Promise<boolean> {
 // behind every engine status line (it resolves the binary through engineBin.ts, so a
 // GUI-launched host without a shell PATH still finds it).
 export async function customEngineStatus(report?: CliReport): Promise<CliStatus> {
-  if ((report ?? await detectCli())[engineBinary("custom")] === "missing") return "missing";
+  const status = (report ?? await detectCli())[engineBinary("custom")];
+  if (status === "missing" || status === "node-missing") return status;
   return (await hasCustomEngine()) ? "ok" : "no-login";
 }
 

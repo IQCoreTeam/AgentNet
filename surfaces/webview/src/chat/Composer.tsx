@@ -36,7 +36,7 @@ function CtxDot({ tokens, window: win, compacting }: { tokens: number; window?: 
   return (
     <span
       ref={rootRef}
-      className="ml-auto relative flex shrink-0 items-center"
+      className="relative flex shrink-0 items-center"
       title={compacting ? "Compacting context…" : !win ? `${tokens.toLocaleString()} context tokens reported by the engine. Model limit unverified.` : `Context: ${tokens.toLocaleString()} / ${win.toLocaleString()} tokens (${pct}%)\n${fmtK(tokens)} / ${fmtK(win)} ctx`}
     >
       {open && (
@@ -591,22 +591,22 @@ export function Composer() {
           <span className="max-w-[7rem] truncate">{MODES[state.cli].find((m) => m.value === mode)?.label ?? mode}</span>
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" style={{ transform: controlsOpen ? "rotate(180deg)" : "none", transition: "transform .15s" }}><path d="M2.5 4l2.5 2.5L7.5 4" /></svg>
         </button>
-        {state.limitPct !== undefined && state.limitPct >= 50 && (
-          <span className="ml-auto mr-2 flex items-center">
+        <span className="ml-auto flex items-center gap-2">
+          {state.limitPct !== undefined && state.limitPct >= 50 && (
             <LimitDot pct={state.limitPct} window={state.limitWindow} resetsAt={state.limitResetsAt} status={state.limitStatus} />
-          </span>
-        )}
-        {(state.contextTokens !== undefined || state.isCompacting) && (() => {
-          const tokens = state.contextTokens ?? 0;
-          // Unknown custom models receive Codex fallback limits, not verified provider limits.
-          const win = state.cli === "custom" ? undefined : state.contextWindow ?? (state.cli === "claude" ? 200_000 : 256_000);
-          return <CtxDot tokens={tokens} window={win} compacting={state.isCompacting} />;
-        })()}
-        {queueCount > 0 && (
-          <span className="ml-auto animate-pulse text-[10px]" style={{ color: "var(--an-amber)" }}>
-            ⏳ {queueCount} queued
-          </span>
-        )}
+          )}
+          {(state.contextTokens !== undefined || state.isCompacting) && (() => {
+            const tokens = state.contextTokens ?? 0;
+            // Custom's fallback window is not a verified provider limit.
+            const win = state.cli === "custom" ? undefined : state.contextWindow ?? (state.cli === "claude" ? 200_000 : 256_000);
+            return <CtxDot tokens={tokens} window={win} compacting={state.isCompacting} />;
+          })()}
+          {queueCount > 0 && (
+            <span className="animate-pulse text-[10px]" style={{ color: "var(--an-amber)" }}>
+              ⏳ {queueCount} queued
+            </span>
+          )}
+        </span>
 
         {controlsOpen && (
           <>

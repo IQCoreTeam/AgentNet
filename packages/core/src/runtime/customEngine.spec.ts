@@ -4,7 +4,7 @@
 // its own global default model. Pin all three to throw or emit correctly.
 import { describe, it, expect } from "vitest";
 import { spawnCli, customProviderFlags } from "./spawn.js";
-import { saveCustomEngineConfig, type CustomEngineConfig } from "../account/customEngineAuth.js";
+import { saveCustomEngineConfig, customEngineStatus, type CustomEngineConfig } from "../account/customEngineAuth.js";
 
 const NOT_CONFIGURED = "Custom engine is not configured. Connect an endpoint before starting a custom session.";
 const NEEDS_MODEL = "The custom engine needs a model id; codex would otherwise silently use its own default model.";
@@ -59,4 +59,9 @@ describe("account/customEngineAuth: saveCustomEngineConfig validation", () => {
     await expect(saveCustomEngineConfig(cfg({ baseUrl: "http://[invalid]?key=synthetic-secret-209" })))
       .rejects.toThrow(/^The custom engine base URL is not a valid URL\.$/);
   });
+});
+
+
+it("reports a missing Node runtime before reading custom credentials", async () => {
+  expect(await customEngineStatus({ claude: "ok", codex: "node-missing" })).toBe("node-missing");
 });

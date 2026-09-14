@@ -20,6 +20,8 @@ import {
   maskedCustomEngine,
   type CustomEnginePreset,
   type EngineKey,
+  NODE_REQUIRED_MESSAGE,
+  NODE_DOWNLOAD_URL,
   type CliReport,
   type CliStatus,
   type ClaudeLogin,
@@ -32,6 +34,7 @@ type Step = "pick" | "claude" | "codex" | "custom" | "customManage" | "customRem
 function statusText(s: CliStatus): { text: string; color: string } {
   if (s === "ok") return { text: `${glyph.ok} logged in`, color: colors.ok };
   if (s === "no-login") return { text: "not logged in", color: colors.warn };
+  if (s === "node-missing") return { text: "Node.js required", color: colors.err };
   return { text: "not installed", color: colors.err };
 }
 
@@ -265,6 +268,10 @@ export function LoginGate({
   }, [step]);
 
   function pick(engine: EngineKey) {
+    if (report[engineBinary(engine)] === "node-missing") {
+      setErr(`${NODE_REQUIRED_MESSAGE} ${NODE_DOWNLOAD_URL}`);
+      return;
+    }
     if (engine === "custom") {
       // custom rides the codex binary; the config store is its login.
       if (report[engineBinary(engine)] === "missing") {

@@ -78,6 +78,21 @@ function boot(): Page {
 }
 
 describe("panel.jsdom: boot", () => {
+  it("explains a missing Node runtime without offering an engine install", () => {
+    const p = boot();
+    p.host({ type: "cliStatus", claude: "node-missing", codex: "node-missing" });
+    expect(p.document.body.textContent).toContain("Node.js is missing");
+    expect(p.$$("button").map((b) => b.textContent)).not.toContain("Install in terminal");
+    const retry = p.$$("button").find((b) => b.textContent === "Check again");
+    expect(retry).toBeDefined();
+    retry!.click();
+    expect(p.posted.at(-1)).toEqual({ type: "getCliStatus" });
+    expect(p.types()).not.toContain("installEngine");
+    p.host({ type: "cliStatus", claude: "ok", codex: "ok" });
+    expect(p.document.getElementById("log")?.textContent).toContain("is ready.");
+    expect(p.errors).toEqual([]);
+  });
+
   it("runs both inline scripts without an error, posts the boot messages in the legacy order, and has the shell roots", () => {
     const p = boot();
     expect(p.errors).toEqual([]);
@@ -309,6 +324,21 @@ describe("panel.jsdom: custom engine tab (issue #209)", () => {
     input.value = command;
     p.key(input, "Enter");
   };
+
+  it("gates Custom on its runtime without requiring Codex sign-in", () => {
+    const p = boot();
+    p.host({ type: "customEngine", masked: "fixture.invalid", presets: [] });
+    p.host({ type: "cliStatus", claude: "ok", codex: "node-missing" });
+    const before = p.posted.length;
+    p.$(CUSTOM_TAB)!.click();
+    expect(p.types().slice(before)).not.toContain("platform");
+    expect(p.$("#log")!.textContent).toContain("Node.js is missing");
+    p.host({ type: "platform", cli: "claude" });
+    p.host({ type: "cliStatus", claude: "ok", codex: "no-login" });
+    p.$(CUSTOM_TAB)!.click();
+    expect(p.posted).toContainEqual({ type: "platform", cli: "custom" });
+    expect(p.errors).toEqual([]);
+  });
 
   it("ships hidden, refuses /engine custom without a config, and appears once the host announces one", () => {
     const p = boot();

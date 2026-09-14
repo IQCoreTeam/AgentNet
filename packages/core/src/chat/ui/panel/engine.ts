@@ -3,6 +3,7 @@
 // modules in dependency order, and main.ts calls the wire functions in the legacy order so
 // listener registration and boot posts keep their sequence.
 import { S } from "./state.js";
+import { engineBinary } from "../../../runtime/engineRegistry.js";
 import { CHAT_MODEL_OPTIONS } from "../../modelOptions.js";
 import { CODEX_UPDATE_COMMAND, ENGINE_INSTALL_COMMAND } from "../../../runtime/engineInstall.js";
 import { vscode } from "./host.js";
@@ -217,12 +218,12 @@ export function setTab(next) {
 export function selectTab(next) {
   if (next === S.cli) return;
   setTab(next);
-  const status = S.cliReport && S.cliReport[next];
-  if (status === 'missing') {
+  const status = S.cliReport && S.cliReport[engineBinary(next)];
+  if (status === 'missing' || status === 'node-missing') {
     renderEngineMissing(next);
     return;
   }
-  if (status === 'no-login') {
+  if (status === 'no-login' && next !== 'custom') {
     renderNotice((next === 'claude' ? 'Claude' : 'Codex') + ' is not signed in. Type /login to connect it.');
     return;
   }

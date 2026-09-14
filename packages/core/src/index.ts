@@ -107,7 +107,7 @@ export { ENGINE_KEYS, ENGINE_REGISTRY, engineBinary, coerceEngineKey, messageBin
 export type { EngineDescriptor } from "./runtime/engineRegistry.js";
 export { detectCli } from "./runtime/detect.js";
 export { resolveEngineBin } from "./runtime/engineBin.js";
-export { ENGINE_INSTALL_COMMAND, ENGINE_UPDATE_COMMAND, CODEX_UPDATE_COMMAND } from "./runtime/engineInstall.js";
+export { ENGINE_INSTALL_COMMAND, ENGINE_UPDATE_COMMAND, CODEX_UPDATE_COMMAND, NODE_REQUIRED_MESSAGE, NODE_DOWNLOAD_URL } from "./runtime/engineInstall.js";
 export { getEngineVersions, updateEngine, isVersionOlder, type EngineVersionInfo } from "./runtime/engineVersions.js";
 export type { CliStatus, CliReport } from "./runtime/detect.js";
 export { listCodexModelOptions } from "./runtime/codexModels.js";

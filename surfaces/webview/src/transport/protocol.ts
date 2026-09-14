@@ -246,7 +246,7 @@ export type ServerMessage =
   | { type: "walletConnected"; address: string | null; storageOptions: unknown; storageConfigured?: boolean }
   // claude subscription login: server reports whether login is needed, streams the OAuth
   // URL to open, and the final result after the user pastes their code.
-  | { type: "cliStatus"; claude: "ok" | "no-login" | "missing"; codex: "ok" | "no-login" | "missing" }
+  | ({ type: "cliStatus" } & import("@iqlabs-official/agent-sdk/runtime/detect").CliReport)
   | { type: "engineVersions"; claude: EngineVersionInfo; codex: EngineVersionInfo }
   | { type: "engineUpdateStatus"; cli: Cli; status: "running" | "done" | "error"; error?: string }
   | { type: "claudeLoginUrl"; url: string }

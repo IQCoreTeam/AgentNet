@@ -35,6 +35,8 @@ import {
   hasCustomEngine,
   maskedCustomEngine,
   type EngineKey,
+  NODE_REQUIRED_MESSAGE,
+  NODE_DOWNLOAD_URL,
 } from "@iqlabs-official/agent-sdk";
 import { Select, TextInput } from "@inkjs/ui";
 import open from "open";
@@ -840,6 +842,8 @@ export function Chat({
         }
         chat.switchEngine(next);
         setNotice(`switched to ${next} (session carries over)`);
+      } else if (status === "node-missing") {
+        setNotice(`${NODE_REQUIRED_MESSAGE} ${NODE_DOWNLOAD_URL}`);
       } else if (status === "missing") {
         setNotice(
           next === "custom"

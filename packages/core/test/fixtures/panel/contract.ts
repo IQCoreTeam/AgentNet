@@ -3,6 +3,7 @@
 // (vscode.postMessage sites, including the ones built as an object first), every type the
 // message listener handles in chain order, and the boot posts in the order they leave.
 export const PANEL_OUTBOUND_TYPES: string[] = [
+  "getCliStatus",
   "installEngine",
   "dismissEngineUpdate",
   "model",

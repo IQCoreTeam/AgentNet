@@ -6,7 +6,7 @@ import { isClaudeLoggedIn } from "../account/claudeAuth.js";
 import { isCodexLoggedIn } from "../account/codexAuth.js";
 import { resolveEngineBin } from "./engineBin.js";
 
-export type CliStatus = "ok" | "no-login" | "missing";
+export type CliStatus = "ok" | "no-login" | "missing" | "node-missing";
 export interface CliReport {
   codex: CliStatus;
   claude: CliStatus;
