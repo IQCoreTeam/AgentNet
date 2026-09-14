@@ -13,7 +13,7 @@ import { CHAT_SLASH_COMMANDS } from "@iqlabs-official/agent-sdk/chat/slashComman
 // Tapping it opens a small readout of the numbers behind the ring: the title
 // tooltip only exists for mouse hover, which touch (and most desktop users)
 // never see.
-function CtxDot({ tokens, window: win, compacting }: { tokens: number; window: number; compacting?: boolean }) {
+function CtxDot({ tokens, window: win, compacting }: { tokens: number; window?: number; compacting?: boolean }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLSpanElement>(null);
   // Tap-away closes: listen only while open, the same pattern the pickers use.
@@ -25,7 +25,7 @@ function CtxDot({ tokens, window: win, compacting }: { tokens: number; window: n
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
   }, [open]);
-  const frac = Math.min(1, tokens / win);
+  const frac = win ? Math.min(1, tokens / win) : 0;
   const pct = Math.round(frac * 100);
   const color = compacting
     ? "var(--an-orange, #f80)"
@@ -36,8 +36,8 @@ function CtxDot({ tokens, window: win, compacting }: { tokens: number; window: n
   return (
     <span
       ref={rootRef}
-      className="relative flex items-center"
-      title={compacting ? "Compacting context…" : `Context: ${tokens.toLocaleString()} / ${win.toLocaleString()} tokens (${pct}%)\n${fmtK(tokens)} / ${fmtK(win)} ctx`}
+      className="relative flex shrink-0 items-center"
+      title={compacting ? "Compacting context…" : !win ? `${tokens.toLocaleString()} context tokens reported by the engine. Model limit unverified.` : `Context: ${tokens.toLocaleString()} / ${win.toLocaleString()} tokens (${pct}%)\n${fmtK(tokens)} / ${fmtK(win)} ctx`}
     >
       {open && (
         <div
@@ -49,10 +49,9 @@ function CtxDot({ tokens, window: win, compacting }: { tokens: number; window: n
             <div style={{ color: "var(--an-orange, #f80)" }}>COMPACTING…</div>
           ) : (
             <>
-              <div style={{ color: "var(--an-fg)" }}>{tokens.toLocaleString()} / {win.toLocaleString()} tk</div>
+              <div style={{ color: "var(--an-fg)" }}>{tokens.toLocaleString()}{win ? ` / ${win.toLocaleString()} tk` : " context tokens"}</div>
               <div className="mt-0.5 flex items-center gap-1.5">
-                <span style={{ color }}>{pct}%</span>
-                <span style={{ color: "var(--an-fg-mute)" }}>used · compacts near full</span>
+                {win ? <><span style={{ color }}>{pct}%</span><span style={{ color: "var(--an-fg-mute)" }}>used · compacts near full</span></> : <span style={{ color: "var(--an-fg-mute)" }}>Engine-reported · model limit unverified</span>}
               </div>
             </>
           )}
@@ -63,10 +62,10 @@ function CtxDot({ tokens, window: win, compacting }: { tokens: number; window: n
         aria-label="Context usage"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center active:opacity-80"
+        className="flex min-h-8 min-w-8 items-center justify-center active:opacity-80"
         style={{ background: "none", border: 0, padding: 0 }}
       >
-      <svg width="18" height="18" viewBox="0 0 18 18" style={{ display: "block" }}>
+      {!win && !compacting ? <span className="an-term-mono text-[10px]" style={{ color: "var(--an-fg-dim)" }}>{fmtK(tokens)} ctx</span> : <svg width="18" height="18" viewBox="0 0 18 18" style={{ display: "block" }}>
         <circle cx="9" cy="9" r={r} fill="none" stroke="var(--an-line, #333)" strokeWidth="2.5" />
         <circle
           cx="9" cy="9" r={r}
@@ -78,7 +77,7 @@ function CtxDot({ tokens, window: win, compacting }: { tokens: number; window: n
           transform={compacting ? undefined : "rotate(-90 9 9)"}
           style={compacting ? { transformBox: "fill-box", transformOrigin: "center", animation: "ctxspin 1s linear infinite" } : undefined}
         />
-      </svg>
+      </svg>}
       </button>
       {compacting && <style>{`@keyframes ctxspin { from { transform: rotate(-90deg); } to { transform: rotate(270deg); } }`}</style>}
     </span>
@@ -599,7 +598,7 @@ export function Composer() {
           )}
           {(state.contextTokens !== undefined || state.isCompacting) && (() => {
             const tokens = state.contextTokens ?? 0;
-            const win = state.contextWindow ?? (state.cli === "codex" ? 256_000 : 200_000);
+            const win = state.cli === "custom" ? undefined : state.contextWindow ?? (state.cli === "codex" ? 256_000 : 200_000);
             return <CtxDot tokens={tokens} window={win} compacting={state.isCompacting} />;
           })()}
           {queueCount > 0 && (

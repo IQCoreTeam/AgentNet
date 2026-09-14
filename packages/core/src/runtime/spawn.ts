@@ -1019,6 +1019,7 @@ function codexEngine(opts: SpawnOpts): Engine {
     try {
       await sendRequest("thread/resume", {
         threadId,
+        ...(opts.custom ? { modelProvider: "custom" } : {}),
         model: opts.model,
         cwd: opts.cwd,
         approvalPolicy: codexApproval,
