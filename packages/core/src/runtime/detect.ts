@@ -6,20 +6,26 @@ import { isClaudeLoggedIn } from "../account/claudeAuth.js";
 import { isCodexLoggedIn } from "../account/codexAuth.js";
 import { resolveEngineBin } from "./engineBin.js";
 
-export type CliStatus = "ok" | "no-login" | "missing";
+export type CliStatus = "ok" | "no-login" | "missing" | "node-missing";
 export interface CliReport {
   codex: CliStatus;
   claude: CliStatus;
 }
 
-function isInstalled(cmd: string): Promise<boolean> {
+function installationStatus(cmd: string): Promise<"runnable" | "missing" | "node-missing"> {
   return new Promise((resolve) => {
-    const p = spawn(cmd, ["--version"], { stdio: ["ignore", "ignore", "ignore"] });
-    p.on("error", () => resolve(false));
+    let stderr = "";
+    // Keep the diagnostic parseable across host locales (GNU env also changes quotes).
+    const p = spawn(cmd, ["--version"], { stdio: ["ignore", "ignore", "pipe"], env: { ...process.env, LC_ALL: "C" } });
+    p.stderr.on("data", (data) => { stderr = (stderr + data.toString()).slice(-4096); });
+    p.on("error", () => resolve("missing"));
     // A launcher that starts and dies nonzero (127 from `env: node`, 126 or 127 from its exec
     // target, a --version that crashes) is not installed for this host, and a signal exit (code
     // null) is not either. A missing file or a wrong-arch binary already took the error path.
-    p.on("exit", (code) => resolve(code === 0));
+    // close follows stderr draining; exit can arrive before the diagnostic.
+    p.on("close", (code) => resolve(code === 0 ? "runnable"
+      : /(?:\bnode['"]?: (?:No such file or directory|(?:command )?not found)|['"]node['"] is not recognized)/i.test(stderr)
+        ? "node-missing" : "missing"));
   });
 }
 
@@ -27,13 +33,15 @@ function isInstalled(cmd: string): Promise<boolean> {
 // this module only answers whether that binary runs and is signed in.
 async function checkClaude(): Promise<CliStatus> {
   const bin = resolveEngineBin("claude");
-  if (!(await isInstalled(bin))) return "missing";
+  const status = await installationStatus(bin);
+  if (status !== "runnable") return status;
   return (await isClaudeLoggedIn(bin)) ? "ok" : "no-login";
 }
 
 async function checkCodex(): Promise<CliStatus> {
   const bin = resolveEngineBin("codex");
-  if (!(await isInstalled(bin))) return "missing";
+  const status = await installationStatus(bin);
+  if (status !== "runnable") return status;
   return (await isCodexLoggedIn(bin)) ? "ok" : "no-login";
 }
 

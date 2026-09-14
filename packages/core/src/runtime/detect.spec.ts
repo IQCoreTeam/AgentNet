@@ -90,13 +90,13 @@ describe("detectCli against launchers that cannot start", () => {
     rmSync(home, { recursive: true, force: true });
   });
 
-  it.skipIf(process.platform === "win32")("node shims with no node anywhere are missing, not no-login", async () => {
+  it.skipIf(process.platform === "win32")("node shims with no node anywhere report the missing runtime", async () => {
     exe(join(home, ".bun", "bin", "claude"), NODE_SHIM);
     exe(join(home, ".bun", "bin", "codex"), NODE_SHIM);
     const { detectCli } = await import("./detect.js");
     const { resolveEngineBin } = await import("./engineBin.js");
 
-    expect(await detectCli()).toEqual({ claude: "missing", codex: "missing" });
+    expect(await detectCli()).toEqual({ claude: "node-missing", codex: "node-missing" });
     // The resolver still says where the engine is; whether it runs is detect's answer.
     expect(resolveEngineBin("claude")).toBe(join(home, ".bun", "bin", "claude"));
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining("no node on PATH"));
@@ -127,7 +127,7 @@ describe("detectCli against launchers that cannot start", () => {
     exe(join(home, ".bun", "bin", "claude"), NODE_SHIM);
     exe(join(home, ".bun", "bin", "codex"), NODE_SHIM);
     const { detectCli } = await import("./detect.js");
-    expect(await detectCli()).toEqual({ claude: "missing", codex: "missing" });
+    expect(await detectCli()).toEqual({ claude: "node-missing", codex: "node-missing" });
 
     exe(join(nvmBin(), "node"), FAKE_NODE);
     expect(await detectCli()).toEqual({ claude: "ok", codex: "ok" });
@@ -167,6 +167,18 @@ describe("detectCli against launchers that cannot start", () => {
     await saveCodexApiKey("sk-test");
     const { detectCli } = await import("./detect.js");
 
-    expect((await detectCli()).codex).toBe("missing");
+    expect((await detectCli()).codex).toBe("node-missing");
+  });
+
+  it.skipIf(process.platform === "win32")("recognizes a legacy shell launcher's missing node diagnostic", async () => {
+    exe(join(home, ".claude", "local", "claude"), "#!/bin/sh\nPATH=/agentnet-empty exec node \"$@\"\n");
+    const { detectCli } = await import("./detect.js");
+    expect((await detectCli()).claude).toBe("node-missing");
+  });
+
+  it.skipIf(process.platform === "win32")("does not call an unrelated launcher error a missing Node runtime", async () => {
+    exe(join(home, ".local", "bin", "claude"), "#!/bin/sh\necho 'permission denied' >&2\nexit 127\n");
+    const { detectCli } = await import("./detect.js");
+    expect((await detectCli()).claude).toBe("missing");
   });
 });

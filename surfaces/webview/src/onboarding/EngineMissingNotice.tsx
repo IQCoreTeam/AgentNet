@@ -4,12 +4,22 @@
 // when the engine is present, so the normal login flow is untouched.
 
 import { useState } from "react";
-import { ENGINE_INSTALL_COMMAND } from "@iqlabs-official/agent-sdk/runtime/engineInstall";
+import { ENGINE_INSTALL_COMMAND, NODE_REQUIRED_MESSAGE, NODE_DOWNLOAD_URL } from "@iqlabs-official/agent-sdk/runtime/engineInstall";
+import { openExternalUrl } from "../platform/openExternalUrl";
 import { useStore } from "../state/store";
 
 export function EngineMissingNotice({ cli }: { cli: "claude" | "codex" }) {
-  const { state } = useStore();
+  const { state, send } = useStore();
   const [copied, setCopied] = useState(false);
+  if (state.cliReport?.[cli] === "node-missing") return (
+    <div className="rounded-xl bg-zinc-900 p-3 ring-1 ring-zinc-800">
+      <p className="text-sm leading-normal text-zinc-300">{NODE_REQUIRED_MESSAGE}</p>
+      <div className="mt-2 flex flex-wrap gap-3">
+        <button className="text-sm text-an-green underline" onClick={() => openExternalUrl(NODE_DOWNLOAD_URL)}>Get Node.js</button>
+        <button className="text-sm text-an-green underline" onClick={() => send({ type: "getCliStatus" })}>Check again</button>
+      </div>
+    </div>
+  );
   if (state.cliReport?.[cli] !== "missing") return null;
   const command = ENGINE_INSTALL_COMMAND[cli];
   return (

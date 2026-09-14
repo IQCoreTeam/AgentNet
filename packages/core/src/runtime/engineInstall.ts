@@ -4,6 +4,9 @@
 //
 // Pure data on purpose: browser surfaces (webview) import this module directly, so it
 // must stay free of node imports (detect.ts, which reports the statuses, is node-only).
+export const NODE_REQUIRED_MESSAGE = "This engine is installed, but Node.js is missing. Install Node.js, restart AgentNet, then retry.";
+export const NODE_DOWNLOAD_URL = "https://nodejs.org/en/download";
+
 export const ENGINE_INSTALL_COMMAND: Record<"claude" | "codex", string> = {
   codex: "npm install -g @openai/codex",
   claude: "npm install -g @anthropic-ai/claude-code",

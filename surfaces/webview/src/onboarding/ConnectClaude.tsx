@@ -16,8 +16,10 @@ export function ConnectClaude() {
   const { claudeLoginUrl, claudeLoginError } = state;
   const [busy, setBusy] = useState(false);
   const [code, setCode] = useState("");
+  const nodeMissing = state.cliReport?.claude === "node-missing";
 
   function start() {
+    if (nodeMissing) return;
     setBusy(true);
     send({ type: "startClaudeLogin" });
   }
@@ -38,7 +40,7 @@ export function ConnectClaude() {
       <EngineMissingNotice cli="claude" />
       {!claudeLoginUrl ? (
         <>
-          <OnboardingButton disabled={busy} onClick={start}>
+          <OnboardingButton disabled={busy || nodeMissing} onClick={start}>
             {busy ? "Opening sign-in…" : "Connect Claude"}
           </OnboardingButton>
           {claudeLoginError && (

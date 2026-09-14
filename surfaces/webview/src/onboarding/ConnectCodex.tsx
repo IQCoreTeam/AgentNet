@@ -14,13 +14,16 @@ export function ConnectCodex() {
 
   const [method, setMethod] = useState<"chatgpt" | "apikey">("chatgpt");
   const [apiKey, setApiKey] = useState("");
+  const nodeMissing = state.cliReport?.codex === "node-missing";
 
   function start() {
+    if (nodeMissing) return;
     setBusy(true);
     send({ type: "startCodexLogin" });
   }
 
   function submitApiKey() {
+    if (nodeMissing) return;
     if (!apiKey.trim()) return;
     setBusy(true);
     send({ type: "submitCodexApiKey", key: apiKey.trim() });
@@ -77,7 +80,7 @@ export function ConnectCodex() {
               <p className="text-center text-xs text-zinc-400 leading-normal">
                 Uses your ChatGPT Plus plan. This runs the Codex CLI locally with device-based authorization.
               </p>
-              <OnboardingButton disabled={busy} onClick={start}>
+              <OnboardingButton disabled={busy || nodeMissing} onClick={start}>
                 {busy ? "Starting sign-in…" : "Connect with ChatGPT Plan"}
               </OnboardingButton>
               {codexLoginError && (
@@ -115,7 +118,7 @@ export function ConnectCodex() {
             type="password"
             className="rounded-xl bg-zinc-900 px-3 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 focus:ring-an-green/50"
           />
-          <OnboardingButton disabled={busy || !apiKey.trim()} onClick={submitApiKey}>
+          <OnboardingButton disabled={busy || nodeMissing || !apiKey.trim()} onClick={submitApiKey}>
             {busy ? "Saving…" : "Connect with API Key"}
           </OnboardingButton>
           {codexLoginError && (

@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import open from "open";
 import { STORAGE_OPTIONS, type StorageConfig, type StorageKind, startCodexLogin, markCodexConnected, saveCodexApiKey, startGoogleLogin, type GoogleLogin, saveHeliusKey, HELIUS_QUICKSTART_URL, detectCli, ENGINE_INSTALL_COMMAND } from "@iqlabs-official/agent-sdk";
 import type { CliReport, CliStatus } from "@iqlabs-official/agent-sdk";
+import { NODE_REQUIRED_MESSAGE, NODE_DOWNLOAD_URL } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../theme.js";
 import { Iggy } from "../components/Iggy.js";
 import { SetupLadder } from "../components/SetupLadder.js";
@@ -42,6 +43,7 @@ function rungOf(step: OnboardStep): number {
 function statusBadge(s: CliStatus) {
   if (s === "ok") return <Text color={colors.ok}>{glyph.ok} ready</Text>;
   if (s === "no-login") return <Text color={colors.warn}>! not logged in</Text>;
+  if (s === "node-missing") return <Text color={colors.err}>Node.js required</Text>;
   return <Text color={colors.err}>{glyph.fail} not installed</Text>;
 }
 
@@ -100,7 +102,7 @@ export function Onboarding({
   // auth choice, otherwise -> storage.
   function routeEngine(e: "claude" | "codex", r: CliReport) {
     setEngine(e);
-    if (r[e] === "missing") {
+    if (r[e] === "missing" || r[e] === "node-missing") {
       setStep("install");
     } else if (e === "codex" && r.codex === "no-login") {
       setStep("codexAuthChoice");
@@ -116,6 +118,7 @@ export function Onboarding({
   const [installErr, setInstallErr] = useState<string | null>(null);
 
   function runInstall() {
+    if (rep[engine] === "node-missing") return;
     setInstalling(true);
     setInstallErr(null);
     setInstallLog([]);
@@ -261,24 +264,40 @@ export function Onboarding({
 
       {step === "install" && (
         <Box flexDirection="column">
-          <Text color={colors.iqCyan}>{engine} is not installed. install it now?</Text>
-          <Text dimColor>runs: {ENGINE_INSTALL_COMMAND[engine]}</Text>
-          {!installing && (
-            <Select
-              options={[
-                { label: "Yes, run the install here", value: "yes" },
-                { label: "No, back to engine pick", value: "no" },
-              ]}
-              onChange={(v) => (v === "yes" ? runInstall() : setStep("engine"))}
-            />
+          {rep[engine] === "node-missing" ? (
+            <>
+              <Text color={colors.warn}>{NODE_REQUIRED_MESSAGE}</Text>
+              <Text>{NODE_DOWNLOAD_URL}</Text>
+              <Select options={[
+                { label: "Check again", value: "retry" },
+                { label: "Back to engine pick", value: "back" },
+              ]} onChange={(v) => {
+                if (v === "back") setStep("engine");
+                else void detectCli().then((fresh) => { setRep(fresh); routeEngine(engine, fresh); });
+              }} />
+            </>
+          ) : (
+            <>
+              <Text color={colors.iqCyan}>{engine} is not installed. install it now?</Text>
+              <Text dimColor>runs: {ENGINE_INSTALL_COMMAND[engine]}</Text>
+              {!installing && (
+                <Select
+                  options={[
+                    { label: "Yes, run the install here", value: "yes" },
+                    { label: "No, back to engine pick", value: "no" },
+                  ]}
+                  onChange={(v) => (v === "yes" ? runInstall() : setStep("engine"))}
+                />
+              )}
+              {installing && (
+                <Box flexDirection="column">
+                  {installLog.map((line, i) => <Text key={i} dimColor>{line}</Text>)}
+                  <Text color={colors.warn}>installing… this can take a minute</Text>
+                </Box>
+              )}
+              {installErr && <Text color={colors.err}>{installErr}</Text>}
+            </>
           )}
-          {installing && (
-            <Box flexDirection="column">
-              {installLog.map((line, i) => <Text key={i} dimColor>{line}</Text>)}
-              <Text color={colors.warn}>installing… this can take a minute</Text>
-            </Box>
-          )}
-          {installErr && <Text color={colors.err}>{installErr}</Text>}
         </Box>
       )}
 

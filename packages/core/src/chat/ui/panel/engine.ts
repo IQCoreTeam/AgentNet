@@ -192,7 +192,7 @@ export function selectTab(next) {
   if (next === S.cli) return;
   setTab(next);
   const status = S.cliReport && S.cliReport[next];
-  if (status === 'missing') {
+  if (status === 'missing' || status === 'node-missing') {
     renderEngineMissing(next);
     return;
   }

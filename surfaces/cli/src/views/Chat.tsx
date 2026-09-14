@@ -29,6 +29,8 @@ import {
   type GoogleLogin,
   detectCli,
   ENGINE_INSTALL_COMMAND,
+  NODE_REQUIRED_MESSAGE,
+  NODE_DOWNLOAD_URL,
 } from "@iqlabs-official/agent-sdk";
 import { Select, TextInput } from "@inkjs/ui";
 import open from "open";
@@ -820,6 +822,8 @@ export function Chat({
       if (rep[next] === "ok") {
         chat.switchEngine(next);
         setNotice(`switched to ${next} (session carries over)`);
+      } else if (rep[next] === "node-missing") {
+        setNotice(`${NODE_REQUIRED_MESSAGE} ${NODE_DOWNLOAD_URL}`);
       } else if (rep[next] === "missing") {
         setNotice(`${next} is not installed · run: ${ENGINE_INSTALL_COMMAND[next]}`);
       } else {
