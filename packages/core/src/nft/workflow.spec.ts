@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { Keypair, PublicKey, TransactionInstruction } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { publishWorkflow, unlockWorkflow, sendTx } from "./workflow.js";
 import { FormatError } from "./checkFormat.js";
 import * as chain from "../core/chain.js";
@@ -119,14 +119,46 @@ Workflow body here, long enough to pass the body length check easily.`;
   // value.err. sendTx must throw on it — otherwise a reverted buy_item returns a
   // signature, the surface reports "Successfully purchased", and the soulbound
   // token is never minted (→ later "balance: 0" on the comment gate).
-  it("sendTx throws (with logs) when a confirmed tx carries an execution error", async () => {
+  it.each(["legacy", 0, 1] as const)("preserves failure logs from a %s RPC response", async (version) => {
     mockConn.confirmTransaction.mockResolvedValueOnce({ value: { err: { InstructionError: [0, "Custom"] } } });
-    mockConn.getTransaction = vi.fn().mockResolvedValue({
-      meta: { err: { InstructionError: [0, "Custom"] }, logMessages: ["Program log: buy_item", "Program failed: insufficient funds"] },
+    // Exercise web3's response decoder, not just a mocked getTransaction result.
+    const rpcFetch = vi.fn<typeof fetch>(async (_url, init) => {
+      const request = JSON.parse(init!.body as string);
+      return new Response(JSON.stringify({
+        jsonrpc: "2.0", id: request.id,
+        result: {
+          slot: 1, version,
+          transaction: {
+            signatures: [],
+            message: {
+              accountKeys: [PublicKey.default.toBase58()],
+              header: { numRequiredSignatures: 1, numReadonlySignedAccounts: 0, numReadonlyUnsignedAccounts: 0 },
+              recentBlockhash: PublicKey.default.toBase58(),
+              instructions: [],
+              ...(version === 0 ? { addressTableLookups: [] } : {}),
+              ...(version === 1 ? { transactionConfig: {
+                computeUnitLimit: 200000, loadedAccountsDataSizeLimit: 33554432,
+                heapSize: null, priorityFee: null,
+              } } : {}),
+            },
+          },
+          meta: {
+            err: { InstructionError: [0, "Custom"] }, fee: 5000,
+            preBalances: [10000], postBalances: [5000],
+            logMessages: ["Program log: buy_item", "Program failed: insufficient funds"],
+          },
+        },
+      }));
     });
+    const connection = new Connection("http://rpc.test", { fetch: rpcFetch });
+    mockConn.getTransaction = connection.getTransaction.bind(connection);
 
     const dummyIx = new TransactionInstruction({ programId: PublicKey.default, keys: [], data: Buffer.from([]) });
-    await expect(sendTx(mockConn as any, signer, [dummyIx])).rejects.toThrow(/failed on-chain/);
-    expect(mockConn.getTransaction).toHaveBeenCalledWith("mockTxSig", expect.objectContaining({ maxSupportedTransactionVersion: 1 }));
+    await expect(sendTx(mockConn as any, signer, [dummyIx])).rejects.toThrow(/failed on-chain:[\s\S]*insufficient funds/);
+    const request = JSON.parse(rpcFetch.mock.calls[0][1]!.body as string);
+    expect(request.method).toBe("getTransaction");
+    expect(request.params).toEqual(["mockTxSig", {
+      maxSupportedTransactionVersion: 1, commitment: "confirmed",
+    }]);
   });
 });
