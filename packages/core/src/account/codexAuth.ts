@@ -12,7 +12,7 @@
 // Exit 0 = success. We never see or store the session token — codex CLI owns it
 // in ~/.codex/auth.json, device-local.
 
-import { spawn } from "node:child_process";
+import { spawnEngine as spawn } from "../runtime/engineProcess.js";
 import { readFile, writeFile, rm } from "node:fs/promises";
 import { tokenFile, tokensDir, ensureDir } from "../core/paths.js";
 import { resolveEngineBin } from "../runtime/engineBin.js";

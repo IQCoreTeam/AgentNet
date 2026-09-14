@@ -13,7 +13,6 @@
 // and never imports an SDK type. Output is delivered as already-mapped ChatMessages
 // (convert/* map the SDK events); the runtime just appends + paints.
 
-import { spawn } from "node:child_process";
 import readline from "node:readline";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { mkdir, writeFile, unlink } from "node:fs/promises";
@@ -34,6 +33,7 @@ import type {
 } from "./approval/channel.js";
 import { autoApprove } from "./approval/channel.js";
 import { resolveEngineBin } from "./engineBin.js";
+import { spawnEngine as spawn, spawnClaudeProcess } from "./engineProcess.js";
 
 // Loosely-typed view of AskUserQuestion's raw input (the SDK hands us `unknown`-ish data).
 type ApprovalQuestionInput = {
@@ -442,6 +442,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
       // use the user's installed claude (logged in) so the bundled extension doesn't
       // need the SDK's own native binary on its (unresolvable) bundle-relative path.
       pathToClaudeCodeExecutable: claudeBin,
+      spawnClaudeCodeProcess: spawnClaudeProcess,
       stderr: (d: string) => { if (d.trim()) cb.emitErr(`[claude] ${d.trim()}`); },
       // Passive skill-shopping wiring (issue #21): the MCP marketplace server + its
       // allowed tools, when the toggle is ON. The "which skills you have" directive is

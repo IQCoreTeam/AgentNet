@@ -16,7 +16,7 @@
 // the user's OAuth token off-device.) The only thing we persist is a tiny marker so the
 // onboarding can skip the login screen on next launch; the real auth lives in the CLI.
 
-import { spawn } from "node:child_process";
+import { spawnEngine as spawn } from "../runtime/engineProcess.js";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { tokenFile, tokensDir, ensureDir } from "../core/paths.js";
 import { resolveEngineBin } from "../runtime/engineBin.js";
