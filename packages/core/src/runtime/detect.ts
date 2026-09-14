@@ -15,7 +15,8 @@ export interface CliReport {
 function installationStatus(cmd: string): Promise<"runnable" | "missing" | "node-missing"> {
   return new Promise((resolve) => {
     let stderr = "";
-    const p = spawn(cmd, ["--version"], { stdio: ["ignore", "ignore", "pipe"] });
+    // Keep the diagnostic parseable across host locales (GNU env also changes quotes).
+    const p = spawn(cmd, ["--version"], { stdio: ["ignore", "ignore", "pipe"], env: { ...process.env, LC_ALL: "C" } });
     p.stderr.on("data", (data) => { stderr = (stderr + data.toString()).slice(-4096); });
     p.on("error", () => resolve("missing"));
     // A launcher that starts and dies nonzero (127 from `env: node`, 126 or 127 from its exec
