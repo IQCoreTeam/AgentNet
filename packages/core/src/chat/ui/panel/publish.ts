@@ -27,7 +27,7 @@ export const pubReqSel = {}; // mint -> selected
 export function chosenReqMints() { return Object.keys(pubReqSel).filter((m) => pubReqSel[m]); }
 export function updatePubReqCount() {
   const c = chosenReqMints().length;
-  pubReqCountEl.textContent = c ? (c + ' selected' + (c > 16 ? ' \u2014 max 16, deselect some' : '')) : '';
+  pubReqCountEl.textContent = c ? (c + ' selected' + (c > 16 ? ': max 16, deselect some' : '')) : '';
 }
 export function renderPubReq() {
   // Only real on-chain SKILLS qualify: the gate requires official-skills-collection members, so

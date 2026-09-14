@@ -7,7 +7,7 @@ import { CHAT_MODEL_OPTIONS } from "../../modelOptions.js";
 import { CODEX_UPDATE_COMMAND, ENGINE_INSTALL_COMMAND } from "../../../runtime/engineInstall.js";
 import { vscode } from "./host.js";
 import { composer, input, jumpBtn, modeBtn, modeEffortTag, modeLabel, modeMenu, modelBtn, modelLabel, modelMenu, tabs } from "./dom.js";
-import { renderEngineMissing, renderNotice } from "./shell.js";
+import { paintMeters, renderEngineMissing, renderNotice } from "./shell.js";
 import { closeMenus } from "./menus.js";
 
 // Platform = which CLI. Model = the actual model inside it. This shared catalog is
@@ -186,6 +186,7 @@ export function setTab(next) {
   input.placeholder = 'Message ' + S.cli + '... (Enter to send)';
   fillModels();
   fillModes();
+  paintMeters(); // the usage slot is per engine too: this tab's gauge, or ctx when it has none
 }
 export function selectTab(next) {
   if (next === S.cli) return;
