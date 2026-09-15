@@ -1,3 +1,4 @@
+import { contextNotice } from "@iqlabs-official/agent-sdk/chat/contextNotice";
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Box, Text, Static, useApp, useInput, useStdout } from "ink";
 import type { AgentRuntime, Wallet, ChatMessage, SkillActivation } from "@iqlabs-official/agent-sdk/runtime/contract";
@@ -1101,22 +1102,7 @@ export function Chat({
         return;
       }
       case "context": {
-        const win = chat.contextWindow ?? (engineBinary(chat.cli) === "codex" ? 256_000 : 200_000);
-        if (chat.contextTokens === undefined) {
-          setNotice(`Context: 0 / ${win.toLocaleString()} tokens. Send a message to measure usage.`);
-          return;
-        }
-        const used = chat.contextTokens;
-        const free = Math.max(0, win - used);
-        const pct = Math.round((used / win) * 100);
-        const threshold = Math.max(0, win - 33_000);
-        const tpct = Math.round((threshold / win) * 100);
-        setNotice(
-          `Context window (${chat.cli})\n` +
-          `  used    ${used.toLocaleString()} / ${win.toLocaleString()} (${pct}%)\n` +
-          `  free    ${free.toLocaleString()}\n` +
-          `  auto-compact at ~${threshold.toLocaleString()} (${tpct}%)`
-        );
+        setNotice(contextNotice(chat.cli, chat.contextTokens, chat.contextWindow));
         return;
       }
       case "wallet":
@@ -1213,7 +1199,9 @@ export function Chat({
           const win = chat.contextWindow ?? (engineBinary(chat.cli) === "codex" ? 256_000 : 200_000);
           const used = chat.contextTokens ?? Math.round(chat.messages.reduce((n, m) => n + m.text.length, 0) / 4);
           lines.push(`model     ${chat.model ?? "default"}`);
-          lines.push(`ctx used  ${used.toLocaleString()} / ${win.toLocaleString()} tokens`);
+          lines.push(chat.cli === "custom"
+            ? `ctx used  ${chat.contextTokens === undefined ? "not reported" : chat.contextTokens.toLocaleString() + " tokens"} (provider limit unknown)`
+            : `ctx used  ${used.toLocaleString()} / ${win.toLocaleString()} tokens`);
           setAccountLines(lines);
           setShowAccount(true);
         })();
@@ -1259,15 +1247,15 @@ export function Chat({
   const mood: Mood = eggMood ?? (pendingApproval ? "tool" : chat.busy ? "thinking" : idle ? "sleeping" : "idle");
   // context-left: prefer the engine's REAL per-turn usage; before the first turn reports,
   // fall back to a rough chars/4 estimate so the meter isn't blank.
-  const WINDOW = chat.contextWindow ?? (engineBinary(chat.cli) === "codex" ? 256_000 : 200_000);
+  const WINDOW = chat.cli === "custom" ? undefined : chat.contextWindow ?? (engineBinary(chat.cli) === "codex" ? 256_000 : 200_000);
   // Only fall back to char-count estimate when there are actual messages — otherwise
   // the bar shows 0/200k on every fresh session which is meaningless noise.
   const usedTokens =
     chat.contextTokens ??
-    (chat.messages.length > 0
+    (chat.cli !== "custom" && chat.messages.length > 0
       ? chat.messages.reduce((n, m) => n + m.text.length, 0) / 4
       : undefined);
-  const usedFrac = usedTokens !== undefined ? Math.min(1, usedTokens / WINDOW) : undefined;
+  const usedFrac = usedTokens !== undefined && WINDOW !== undefined ? Math.min(1, usedTokens / WINDOW) : undefined;
   const ctxReal = chat.contextTokens !== undefined;
 
   // An approval that arrives while the user is on ANOTHER screen must not be invisible.
