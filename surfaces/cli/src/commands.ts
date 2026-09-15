@@ -20,7 +20,7 @@ export const SLASH_COMMANDS: SlashCmd[] = [
   { name: "compact", desc: "compact the conversation context" },
   { name: "clear", desc: "clear the on-screen transcript" },
   { name: "copy", desc: "copy the last reply to the clipboard" },
-  { name: "engine", desc: "switch engine (carries session)", args: "claude|codex" },
+  { name: "engine", desc: "switch engine (carries session)", args: "claude|codex|custom" },
   { name: "model", desc: "change model", args: "<model>" },
   { name: "models", desc: "pick a model from a menu" },
   // levels live in the desc, not args: "/effort low|medium|high|xhigh|max" is wider than

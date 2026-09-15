@@ -125,7 +125,7 @@ export function Message({ msg, live }: { msg: ChatMessage; live?: boolean }) {
   }
 
   // assistant
-  const who = msg.cli === "codex" ? "codex" : "claude";
+  const who = msg.cli === "custom" ? "custom" : msg.cli === "codex" ? "codex" : "claude";
   return (
     <Reply accent>
       <Assistant text={msg.text} who={who} live={!!live} />

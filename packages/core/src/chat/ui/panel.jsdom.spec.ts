@@ -78,6 +78,21 @@ function boot(): Page {
 }
 
 describe("panel.jsdom: boot", () => {
+  it("explains a missing Node runtime without offering an engine install", () => {
+    const p = boot();
+    p.host({ type: "cliStatus", claude: "node-missing", codex: "node-missing" });
+    expect(p.document.body.textContent).toContain("Node.js is missing");
+    expect(p.$$("button").map((b) => b.textContent)).not.toContain("Install in terminal");
+    const retry = p.$$("button").find((b) => b.textContent === "Check again");
+    expect(retry).toBeDefined();
+    retry!.click();
+    expect(p.posted.at(-1)).toEqual({ type: "getCliStatus" });
+    expect(p.types()).not.toContain("installEngine");
+    p.host({ type: "cliStatus", claude: "ok", codex: "ok" });
+    expect(p.document.getElementById("log")?.textContent).toContain("is ready.");
+    expect(p.errors).toEqual([]);
+  });
+
   it("runs both inline scripts without an error, posts the boot messages in the legacy order, and has the shell roots", () => {
     const p = boot();
     expect(p.errors).toEqual([]);
@@ -298,6 +313,112 @@ describe("panel.jsdom: rate-limit gauge", () => {
     p.host({ type: "clear" });
     expect(meter.style.display).toBe("inline-flex");
     expect((p.$("#limitMeter .lm-pct") as HTMLElement).textContent).toBe("60%");
+    expect(p.errors).toEqual([]);
+  });
+});
+
+describe("panel.jsdom: custom engine tab (issue #209)", () => {
+  const CUSTOM_TAB = '#engineTabs .etab[data-cli="custom"]';
+  const run = (p: Page, command: string) => {
+    const input = p.$("#input") as HTMLTextAreaElement;
+    input.value = command;
+    p.key(input, "Enter");
+  };
+
+  it("gates Custom on its runtime without requiring Codex sign-in", () => {
+    const p = boot();
+    p.host({ type: "customEngine", masked: "fixture.invalid", presets: [] });
+    p.host({ type: "cliStatus", claude: "ok", codex: "node-missing" });
+    const before = p.posted.length;
+    p.$(CUSTOM_TAB)!.click();
+    expect(p.types().slice(before)).not.toContain("platform");
+    expect(p.$("#log")!.textContent).toContain("Node.js is missing");
+    p.host({ type: "platform", cli: "claude" });
+    p.host({ type: "cliStatus", claude: "ok", codex: "no-login" });
+    p.$(CUSTOM_TAB)!.click();
+    expect(p.posted).toContainEqual({ type: "platform", cli: "custom" });
+    expect(p.errors).toEqual([]);
+  });
+
+  it("ships hidden, refuses /engine custom without a config, and appears once the host announces one", () => {
+    const p = boot();
+    p.host({ type: "cliStatus", claude: "ok", codex: "ok" });
+    expect(p.$(CUSTOM_TAB)!.style.display).toBe("none");
+    const before = p.posted.length;
+    run(p, "/engine custom");
+    expect(p.types().slice(before)).toEqual([]);
+    expect(p.$("#log")!.textContent).toContain("Custom engine is not configured");
+    expect(p.$("#composer")!.dataset.cli).toBe("claude");
+
+    p.host({ type: "customEngine", masked: "127.0.0.1:11667", presets: [] });
+    expect(p.$(CUSTOM_TAB)!.style.display).toBe("");
+    const input = p.$("#input") as HTMLTextAreaElement;
+    input.value = "/engine";
+    p.fire(input, "input");
+    expect(p.$$("#slashMenu .slashOpt .cmd").map((e) => e.textContent)).toContain("custom");
+    input.value = ""; // close the menu: an open menu makes Enter complete, not send
+    p.fire(input, "input");
+
+    const at = p.posted.length;
+    run(p, "/engine custom");
+    expect(p.types().slice(at)).toEqual(["platform", "model", "mode", "effort"]);
+    expect(p.posted[at]).toEqual({ type: "platform", cli: "custom" });
+    expect(p.posted[at + 2]).toEqual({ type: "mode", mode: "auto" }); // codex's modes, shared
+    expect(p.$("#composer")!.dataset.cli).toBe("custom");
+    expect(p.errors).toEqual([]);
+  });
+
+  it("reveals the tab on custom modelOptions and shows the configured model on the chip", () => {
+    const p = boot();
+    p.host({ type: "cliStatus", claude: "ok", codex: "ok" });
+    p.host({ type: "modelOptions", cli: "custom", options: [{ value: "mock-model", chipLabel: "mock-model", label: "mock-model" }] });
+    expect(p.$(CUSTOM_TAB)!.style.display).toBe("");
+    run(p, "/engine custom");
+    expect(p.$("#modelLabel")!.textContent).toBe("mock-model");
+    expect(p.errors).toEqual([]);
+  });
+
+  it("keeps /login and /logout away from the host on the custom tab: it has no account", () => {
+    const p = boot();
+    p.host({ type: "cliStatus", claude: "ok", codex: "ok" });
+    p.host({ type: "customEngine", masked: "127.0.0.1:11667", presets: [] });
+    run(p, "/engine custom");
+    const at = p.posted.length;
+    run(p, "/login");
+    run(p, "/logout");
+    run(p, "/logout custom");
+    expect(p.types().slice(at)).toEqual([]);
+    expect(p.$("#log")!.textContent).toContain("Custom endpoints have no login");
+    expect(p.errors).toEqual([]);
+  });
+
+  it("a null customEngine while on the tab hides it and lands the user on codex", () => {
+    const p = boot();
+    p.host({ type: "cliStatus", claude: "ok", codex: "ok" });
+    p.host({ type: "customEngine", masked: "127.0.0.1:11667", presets: [] });
+    run(p, "/engine custom");
+    const at = p.posted.length;
+    p.host({ type: "customEngine", masked: null, presets: [] });
+    expect(p.$(CUSTOM_TAB)!.style.display).toBe("none");
+    expect(p.$("#composer")!.dataset.cli).toBe("codex");
+    expect(p.posted[at]).toEqual({ type: "platform", cli: "codex" });
+    expect(p.$("#log")!.textContent).toContain("Custom engine was removed");
+    expect(p.errors).toEqual([]);
+  });
+
+  it("marks a custom reply as custom and an unknown persisted cli as codex, live and on older pages", () => {
+    const p = boot();
+    p.host({ type: "message", msg: { role: "user", text: "q" } });
+    p.host({ type: "message", msg: { role: "assistant", cli: "custom", text: "from the endpoint" } });
+    expect(p.$("#log .node.assistant.custom .msg")!.textContent).toContain("from the endpoint");
+    p.host({ type: "message", msg: { role: "assistant", cli: "future-engine", text: "from a newer build" } });
+    p.host({ type: "older", messages: [
+      { role: "user", text: "older q" },
+      { role: "assistant", cli: "future-engine", text: "older a" },
+    ], hasMore: false, cursor: null });
+    // the unknown cli never reaches the class list: both nodes carry the codex mark instead
+    expect(p.$$("#log .node.assistant.codex .msg").map((e) => e.textContent!.trim())).toEqual(["older a", "from a newer build"]);
+    expect(p.$$('#log .node[class*="future-engine"]')).toEqual([]);
     expect(p.errors).toEqual([]);
   });
 });

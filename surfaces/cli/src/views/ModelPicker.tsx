@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Box, Text, useInput } from "ink";
+import type { EngineKey } from "@iqlabs-official/agent-sdk";
 import { MODELS, loadModelOptions } from "../models.js";
 import { colors, rule } from "../theme.js";
 import { displayWidth } from "../format.js";
@@ -17,7 +18,7 @@ export function ModelPicker({
   onPick,
   onClose,
 }: {
-  cli: "claude" | "codex";
+  cli: EngineKey;
   current?: string;
   onPick: (value?: string) => void;
   onClose: () => void;

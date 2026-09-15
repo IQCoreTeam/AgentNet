@@ -5,11 +5,12 @@
 // the bundle keeps every module at its legacy section position, which keeps the artifact diffable.
 import { vscode } from "./host.js";
 import { S } from "./state.js";
+import { messageBinary } from "../../../runtime/engineRegistry.js";
 import { log, approvalDock } from "./dom.js";
 import { escapeHtml } from "./markdown.js";
 import { syncWatermark, renderNotice, renderEngineBanner, renderLimitMeter, setCtxTokens, clearCtx, copyAction, renderEngineMissing, renderStatus, showLoading, hideLoading, wireShell } from "./shell.js";
 import { wireSlash } from "./slash.js";
-import { CODEX_UPDATE_CMD, applyModelOptions, setTab, wireEngine } from "./engine.js";
+import { CODEX_UPDATE_CMD, applyModelOptions, hideCustomTab, setTab, showCustomTab, wireEngine } from "./engine.js";
 import "./format.js";
 import "./turns.js";
 import { dismissApproval, renderApproval } from "./approval.js";
@@ -57,7 +58,12 @@ window.addEventListener('message', (event) => {
   else if (m.type === 'loading') showLoading();
   else if (m.type === 'clear') { log.innerHTML = ''; approvalDock.innerHTML = ''; clearCtx(); syncComposerLock(); S.streaming = null; S.openBash = null; S.tailTurn = null; S.headTurn = null; hideTyping(); hideActivity(); resetPaging(); syncWatermark(); hideLoading(); }
   else if (m.type === 'turnEnd') { hideTyping(); hideActivity(); }
-  else if (m.type === 'modelOptions') { applyModelOptions(m.cli, m.options); }
+  else if (m.type === 'modelOptions') {
+    // options for "custom" only exist once an endpoint config is saved, so their arrival
+    // doubles as the reveal signal for the hidden tab
+    if (m.cli === 'custom') showCustomTab();
+    applyModelOptions(m.cli, m.options);
+  }
   else if (m.type === 'usage') {
     // per-chat context tokens — the secondary chip, revealed by clicking the usage gauge
     setCtxTokens(m.contextTokens);
@@ -335,11 +341,19 @@ window.addEventListener('message', (event) => {
     }
   }
   else if (m.type === 'platform') setTab(m.cli); // extension switched CLI (e.g. on session open)
+  else if (m.type === 'customEngine') {
+    // The host's masked config summary doubles as the tab gate: non-null (a key tail, or a
+    // bare host for keyless local endpoints) means a saved endpoint exists.
+    if (m.masked != null) showCustomTab();
+    else hideCustomTab();
+  }
   else if (m.type === 'cliStatus') {
+    const previousStatus = S.cliReport?.[messageBinary(S.cli)];
     S.cliReport = { claude: m.claude, codex: m.codex };
-    const status = S.cliReport[S.cli];
-    if (status === 'no-login') renderNotice((S.cli === 'claude' ? 'Claude' : 'Codex') + ' is not signed in. Type /login to connect it.');
-    else if (status === 'missing') renderEngineMissing(S.cli);
+    const status = S.cliReport[messageBinary(S.cli)];
+    if (status === 'no-login' && S.cli !== 'custom') renderNotice((S.cli === 'claude' ? 'Claude' : 'Codex') + ' is not signed in. Type /login to connect it.');
+    else if (status === 'missing' || status === 'node-missing') renderEngineMissing(S.cli);
+    else if (status === 'ok' && previousStatus === 'node-missing') renderNotice((S.cli === 'claude' ? 'Claude' : 'Codex') + ' is ready.');
   }
   else if (m.type === 'engineUpdate' && m.cli === 'codex') {
     // Host-side codex probe saw the stale-models-cache signal: the installed codex is

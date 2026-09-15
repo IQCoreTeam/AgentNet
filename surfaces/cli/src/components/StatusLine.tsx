@@ -43,6 +43,7 @@ export function StatusLine({
   const usedFrac = ctx ?? 0;
   const tokenLabel = ctxTokens !== undefined && ctxWindow !== undefined
     ? `${fmtK(ctxTokens)}/${fmtK(ctxWindow)}`
+    : ctxTokens !== undefined ? `${fmtK(ctxTokens)} tokens`
     : ctx !== undefined ? `${Math.round(usedFrac * 100)}%` : "";
 
   // Still exactly one row: the frame is fixed height, so a wrap here shifts every band
@@ -62,9 +63,9 @@ export function StatusLine({
       <Box flexGrow={1} paddingLeft={2} overflow="hidden">
         {status}
       </Box>
-      {ctx !== undefined ? (
+      {tokenLabel ? (
         <Box flexShrink={0}>
-          <CtxBar used={usedFrac} approx={!!ctxApprox} />
+          {ctx !== undefined && <CtxBar used={usedFrac} approx={!!ctxApprox} />}
           <Text dimColor wrap="truncate-end"> {tokenLabel}</Text>
         </Box>
       ) : null}

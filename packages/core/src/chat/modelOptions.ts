@@ -1,4 +1,6 @@
-export type EngineKey = "claude" | "codex";
+import type { EngineKey } from "../runtime/engineRegistry.js";
+
+export type { EngineKey } from "../runtime/engineRegistry.js";
 
 export type ChatModelOption = {
   value?: string;
@@ -48,7 +50,24 @@ export const CHAT_MODEL_OPTIONS: Record<EngineKey, ChatModelOption[]> = {
       description: "General GPT model · exact value: gpt-5.5",
     },
   ],
+  // The custom engine has no catalog: its one model is whatever the saved endpoint
+  // config names, which lives on the host side. Surfaces build the entry with
+  // customModelOption from the stored config and push it over their live channel.
+  custom: [],
 };
+
+// Picker entry for the configured custom-endpoint model. Empty only for a legacy
+// config saved before saveCustomEngineConfig required a model id; spawn rejects
+// those configs, so an empty list here matches an engine that cannot run.
+export function customModelOption(model: string, label?: string): ChatModelOption[] {
+  if (!model) return [];
+  return [{
+    value: model,
+    chipLabel: model,
+    label: model,
+    description: (label ? label + " · " : "") + "configured endpoint model",
+  }];
+}
 
 export function findChatModelOption(cli: EngineKey, model?: string): ChatModelOption | undefined {
   const opts = CHAT_MODEL_OPTIONS[cli];

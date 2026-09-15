@@ -16,13 +16,11 @@ import type { ApprovalChannel } from "../runtime/approval/channel.js";
 import type { SkillCard, MarketRequest } from "./marketMessages.js";
 import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ChatModelOption } from "./modelOptions.js";
+import { customModelOption, type ChatModelOption } from "./modelOptions.js";
+import { loadCustomEngineConfig, customEngineStatus } from "../account/customEngineAuth.js";
+import { ENGINE_KEYS, ENGINE_REGISTRY, type EngineKey } from "../runtime/engineRegistry.js";
 
-// Format a token count with thousands separators (e.g. 167000 → "167,000") for the
-// /context breakdown notice.
-function fmtTok(n: number): string {
-  return Math.round(n).toLocaleString("en-US");
-}
+import { contextNotice } from "./contextNotice.js";
 
 // The two-way pipe to ONE chat UI (one panel / one socket). Messages both ways are
 // flat {type, ...} JSON — the same shape the webview already speaks.
@@ -126,7 +124,7 @@ export interface ChatEnv {
   rpcStatus?(): Promise<import("./marketMessages.js").RpcStatus>;
   // Optional model catalog override from the host. VSCode uses this for Codex so the
   // picker can show the actual models exposed by the logged-in app-server account.
-  modelOptions?(cli: "claude" | "codex"): Promise<ChatModelOption[] | null>;
+  modelOptions?(cli: EngineKey): Promise<ChatModelOption[] | null>;
   // OPTIONAL multi-tab guard: vscode can open the same session in two panels (two
   // tabs writing one log races), so it claims a session before opening and yields
   // false to abort if another panel already holds it. One-socket surfaces (server,
@@ -184,11 +182,11 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-async function initInstructionsFile(cli: "claude" | "codex", cwd: string): Promise<{ file: string; created: boolean }> {
-  const file = cli === "codex" ? "AGENTS.md" : "CLAUDE.md";
+async function initInstructionsFile(cli: EngineKey, cwd: string): Promise<{ file: string; created: boolean }> {
+  const file = ENGINE_REGISTRY[cli].memoryFile;
   const path = join(cwd, file);
   if (await exists(path)) return { file, created: false };
-  const tool = cli === "codex" ? "Codex" : "Claude Code";
+  const tool = cli === "claude" ? "Claude Code" : "Codex";
   await writeFile(path, [
     `# ${file}`,
     "",
@@ -241,11 +239,12 @@ export function createChatSession(
     lastUsage?: number;
     lastWindow?: number;
   };
-  const slots: Record<"claude" | "codex", Slot> = {
+  const slots: Record<EngineKey, Slot> = {
     claude: { handle: null, parked: new Set(), mode: "acceptEdits", restage: null },
     codex: { handle: null, parked: new Set(), mode: "auto", restage: null },
+    custom: { handle: null, parked: new Set(), mode: "auto", restage: null },
   };
-  let cli: "claude" | "codex" = "claude"; // which tab is showing
+  let cli: EngineKey = "claude"; // which tab is showing
   const slot = () => slots[cli];
 
   // Handles with a turn in flight (set in ensureHandle when a turn starts, cleared in
@@ -260,7 +259,7 @@ export function createChatSession(
   // onTurnEnd awaits it to write the matching `ended` mark, and only that turn's.
   const turnMarks = new Map<SessionHandle, Promise<string | null>>();
 
-  function isVisibleHandle(forCli: "claude" | "codex", h: SessionHandle): boolean {
+  function isVisibleHandle(forCli: EngineKey, h: SessionHandle): boolean {
     return cli === forCli && slots[forCli].handle === h;
   }
 
@@ -297,7 +296,7 @@ export function createChatSession(
   // background reply doesn't bleed into the other tab's log). The message already
   // carries its own .cli (stamped by the runtime), so the UI badges the real engine
   // per-message — correct even for a cross-CLI session.
-  function wire(forCli: "claude" | "codex", h: SessionHandle) {
+  function wire(forCli: EngineKey, h: SessionHandle) {
     h.onMessage((msg) => { if (isVisibleHandle(forCli, h)) transport.send({ type: "message", msg }); });
     // nft skill firing cue; local plaintext skills are filtered in runtime/index.
     h.onSkill((skill) => {
@@ -503,7 +502,7 @@ export function createChatSession(
     transport.send({ type: "skillShopping", on });
   }
 
-  async function pushModelOptions(forCli: "claude" | "codex") {
+  async function pushModelOptions(forCli: EngineKey) {
     if (!env.modelOptions) return;
     const options = await env.modelOptions(forCli).catch(() => null);
     // Empty/failed probe → leave the webview on its static baseline (listClaudeModelOptions
@@ -553,6 +552,15 @@ export function createChatSession(
         // only pushed codex, so a fresh claude session never received its dynamic list and
         // kept showing the static baseline. Switching engines pushes the other side.
         void pushModelOptions(cli);
+        // The custom tab ships hidden; a modelOptions push for "custom" is the signal
+        // that the custom engine is USABLE, so it is gated on customEngineStatus (config
+        // saved AND codex binary present). A config without the binary would reveal a
+        // tab that can only die with a raw spawn error.
+        void (async () => {
+          if ((await customEngineStatus()) !== "ok") return;
+          const cfg = await loadCustomEngineConfig();
+          if (cfg) transport.send({ type: "modelOptions", cli: "custom", options: customModelOption(cfg.model, cfg.label || ENGINE_REGISTRY.custom.label) });
+        })().catch(() => {});
         // install the wallet's owned skills so they're present + discoverable this
         // session (issue #17). Fire-and-forget: a chain hiccup must not delay the chat;
         // refresh the panel once it lands.
@@ -584,7 +592,7 @@ export function createChatSession(
         // you on an empty screen. We show a loading flash, hand the session to the new
         // slot, and repaint — the next send resumes it (history re-injected into the
         // new cli). If nothing was open, just switch to a blank chat as before.
-        if ((m.cli === "claude" || m.cli === "codex") && m.cli !== cli) {
+        if (ENGINE_KEYS.includes(m.cli) && m.cli !== cli) {
           const carry = slot().pendingId; // the session the OLD engine was showing
           cli = m.cli;
           void pushModelOptions(cli);
@@ -704,26 +712,7 @@ export function createChatSession(
         // have per-category token data from the engines, so we report the totals we do have.
         if (command === "context") {
           const s = slot();
-          const window = s.lastWindow ?? (cli === "codex" ? 256_000 : 200_000);
-          if (s.lastUsage === undefined) {
-            transport.send({ type: "notice", text: `Context: 0 / ${fmtTok(window)} tokens. Send a message to measure usage.` });
-            break;
-          }
-          const used = s.lastUsage;
-          const free = Math.max(0, window - used);
-          const pct = Math.round((used / window) * 100);
-          // auto-compact reserve: ~20k for the model's reply + ~13k summary headroom,
-          // matching Claude Code's effectiveWindow − 13k formula.
-          const threshold = Math.max(0, window - 33_000);
-          const tpct = Math.round((threshold / window) * 100);
-          transport.send({
-            type: "notice",
-            text:
-              `Context window (${cli})\n` +
-              `  used    ${fmtTok(used)} / ${fmtTok(window)} (${pct}%)\n` +
-              `  free    ${fmtTok(free)}\n` +
-              `  auto-compact at ~${fmtTok(threshold)} (${tpct}%)`,
-          });
+          transport.send({ type: "notice", text: contextNotice(cli, s.lastUsage, s.lastWindow) });
           break;
         }
         if (command === "resume") {
@@ -754,7 +743,7 @@ export function createChatSession(
         if (typeof m.sessionId === "string") {
           await rt.deleteSession(m.sessionId);
           // if the deleted one is open in either slot, clear that slot
-          for (const k of ["claude", "codex"] as const) {
+          for (const k of ENGINE_KEYS) {
             const s = slots[k];
             if (m.sessionId === (s.handle?.sessionId ?? s.pendingId)) {
               if (s.handle) stopHandle(s, s.handle);
@@ -1041,7 +1030,7 @@ export function createChatSession(
 
   return {
     stop() {
-      for (const s of [slots.claude, slots.codex]) {
+      for (const s of Object.values(slots)) {
         if (s.handle) stopHandle(s, s.handle);
         for (const h of [...s.parked]) stopHandle(s, h);
       }
