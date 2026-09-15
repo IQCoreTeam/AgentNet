@@ -9,7 +9,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-function fakeHandle(id: string, cli: "claude" | "codex") {
+function fakeHandle(id: string, cli: "claude" | "codex" | "custom") {
   const usageCbs: Array<(n: number, window?: number) => void> = [];
   const compactCbs: Array<() => void> = [];
   const msgCbs: Array<(msg: any) => void> = [];
@@ -672,5 +672,23 @@ describe("chat/session — feed anchor re-prime after a bumping blog comment (is
     fromUI({ type: "getBlogFeed", sort: "latest", fresh: true });
     await waitForType(transport, "blogFeed");
     expect(getBlogFeed).toHaveBeenCalledWith(undefined, "latest", true);
+  });
+});
+
+describe("Custom context reporting", () => {
+  it("never derives provider capacity or compaction from a Codex window", async () => {
+    const { handles, fromUI, transport, chat } = harness();
+    try {
+      fromUI({ type: "platform", cli: "custom" });
+      fromUI({ type: "slashCommand", command: "context" });
+      await flush();
+      expect(transport.send).toHaveBeenCalledWith({ type: "notice", text: "Context: usage not reported yet. Provider context limit unknown." });
+      fromUI({ type: "send", text: "fixture" });
+      await flush();
+      handles[0].emitUsage(12000, 256000);
+      fromUI({ type: "slashCommand", command: "context" });
+      await flush();
+      expect(transport.send).toHaveBeenCalledWith({ type: "notice", text: "Context (custom): 12,000 tokens used. Provider context limit unknown." });
+    } finally { chat.stop(); }
   });
 });

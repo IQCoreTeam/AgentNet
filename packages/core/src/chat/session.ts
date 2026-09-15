@@ -20,11 +20,7 @@ import { customModelOption, type ChatModelOption } from "./modelOptions.js";
 import { loadCustomEngineConfig, customEngineStatus } from "../account/customEngineAuth.js";
 import { ENGINE_KEYS, ENGINE_REGISTRY, type EngineKey } from "../runtime/engineRegistry.js";
 
-// Format a token count with thousands separators (e.g. 167000 → "167,000") for the
-// /context breakdown notice.
-function fmtTok(n: number): string {
-  return Math.round(n).toLocaleString("en-US");
-}
+import { contextNotice } from "./contextNotice.js";
 
 // The two-way pipe to ONE chat UI (one panel / one socket). Messages both ways are
 // flat {type, ...} JSON — the same shape the webview already speaks.
@@ -716,26 +712,7 @@ export function createChatSession(
         // have per-category token data from the engines, so we report the totals we do have.
         if (command === "context") {
           const s = slot();
-          const window = s.lastWindow ?? (cli === "claude" ? 200_000 : 256_000);
-          if (s.lastUsage === undefined) {
-            transport.send({ type: "notice", text: `Context: 0 / ${fmtTok(window)} tokens. Send a message to measure usage.` });
-            break;
-          }
-          const used = s.lastUsage;
-          const free = Math.max(0, window - used);
-          const pct = Math.round((used / window) * 100);
-          // auto-compact reserve: ~20k for the model's reply + ~13k summary headroom,
-          // matching Claude Code's effectiveWindow − 13k formula.
-          const threshold = Math.max(0, window - 33_000);
-          const tpct = Math.round((threshold / window) * 100);
-          transport.send({
-            type: "notice",
-            text:
-              `Context window (${cli})\n` +
-              `  used    ${fmtTok(used)} / ${fmtTok(window)} (${pct}%)\n` +
-              `  free    ${fmtTok(free)}\n` +
-              `  auto-compact at ~${fmtTok(threshold)} (${tpct}%)`,
-          });
+          transport.send({ type: "notice", text: contextNotice(cli, s.lastUsage, s.lastWindow) });
           break;
         }
         if (command === "resume") {

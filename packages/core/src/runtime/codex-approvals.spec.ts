@@ -73,12 +73,16 @@ describe.each([
       expect(requests[1].params).toMatchObject({ approvalPolicy: policy, approvalsReviewer: "user" });
       expect(requests[1].params.sandbox).toBe(sandbox);
       expect(requests[1].params.modelProvider).toBe(cli === "custom" ? "custom" : undefined);
+      stdout.write(JSON.stringify({ method: "thread/tokenUsage/updated", params: {
+        tokenUsage: { last: { totalTokens: 1000 } },
+      } }) + "\n");
+      expect(usage).toHaveBeenLastCalledWith(1000, cli === "custom" ? undefined : 256000);
       // A second turn adds to billed totals, not to current context occupancy.
       for (const [total, last] of [[40000, 20000], [60000, 21000], [61000, 1000]]) {
         stdout.write(JSON.stringify({ method: "thread/tokenUsage/updated", params: {
           tokenUsage: { total: { totalTokens: total }, last: { totalTokens: last }, modelContextWindow: 32000 },
         } }) + "\n");
-        expect(usage).toHaveBeenLastCalledWith(last, 32000);
+        expect(usage).toHaveBeenLastCalledWith(last, cli === "custom" ? undefined : 32000);
       }
       for (const [id, outcome] of (["once", "deny", "always"] as const).entries()) {
         approve.mockResolvedValueOnce({ outcome });

@@ -584,7 +584,7 @@ function codexEngine(opts: SpawnOpts): Engine {
   const cb = callbacks();
   // last known context-window size (tokens). Seeded with the model default; replaced by
   // the real modelContextWindow the moment the server reports it in a usage notification.
-  let knownWindow = defaultWindow("codex", opts.model);
+  let knownWindow = opts.cli === "custom" ? undefined : defaultWindow("codex", opts.model);
   const approval = opts.approval ?? autoApprove();
 
   const codexPath = resolveEngineBin("codex");
@@ -799,7 +799,7 @@ function codexEngine(opts: SpawnOpts): Engine {
       // turns and must not be shown as context occupancy.
       const tu = params?.tokenUsage;
       if (tu) {
-        if (typeof tu.modelContextWindow === "number") knownWindow = tu.modelContextWindow;
+        if (opts.cli !== "custom" && typeof tu.modelContextWindow === "number") knownWindow = tu.modelContextWindow;
         const last = tu.last?.totalTokens;
         if (typeof last === "number") cb.emitUsage(last, knownWindow);
       }

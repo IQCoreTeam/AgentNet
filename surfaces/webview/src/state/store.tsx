@@ -332,7 +332,7 @@ type LocalAction =
   | { type: "__clearCelebrate" };
 type Action = ServerMessage | LocalAction;
 
-function reducer(state: State, ev: Action): State {
+export function reducer(state: State, ev: Action): State {
   switch (ev.type) {
     case "__typing":
       return { ...state, typing: true };
@@ -541,11 +541,13 @@ function reducer(state: State, ev: Action): State {
       return { ...state, toast: ev.text };
     case "status": {
       const s = ev.status;
-      const win = state.contextWindow ?? (s.cli === "claude" ? 200_000 : 256_000);
+      const win = s.contextWindow ?? (s.cli === "claude" ? 200_000 : 256_000);
       const fmtK = (n: number) => n >= 1000 ? Math.round(n / 1000) + "k" : String(n);
       const ctx = s.contextTokens === undefined
         ? ""
-        : `, ctx ${fmtK(s.contextTokens)} / ${fmtK(win)} (${Math.round((s.contextTokens / win) * 100)}%)`;
+        : s.cli === "custom"
+          ? `, ctx ${fmtK(s.contextTokens)} tokens (provider limit unknown)`
+          : `, ctx ${fmtK(s.contextTokens)} / ${fmtK(win)} (${Math.round((s.contextTokens / win) * 100)}%)`;
       return {
         ...state,
         toast: `${s.cli}: model ${s.model ?? "default"}, mode ${s.mode ?? "default"}, effort ${s.effort ?? "default"}${ctx}`,
