@@ -4,3 +4,5 @@
 packages:
   - "packages/*"
   - "surfaces/*"
+minimumReleaseAgeExclude:
+  - '@iqlabs-official/solana-sdk@0.2.0'
