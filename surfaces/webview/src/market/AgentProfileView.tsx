@@ -238,6 +238,7 @@ export function BlogPostView({ post, wallet, onClose }: { post: BlogNote; wallet
   const { state, send } = useStore();
   const author = post.author || wallet;
   const threads = state.blogComments[post.id];
+  const readError = state.blogReadErrors[`comments:${post.id}`];
   // Post replies are OPEN (issue #183): anyone with a wallet may reply, UNLIKE the agent
   // reputation comment wall, which is holder-gated. So the gate here is just "has a wallet".
   const canReply = !!state.walletAddress;
@@ -310,12 +311,13 @@ export function BlogPostView({ post, wallet, onClose }: { post: BlogNote; wallet
           <p className="an-term-mono mb-3 text-[11px] font-bold uppercase" style={{ letterSpacing: "0.14em", color: "var(--an-term-fg)" }}>
             <span style={{ color: "var(--an-term-green)" }}>&gt;</span>COMMENTS{threads?.length ? <span style={{ color: "var(--an-term-fg-7)" }}> ({threads.length})</span> : ""}
           </p>
-          {threads === undefined ? (
+          {readError && <div role="alert" className="my-3 text-xs" style={{ color: "var(--an-red)" }}><p>Could not load comments. {readError}</p><button onClick={() => send({ type: "getBlogComments", postId: post.id, agentWallet: wallet })}>Try again</button></div>}
+          {threads === undefined && !readError ? (
             <p className="an-term-mono py-4 text-center text-[11px]" style={{ color: "var(--an-fg-mute)" }}>Loading comments...</p>
-          ) : threads.length === 0 ? (
+          ) : threads?.length === 0 && !readError ? (
             <p className="an-term-mono py-2 text-[11px]" style={{ color: "var(--an-fg-mute)" }}>No comments yet. Be the first.</p>
           ) : (
-            <CommentThreadList preserveDraft threads={threads} canPost={canReply} posting={posting} replyTo={replyTo} setReplyTo={setReplyTo} onReply={submitComment} />
+            <CommentThreadList preserveDraft threads={threads ?? []} canPost={canReply} posting={posting} replyTo={replyTo} setReplyTo={setReplyTo} onReply={submitComment} />
           )}
           {commentError && <p role="alert" className="mt-3 text-xs break-words" style={{ color: "var(--an-red)" }}>{commentError}</p>}
           <div className="mt-3">

@@ -657,23 +657,28 @@ export async function marketplaceEnv(wallet: Wallet) {
     // lazily when the post view opens. Write = a comment on that post (gate lives in
     // corePostBlogComment: holds ≥1 of the post-author's skills, or is the author).
     async getBlogComments(postId: string) {
-      return readBlogCommentThreads(postId).catch(() => []);
+      return readBlogCommentThreads(postId);
     },
     // The global blog feed (issue #183: RANK -> FEED): one read of the feed
     // anchor, grouped by post with activity signals, sorted ACTIVE or LATEST
-    // (issue #208). Failure degrades to an empty feed, never a throw.
+    // (issue #208). Hosts surface read failures separately from an empty feed.
     async getBlogFeed(limit?: number, sort?: "active" | "latest", fresh?: boolean) {
-      return readBlogFeed({ limit, sort, fresh }).catch(() => []);
+      return readBlogFeed({ limit, sort, fresh });
     },
     // Open a feed post: the real body from the author's own blog table (#208).
     async getBlogPost(author: string, postId: string) {
-      return readBlogPost(author, postId).catch(() => null);
+      return readBlogPost(author, postId);
     },
     async postBlogComment(postId: string, agentWallet: string, text: string, gitLink?: string, parentId?: string, opts?: { sage?: boolean; feedBump?: boolean }) {
       try {
         await corePostBlogComment(conn, wallet, { postId, agentWallet, text, gitLink, parentId, sage: opts?.sage, feedBump: opts?.feedBump });
-        const threads = await readBlogCommentThreads(postId).catch(() => []);
-        return { ok: true as const, threads };
+        // A confirmed write remains successful even if its follow-up read fails.
+        // Reporting this as a write failure would invite a duplicate comment.
+        try {
+          return { ok: true as const, threads: await readBlogCommentThreads(postId) };
+        } catch (e) {
+          return { ok: true as const, commentsError: e instanceof Error ? e.message : String(e) };
+        }
       } catch (e) {
         return { ok: false as const, error: e instanceof Error ? e.message : String(e) };
       }

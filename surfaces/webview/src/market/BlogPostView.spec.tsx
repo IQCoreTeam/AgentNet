@@ -2,7 +2,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { BlogPostView } from './AgentProfileView';
-const store = vi.hoisted(() => ({ state: { walletAddress: 'local-wallet', blogComments: {} as Record<string, any[]>, blogCommentResults: {} as Record<string, any> }, send: vi.fn() }));
+const store = vi.hoisted(() => ({ state: { walletAddress: 'local-wallet', blogReadErrors: {} as Record<string,string>, blogComments: {} as Record<string, any[]>, blogCommentResults: {} as Record<string, any> }, send: vi.fn() }));
 vi.mock('../state/store', () => ({ useStore: () => store, skillCardFiring: () => false }));
 const post = { id: 'local-post', author: 'local-author', text: 'Local QA only', timestamp: 1 };
 const thread = { note: { id: 'local-comment', author: 'reader', text: 'hello', timestamp: 1 }, replies: [] };
@@ -13,7 +13,7 @@ async function type(text: string, reply = false) { await act(async () => { const
 async function click(label: string) { await act(async () => { const b = [...host.querySelectorAll('button')].find(b => b.textContent === label); expect(b).toBeTruthy(); b!.click(); }); }
 beforeEach(async () => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  store.state.blogComments = { 'local-post': [thread] }; store.state.blogCommentResults = {}; store.send.mockClear();
+  store.state.blogReadErrors = {}; store.state.blogComments = { 'local-post': [thread] }; store.state.blogCommentResults = {}; store.send.mockClear();
   host = document.createElement('div'); document.body.append(host); root = createRoot(host); await render();
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
@@ -46,4 +46,16 @@ it('repeated failures restore controls and do not consume an older result', asyn
   await click('Comment'); expect(field().disabled).toBe(true);
   store.state.blogCommentResults['local-post'] = { ok: false, error: 'Same error' }; await render();
   expect(field().disabled).toBe(false); expect(field().value).toBe('retryable');
+});
+
+it('keeps the draft and cached comments when a thread read fails', async () => {
+  await type('안녕하세요 draft');
+  store.state.blogReadErrors['comments:local-post'] = 'Gateway unavailable';
+  await render();
+  expect(field().value).toBe('안녕하세요 draft');
+  expect(host.textContent).toContain('hello');
+  expect(host.textContent).toContain('Could not load comments');
+  expect(host.textContent).not.toContain('No comments yet');
+  await click('Try again');
+  expect(store.send).toHaveBeenCalledWith({ type: 'getBlogComments', postId: 'local-post', agentWallet: 'local-author' });
 });

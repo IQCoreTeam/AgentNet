@@ -1,0 +1,10 @@
+../../packages/core/src/chat/ui/webview.ts(20,35): error TS6133: 'LAYERS_SVG' is declared but its value is never read.
+../../packages/core/src/notes/notes.ts(112,3): error TS6133: 'conn' is declared but its value is never read.
+../../packages/core/src/notes/notes.ts(193,3): error TS6133: 'conn' is declared but its value is never read.
+../../packages/core/src/notes/notes.ts(334,3): error TS6133: 'conn' is declared but its value is never read.
+../../packages/core/src/notes/notes.ts(335,3): error TS6133: 'signer' is declared but its value is never read.
+../../packages/core/src/notes/notes.ts(336,3): error TS6133: 'noteId' is declared but its value is never read.
+../../packages/core/src/notes/notes.ts(479,3): error TS6133: 'conn' is declared but its value is never read.
+../../packages/core/src/runtime/spawn.ts(1139,18): error TS6133: 'mode' is declared but its value is never read.
+../../packages/core/src/skill-market/index.ts(318,3): error TS6133: 'defaultCreatorWallet' is declared but its value is never read.
+src/market/skillSigil.ts(70,45): error TS6133: 'category' is declared but its value is never read.

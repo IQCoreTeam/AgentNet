@@ -1,0 +1,60 @@
+
+ RUN  v4.1.8 /Users/nubs/Git/AgentNet-feed-read-20260916/packages/core
+
+stderr | src/runtime/session-settings.spec.ts
+bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)
+
+ ❯ src/runtime/session-settings.spec.ts (4 tests | 1 failed) 559ms
+     × resuming under different settings refreshes the stored meta mid-page 286ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/runtime/session-settings.spec.ts > runtime/session-settings: model/effort persist and survive resume > resuming under different settings refreshes the stored meta mid-page
+AssertionError: expected 'haiku' to be 'sonnet' // Object.is equality
+
+Expected: "sonnet"
+Received: "haiku"
+
+ ❯ src/runtime/session-settings.spec.ts:101:28
+     99|     const metas = await new SessionStore(wallet, storage).listMine();
+    100|     expect(metas).toHaveLength(1);
+    101|     expect(metas[0].model).toBe("sonnet");
+       |                            ^
+    102|     expect(metas[0].effort).toBe("high");
+    103|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: ENOENT: no such file or directory, mkdir '/var/folders/kw/kjchvtvj0_d0wk1485qsjmfm0000gn/T/agentnet-settings-DpxQJa/sessions'
+ ❯ mkdir node:internal/fs/promises:859:10
+ ❯ Object.append src/account/storage/manual.ts:27:7
+     25|     // real append — adds the chunk to the file end, no rewrite.
+     26|     async append(sessionId, chunk) {
+     27|       await mkdir(dir(), { recursive: true });
+       |       ^
+     28|       await appendFile(file(sessionId), chunk);
+     29|     },
+ ❯ SessionStore.write src/account/store.ts:111:7
+ ❯ SessionStore.appendMessage src/account/store.ts:189:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { errno: -2, code: 'ENOENT', syscall: 'mkdir', path: '/var/folders/kw/kjchvtvj0_d0wk1485qsjmfm0000gn/T/agentnet-settings-DpxQJa/sessions' }
+This error originated in "src/runtime/session-settings.spec.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "sessions saved before the fields existed list with no model/effort". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+
+ Test Files  1 failed | 65 passed (66)
+      Tests  1 failed | 479 passed (480)
+     Errors  1 error
+   Start at  02:45:08
+   Duration  13.50s (transform 4.19s, setup 0ms, import 12.88s, tests 35.04s, environment 4ms)
+
