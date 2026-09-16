@@ -1,0 +1,45 @@
+
+ RUN  v4.1.8 /Users/nubs/Git/AgentNet-session-feed-20260916/surfaces/webview
+
+ ❯ src/market/BlogPostView.spec.tsx (3 tests | 2 failed) 198ms
+   × preserves a Korean draft on failure, permits retry, clears only on success 116ms
+   × late comment refresh does not close a reply or acknowledge its submission 39ms
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  02:21:16
+   Duration  2.12s (transform 614ms, setup 0ms, import 739ms, tests 198ms, environment 945ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/market/BlogPostView.spec.tsx > preserves a Korean draft on failure, permits retry, clears only on success
+AssertionError: expected '' to contain '안녕하세요'
+
+- Expected
++ Received
+
+- 안녕하세요
+
+ ❯ src/market/BlogPostView.spec.tsx:22:25
+     20| it('preserves a Korean draft on failure, permits retry, clears only on…
+     21|   await type('안녕하세요, 다시 시도할 댓글입니다'); await click('Comment');
+     22|   expect(field().value).toContain('안녕하세요'); expect(field().disabled).t…
+       |                         ^
+     23|   store.state.blogCommentResults['local-post'] = { ok: false, error: '…
+     24|   expect(field().disabled).toBe(false); expect(field().value).toContai…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/market/BlogPostView.spec.tsx > late comment refresh does not close a reply or acknowledge its submission
+TypeError: Cannot read properties of null (reading 'value')
+ ❯ src/market/BlogPostView.spec.tsx:30:94
+     28| it('late comment refresh does not close a reply or acknowledge its sub…
+     29|   await click('[Reply]'); await type('reply draft', true);
+     30|   store.state.blogComments['local-post'] = [{ ...thread }]; await rend…
+       |                                                                                              ^
+     31|   store.state.blogComments['local-post'] = [{ ...thread }]; await rend…
+     32|   store.state.blogCommentResults['other-post'] = { ok: true }; await r…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
