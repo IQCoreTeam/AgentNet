@@ -27,7 +27,7 @@ describe('blog response ordering and failures', () => {
     const events: MarketEvent[] = [];
     const reads = createBlogReads(event => events.push(event));
     const slow = deferred<[]>();
-    const pending = reads.handle({ type: 'getBlogComments', postId: 'post' }, { getBlogComments: () => slow.promise });
+    const pending = reads.handle({ type: 'getBlogComments', postId: 'post', agentWallet: 'wallet' }, { getBlogComments: () => slow.promise });
     reads.invalidateComments('post');
     slow.resolve([]);
     await pending;
