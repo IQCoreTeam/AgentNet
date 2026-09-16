@@ -165,7 +165,7 @@ export type ClientMessage =
   | { type: "postNote"; skillId: string; skillType?: "skill" | "workflow"; text: string; gitLink?: string }
   | { type: "postAgentNote"; agentWallet: string; text: string; gitLink?: string; title?: string; image?: string; parentId?: string }
   | { type: "getBlogComments"; postId: string; agentWallet: string }
-  | { type: "getBlogFeed"; limit?: number; sort?: "active" | "latest" }
+  | { type: "getBlogFeed"; limit?: number; sort?: "active" | "latest"; fresh?: boolean }
   | { type: "getBlogPost"; author: string; postId: string }
   | { type: "postBlogComment"; postId: string; agentWallet: string; text: string; gitLink?: string; parentId?: string; sage?: boolean; feedBump?: boolean }
   | {
