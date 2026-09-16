@@ -20,12 +20,12 @@
     "test:panel:chrome": "PANEL_CHROME_REQUIRED=1 vitest run src/chat/ui/panel.chrome.spec.ts"
   },
   "peerDependencies": {
-    "@iqlabs-official/solana-sdk": "^0.1.28",
-    "@solana/web3.js": "^1.98.0"
+    "@iqlabs-official/solana-sdk": "^0.2.0",
+    "@solana/web3.js": "^1.99.0"
   },
   "devDependencies": {
-    "@iqlabs-official/solana-sdk": "^0.1.28",
-    "@solana/web3.js": "^1.98.0",
+    "@iqlabs-official/solana-sdk": "^0.2.0",
+    "@solana/web3.js": "^1.99.0",
     "@types/jsdom": "^30.0.0",
     "@types/node": "^20.0.0",
     "jsdom": "^30.0.1",
