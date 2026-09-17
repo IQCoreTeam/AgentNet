@@ -366,11 +366,13 @@ export function createChatSession(
     transport.send({ type: "loading" });
     let localCount = 0;
     let localNewestTs = 0;
+    let localMessages = "";
     try {
       const page = await rt.loadSessionLocal(id);
       for (const msg of page.messages) transport.send({ type: "message", msg });
       transport.send({ type: "page", hasMore: page.hasMore, cursor: page.cursor });
       localCount = page.messages.length;
+      localMessages = JSON.stringify(page.messages);
       if (localCount) localNewestTs = page.messages[localCount - 1].ts ?? 0;
     } catch (err) {
       console.error(`[session] loadSessionLocal failed for ${String(id).slice(0, 8)}:`, err);
@@ -380,7 +382,7 @@ export function createChatSession(
     // above can be STALE: the just-ended turn may not have flushed to disk yet (so an engine
     // switch, which repaints, would show a blank/partial chat until a manual reload), or the
     // session may carry newer turns from another device. Re-read and ADOPT the result only
-    // when it is FRESHER than what we painted — a newer last-turn ts, or local was empty — so
+    // when it is newer, or merges other writers at the same newest timestamp — so
     // a fresher local view is never clobbered by a staler mirror copy. Guard on pendingId so a
     // late result can't overwrite a tab the user switched away from. (The old guard reconciled
     // only when local was EMPTY, so a stale-but-nonempty local page stuck until a reload — the
@@ -391,7 +393,13 @@ export function createChatSession(
         if (slot().pendingId !== id) return;   // user switched tabs while we waited
         if (!page.messages.length) return;     // nothing to adopt — leave the local paint as-is
         const newestTs = page.messages[page.messages.length - 1].ts ?? 0;
-        if (localCount > 0 && newestTs <= localNewestTs) return; // local already as fresh
+        if (localCount > 0) {
+          if (newestTs < localNewestTs) return;
+          // Another writer can insert earlier messages without changing the newest
+          // timestamp. Compare the merged page too, including full 30-message pages.
+          if (newestTs === localNewestTs &&
+              (page.messages.length < localCount || JSON.stringify(page.messages) === localMessages)) return;
+        }
         transport.send({ type: "clear" });
         for (const msg of page.messages) transport.send({ type: "message", msg });
         transport.send({ type: "page", hasMore: page.hasMore, cursor: page.cursor });

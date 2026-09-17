@@ -692,3 +692,37 @@ describe("Custom context reporting", () => {
     } finally { chat.stop(); }
   });
 });
+
+describe("chat/session — device-page reconciliation", () => {
+  const msg = (text: string, ts: number) => ({ role: "user", text, ts });
+  const page = (messages: any[]) => ({ messages, hasMore: false, cursor: null });
+
+  it.each([false, true])("adopts earlier remote messages with the same newest timestamp (full page: %s)", async (full) => {
+    const local = full
+      ? Array.from({ length: 30 }, (_, i) => msg(`local-${i}`, i + 1))
+      : [msg("phone", 30)];
+    const merged = full
+      ? [...local.slice(1, 15), msg("맥에서 보낸 메시지", 15.5), ...local.slice(15)]
+      : [msg("맥에서 보낸 메시지", 20), ...local];
+    const { fromUI, transport } = harness({ rt: {
+      loadSessionLocal: async () => page(local),
+      loadSession: async () => page(merged),
+    } });
+    fromUI({ type: "open", sessionId: "shared" });
+    await flush();
+    const events = transport.send.mock.calls.map(c => c[0]);
+    const lastClear = events.map(e => e.type).lastIndexOf("clear");
+    expect(events.slice(lastClear + 1).filter(e => e.type === "message").map(e => e.msg)).toEqual(merged);
+  });
+
+  it("does not replace a newer local page with an older cloud result", async () => {
+    const local = [msg("latest", 30)];
+    const { fromUI, transport } = harness({ rt: {
+      loadSessionLocal: async () => page(local),
+      loadSession: async () => page([msg("older", 20)]),
+    } });
+    fromUI({ type: "open", sessionId: "shared" });
+    await flush();
+    expect(transport.send.mock.calls.filter(c => c[0].type === "message").map(c => c[0].msg)).toEqual(local);
+  });
+});
