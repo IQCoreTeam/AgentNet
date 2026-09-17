@@ -171,10 +171,10 @@ export type MarketEvent =
   | { type: "buyAllResult"; wallet: string; ok: boolean; bought: number; failed: number; error?: string }
   | { type: "agentNoteResult"; agentWallet: string; ok: boolean; error?: string }
   // per-post blog comments: the refreshed thread for one post, and a write result
-  | { type: "blogComments"; postId: string; threads: ThreadNode[] }
+  | { type: "blogComments"; postId: string; threads: ThreadNode[]; error?: string }
   // the feed serves PREVIEW entries (issue #203), not full notes; a tap fetches the body
-  | { type: "blogFeed"; posts: import("../core/types.js").Note[] }
-  | { type: "blogPost"; postId: string; post: import("../core/types.js").Note | null }
+  | { type: "blogFeed"; posts: import("../core/types.js").Note[]; error?: string }
+  | { type: "blogPost"; postId: string; post: import("../core/types.js").Note | null; error?: string }
   | { type: "blogCommentResult"; postId: string; ok: boolean; error?: string }
   // make-skill: result of a UI publish. mint = the new skill's mint address on success.
   | { type: "publishResult"; ok: boolean; mint?: string; error?: string }

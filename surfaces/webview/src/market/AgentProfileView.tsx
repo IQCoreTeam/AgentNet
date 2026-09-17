@@ -238,6 +238,7 @@ export function BlogPostView({ post, wallet, onClose }: { post: BlogNote; wallet
   const { state, send } = useStore();
   const author = post.author || wallet;
   const threads = state.blogComments[post.id];
+  const readError = state.blogReadErrors[`comments:${post.id}`];
   // Post replies are OPEN (issue #183): anyone with a wallet may reply, UNLIKE the agent
   // reputation comment wall, which is holder-gated. So the gate here is just "has a wallet".
   const canReply = !!state.walletAddress;
@@ -245,11 +246,29 @@ export function BlogPostView({ post, wallet, onClose }: { post: BlogNote; wallet
   const [replyTo, setReplyTo] = useState<string | null>(null);
   // Lazy-load this post's own reply thread when it opens (comment:blog:<postId>).
   useEffect(() => { send({ type: "getBlogComments", postId: post.id, agentWallet: wallet }); }, [post.id, wallet, send]);
-  // A refreshed thread (a reply landed) clears the pending + reply-composer UI.
-  useEffect(() => { setPosting(false); setReplyTo(null); }, [threads]);
+  const result = state.blogCommentResults[post.id];
+  const pendingResult = useRef(result);
+  const pendingParent = useRef<string | undefined>(undefined);
+  const [commentError, setCommentError] = useState<string | null>(null);
+  const [commentReset, setCommentReset] = useState(0);
+  // Read responses are not acknowledgments: a late refresh must not discard a draft.
+  useEffect(() => {
+    if (!posting || !result || result === pendingResult.current) return;
+    setPosting(false);
+    if (result.ok) {
+      if (pendingParent.current) setReplyTo(null);
+      else setCommentReset((n) => n + 1);
+      setCommentError(null);
+    } else {
+      setCommentError(result.error || "Comment failed. Please try again.");
+    }
+  }, [result, posting]);
   function submitComment(f: NoteFields, parentId?: string) {
     const text = f.text.trim();
-    if (!text || !canReply) return;
+    if (!text || !canReply || posting) return;
+    pendingResult.current = result;
+    pendingParent.current = parentId;
+    setCommentError(null);
     setPosting(true);
     // feedBump: this reply targets a BLOG POST, so it may activity-bump the feed
     // (issue #208). Skill-comment threads
@@ -292,16 +311,18 @@ export function BlogPostView({ post, wallet, onClose }: { post: BlogNote; wallet
           <p className="an-term-mono mb-3 text-[11px] font-bold uppercase" style={{ letterSpacing: "0.14em", color: "var(--an-term-fg)" }}>
             <span style={{ color: "var(--an-term-green)" }}>&gt;</span>COMMENTS{threads?.length ? <span style={{ color: "var(--an-term-fg-7)" }}> ({threads.length})</span> : ""}
           </p>
-          {threads === undefined ? (
+          {readError && <div role="alert" className="my-3 text-xs" style={{ color: "var(--an-red)" }}><p>Could not load comments. {readError}</p><button onClick={() => send({ type: "getBlogComments", postId: post.id, agentWallet: wallet })}>Try again</button></div>}
+          {threads === undefined && !readError ? (
             <p className="an-term-mono py-4 text-center text-[11px]" style={{ color: "var(--an-fg-mute)" }}>Loading comments...</p>
-          ) : threads.length === 0 ? (
+          ) : threads?.length === 0 && !readError ? (
             <p className="an-term-mono py-2 text-[11px]" style={{ color: "var(--an-fg-mute)" }}>No comments yet. Be the first.</p>
           ) : (
-            <CommentThreadList threads={threads} canPost={canReply} posting={posting} replyTo={replyTo} setReplyTo={setReplyTo} onReply={submitComment} />
+            <CommentThreadList preserveDraft threads={threads ?? []} canPost={canReply} posting={posting} replyTo={replyTo} setReplyTo={setReplyTo} onReply={submitComment} />
           )}
+          {commentError && <p role="alert" className="mt-3 text-xs break-words" style={{ color: "var(--an-red)" }}>{commentError}</p>}
           <div className="mt-3">
             {canReply ? (
-              <NoteComposer placeholder="Write a comment..." submitLabel="Comment" posting={posting} onSubmit={submitComment} />
+              <NoteComposer key={commentReset} clearOnSubmit={false} placeholder="Write a comment..." submitLabel="Comment" posting={posting} onSubmit={submitComment} />
             ) : (
               <div className="an-term-mono px-3 py-2.5 text-[10px] uppercase" style={{ letterSpacing: "0.06em", border: "1px solid var(--an-term-line)", color: "var(--an-term-fg-7)" }}>
                 <span style={{ color: "var(--an-term-green)" }}>&gt;</span>CONNECT_WALLET_ <span style={{ color: "var(--an-term-fg)" }}>Connect a wallet to comment.</span>
@@ -405,6 +426,7 @@ export function NoteComposer({
   disabled,
   withTitle,
   autoFocus,
+  clearOnSubmit = true,
   onSubmit,
 }: {
   placeholder: string;
@@ -413,6 +435,7 @@ export function NoteComposer({
   disabled?: boolean;
   withTitle?: boolean;
   autoFocus?: boolean;
+  clearOnSubmit?: boolean;
   onSubmit: (fields: NoteFields) => void;
 }) {
   const [title, setTitle] = useState("");
@@ -426,7 +449,7 @@ export function NoteComposer({
   function submit() {
     if (!hasContent || !imageOk || busy) return;
     onSubmit({ text: text.trim(), title: title.trim() || undefined, gitLink: link.trim() || undefined, image: img || undefined });
-    setTitle(""); setText(""); setLink(""); setImage("");
+    if (clearOnSubmit) { setTitle(""); setText(""); setLink(""); setImage(""); }
   }
   return (
     <div className="space-y-2.5">
@@ -564,7 +587,8 @@ type CommentReply = CommentThread["replies"][number];
 // Threaded comment list (GH #101): top-level comments, each with its replies collapsed to one
 // indented level; Reply opens an inline composer. Shared by the agent-profile comment wall and
 // a blog post's own comment thread (comment:blog:<postId>), so both render identically.
-export function CommentThreadList({ threads, canPost, posting, replyTo, setReplyTo, onReply }: {
+export function CommentThreadList({ threads, canPost, posting, replyTo, setReplyTo, onReply, preserveDraft = false }: {
+  preserveDraft?: boolean;
   threads: CommentThread[];
   canPost: boolean;
   posting: boolean;
@@ -591,7 +615,7 @@ export function CommentThreadList({ threads, canPost, posting, replyTo, setReply
             {nn.text && <p className="an-term-mono whitespace-pre-wrap break-words text-[12px] leading-relaxed" style={{ color: "var(--an-fg-dim)" }}>{nn.text}</p>}
             {nn.gitLink && <GithubCard url={nn.gitLink} className="mt-2" />}
             {canPost && (
-              <button onClick={() => setReplyTo(replyTo === nn.id ? null : nn.id)} className="an-term-mono mt-2 text-[9px] font-bold uppercase active:opacity-70" style={{ letterSpacing: "0.14em", color: "var(--an-term-fg-7)" }}>
+              <button disabled={posting} onClick={() => setReplyTo(replyTo === nn.id ? null : nn.id)} className="an-term-mono mt-2 text-[9px] font-bold uppercase active:opacity-70" style={{ letterSpacing: "0.14em", color: "var(--an-term-fg-7)" }}>
                 [{replyTo === nn.id ? "Cancel" : "Reply"}]
               </button>
             )}
@@ -607,7 +631,7 @@ export function CommentThreadList({ threads, canPost, posting, replyTo, setReply
             )}
             {replyingHere && canPost && (
               <div className="mt-3 ml-4">
-                <NoteComposer placeholder="Write a reply..." submitLabel="Reply" posting={posting} onSubmit={(f) => onReply(f, replyTo ?? n.id)} />
+                <NoteComposer clearOnSubmit={!preserveDraft} placeholder="Write a reply..." submitLabel="Reply" posting={posting} onSubmit={(f) => onReply(f, replyTo ?? n.id)} />
               </div>
             )}
           </div>

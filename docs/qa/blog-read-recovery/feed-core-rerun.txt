@@ -1,0 +1,8 @@
+
+ RUN  v4.1.8 /Users/nubs/Git/AgentNet-feed-read-20260916/packages/core
+
+
+ Test Files  66 passed (66)
+      Tests  480 passed (480)
+   Start at  02:45:56
+   Duration  13.67s (transform 5.36s, setup 0ms, import 18.93s, tests 36.48s, environment 8ms)

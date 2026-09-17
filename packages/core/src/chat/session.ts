@@ -1,3 +1,4 @@
+import { createBlogReads } from "./blogReads.js";
 // The chat session DISPATCHER — transport-neutral, shared by every surface.
 //
 // This is the body of what used to live inside vscode's openChat(): the per-panel
@@ -86,7 +87,7 @@ export interface ChatEnv {
   getBlogComments?(postId: string): Promise<import("./marketMessages.js").ThreadNode[]>;
   getBlogFeed?(limit?: number, sort?: "active" | "latest", fresh?: boolean): Promise<import("../core/types.js").Note[]>;
   getBlogPost?(author: string, postId: string): Promise<import("../core/types.js").Note | null>;
-  postBlogComment?(postId: string, agentWallet: string, text: string, gitLink?: string, parentId?: string, opts?: { sage?: boolean; feedBump?: boolean }): Promise<{ ok: boolean; threads?: import("./marketMessages.js").ThreadNode[]; error?: string }>;
+  postBlogComment?(postId: string, agentWallet: string, text: string, gitLink?: string, parentId?: string, opts?: { sage?: boolean; feedBump?: boolean }): Promise<{ ok: boolean; threads?: import("./marketMessages.js").ThreadNode[]; commentsError?: string; error?: string }>;
   solBalance?(): Promise<number | null>; // wallet's native SOL balance (lamports), for the UI funds display
   // devnet-only: fund the wallet from the faucet (manual "Get devnet SOL" on an insufficient-
   // funds buy). Returns the new balance so the UI refreshes and lets the buyer retry.
@@ -292,6 +293,7 @@ export function createChatSession(
   // here, so a wrong field/type on a market event is a compile error, not a silent
   // runtime miss. Every surface's UI reads the same shape.
   const sendMarket = (e: import("./marketMessages.js").MarketEvent) => transport.send(e);
+  const blogReads = createBlogReads(sendMarket);
 
   // A handle's output is only painted when ITS cli tab is the active one (so a
   // background reply doesn't bleed into the other tab's log). The message already
@@ -976,25 +978,10 @@ export function createChatSession(
         break;
       }
       // per-post blog comments: lazy-load one post's thread on tap-open
-      case "getBlogComments": {
-        const req = m as Extract<MarketRequest, { type: "getBlogComments" }>;
-        if (!env.getBlogComments) break;
-        const threads = await env.getBlogComments(req.postId);
-        sendMarket({ type: "blogComments", postId: req.postId, threads });
-        break;
-      }
-      // The global blog feed (issue #183: RANK -> FEED), one read of the feed anchor.
-      case "getBlogFeed": {
-        const req = m as Extract<MarketRequest, { type: "getBlogFeed" }>;
-        if (!env.getBlogFeed) break;
-        sendMarket({ type: "blogFeed", posts: await env.getBlogFeed(req.limit, req.sort, req.fresh) });
-        break;
-      }
-      // open a feed post: fetch the real body from the author's own table (issue #208)
+      case "getBlogComments":
+      case "getBlogFeed":
       case "getBlogPost": {
-        const req = m as Extract<MarketRequest, { type: "getBlogPost" }>;
-        if (!env.getBlogPost) break;
-        sendMarket({ type: "blogPost", postId: req.postId, post: await env.getBlogPost(req.author, req.postId) });
+        await blogReads.handle(m as MarketRequest, env);
         break;
       }
       // post a comment onto one blog post, then re-push that post's refreshed thread
@@ -1003,7 +990,10 @@ export function createChatSession(
         if (!env.postBlogComment) break;
         const res = await env.postBlogComment(req.postId, req.agentWallet, req.text, req.gitLink, req.parentId, { sage: req.sage, feedBump: req.feedBump });
         sendMarket({ type: "blogCommentResult", postId: req.postId, ok: res.ok, error: res.ok ? undefined : (res as { ok: false; error?: string }).error });
-        if (res.ok) sendMarket({ type: "blogComments", postId: req.postId, threads: res.threads ?? [] });
+        if (res.ok) {
+          blogReads.invalidateComments(req.postId);
+          sendMarket({ type: "blogComments", postId: req.postId, threads: res.threads ?? [], error: res.commentsError });
+        }
         // issue #210: a bumping reply must re-prime the gateway's feed anchor cache.
         // The anchor is not a real table, so the background row-cache refresh bails on
         // it; one fresh read cold-fetches the new mirror row (same as the localhost host).

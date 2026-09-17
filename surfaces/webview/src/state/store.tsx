@@ -146,6 +146,8 @@ export interface State {
   agents: Reputation[];
   agentProfile: AgentProfile | null;
   agentProfileLoading: boolean;
+  blogReadErrors: Record<string, string | undefined>;
+  blogCommentResults: Record<string, { ok: boolean; error?: string }>;
   blogComments: Record<string, AgentProfile["threads"]>; // per-post comment threads, keyed by postId
   blogFeed: import("@iqlabs-official/agent-sdk").Note[] | null; // global feed, grouped + sorted (issues #183/#203/#208); null = not loaded yet
   blogPosts: Record<string, import("@iqlabs-official/agent-sdk").Note | null>; // opened post bodies by id (#208 re-fetch); null = not found
@@ -221,6 +223,8 @@ export const initialState: State = {
   agents: [],
   agentProfile: null,
   agentProfileLoading: false,
+  blogReadErrors: {},
+  blogCommentResults: {},
   blogComments: {},
   blogFeed: null,
   blogPosts: {},
@@ -665,13 +669,13 @@ export function reducer(state: State, ev: Action): State {
         ? { ...state, marketDetail: { ...state.marketDetail, notes: ev.notes as SkillDetail["notes"] } }
         : state;
     case "blogComments":
-      return { ...state, blogComments: { ...state.blogComments, [ev.postId]: ev.threads } };
+      return { ...state, blogReadErrors: { ...state.blogReadErrors, [`comments:${ev.postId}`]: ev.error }, blogComments: ev.error ? state.blogComments : { ...state.blogComments, [ev.postId]: ev.threads } };
     case "blogFeed":
-      return { ...state, blogFeed: ev.posts };
+      return { ...state, blogReadErrors: { ...state.blogReadErrors, feed: ev.error }, blogFeed: ev.error ? state.blogFeed : ev.posts };
     case "blogPost":
-      return { ...state, blogPosts: { ...state.blogPosts, [ev.postId]: ev.post } };
+      return { ...state, blogReadErrors: { ...state.blogReadErrors, [`post:${ev.postId}`]: ev.error }, blogPosts: ev.error ? state.blogPosts : { ...state.blogPosts, [ev.postId]: ev.post } };
     case "blogCommentResult":
-      return { ...state, toast: ev.ok ? "Comment posted." : `Comment failed: ${ev.error ?? "unknown"}` };
+      return { ...state, blogCommentResults: { ...state.blogCommentResults, [ev.postId]: { ok: ev.ok, error: ev.error } }, toast: ev.ok ? "Comment posted." : `Comment failed: ${ev.error ?? "unknown"}` };
     case "githubStatus":
       return { ...state, githubStatus: { hasToken: ev.hasToken, masked: ev.masked } };
     case "__loadingAgents":

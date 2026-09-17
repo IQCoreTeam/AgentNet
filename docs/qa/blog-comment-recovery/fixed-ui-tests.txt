@@ -1,0 +1,9 @@
+
+ RUN  v4.1.8 /Users/nubs/Git/AgentNet-session-feed-20260916/surfaces/webview
+
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  02:25:32
+   Duration  935ms (transform 146ms, setup 0ms, import 195ms, tests 123ms, environment 500ms)
+

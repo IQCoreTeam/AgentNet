@@ -85,6 +85,7 @@ export function BlogFeed() {
   // The opened post's real body: undefined = still fetching, null = not found.
   const openBody = openId !== null ? state.blogPosts[openId] : undefined;
   const openFallback = openId !== null ? posts?.find((p) => p.id === openId) : undefined;
+  const openError = openId !== null ? state.blogReadErrors[`post:${openId}`] : undefined;
   const openPost = openBody ?? undefined;
   return (
     <div className="pt-1">
@@ -105,7 +106,9 @@ export function BlogFeed() {
           ))}
         </div>
       </div>
-      {posts === null ? (
+      {state.blogReadErrors.feed ? (
+        <div role="alert" className="p-3"><p>Could not load posts. {state.blogReadErrors.feed}</p><button onClick={() => send({ type: "getBlogFeed", sort, fresh: true })}>Try again</button></div>
+      ) : posts === null ? (
         <BlogFeedSkeleton />
       ) : posts.length === 0 ? (
         <p className="py-8 text-center text-xs" style={{ color: "var(--an-fg-mute)" }}>
@@ -125,7 +128,7 @@ export function BlogFeed() {
                 onClick={() => {
                   haptics.tick();
                   setOpenId(p.id);
-                  if (state.blogPosts[p.id] === undefined) send({ type: "getBlogPost", author: p.author, postId: p.id });
+                  if (state.blogPosts[p.id] == null || state.blogReadErrors[`post:${p.id}`]) send({ type: "getBlogPost", author: p.author, postId: p.id });
                 }}
                 className="relative block w-full text-left active:opacity-80"
                 style={{ border: "1px solid var(--an-term-line-2)", background: showBump ? BUMP_TICKS : "var(--an-bg-0)", padding: "11px 12px" }}
@@ -164,12 +167,14 @@ export function BlogFeed() {
         </div>
       )}
       {openId !== null && (
-        openPost ? (
+        openError || openBody === null ? (
+          <div role="alert" className="absolute inset-0 z-30 p-4" style={{ background: "var(--an-bg-0)" }}>
+            <button onClick={() => setOpenId(null)}>Back</button>
+            <p className="my-4">{openError ? `Could not load this post. ${openError}` : "This post is unavailable from the author's table."}</p>
+            {openFallback && <button onClick={() => send({ type: "getBlogPost", author: openFallback.author, postId: openId })}>Try again</button>}
+          </div>
+        ) : openPost ? (
           <BlogPostView post={openPost} wallet={openPost.author} onClose={() => setOpenId(null)} />
-        ) : openBody === null && openFallback ? (
-          // Body gone from the author's table (or never there: a forged bump):
-          // fall back to the mirrored row so the tap still shows something real.
-          <BlogPostView post={openFallback} wallet={openFallback.author} onClose={() => setOpenId(null)} />
         ) : (
           <BlogPostSkeleton onClose={() => setOpenId(null)} />
         )
