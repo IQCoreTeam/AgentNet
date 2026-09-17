@@ -1,0 +1,9 @@
+$ vitest run
+
+ RUN  v4.1.8 /Users/nubs/Git/AgentNet-device-page-logs-20260917/packages/core
+
+
+ Test Files  69 passed (69)
+      Tests  503 passed | 5 skipped (508)
+   Start at  22:43:04
+   Duration  13.57s (transform 4.36s, setup 0ms, import 18.77s, tests 49.11s, environment 7ms)

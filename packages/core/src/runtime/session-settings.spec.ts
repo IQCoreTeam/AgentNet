@@ -62,7 +62,9 @@ describe("runtime/session-settings: model/effort persist and survive resume", ()
       effort: "low",
     });
     handle.send("hello");
-    await new Promise((r) => setTimeout(r, 50));
+    await vi.waitFor(async () => {
+      expect((await new SessionStore(wallet, storage).load("fresh-session-id"))?.messages).toHaveLength(1);
+    });
 
     // A FRESH store (new metaCache) = what a later `agentnet resume` boot sees.
     const metas = await new SessionStore(wallet, storage).listMine();
@@ -83,7 +85,9 @@ describe("runtime/session-settings: model/effort persist and survive resume", ()
       effort: "low",
     });
     first.send("first turn");
-    await new Promise((r) => setTimeout(r, 50));
+    await vi.waitFor(async () => {
+      expect((await new SessionStore(wallet, storage).load("fresh-session-id"))?.messages).toHaveLength(1);
+    });
 
     // New process resumes the same session with an explicit different model.
     const second = await createRuntime(wallet, storage).startSession({
@@ -94,7 +98,9 @@ describe("runtime/session-settings: model/effort persist and survive resume", ()
       effort: "high",
     });
     second.send("second turn");
-    await new Promise((r) => setTimeout(r, 50));
+    await vi.waitFor(async () => {
+      expect((await new SessionStore(wallet, storage).load("fresh-session-id"))?.messages).toHaveLength(2);
+    });
 
     const metas = await new SessionStore(wallet, storage).listMine();
     expect(metas).toHaveLength(1);
@@ -130,7 +136,9 @@ describe("runtime/session-settings: model/effort persist and survive resume", ()
       effort: "xhigh",
     });
     handle.send("branch me");
-    await new Promise((r) => setTimeout(r, 50));
+    await vi.waitFor(async () => {
+      expect((await new SessionStore(wallet, storage).load("fresh-session-id"))?.messages).toHaveLength(1);
+    });
 
     const forked = await runtime.forkSession("fresh-session-id");
     expect(forked.model).toBe("haiku");
