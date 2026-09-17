@@ -36,7 +36,7 @@ function CtxDot({ tokens, window: win, compacting }: { tokens: number; window: n
   return (
     <span
       ref={rootRef}
-      className="ml-auto relative flex items-center"
+      className="relative flex items-center"
       title={compacting ? "Compacting context…" : `Context: ${tokens.toLocaleString()} / ${win.toLocaleString()} tokens (${pct}%)\n${fmtK(tokens)} / ${fmtK(win)} ctx`}
     >
       {open && (
@@ -223,6 +223,7 @@ function ChipGroup({ label, value, options, onPick, accent = "green" }: {
 // Input + engine tabs + model/effort pickers. FROZEN while an approval is pending.
 export function Composer() {
   const { state, send, selectEngine, switchEngine, queueCount, markCompacting } = useStore();
+  const limit = state.rateLimits[state.cli];
   const [text, setText] = useState("");
   const [effort, setEffort] = useState("default");
   const [model, setModel] = useState("default");
@@ -537,7 +538,7 @@ export function Composer() {
     >
       {/* engine segmented control + a single "controls" disclosure (model/effort/mode
           live in the popover so the bar stays clean on a phone) */}
-      <div className="relative mb-2 flex items-center gap-1.5 text-xs">
+      <div className="relative mb-2 flex flex-wrap items-center gap-1.5 text-xs">
         <div className="an-term-seg">
           {(["claude", "codex"] as Cli[]).map((c) => {
             const on = state.cli === c;
@@ -565,21 +566,21 @@ export function Composer() {
           <span className="max-w-[7rem] truncate">{MODES[state.cli].find((m) => m.value === mode)?.label ?? mode}</span>
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" style={{ transform: controlsOpen ? "rotate(180deg)" : "none", transition: "transform .15s" }}><path d="M2.5 4l2.5 2.5L7.5 4" /></svg>
         </button>
-        {state.limitPct !== undefined && state.limitPct >= 50 && (
-          <span className="ml-auto mr-2 flex items-center">
-            <LimitDot pct={state.limitPct} window={state.limitWindow} resetsAt={state.limitResetsAt} status={state.limitStatus} />
-          </span>
-        )}
-        {(state.contextTokens !== undefined || state.isCompacting) && (() => {
-          const tokens = state.contextTokens ?? 0;
-          const win = state.contextWindow ?? (state.cli === "codex" ? 256_000 : 200_000);
-          return <CtxDot tokens={tokens} window={win} compacting={state.isCompacting} />;
-        })()}
-        {queueCount > 0 && (
-          <span className="ml-auto animate-pulse text-[10px]" style={{ color: "var(--an-amber)" }}>
-            ⏳ {queueCount} queued
-          </span>
-        )}
+        <span className="ml-auto flex items-center gap-2">
+          {limit?.utilization !== undefined && limit.utilization >= 50 && (
+            <LimitDot pct={limit.utilization} window={limit.window} resetsAt={limit.resetsAt} status={limit.status} />
+          )}
+          {(state.contextTokens !== undefined || state.isCompacting) && (() => {
+            const tokens = state.contextTokens ?? 0;
+            const win = state.contextWindow ?? (state.cli === "codex" ? 256_000 : 200_000);
+            return <CtxDot tokens={tokens} window={win} compacting={state.isCompacting} />;
+          })()}
+          {queueCount > 0 && (
+            <span className="animate-pulse text-[10px]" style={{ color: "var(--an-amber)" }}>
+              ⏳ {queueCount} queued
+            </span>
+          )}
+        </span>
 
         {controlsOpen && (
           <>
