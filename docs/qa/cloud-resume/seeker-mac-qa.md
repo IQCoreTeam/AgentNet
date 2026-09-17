@@ -26,3 +26,18 @@ Localhost bundle SHA-256: `68465bc83b86b7ec5a0402c5d79e0cd2763cae3a797c4a6b4661b
 ## Boundaries
 
 No blockchain posts or transactions were submitted. These were dedicated QA chat conversations. The physical test covers real two-device writes and restart; offline-tail and long-history checks remain the separate live-Drive harness, not claimed as physical-phone tests. Reused Android rootfs/native assets are development fixtures; this is not a production APK release certification. The unrelated browser OAuth popup correction remains in its separate worktree.
+
+## Review follow-up: identical newest window, merged cursor
+
+After Zo's review, the branch was rebased onto `1690b0ee` (merged #238 and #244).
+The added regression uses real encrypted SessionStore device chains over in-memory
+local/cloud adapters: B writes three older Korean messages, A writes 30 newer
+messages, and A reopens. The newest messages are identical locally and remotely,
+but only the merged cursor exposes B's older history. The test failed before the
+fix and now proves the chat dispatcher adopts that cursor and loads all three
+older messages without repainting the unchanged newest window.
+
+Post-rebase checks: 547 core tests passed, 5 skipped; TypeScript passed; all six
+required Chromium panel tests passed; localhost and webview builds passed. This
+follow-up was not rerun on the sleeping physical phone; the device evidence above
+records the earlier six-message reconciliation test.
