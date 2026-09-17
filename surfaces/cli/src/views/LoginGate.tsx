@@ -22,8 +22,6 @@ import {
   maskedCustomEngine,
   type CustomEnginePreset,
   type EngineKey,
-  NODE_REQUIRED_MESSAGE,
-  NODE_DOWNLOAD_URL,
   type CliReport,
   type CliStatus,
   type ClaudeLogin,

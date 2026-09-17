@@ -38,8 +38,6 @@ import {
   hasCustomEngine,
   maskedCustomEngine,
   type EngineKey,
-  NODE_REQUIRED_MESSAGE,
-  NODE_DOWNLOAD_URL,
 } from "@iqlabs-official/agent-sdk";
 import { Select, TextInput } from "@inkjs/ui";
 import open from "open";
