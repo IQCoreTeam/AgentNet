@@ -36,7 +36,6 @@ function SyncIcon({ className, style }: { className?: string; style?: CSSPropert
 }
 import { forgetAndroidWallet } from "../onboarding/androidWallet";
 import { openExternalUrl } from "../platform/openExternalUrl";
-import { useAutoOpenExternalUrl } from "../platform/useAutoOpenExternalUrl";
 import { HeliusKeyForm } from "../settings/HeliusKeyForm";
 // Leaf subpath (browser-safe, no node imports) so the bundle stays free of the Node SDK.
 import { CUSTOM_ENGINE_EGRESS_WARNING, CUSTOM_ENGINE_TOOL_WARNING } from "@iqlabs-official/agent-sdk/account/customEngineMeta";
@@ -335,7 +334,6 @@ export function Sessions({
 
   const info = storage?.info as { kind?: string; connected?: boolean; account?: string; location?: string } | null;
   const cloudConnected = !!(info && info.connected && info.kind !== "local");
-  useAutoOpenExternalUrl(googleLoginUrl);
 
   useEffect(() => {
     send({ type: "getRpcStatus" });

@@ -30,6 +30,11 @@ jobs:
           # the panel Chrome layout pass must run here; a missing browser is a failure, never a skip
           PANEL_CHROME_REQUIRED: "1"
 
+      - name: Test webview
+        run: pnpm --filter agentnet-webview test
+      - name: Build webview
+        run: pnpm --filter agentnet-webview build
+
       # The runtime smoke test (pnpm run test:run) is intentionally NOT run here:
       # it drives the real claude + codex CLIs and needs them installed and logged
       # in, which a CI runner has not. Keep it as a local/manual integration check.
