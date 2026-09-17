@@ -109,7 +109,7 @@ export type ClientMessage =
   | { type: "send"; text: string; images?: ImageInput[] }
   | { type: "slashCommand"; command: string; arg?: string }
   | { type: "interrupt" }
-  | { type: "loadMore"; cursor: number }
+  | { type: "loadMore"; cursor: number | string }
   | { type: "delete"; sessionId: string }
   // opt-in per-session sync (issue #123): copy ONE local (guest) session into the
   // connected wallet's store; answered by sessionSynced.
@@ -219,8 +219,8 @@ export type ServerMessage =
     }
   | { type: "message"; msg: ChatMessage }
   | { type: "turnEnd" }
-  | { type: "page"; hasMore: boolean; cursor: number }
-  | { type: "older"; messages: ChatMessage[]; hasMore: boolean; cursor: number }
+  | { type: "page"; hasMore: boolean; cursor: number | string }
+  | { type: "older"; messages: ChatMessage[]; hasMore: boolean; cursor: number | string }
   // cloud: health of the union behind `list` — "reauth"/"transient" mean the cloud tier
   // failed and the list is silently local-only (label it; other devices' sessions are
   // not gone, sync is down). "none" = no cloud configured.

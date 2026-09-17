@@ -736,7 +736,7 @@ export function createChatSession(
       // the transport itself), so there's deliberately no case for it here.
       // scroll-to-top: fetch the page older than `cursor`, prepend in the UI
       case "loadMore":
-        if (slot().pendingId && typeof m.cursor === "number") {
+        if (slot().pendingId && (typeof m.cursor === "number" || typeof m.cursor === "string")) {
           const page = await rt.loadMore(slot().pendingId!, m.cursor);
           transport.send({ type: "older", messages: page.messages, hasMore: page.hasMore, cursor: page.cursor });
         }

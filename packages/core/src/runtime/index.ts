@@ -370,7 +370,7 @@ export function createRuntime(
       return store.loadLatestLocal(sessionId); // local tier only — never blocks on cloud
     },
 
-    async loadMore(sessionId: string, cursor: number) {
+    async loadMore(sessionId: string, cursor: number | string) {
       return store.loadOlder(sessionId, cursor); // the page before `cursor`
     },
 

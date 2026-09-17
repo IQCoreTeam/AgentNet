@@ -5,6 +5,7 @@
 //   list  → union of local + cloud, deduped.
 // Satisfies StorageAdapter, so runtime/store don't change — this is one layer on top.
 
+import { parseSessionPage } from "../devicePages.js";
 import type { CloudListState, StorageAdapter } from "../../runtime/contract.js";
 
 // onCloudStatus (optional): notified after each cloud write attempt — "ok" on
@@ -80,6 +81,12 @@ export function mirrorStorage(
   // settle, upload its LATEST local blob exactly once. Local (source of truth) still writes
   // every turn; a flush missed to a crash/exit is reconciled by backfill() on reconnect.
   const FLUSH_DEBOUNCE_MS = 2500;
+  const flushing = new Map<string, Promise<void>>();
+  const serializeCloud = (key: string, fn: () => Promise<void>): Promise<void> => {
+    const next = (flushing.get(key) ?? Promise.resolve()).catch(() => {}).then(fn);
+    flushing.set(key, next);
+    return next.finally(() => { if (flushing.get(key) === next) flushing.delete(key); });
+  };
   const pendingFlush = new Map<string, ReturnType<typeof setTimeout>>();
   const cancelFlush = (sessionId: string) => {
     const t = pendingFlush.get(sessionId);
@@ -89,10 +96,10 @@ export function mirrorStorage(
     cancelFlush(sessionId);
     const t = setTimeout(() => {
       pendingFlush.delete(sessionId);
-      void tryCloud(async () => {
+      void serializeCloud(sessionId, () => tryCloud(async () => {
         const full = await local.get(sessionId);
         if (full) await cloud!.put(sessionId, full);
-      });
+      }));
     }, FLUSH_DEBOUNCE_MS);
     t.unref?.();
     pendingFlush.set(sessionId, t);
@@ -106,12 +113,17 @@ export function mirrorStorage(
     async put(sessionId, blob) {
       await local.put(sessionId, blob);
       cancelFlush(sessionId); // this full write supersedes any pending debounced flush
-      await tryCloud(() => cloud!.put(sessionId, blob));
+      await serializeCloud(sessionId, () => tryCloud(() => cloud!.put(sessionId, blob)));
     },
 
     async append(sessionId, chunk) {
       if (local.append) await local.append(sessionId, chunk);
-      else await local.put(sessionId, chunk);
+      else {
+        const previous = await local.get(sessionId) ?? new Uint8Array();
+        const full = new Uint8Array(previous.length + chunk.length);
+        full.set(previous); full.set(chunk, previous.length);
+        await local.put(sessionId, full);
+      }
       if (!cloud) return;
       if (cloud.append) {
         // cloud supports append: mirror the chunk incrementally, per turn (cheap).
@@ -175,7 +187,7 @@ export function mirrorStorage(
     async remove(sessionId) {
       cancelFlush(sessionId); // don't re-upload a session we're deleting
       await local.remove(sessionId);
-      await tryCloud(() => cloud!.remove(sessionId));
+      await serializeCloud(sessionId, () => tryCloud(() => cloud!.remove(sessionId)));
     },
 
     // One-shot reconciliation: upload local keys the cloud is missing (sessions written
@@ -183,11 +195,10 @@ export function mirrorStorage(
     // surface calls this ONLY right after an explicit (re)connect, never on a timer or
     // passive startup, so it can't become a cloud storm:
     //   - exactly ONE cloud.list() (local.list is offline) to compute the diff;
-    //   - uploads ONLY the genuinely-missing keys (0 when already in sync);
+    //   - uploads missing keys and verifies device-page tails (0 uploads when in sync);
     //   - bounded concurrency so a large first sync trickles instead of bursting;
     //   - aborts immediately if the cloud is dead again (no hammering a bad token).
-    // local and cloud share one keyspace (that is what list()'s union relies on), so a
-    // plain key diff is correct regardless of paging granularity.
+    // Local and cloud share one keyspace. Legacy pages retain missing-key-only reconciliation; device pages also compare tails.
     async backfill() {
       if (!cloud) return { uploaded: 0, missing: 0 };
       let cloudKeys: string[];
@@ -197,7 +208,27 @@ export function mirrorStorage(
         return { uploaded: 0, missing: 0 }; // cloud unreachable/dead — nothing to do now
       }
       const inCloud = new Set(cloudKeys);
-      const missing = (await local.list()).filter((k) => !inCloud.has(k));
+      const missing: string[] = [];
+      for (const k of await local.list()) {
+        if (!inCloud.has(k)) { missing.push(k); continue; }
+        // A new-format local page belongs to exactly one writer incarnation. Its
+        // offline tail may be newer than an existing cloud copy. Never apply this
+        // replacement rule to shared legacy keys.
+        if (!parseSessionPage(k)?.writer) continue;
+        try {
+          const a = await local.get(k);
+          const b = await withCloudTimeout(cloud.get(k));
+          if (!a) continue;
+          if (!b) { missing.push(k); continue; }
+          const prefix = a.subarray(0, Math.min(a.length, b.length)).every((v, i) => v === b[i]);
+          if (!prefix) {
+            onCloudStatus?.({ ok: false, error: `Divergent device page: ${k}; neither copy was replaced`, reason: "transient" });
+            continue;
+          }
+          // Restore of an older local backup must not roll back a longer cloud log.
+          if (a.length > b.length) missing.push(k);
+        } catch { return { uploaded: 0, missing: 0 }; }
+      }
       let uploaded = 0;
       const CONCURRENCY = 4;
       for (let i = 0; i < missing.length; i += CONCURRENCY) {
@@ -208,7 +239,12 @@ export function mirrorStorage(
             const blob = await local.get(key);
             if (!blob) return;
             try {
-              await withCloudTimeout(cloud.put(key, blob));
+              await serializeCloud(key, async () => {
+                // A normal append/flush may have advanced since discovery; never
+                // upload the earlier snapshot after its newer queued upload.
+                const latest = await local.get(key);
+                if (latest) await withCloudTimeout(cloud.put(key, latest));
+              });
               uploaded++;
             } catch (e) {
               // A dead sign-in mid-run means the whole rest is pointless — stop, don't

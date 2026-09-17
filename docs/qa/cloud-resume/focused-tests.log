@@ -1,0 +1,8 @@
+
+ RUN  v4.1.8 /Users/nubs/Git/AgentNet-device-page-logs-20260917/packages/core
+
+
+ Test Files  2 passed (2)
+      Tests  17 passed (17)
+   Start at  22:41:16
+   Duration  7.04s (transform 455ms, setup 0ms, import 1.22s, tests 7.44s, environment 0ms)

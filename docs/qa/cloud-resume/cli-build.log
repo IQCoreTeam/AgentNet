@@ -1,0 +1,28 @@
+$ tsup
+CLI Building entry: {"cli":"src/index.tsx"}
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.1
+CLI Using tsup config: /Users/nubs/Git/AgentNet-device-page-logs-20260917/surfaces/cli/tsup.config.ts
+CLI Target: node20
+CLI Cleaning output folder
+ESM Build start
+ESM dist/index.esm-4M5OBOX5.js   4.64 KB
+ESM dist/custom-ZCW7W72R.js      2.53 KB
+ESM dist/esm-AKO75YOG.js         27.42 KB
+ESM dist/skillSource-MS63SJO3.js 1.46 KB
+ESM dist/token2022-6N7MPBR3.js   1.39 KB
+ESM dist/icloud-UGPKS5K5.js      2.28 KB
+ESM dist/seed-TGT4FT4S.js        2.07 KB
+ESM dist/manual-F6NRSJXX.js      1.23 KB
+ESM dist/gdrive-IB5USRJ7.js      1.28 KB
+ESM dist/chunk-4RB4OWPY.js       2.74 KB
+ESM dist/chunk-EEOJZXOM.js       360.76 KB
+ESM dist/chunk-NO74MSXX.js       13.82 KB
+ESM dist/chunk-UQIJKSU2.js       3.10 KB
+ESM dist/chunk-QTXOJGHT.js       20.18 KB
+ESM dist/chunk-PILADXXM.js       3.97 KB
+ESM dist/chunk-XN5EYU52.js       3.56 KB
+ESM dist/chunk-AGWPZ3RE.js       1.34 MB
+ESM dist/chunk-UBBZAKR5.js       1.35 MB
+ESM dist/cli.js                  1.57 MB
+ESM ⚡️ Build success in 213ms
