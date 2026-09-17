@@ -397,8 +397,13 @@ export function createChatSession(
           if (newestTs < localNewestTs) return;
           // Another writer can insert earlier messages without changing the newest
           // timestamp. Compare the merged page too, including full 30-message pages.
-          if (newestTs === localNewestTs &&
-              (page.messages.length < localCount || JSON.stringify(page.messages) === localMessages)) return;
+          if (newestTs === localNewestTs && page.messages.length < localCount) return;
+          if (JSON.stringify(page.messages) === localMessages) {
+            // The same newest window can have older messages on another device.
+            // Adopt the merged cursor without repainting unchanged messages.
+            transport.send({ type: "page", hasMore: page.hasMore, cursor: page.cursor });
+            return;
+          }
         }
         transport.send({ type: "clear" });
         for (const msg of page.messages) transport.send({ type: "message", msg });
