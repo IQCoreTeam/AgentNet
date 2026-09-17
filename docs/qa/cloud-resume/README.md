@@ -22,7 +22,7 @@ Final local result: **503 tests passed, 5 platform skips across 69 files**, with
 
 The implementation and local regression suite are complete for this draft. The key suffix and per-process writer incarnation are the two deliberate details added to the proposed sketch: they prevent old-reader namespace collisions and concurrent processes sharing a device key.
 
-A real two-device Google Drive run has **not** been performed: this checkout has no saved Google sign-in. The local harness exercises the actual encrypted storage/runtime paths with an in-memory cloud adapter, so it does not establish Drive transport acceptance. The PR remains draft until that integration check is complete.
+The real Google Drive transport harness **passed** with two independent device processes on one physical Mac. It verified concurrent rollover, fresh readers, Korean offline writes and reconnect, pagination, unchanged sealed/legacy pages, and fixture cleanup. This is not physical two-device or normal-app UI acceptance; those remain unverified. The PR remains draft for that final acceptance review.
 
 Known scope limits: old clients do not display new-format messages; two old clients still share legacy keys. Each process restart adds a chain head, increasing discovery reads. Delete does not add distributed tombstones, and a restored stale local backup is not automatically refreshed from its longer cloud copy. Serializing uploads does not provide server-side fencing for requests that complete after a timeout. This change does not recover history already overwritten before it was installed.
 
@@ -44,4 +44,4 @@ To check the harness without Google access:
 pnpm --filter @iqlabs-official/agent-sdk exec tsx test/test-gdrive-device-pages.ts --local-smoke
 ```
 
-[Local harness receipt](drive-harness-local.json): **PASS**, including cleanup. This mode uses a filesystem cloud substitute and **is not Drive evidence**. The attempted real-mode preflight correctly stopped with `Google Drive is not connected` before creating fixture files; Google sign-in and OAuth client configuration are still needed here.
+[Local harness receipt](drive-harness-local.json): **PASS**, including cleanup. This mode uses a filesystem cloud substitute and **is not Drive evidence**. [Real Google Drive receipt](drive-harness-live.json): **PASS**, including cleanup, on 2026-09-17 UTC at implementation commit `999fd2754061dcbcc00e8e47302338580bed8fd3`. OAuth connected successfully; the first request identified the project's disabled Drive API, and the test passed after enabling it. No credentials are included in the receipt.
