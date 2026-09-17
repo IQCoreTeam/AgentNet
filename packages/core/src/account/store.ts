@@ -1,5 +1,6 @@
 // Paginated session persistence over encrypted page logs (see sessionLog.ts).
-// A session is stored as PAGES: keys "{sessionId}__p{N}", PAGE_SIZE messages each.
+// Legacy/local pages use "{sessionId}__p{N}". Cloud writes use device-scoped
+// single-writer chains (devicePages.ts); readers merge them under one session ID.
 // Only the current (last) page is appended to; full pages are never rewritten —
 // so long sessions stay fast and cloud re-uploads are bounded to one page.
 //
@@ -8,6 +9,7 @@
 // - loadOlder(): the page before a given index (scroll-to-load-older).
 // - listMine(): one entry per session, meta read from its newest page only.
 
+import { DevicePages, parseSessionPage } from "./devicePages.js";
 import type {
   CanonicalSession,
   ChatMessage,
@@ -58,13 +60,7 @@ function lastActivityTs(s: CanonicalSession): number {
 
 const pageKey = (sessionId: string, page: number) => `${sessionId}__p${page}`;
 // parse "abc__p2" -> { sessionId: "abc", page: 2 }; null if not a page key
-function parsePageKey(key: string): { sessionId: string; page: number } | null {
-  const i = key.lastIndexOf("__p");
-  if (i < 0) return null;
-  const page = Number(key.slice(i + 3));
-  if (!Number.isInteger(page)) return null;
-  return { sessionId: key.slice(0, i), page };
-}
+const parsePageKey = parseSessionPage;
 
 // Highest page index for `sessionId` among `keys` (-1 if none).
 function maxPageOf(keys: string[], sessionId: string): number {
@@ -79,11 +75,24 @@ function maxPageOf(keys: string[], sessionId: string): number {
 export interface PageResult {
   messages: ChatMessage[];
   hasMore: boolean; // older pages exist
-  cursor: number | null; // page index to pass to loadOlder for the previous page
+  cursor: number | string | null; // numeric legacy page or opaque device-chain positions
 }
 
 export class SessionStore {
   // per-session in-memory state for the CURRENT page (this process)
+  private devicePages: DevicePages;
+  private deviceSessions = new Set<string>();
+  private async usesDevicePages(sessionId: string, local = false): Promise<boolean> {
+    if (this.deviceSessions.has(sessionId)) return true;
+    const keys = await (local && this.storage.listLocal ? this.storage.listLocal() : this.storage.list());
+    const found = keys.some(k => { const p = parseSessionPage(k); return p?.sessionId === sessionId && !!p.writer; });
+    if (found) this.deviceSessions.add(sessionId);
+    return found;
+  }
+  private async writesDevicePages(id: string): Promise<boolean> {
+    if (this.storage.cloudState && this.storage.cloudState() !== "none") return true;
+    return this.usesDevicePages(id, true);
+  }
   private cur = new Map<string, { page: number; count: number }>();
 
   // Cache of each session's newest-page meta so listMine() doesn't re-decrypt every
@@ -100,7 +109,7 @@ export class SessionStore {
     private wallet: Wallet,
     private storage: StorageAdapter,
     private keys: KeyPolicy = ephemeralKey(),
-  ) {}
+  ) { this.devicePages = new DevicePages(storage, () => this.getKey(), PAGE_SIZE); }
 
   private getKey(): Promise<SessionKey> {
     return this.keys.getKey(this.wallet);
@@ -164,6 +173,10 @@ export class SessionStore {
     meta: Omit<CanonicalSession, "messages">,
     msg: ChatMessage,
   ): Promise<void> {
+    if (await this.writesDevicePages(meta.sessionId)) {
+      this.deviceSessions.add(meta.sessionId);
+      return this.devicePages.append(meta, msg);
+    }
     const key = await this.getKey();
     const state = await this.currentPage(meta.sessionId);
 
@@ -192,6 +205,10 @@ export class SessionStore {
   }
 
   async recordMeta(meta: Omit<CanonicalSession, "messages">): Promise<void> {
+    if (await this.writesDevicePages(meta.sessionId)) {
+      this.deviceSessions.add(meta.sessionId);
+      return this.devicePages.append(meta);
+    }
     const key = await this.getKey();
     const state = await this.currentPage(meta.sessionId);
     const pk = pageKey(meta.sessionId, state.page);
@@ -219,6 +236,16 @@ export class SessionStore {
     title: string,
     upTo?: number,
   ): Promise<{ messages: number }> {
+    if (await this.usesDevicePages(srcId)) {
+      const source = await this.devicePages.load(srcId);
+      if (!source) throw new Error(`no such session: ${srcId}`);
+      if ((await this.storage.list()).some(k => parseSessionPage(k)?.sessionId === newId)) throw new Error("Fork destination already exists");
+      const meta = { ...source, sessionId: newId, title };
+      const keep = upTo === undefined ? source.messages : source.messages.slice(0, Math.max(0, upTo));
+      await this.devicePages.copy(meta, keep);
+      this.deviceSessions.add(newId);
+      return { messages: keep.length };
+    }
     const key = await this.getKey();
     const last = await this.lastPageIndex(srcId);
     if (last < 0) throw new Error(`no such session: ${srcId}`);
@@ -227,7 +254,7 @@ export class SessionStore {
     const messages: ChatMessage[] = [];
     for (let p = 0; p <= last; p++) {
       const page = await this.loadPage(srcId, p);
-      if (!page) continue;
+      if (!page) throw new Error(`incomplete fork: missing page ${p} of ${srcId}`);
       // Newest readable page wins: it carries the session's CURRENT settings (cli/model/
       // effort), which is what the copy should wake up wearing.
       meta = { sessionId: newId, cli: page.cli, title, ts: page.ts, lastDevice: page.lastDevice, model: page.model, effort: page.effort };
@@ -267,6 +294,7 @@ export class SessionStore {
 
   // Newest page + cursor to the page before it.
   async loadLatest(sessionId: string): Promise<PageResult> {
+    if (await this.usesDevicePages(sessionId)) return this.devicePages.page(sessionId);
     const t0 = Date.now();
     let idx = await this.lastPageIndex(sessionId);
     const t1 = Date.now();
@@ -302,6 +330,7 @@ export class SessionStore {
   // cloud in the background. Mirrors loadLatest's empty-trailing-page walk-back so a rolled-
   // over-but-not-yet-written page never paints a blank chat.
   async loadLatestLocal(sessionId: string): Promise<PageResult> {
+    if (await this.usesDevicePages(sessionId, true)) return this.devicePages.page(sessionId, undefined, true);
     const listLocal = () => (this.storage.listLocal ? this.storage.listLocal() : this.storage.list());
     const getLocal = (k: string) => (this.storage.getLocal ? this.storage.getLocal(k) : this.storage.get(k));
     let idx = maxPageOf(await listLocal(), sessionId);
@@ -317,7 +346,8 @@ export class SessionStore {
   }
 
   // The page at `cursor` (older). Returns its messages + cursor to the one before.
-  async loadOlder(sessionId: string, cursor: number): Promise<PageResult> {
+  async loadOlder(sessionId: string, cursor: number | string): Promise<PageResult> {
+    if (typeof cursor === "string") return this.devicePages.page(sessionId, cursor);
     if (cursor < 0) return { messages: [], hasMore: false, cursor: null };
     // Inline get + decode (instead of loadPage) so the "loading older..." scroll-up cost is
     // timed per leg, exactly like loadLatest; each older page is its own Drive round-trip.
@@ -335,6 +365,7 @@ export class SessionStore {
 
   // Whole session, all pages in order (for non-UI callers / migration).
   async load(sessionId: string): Promise<CanonicalSession | null> {
+    if (await this.usesDevicePages(sessionId)) return this.devicePages.load(sessionId);
     const last = await this.lastPageIndex(sessionId);
     if (last < 0) return null;
     let head: CanonicalSession | null = null;
@@ -352,9 +383,11 @@ export class SessionStore {
   async listMine(): Promise<SessionMeta[]> {
     const t0 = Date.now();
     const latestPage = new Map<string, number>();
+    const deviceIds = new Set<string>();
     for (const key of await this.storage.list()) {
       const p = parsePageKey(key);
       if (!p) continue;
+      if (p.writer) deviceIds.add(p.sessionId);
       const prev = latestPage.get(p.sessionId);
       if (prev === undefined || p.page > prev) latestPage.set(p.sessionId, p.page);
     }
@@ -367,6 +400,10 @@ export class SessionStore {
     let decoded = 0;
     const metas = await Promise.all(
       [...latestPage].map(async ([sessionId, page]) => {
+        if (deviceIds.has(sessionId)) {
+          this.deviceSessions.add(sessionId);
+          try { return await this.devicePages.meta(sessionId); } catch { return null; }
+        }
         const cached = this.metaCache.get(sessionId);
         if (cached && cached.page === page) return cached.meta;
         // A page encrypted with a DIFFERENT wallet key (e.g. after reconnecting a new

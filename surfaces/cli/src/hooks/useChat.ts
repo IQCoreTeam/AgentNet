@@ -59,7 +59,7 @@ export function useChat(
   // scrollback pagination (older pages) + a Static-reset epoch (bumped on any wholesale
   // transcript change so the <Static> history re-renders instead of mis-appending).
   const [hasMore, setHasMore] = useState(false);
-  const [cursor, setCursor] = useState<number | null>(null);
+  const [cursor, setCursor] = useState<number | string | null>(null);
   const [epoch, setEpoch] = useState(0);
   // In-flight page loads, so the view can say so instead of looking frozen. Decrypting and
   // parsing a long log takes real time, and both of these block on it: `loadingOlder` is a
@@ -193,13 +193,13 @@ export function useChat(
   // at the end (the cost of a single /more, once). It yields while a turn runs and a token
   // cancels it the instant the session changes.
   const backfillOlder = useCallback(
-    async (startCursor: number | null, startMore: boolean) => {
+    async (startCursor: number | string | null, startMore: boolean) => {
       const token = ++backfillToken.current;
       const sid = pendingRef.current;
       if (!sid || !startMore || startCursor === null) return;
       const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
       const buffer: ChatMessage[] = [];
-      let cur: number | null = startCursor;
+      let cur: number | string | null = startCursor;
       let more: boolean = startMore;
       loadingOlderRef.current = true; // also blocks a manual /more from racing the backfill
       setLoadingOlder(true);

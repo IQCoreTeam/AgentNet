@@ -4,6 +4,10 @@
 // watching. The fix is lazy-restage: keep the running handle, re-spawn on the NEXT
 // send carrying the live sessionId so the turn finishes and the new mode applies next.
 import { describe, it, expect, vi } from "vitest";
+import { SessionStore } from "../account/store.js";
+import { mirrorStorage } from "../account/storage/mirror.js";
+import { testWallet } from "../account/keypairWallet.js";
+import type { StorageAdapter } from "../runtime/contract.js";
 import { createChatSession } from "./session.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -691,4 +695,80 @@ describe("Custom context reporting", () => {
       expect(transport.send).toHaveBeenCalledWith({ type: "notice", text: "Context (custom): 12,000 tokens used. Provider context limit unknown." });
     } finally { chat.stop(); }
   });
+});
+
+describe("chat/session — device-page reconciliation", () => {
+  const msg = (text: string, ts: number) => ({ role: "user", text, ts });
+  const page = (messages: any[]) => ({ messages, hasMore: false, cursor: null });
+
+  it.each([false, true])("adopts earlier remote messages with the same newest timestamp (full page: %s)", async (full) => {
+    const local = full
+      ? Array.from({ length: 30 }, (_, i) => msg(`local-${i}`, i + 1))
+      : [msg("phone", 30)];
+    const merged = full
+      ? [...local.slice(1, 15), msg("맥에서 보낸 메시지", 15.5), ...local.slice(15)]
+      : [msg("맥에서 보낸 메시지", 20), ...local];
+    const { fromUI, transport } = harness({ rt: {
+      loadSessionLocal: async () => page(local),
+      loadSession: async () => page(merged),
+    } });
+    fromUI({ type: "open", sessionId: "shared" });
+    await flush();
+    const events = transport.send.mock.calls.map(c => c[0]);
+    const lastClear = events.map(e => e.type).lastIndexOf("clear");
+    expect(events.slice(lastClear + 1).filter(e => e.type === "message").map(e => e.msg)).toEqual(merged);
+  });
+
+  it("does not replace a newer local page with an older cloud result", async () => {
+    const local = [msg("latest", 30)];
+    const { fromUI, transport } = harness({ rt: {
+      loadSessionLocal: async () => page(local),
+      loadSession: async () => page([msg("older", 20)]),
+    } });
+    fromUI({ type: "open", sessionId: "shared" });
+    await flush();
+    expect(transport.send.mock.calls.filter(c => c[0].type === "message").map(c => c[0].msg)).toEqual(local);
+  });
+});
+
+
+it("adopts merged scrollback even when the newest 30 messages are identical locally", async () => {
+  const memory = (): StorageAdapter => {
+    const blobs = new Map<string, Uint8Array>();
+    return {
+      get: async k => blobs.get(k)?.slice() ?? null,
+      put: async (k, v) => { blobs.set(k, v.slice()); },
+      remove: async k => { blobs.delete(k); },
+      list: async () => [...blobs.keys()],
+    };
+  };
+  const cloud = memory(), local = memory(), wallet = testWallet(229);
+  const b = new SessionStore(wallet, { ...cloud, cloudState: () => "ok" });
+  const meta = { sessionId: "shared", title: "Shared", cli: "claude" as const, ts: 1 };
+  for (let i = 0; i < 3; i++) await b.appendMessage(meta, { role: "user", text: `기기 B ${i}`, ts: i + 1 });
+  const a = new SessionStore(wallet, mirrorStorage(local, cloud));
+  for (let i = 0; i < 30; i++) await a.appendMessage(meta, { role: "user", text: `A ${i}`, ts: i + 10 });
+  const reader = new SessionStore(wallet, mirrorStorage(local, cloud));
+  const localPage = await reader.loadLatestLocal("shared");
+  const mergedPage = await reader.loadLatest("shared");
+  expect(mergedPage.messages).toEqual(localPage.messages);
+  expect(localPage.hasMore).toBe(false);
+  expect(mergedPage.hasMore).toBe(true);
+  const { fromUI, transport } = harness({ rt: {
+    loadSessionLocal: async () => localPage,
+    loadSession: async () => mergedPage,
+    loadMore: (id: string, cursor: string) => reader.loadOlder(id, cursor),
+  } });
+  fromUI({ type: "open", sessionId: "shared" });
+  await flush();
+  const events = transport.send.mock.calls.map(c => c[0]);
+  const adopted = events.filter(e => e.type === "page").at(-1)!;
+  expect(adopted.hasMore).toBe(true);
+  expect(adopted.cursor).toBe(mergedPage.cursor);
+  expect(events.filter(e => e.type === "message")).toHaveLength(30);
+  fromUI({ type: "loadMore", cursor: adopted.cursor });
+  for (let i = 0; i < 20 && !transport.send.mock.calls.some(c => c[0].type === "older"); i++) await flush();
+  const older = transport.send.mock.calls.map(c => c[0]).find(e => e.type === "older");
+  expect(older?.messages.map((m: any) => m.text)).toEqual(["기기 B 0", "기기 B 1", "기기 B 2"]);
+  expect(older?.hasMore).toBe(false);
 });

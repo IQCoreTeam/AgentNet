@@ -133,7 +133,7 @@ export interface State {
   typing: boolean; // a turn is in flight (typing dots)
   loading: boolean; // cross-CLI carry veil
   hasMore: boolean;
-  cursor: number;
+  cursor: number | string;
   toast: string | null;
   buyCelebrate: boolean;
   buyCelebrateLabel: string | null; // the COMPLETE plaque sub-label: "SKILL PURCHASED" / "WORKFLOW PURCHASED"

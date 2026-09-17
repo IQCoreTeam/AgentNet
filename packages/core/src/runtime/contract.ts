@@ -216,7 +216,7 @@ export interface AgentRuntime {
 
   // load the page BEFORE `cursor` (older messages, for scroll-up). Prepend its
   // messages; use the returned cursor/hasMore for the next step.
-  loadMore(sessionId: string, cursor: number): Promise<PageResult>;
+  loadMore(sessionId: string, cursor: number | string): Promise<PageResult>;
 
   // delete a saved session (all its pages). The UI removes it from the list.
   deleteSession(sessionId: string): Promise<void>;
@@ -248,7 +248,7 @@ export interface AgentRuntime {
 export interface PageResult {
   messages: ChatMessage[]; // one page, oldest→newest within the page
   hasMore: boolean; // older pages exist
-  cursor: number | null; // pass to loadMore for the previous page; null = no older
+  cursor: number | string | null; // pass to loadMore for the previous page; null = no older
 }
 
 // ── persisted forms ─────────────────────────────────────

@@ -1,0 +1,9 @@
+$ tsup
+CLI Building entry: {"agentnet-mcp":"../core/src/mcp-stdio.ts"}
+CLI tsup v8.5.1
+CLI Using tsup config: /Users/nubs/Git/AgentNet-device-page-logs-20260917/packages/mcp/tsup.config.ts
+CLI Target: node18
+CLI Cleaning output folder
+CJS Build start
+CJS dist/agentnet-mcp.js 4.23 MB
+CJS ⚡️ Build success in 176ms

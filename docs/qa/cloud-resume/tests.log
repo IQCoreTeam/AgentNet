@@ -1,0 +1,609 @@
+
+ RUN  v4.1.8 /Users/nubs/Git/AgentNet-device-page-logs-20260917/packages/core
+
+stderr | src/skill-market/index.spec.ts
+bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)
+
+stderr | src/runtime/cloud-resume.spec.ts
+bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)
+
+ ✓ src/skill-market/index.spec.ts > skill-market > exposes the marketplace tool set (incl. unequip_skill and post_blog) 35ms
+ ✓ src/skill-market/index.spec.ts > skill-market > both transports derive from the one SKILL_TOOLS source — identical names, no drift 7ms
+ ✓ src/skill-market/index.spec.ts > skill-market > spend/mint tools are NOT auto-allowed (must hit the approval card); read tools are 1ms
+ ✓ src/skill-market/index.spec.ts > skill-market > stdio JSON Schema is generated from the Zod source (correct shape + required fields) 1ms
+ ✓ src/skill-market/index.spec.ts > skill-market > publish_skill mints via core publishSkill (priceSol → lamports, default 0.1) 2ms
+ ✓ src/skill-market/index.spec.ts > skill-market > publish_skill rejects an invalid priceSol 1ms
+ ✓ src/skill-market/index.spec.ts > skill-market > search_skills returns empty when there are no results 6ms
+ ✓ src/skill-market/index.spec.ts > skill-market > search_skills formats results 2ms
+ ✓ src/runtime/cloud-resume.spec.ts > cloud resume writer isolation > preserves both writers across a page boundary in a fresh cloud reader 3072ms
+ ✓ src/runtime/cloud-resume.spec.ts > cloud resume writer isolation > keeps local-only resumes on their original id 19ms
+ ✓ src/runtime/cloud-resume.spec.ts > cloud resume writer isolation > refuses to fork missing pages instead of copying partial history 70ms
+ ✓ src/runtime/cloud-resume.spec.ts > cloud resume writer isolation > ephemeral cloud resumes do not create or modify persisted pages 18ms
+ ✓ src/skill-market/index.spec.ts > skill-market > should handle buy_skill tool call 4004ms
+ ✓ src/skill-market/index.spec.ts > skill-market > buy_skill refuses when the creator cannot be resolved, instead of sending a doomed tx (#125) 1ms
+ ✓ src/skill-market/index.spec.ts > skill-market > should handle buy_skill errors 1ms
+ ✓ src/skill-market/index.spec.ts > skill-market > should pass through a non-funds buy error verbatim 1ms
+ ✓ src/skill-market/index.spec.ts > skill-market > should handle post_skill_comment tool call 1ms
+ ✓ src/skill-market/index.spec.ts > skill-market > should surface gate error for post_skill_comment 1ms
+ ✓ src/skill-market/index.spec.ts > skill-market > post_skill_comment on a workflow files under the WORKFLOWS collection when collectionId is omitted 1ms
+ ✓ src/skill-market/index.spec.ts > skill-market > post_skill_comment on a skill still files under the skills collection when collectionId is omitted 1ms
+ ✓ src/skill-market/index.spec.ts > skill-market > post_skill_comment refuses to guess the collection for an item missing from the catalog 1ms
+ ✓ src/skill-market/index.spec.ts > skill-market > should handle post_agent_comment tool call 0ms
+ ✓ src/skill-market/index.spec.ts > skill-market > should surface gate error for post_agent_comment 0ms
+ ✓ src/skill-market/index.spec.ts > skill-market > post_blog writes a self-note to the connected wallet only 0ms
+ ✓ src/skill-market/index.spec.ts > skill-market > post_blog rejects over-long text 0ms
+ ✓ src/skill-market/index.spec.ts > skill-market > post_blog validates gitLink as https GitHub 0ms
+ ✓ src/skill-market/index.spec.ts > skill-market > post_blog applies a basic rate limit 0ms
+ ✓ src/skill-market/index.spec.ts > skill-market > unequip_skill un-equips locally + records the mint as disposed (no on-chain call) 5ms
+ ✓ src/skill-market/index.spec.ts > skill-market > install_skill re-equips: it clears the disposed flag, not just the files (#126) 3ms
+ ✓ src/skill-market/index.spec.ts > skill-market > unequip_skill requires a skillId 2ms
+ ✓ src/skill-market/index.spec.ts > skill-market > should throw on unknown tool 1ms
+ ✓ src/skill-market/index.spec.ts > skill-market > buy_skill is refused when the skill wasn't verified this session 1ms
+ ✓ src/runtime/cloud-resume.spec.ts > cloud resume writer isolation > offline resumes preserve the session id and backfill their own chain 2800ms
+ ✓ src/runtime/detect.spec.ts > detectCli against launchers that cannot start > node shims with no node anywhere report the missing runtime 439ms
+ ✓ src/runtime/detect.spec.ts > detectCli against launchers that cannot start > a version-manager node is put on PATH so the shim runs 471ms
+ ✓ src/runtime/detect.spec.ts > detectCli against launchers that cannot start > the node running the check is the last resort, as under the desktop app's bundled node 427ms
+ ✓ src/skill-market/index.spec.ts > skill-market > verify_skill (clean body) passes the scan, marks the guard, and returns the rubric + body 4004ms
+ ✓ src/runtime/detect.spec.ts > detectCli against launchers that cannot start > node installed after a missing report is picked up without a reload 413ms
+ ✓ src/skill-market/index.spec.ts > skill-market > verify_skill (obvious-danger body) is rejected by the scan and does NOT mark the guard 2ms
+ ✓ src/skill-market/index.spec.ts > skill-market > verify_skill does not mark the guard when there is no on-chain text 1ms
+ ✓ src/runtime/detect.spec.ts > detectCli against launchers that cannot start > the native install outranks the legacy migrate-installer launcher 162ms
+ ✓ src/runtime/detect.spec.ts > detectCli against launchers that cannot start > the legacy launcher is still found when it is the only install 303ms
+ ✓ src/runtime/detect.spec.ts > detectCli against launchers that cannot start > guard, passes on main too: an engine that starts but is signed out stays no-login, the exit-code rule is for --version only 332ms
+ ✓ src/runtime/detect.spec.ts > detectCli against launchers that cannot start > a saved codex API key no longer masks a launcher that cannot start 145ms
+ ✓ src/runtime/detect.spec.ts > detectCli against launchers that cannot start > recognizes a legacy shell launcher's missing node diagnostic 154ms
+ ✓ src/runtime/detect.spec.ts > detectCli against launchers that cannot start > does not call an unrelated launcher error a missing Node runtime 243ms
+ ✓ src/chat/ui/panel.jsdom.spec.ts > panel.jsdom: boot > explains a missing Node runtime without offering an engine install 510ms
+ ✓ src/chat/ui/panel.jsdom.spec.ts > panel.jsdom: boot > runs both inline scripts without an error, posts the boot messages in the legacy order, and has the shell roots 103ms
+ ✓ src/chat/ui/panel.jsdom.spec.ts > panel.jsdom: every inbound type > is dispatched without throwing on the host's minimal payload, and clear empties the log 155ms
+ ✓ src/chat/ui/panel.jsdom.spec.ts > panel.jsdom: composer > sends on Enter with exactly { type, text, images }, opens the slash menu on /mod, and interrupts on Escape while busy 96ms
+ ✓ src/chat/ui/panel.jsdom.spec.ts > panel.jsdom: engine update notice > copies the installed Codex updater and sends the terminal update request 82ms
+ ✓ src/chat/ui/panel.jsdom.spec.ts > panel.jsdom: rate-limit gauge > shows the gauge at any utilization, fills to 100 on an over-cap window, and turns amber past 80% 83ms
+ ✓ src/chat/ui/panel.jsdom.spec.ts > panel.jsdom: rate-limit gauge > keeps the last percentage and repaints the tint on a frame without a reading 90ms
+ ✓ src/chat/ui/panel.jsdom.spec.ts > panel.jsdom: rate-limit gauge > paints a rejection as a full amber window, whichever reading came before 95ms
+ ✓ src/chat/ui/panel.jsdom.spec.ts > panel.jsdom: rate-limit gauge > shows a rejection that arrives before any reading 82ms
+ ✓ src/chat/ui/panel.jsdom.spec.ts > panel.jsdom: rate-limit gauge > keeps context tokens secondary: hidden behind the gauge until clicked, shown as a fallback without it 83ms
+ ✓ src/chat/ui/panel.jsdom.spec.ts > panel.jsdom: rate-limit gauge > keeps the gauge per engine: the codex tab paints ctx, and the claude tab gets its reading back 89ms
+ ✓ src/chat/ui/panel.jsdom.spec.ts > panel.jsdom: rate-limit gauge > files a frame under the engine the host stamped on it, not the tab it lands on 81ms
+ ✓ src/chat/ui/panel.jsdom.spec.ts > panel.jsdom: streaming > replaces the live bubble on each cumulative partial and finalizes exactly one assistant bubble 139ms
+ ✓ src/chat/ui/panel.jsdom.spec.ts > panel.jsdom: feed images > uses HTTP(S) URLs for list covers and reader heroes, and omits unsupported images 90ms
+ ✓ src/chat/ui/panel.jsdom.spec.ts > panel.jsdom: feed quote cards > renders one row per post, hydrates a >>note: ref through getBlogPost/blogPost, and marks a null reply as a deadlink 90ms
+ ✓ src/skill-market/index.spec.ts > skill-market > buy_skill accepts a verify token from an earlier session and re-scans in this process 4003ms
+ ✓ src/skill-market/index.spec.ts > skill-market > buy_skill refuses a token minted over different text (the skill changed since verify) 1ms
+ ✓ src/skill-market/index.spec.ts > skill-market > buy_skill with a token still refuses when the current text fails the scan 1ms
+ ✓ src/skill-market/index.spec.ts > skill-market > a mismatched token leaves the guard unmarked: the next tokenless buy still refuses 1ms
+ ✓ src/skill-market/index.spec.ts > skill-market > a token minted for skill A cannot buy skill B, even when both carry identical text 0ms
+ ✓ src/skill-market/index.spec.ts > createAgentMcpServer readOnly (Codex Phase 1) > readOnly exposes ONLY search_skills + verify_skill 12ms
+ ✓ src/skill-market/index.spec.ts > createAgentMcpServer readOnly (Codex Phase 1) > default (no readOnly) exposes the full tool set 3ms
+ ✓ src/skill-market/index.spec.ts > createAgentMcpServer readOnly (Codex Phase 1) > readOnly refuses to CALL a write tool (not just hide it) 2ms
+ ✓ src/skill-market/index.spec.ts > codexMcpFlags > emits TOML -c overrides with JSON-encoded command + args (no global config touched) 0ms
+ ✓ src/chat/ui/panel.jsdom.spec.ts > panel.jsdom: feed quote cards > cards and requests at most QUOTE_REFS_MAX refs per view, marks the rest inline, and ignores a glued ref 81ms
+ ✓ src/chat/ui/panel.jsdom.spec.ts > panel.jsdom: sessions and webview state > collapses a long session list behind 모두 보기(N), expands on click, and persists ui prefs through setState 81ms
+ ✓ src/account/devicePages.spec.ts > separates concurrent writers on the same device and serializes concurrent appends 729ms
+ ✓ src/account/migrate.spec.ts > account/migrate — session re-key between wallets > re-keys every session: B decrypts and lists what A wrote, across page boundaries 736ms
+ ✓ src/account/migrate.spec.ts > account/migrate — session re-key between wallets > destination pages are truly re-encrypted: A's key cannot read B's copies 62ms
+ ✓ src/account/devicePages.spec.ts > keeps pagination stable when new messages and a new chain arrive 458ms
+ ✓ src/account/devicePages.spec.ts > merges legacy pages without rewriting them and orders skewed new writes after observed history 26ms
+ ✓ src/account/devicePages.spec.ts > refreshes other writers and metadata without discarding local first paint 33ms
+ ✓ src/account/devicePages.spec.ts > reconnect repairs an existing cloud page with an offline tail 23ms
+ ✓ src/account/devicePages.spec.ts > forks and removes all chains without writing to source pages 42ms
+ ✓ src/account/devicePages.spec.ts > does not silently return partial history when a chain page is missing 121ms
+ ✓ src/account/migrate.spec.ts > account/migrate — session re-key between wallets > is non-destructive: the source dir is byte-identical and still loads under A 556ms
+ ✓ src/account/devicePages.spec.ts > backfill never replaces a longer cloud page with a restored stale local backup 13ms
+ ✓ src/account/devicePages.spec.ts > keeps exact message timestamps in an explicit fork 40ms
+ ✓ src/account/devicePages.spec.ts > new writer keys cannot be mistaken for writable legacy session pages 7ms
+ ✓ src/account/devicePages.spec.ts > does not overlap normal cloud flushes for a writer page 25ms
+ ✓ src/account/devicePages.spec.ts > rollover leaves the full page byte-for-byte unchanged 137ms
+ ✓ src/account/migrate.spec.ts > account/migrate — session re-key between wallets > is idempotent: a second run copies nothing and duplicates nothing 682ms
+ ✓ src/account/migrate.spec.ts > account/migrate — session re-key between wallets > resumes an interrupted copy: only the missing tail is appended 133ms
+ ✓ src/account/migrate.spec.ts > account/migrate — session re-key between wallets > skips a divergent same-id session and leaves the destination untouched 44ms
+ ✓ src/runtime/engineVersions.spec.ts > updateEngine sees its own result > runs the engine's own updater, never npm, and reports the new version at the same path 365ms
+ ✓ src/account/migrate.spec.ts > account/migrate — session re-key between wallets > migrates a meta-only session via recordMeta 35ms
+ ✓ src/runtime/engineVersions.spec.ts > updateEngine sees its own result > surfaces the updater's stderr reason when it fails 161ms
+ ✓ src/account/migrate.spec.ts > account/migrate — session re-key between wallets > isolates faults: a corrupt source session is counted skipped, healthy ones copy 162ms
+ ✓ src/account/migrate.spec.ts > account/migrate — session re-key between wallets > scopes to one session when a sessionId is given: siblings are untouched 81ms
+ ✓ src/account/migrate.spec.ts > account/migrate — session re-key between wallets > covers the guest-unlock shape: a signMessage-only device wallet migrates into a real wallet 52ms
+ ✓ src/runtime/engineVersions.spec.ts > updateEngine sees its own result > surfaces a stdout reason when the updater fails with an empty stderr 213ms
+ ✓ src/notes/holdings.spec.ts > notes/holdings > returns the held mint set from a single RPC read 2ms
+ ✓ src/notes/holdings.spec.ts > notes/holdings > caches per owner — repeated gates do NOT re-hit RPC 0ms
+ ✓ src/notes/holdings.spec.ts > notes/holdings > force bypasses the cache (e.g. after a buy) 0ms
+ ✓ src/notes/holdings.spec.ts > notes/holdings > invalidate forces a fresh read 0ms
+ ✓ src/runtime/engineVersions.spec.ts > updateEngine sees its own result > treats an updater that exits 0 without changing the version as a failure 301ms
+ ✓ src/notes/holdings.spec.ts > notes/holdings > retries a transient RPC error before succeeding 302ms
+ ✓ src/runtime/engineVersions.spec.ts > updateEngine sees its own result > accepts an unchanged version when the updater says it is already up to date 283ms
+ ✓ src/notes/holdings.spec.ts > notes/holdings > does not trust a flaky empty read when a prior non-empty set exists 302ms
+ ✓ src/chat/ui/panel.chrome.spec.ts > panel.chrome: real Chromium layout of chatHtml() > has a Chrome binary, or says why the layout pass is skipped 1ms
+ ✓ src/chat/ui/panel.chrome.spec.ts > panel.chrome: real Chromium layout of chatHtml() > boots with no uncaught exception and posts the boot messages in the legacy order 7ms
+ ✓ src/chat/ui/panel.chrome.spec.ts > panel.chrome: real Chromium layout of chatHtml() > lays out the composer and the log with real height 1ms
+ ✓ src/chat/ui/panel.chrome.spec.ts > panel.chrome: real Chromium layout of chatHtml() > posts send on Enter from the composer 16ms
+ ✓ src/chat/ui/panel.chrome.spec.ts > panel.chrome: real Chromium layout of chatHtml() > shows the slash menu with real height when the composer holds a slash 9ms
+ ✓ src/chat/ui/panel.chrome.spec.ts > panel.chrome: real Chromium layout of chatHtml() > hydrates a quote card in the feed reader with real height and the quoted title 32ms
+ ✓ src/notes/holdings.spec.ts > notes/holdings > falls back to the last good set when every retry fails 902ms
+stdout | src/chat/session.spec.ts > chat/session — switching sessions does not kill the original in-flight handle > parks the active same-CLI session instead of stopping it when another session opens
+[session] switch-away: parked working sess-0 (retire when its turn ends)
+
+stdout | src/chat/session.spec.ts > chat/session — switching sessions does not kill the original in-flight handle > reuses the parked handle when the original session is reopened
+[session] switch-away: parked working sess-0 (retire when its turn ends)
+
+stdout | src/chat/session.spec.ts > chat/session — switching sessions does not kill the original in-flight handle > reuses the parked handle when the original session is reopened
+[session] switch-away: parked working sess-1 (retire when its turn ends)
+
+stdout | src/chat/session.spec.ts > chat/session — switch-away frees idle sessions, keeps working ones until their turn ends > stops an IDLE session (turn already ended) when another session opens
+[session] switch-away: stopped idle sess-0
+
+stdout | src/chat/session.spec.ts > chat/session — switch-away frees idle sessions, keeps working ones until their turn ends > keeps a working session alive on switch-away, then retires it the moment its turn ends
+[session] switch-away: parked working sess-0 (retire when its turn ends)
+
+stdout | src/chat/session.spec.ts > chat/session — switch-away frees idle sessions, keeps working ones until their turn ends > keeps a working session alive on switch-away, then retires it the moment its turn ends
+[session] retired backgrounded sess-0 (turn ended)
+
+stdout | src/chat/session.spec.ts > chat/session — switch-away frees idle sessions, keeps working ones until their turn ends > an approval-blocked turn (no turnEnd) stays alive across a switch-away
+[session] switch-away: parked working sess-0 (retire when its turn ends)
+
+stdout | src/chat/session.spec.ts > chat/session — switch-away frees idle sessions, keeps working ones until their turn ends > cancels retirement if you switch back before the background turn ends
+[session] switch-away: parked working sess-0 (retire when its turn ends)
+
+stdout | src/chat/session.spec.ts > chat/session — switch-away frees idle sessions, keeps working ones until their turn ends > lazy-resumes a stopped idle session from storage when it is reopened
+[session] switch-away: stopped idle sess-0
+
+stdout | src/chat/session.spec.ts > chat/session — switch-away frees idle sessions, keeps working ones until their turn ends > lazy-resumes a stopped idle session from storage when it is reopened
+[session] switch-away: parked working sess-1 (retire when its turn ends)
+
+ ✓ src/chat/session.spec.ts > chat/session — storage setup state > preserves whether Google OAuth credentials are configured 6ms
+ ✓ src/chat/session.spec.ts > chat/session — permission mode never interrupts a live turn > toggling mode keeps the running handle; next send re-spawns with the new mode + same session 6ms
+ ✓ src/chat/session.spec.ts > chat/session — permission mode never interrupts a live turn > model change follows the same lazy-restage path (no mid-turn kill, session preserved) 5ms
+ ✓ src/chat/session.spec.ts > chat/session — switching sessions does not kill the original in-flight handle > parks the active same-CLI session instead of stopping it when another session opens 6ms
+ ✓ src/chat/session.spec.ts > chat/session — switching sessions does not kill the original in-flight handle > reuses the parked handle when the original session is reopened 7ms
+ ✓ src/chat/session.spec.ts > chat/session — switch-away frees idle sessions, keeps working ones until their turn ends > stops an IDLE session (turn already ended) when another session opens 5ms
+ ✓ src/chat/session.spec.ts > chat/session — switch-away frees idle sessions, keeps working ones until their turn ends > keeps a working session alive on switch-away, then retires it the moment its turn ends 5ms
+ ✓ src/chat/session.spec.ts > chat/session — switch-away frees idle sessions, keeps working ones until their turn ends > an approval-blocked turn (no turnEnd) stays alive across a switch-away 5ms
+ ✓ src/chat/session.spec.ts > chat/session — switch-away frees idle sessions, keeps working ones until their turn ends > cancels retirement if you switch back before the background turn ends 6ms
+ ✓ src/chat/session.spec.ts > chat/session — switch-away frees idle sessions, keeps working ones until their turn ends > lazy-resumes a stopped idle session from storage when it is reopened 9ms
+ ✓ src/chat/session.spec.ts > chat/session — image attachments pass through to the engine > forwards attached images alongside the text 1ms
+ ✓ src/chat/session.spec.ts > chat/session — image attachments pass through to the engine > allows an image-only turn (empty text, images present) 2ms
+ ✓ src/chat/session.spec.ts > chat/session — image attachments pass through to the engine > ignores a truly empty turn (no text, no images) 2ms
+ ✓ src/chat/session.spec.ts > chat/session — slash commands > routes /compact and /diff to the active engine handle 3ms
+ ✓ src/chat/session.spec.ts > chat/session — slash commands > /clear resets the active context without spawning an engine turn 3ms
+ ✓ src/chat/session.spec.ts > chat/session — slash commands > /status surfaces active engine, session, config, and last usage 3ms
+ ✓ src/chat/session.spec.ts > chat/session — slash commands > /resume refreshes sessions and gives a visible instruction 2ms
+ ✓ src/chat/session.spec.ts > chat/session — slash commands > aliases /cost to the same status payload 3ms
+ ✓ src/chat/session.spec.ts > chat/session — slash commands > /permissions reports current mode and available modes 2ms
+ ✓ src/runtime/codex-approvals.spec.ts > Codex approvals (session undefined) > 'auto' with sandbox override '''' 67ms
+ ✓ src/runtime/codex-approvals.spec.ts > Codex approvals (session undefined) > 'readonly' with sandbox override '''' 52ms
+ ✓ src/runtime/codex-approvals.spec.ts > Codex approvals (session undefined) > 'full' with sandbox override '''' 53ms
+ ✓ src/runtime/codex-approvals.spec.ts > Codex approvals (session undefined) > undefined with sandbox override '''' 51ms
+ ✓ src/runtime/codex-approvals.spec.ts > Codex approvals (session undefined) > 'auto' with sandbox override ''danger-full-access'' 51ms
+ ✓ src/runtime/codex-approvals.spec.ts > Codex approvals (session undefined) > 'readonly' with sandbox override ''danger-full-access'' 51ms
+ ✓ src/runtime/codex-approvals.spec.ts > Codex approvals (session undefined) > 'full' with sandbox override ''danger-full-access'' 52ms
+ ✓ src/chat/session.spec.ts > chat/session — slash commands > /skills refreshes owned skills 593ms
+ ✓ src/runtime/codex-approvals.spec.ts > Codex approvals (session existing-thread) > 'auto' with sandbox override '''' 52ms
+ ✓ src/runtime/codex-approvals.spec.ts > Codex approvals (session existing-thread) > 'readonly' with sandbox override '''' 51ms
+stderr | src/chat/session.spec.ts > chat/session — a handler that throws > keeps the dispatcher alive, reports the failure, and drains the rest of the queue
+[chat] connectCloud failed: gdrive needs an openBrowser callback for sign-in
+
+ ✓ src/chat/session.spec.ts > chat/session — slash commands > /review and /mcp route to the active engine handle 3ms
+ ✓ src/chat/session.spec.ts > chat/session — slash commands > forwards unknown slash commands to the active engine 1ms
+ ✓ src/chat/session.spec.ts > chat/session — slash commands > /init creates CLAUDE.md for Claude and AGENTS.md for Codex 15ms
+ ✓ src/chat/session.spec.ts > chat/session — market requests stay silent when env lacks the capability > searchSkills: no searchResults reply without env.searchSkills 6ms
+ ✓ src/chat/session.spec.ts > chat/session — market requests stay silent when env lacks the capability > searchSkills: still answers when env.searchSkills exists 6ms
+ ✓ src/chat/session.spec.ts > chat/session — market requests stay silent when env lacks the capability > ownedSkills: no ownedSkills reply without env.ownedSkills/ownedNftSkills 6ms
+ ✓ src/chat/session.spec.ts > chat/session — market requests stay silent when env lacks the capability > ownedSkills: still answers when the env exposes an owned view 6ms
+ ✓ src/chat/session.spec.ts > chat/session — market requests stay silent when env lacks the capability > getBalance: no balance reply without env.solBalance 6ms
+ ✓ src/chat/session.spec.ts > chat/session — market requests stay silent when env lacks the capability > getBalance: still answers when env.solBalance exists 6ms
+ ✓ src/chat/session.spec.ts > chat/session — market requests stay silent when env lacks the capability > listAgents: no agents reply without env.listAgents 6ms
+ ✓ src/chat/session.spec.ts > chat/session — market requests stay silent when env lacks the capability > listAgents: still answers when env.listAgents exists 6ms
+ ✓ src/chat/session.spec.ts > chat/session — market requests stay silent when env lacks the capability > /skills: no ownedSkills reply on a surface whose env lacks the owned view 6ms
+ ✓ src/chat/session.spec.ts > chat/session — a handler that throws > keeps the dispatcher alive, reports the failure, and drains the rest of the queue 3ms
+ ✓ src/chat/session.spec.ts > chat/session - Running Sync markers (issue #129) > writes the running marker at turn start and the matching ended mark at turn end 3ms
+ ✓ src/chat/session.spec.ts > chat/session - Running Sync markers (issue #129) > an interrupted turn ends the marker too (interrupt fires the same turn-end path) 3ms
+ ✓ src/chat/session.spec.ts > chat/session - Running Sync markers (issue #129) > merges live markers from other devices into the sessions frame's running list 2ms
+ ✓ src/chat/session.spec.ts > chat/session - Running Sync markers (issue #129) > a failing remote-marker read never breaks the session list 2ms
+ ✓ src/chat/session.spec.ts > chat/session — feed anchor re-prime after a bumping blog comment (issue #210) > a bumping reply fires one fresh getBlogFeed so the shared anchor cache is re-primed 6ms
+ ✓ src/chat/session.spec.ts > chat/session — feed anchor re-prime after a bumping blog comment (issue #210) > a sage reply never re-primes: it did not bump, so the cache is not stale 6ms
+ ✓ src/chat/session.spec.ts > chat/session — feed anchor re-prime after a bumping blog comment (issue #210) > a failed comment never re-primes 6ms
+ ✓ src/chat/session.spec.ts > chat/session — feed anchor re-prime after a bumping blog comment (issue #210) > getBlogFeed request threads fresh through to the env 7ms
+ ✓ src/runtime/codex-approvals.spec.ts > Codex approvals (session existing-thread) > 'full' with sandbox override '''' 51ms
+ ✓ src/runtime/codex-approvals.spec.ts > Codex approvals (session existing-thread) > undefined with sandbox override '''' 51ms
+ ✓ src/runtime/codex-approvals.spec.ts > Codex approvals (session existing-thread) > 'auto' with sandbox override ''danger-full-access'' 51ms
+ ✓ src/runtime/codex-approvals.spec.ts > Codex approvals (session existing-thread) > 'readonly' with sandbox override ''danger-full-access'' 52ms
+ ✓ src/runtime/codex-approvals.spec.ts > Codex approvals (session existing-thread) > 'full' with sandbox override ''danger-full-access'' 51ms
+stderr | src/runtime/codex-resume-fallback.spec.ts
+bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)
+
+stderr | src/runtime/session-settings.spec.ts
+bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)
+
+stderr | src/runtime/codex-resume-fallback.spec.ts > codex engine: rejected thread/resume > recovers under the reinjected id and ends no turn before turn/start is written
+[codex] thread/resume dead-thread rejected: thread dead-thread not found
+
+stderr | src/runtime/codex-resume-fallback.spec.ts > codex engine: rejected thread/resume > opens an empty thread when the reinjected id is rejected too, still ending no turn
+[codex] thread/resume dead-thread rejected: thread dead-thread not found
+
+stderr | src/runtime/codex-resume-fallback.spec.ts > codex engine: rejected thread/resume > opens an empty thread when the reinjected id is rejected too, still ending no turn
+[codex] thread/resume fresh-thread rejected: thread fresh-thread not found
+
+ ✓ src/runtime/codex-resume-fallback.spec.ts > codex engine: rejected thread/resume > recovers under the reinjected id and ends no turn before turn/start is written 66ms
+stderr | src/runtime/codex-resume-fallback.spec.ts > codex engine: rejected thread/resume > opens an empty thread when no reinject hook is given
+[codex] thread/resume dead-thread rejected: thread dead-thread not found
+
+ ✓ src/runtime/codex-resume-fallback.spec.ts > codex engine: rejected thread/resume > opens an empty thread when the reinjected id is rejected too, still ending no turn 52ms
+ ✓ src/runtime/codex-resume-fallback.spec.ts > codex engine: rejected thread/resume > opens an empty thread when no reinject hook is given 53ms
+stderr | src/runtime/codex-resume-fallback.spec.ts > runtime: codex resume fallback > replays the history under a recorded fresh id that later turns, approvals and respawns use
+[codex] thread/resume 06ffa5b6-73a8-4de9-8d42-f5353dacd0aa rejected: thread 06ffa5b6-73a8-4de9-8d42-f5353dacd0aa not found
+
+ ✓ src/runtime/session-settings.spec.ts > runtime/session-settings: model/effort persist and survive resume > a session started with a model/effort lists them back in a fresh process 112ms
+ ✓ src/runtime/codex-resume-fallback.spec.ts > runtime: codex resume fallback > replays the history under a recorded fresh id that later turns, approvals and respawns use 205ms
+ ✓ src/runtime/session-settings.spec.ts > runtime/session-settings: model/effort persist and survive resume > resuming under different settings refreshes the stored meta mid-page 139ms
+ ✓ src/runtime/session-settings.spec.ts > runtime/session-settings: model/effort persist and survive resume > sessions saved before the fields existed list with no model/effort 16ms
+ ✓ src/runtime/session-settings.spec.ts > runtime/session-settings: model/effort persist and survive resume > a fork wakes up wearing the source session's settings 68ms
+ ✓ test/chrome-process.spec.ts > waits for graceful browser closure before returning 5ms
+ ✓ test/chrome-process.spec.ts > stops a profile-writing helper after its launcher exits, including SIGTERM refusal 295ms
+stderr | src/runtime/device-resume.spec.ts
+bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)
+
+ ✓ src/vault/tools.spec.ts > vault tools > exposes exactly the four vault tools with generated schemas 91ms
+ ✓ src/vault/tools.spec.ts > vault tools > soul_get before any soul_set reports no soul, not an error 3ms
+ ✓ src/vault/tools.spec.ts > vault tools > soul_set → soul_get round-trips the text and stamps this device as lastWriter 24ms
+ ✓ src/vault/tools.spec.ts > vault tools > stores the soul encrypted — the blob never contains the plaintext 10ms
+ ✓ src/vault/tools.spec.ts > vault tools > soul_set rejects text over the size cap as a tool error 5ms
+ ✓ src/vault/tools.spec.ts > vault tools > memory_list on a fresh project reports no records 4ms
+ ✓ src/vault/tools.spec.ts > vault tools > memory_save creates, memory_save with the same name updates, memory_list shows both states 22ms
+ ✓ src/vault/tools.spec.ts > vault tools > memory_save defaults an unknown/missing type to project 12ms
+ ✓ src/vault/tools.spec.ts > vault tools > throws on unknown tool names (the server routes only VAULT_TOOL_NAMES here) 4ms
+ ✓ src/runtime/device-resume.spec.ts > runtime/device-resume — cross-device notice resume flow > injects cross-device notice on first send and updates page meta, but doesn't persist notice 164ms
+ ✓ src/runtime/device-resume.spec.ts > runtime/device-resume — cross-device notice resume flow > does not inject notice on same-device resume 25ms
+ ✓ src/soul/convert/openclaw.spec.ts > soul/convert/openclaw — syncSoulWithFile > neither side → none 60ms
+ ✓ src/soul/convert/openclaw.spec.ts > soul/convert/openclaw — syncSoulWithFile > vault only → injected (file created with the doc text) 22ms
+ ✓ src/soul/convert/openclaw.spec.ts > soul/convert/openclaw — syncSoulWithFile > file only → captured into the vault 10ms
+ ✓ src/soul/convert/openclaw.spec.ts > soul/convert/openclaw — syncSoulWithFile > both differ, file newer → captured; doc newer → injected 29ms
+ ✓ src/core/chain.spec.ts > core/chain > should return null if dbRoot already exists 31ms
+ ✓ src/core/chain.spec.ts > core/chain > should initialize dbRoot if it does not exist 7ms
+ ✓ src/core/chain.spec.ts > core/chain > should call createTable from solana-sdk writer 1ms
+ ✓ src/core/chain.spec.ts > core/chain > should call writeRow from solana-sdk writer 42ms
+ ✓ src/core/chain.spec.ts > core/chain > should call codeIn from solana-sdk writer 1ms
+ ✓ src/core/chain.spec.ts > core/chain > should return false if table does not exist 1ms
+ ✓ src/core/chain.spec.ts > core/chain > should return true if table exists 1ms
+ ✓ src/core/chain.spec.ts > core/chain > should get correct signer address 1ms
+ ✓ src/core/chain.spec.ts > core/chain > readCodeIn — gateway-first > returns the gateway's /data result when the gateway responds OK 2ms
+ ✓ src/core/chain.spec.ts > core/chain > readCodeIn — gateway-first > falls back to the SDK read when the gateway fails 1ms
+ ✓ src/core/chain.spec.ts > core/chain > readCodeIn — gateway-first > falls back to the SDK read when the gateway returns non-OK 3ms
+ ✓ src/core/chain.spec.ts > core/chain > readRows — gateway-first > returns the gateway's /table/{pda}/rows result without an on-chain read 1ms
+ ✓ src/core/chain.spec.ts > core/chain > readRows — gateway-first > falls back to the SDK on-chain read when the gateway fails 1ms
+ ✓ src/core/chain.spec.ts > core/chain > readRows — gateway-first > falls back to the SDK on-chain read when the gateway returns non-OK 0ms
+ ✓ src/core/chain.spec.ts > core/chain > readRows — gateway-first > follows nextCursor to gather up to `limit` rows, then stops 1ms
+ ✓ src/core/chain.spec.ts > core/chain > readRows — gateway-first > evicts the oldest ETag entry past the cap instead of growing without bound 3ms
+ ✓ src/core/chain.spec.ts > core/chain > readRows — gateway-first > evicts by least-recently-used, so a page still being polled survives 2ms
+ ✓ src/core/chain.spec.ts > core/chain > inscriptionSigOf / itemMetadataUri > passes a legacy bare signature through 1ms
+ ✓ src/core/chain.spec.ts > core/chain > inscriptionSigOf / itemMetadataUri > extracts the sig from a gateway skill URL (last segment) 1ms
+ ✓ src/core/chain.spec.ts > core/chain > inscriptionSigOf / itemMetadataUri > tolerates .png suffix, trailing slash and query 1ms
+ ✓ src/core/chain.spec.ts > core/chain > inscriptionSigOf / itemMetadataUri > rejects things that carry no signature 1ms
+ ✓ src/core/chain.spec.ts > core/chain > inscriptionSigOf / itemMetadataUri > itemMetadataUri builds a URL whose tail round-trips through inscriptionSigOf 1ms
+ ✓ src/core/chain.spec.ts > chain/feed anchor (issue #183) > feedPda derives a stable program address for a hint 2ms
+ ✓ src/core/chain.spec.ts > chain/feed anchor (issue #183) > writeRow passes mirrors through as the write's remainingAccounts 2ms
+stderr | src/nft/workflow.spec.ts
+bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)
+
+ ✓ src/account/remoteWallet.spec.ts > remoteWallet > resolves the wallet address from the signer's /pubkey (trailing slash tolerated) 21ms
+ ✓ src/account/remoteWallet.spec.ts > remoteWallet > sign-transaction round trip keeps a co-signer's pre-added partial signature 23ms
+ ✓ src/account/remoteWallet.spec.ts > remoteWallet > sign-message returns the signer's ed25519 signature over the exact fixed message 20ms
+ ✓ src/account/remoteWallet.spec.ts > remoteWallet > surfaces a policy refusal with the vault's own reason text (403 path) 7ms
+ ✓ src/nft/workflow.spec.ts > nft/workflow > publishes a workflow (mint authority = gate PDA, then publish_workflow ix) 57ms
+ ✓ src/nft/workflow.spec.ts > nft/workflow > rejects publish if the workflow MD is invalid (type not workflow) 1ms
+ ✓ src/nft/workflow.spec.ts > nft/workflow > unlock builds a buy_workflow tx (gate is on-chain — no client balance check) 9ms
+ ✓ src/nft/workflow.spec.ts > nft/workflow > preserves failure logs from a legacy RPC response 29ms
+ ✓ src/nft/workflow.spec.ts > nft/workflow > preserves failure logs from a 0 RPC response 4ms
+ ✓ src/nft/workflow.spec.ts > nft/workflow > preserves failure logs from a 1 RPC response 4ms
+ ✓ src/runtime/engineProcess.spec.ts > engine process launch > preserves argument boundaries through the shared launcher 80ms
+ ✓ src/runtime/engineProcess.spec.ts > engine process launch > forwards the Claude SDK abort signal to a piped child 3ms
+ ↓ src/runtime/engineProcess.spec.ts > Windows npm launcher > rejects unknown batch wrappers instead of forwarding arguments through a shell
+ ↓ src/runtime/engineProcess.spec.ts > Windows npm launcher > runs a cmd shim in a spaced path with quoted and shell-special arguments
+ ↓ src/runtime/engineProcess.spec.ts > Windows npm launcher > detects and authenticates engines launched through cmd files
+ ↓ src/runtime/engineProcess.spec.ts > Windows npm launcher > launches the Claude SDK process through the same cmd adapter
+ ↓ src/runtime/engineProcess.spec.ts > Windows npm launcher > prefers the Windows shim when where also finds an extensionless launcher
+stderr | src/nft/token2022.spec.ts
+bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)
+
+ ✓ src/nft/token2022.spec.ts > nft/token2022 > should create a skill mint and return its address 58ms
+ ✓ src/nft/token2022.spec.ts > nft/token2022 > should mint a skill token to the recipient 9ms
+ ✓ src/nft/token2022.spec.ts > nft/token2022 > should create ATA if it does not exist before minting 7ms
+ ✓ src/chat/ui/panel.generated.spec.ts > panel.generated: the committed bundle is fresh > equals a rebuild of src/chat/ui/panel/ byte-for-byte (run pnpm build:panel and commit when this fails) 36ms
+ ✓ src/chat/ui/panel.generated.spec.ts > panel.generated: the bundle has the shape chatHtml() inlines > is a strict-mode IIFE that parses 4ms
+ ✓ src/chat/ui/panel.generated.spec.ts > panel.generated: the bundle has the shape chatHtml() inlines > cannot end the inline <script> tag and reaches the browser with nothing node-only 1ms
+ ✓ src/chat/ui/panel.generated.spec.ts > panel.generated: the bundle has the shape chatHtml() inlines > carries no double-escaped newline outside comments (the template-literal un-escape sentinel) 1ms
+ ✓ src/chat/ui/panel.generated.spec.ts > panel.generated: the bundle has the shape chatHtml() inlines > keeps the Korean UI strings literal and stays under 400 KB 1ms
+ ✓ src/chat/ui/panel.generated.spec.ts > panel.generated: the bundle has the shape chatHtml() inlines > inlines every CHAT_MODEL_OPTIONS engine and model (a treeshake pass once dropped them) 0ms
+ ✓ src/chat/ui/panel.generated.spec.ts > panel.generated: the bundle has the shape chatHtml() inlines > keeps the four GitHub link kind labels the panel displays 0ms
+ ✓ src/chat/ui/panel.generated.spec.ts > panel.generated: the host contract survives the cut > posts every outbound type the legacy script posted 8ms
+ ✓ src/chat/ui/panel.generated.spec.ts > panel.generated: the host contract survives the cut > the fixture lists every literal post site, so a new outbound type cannot ship unguarded 1ms
+ ✓ src/chat/ui/panel.generated.spec.ts > panel.generated: the host contract survives the cut > handles every inbound type in the legacy chain order 12ms
+ ✓ src/chat/ui/panel.generated.spec.ts > panel.generated: the host contract survives the cut > sends ready, wallet, getBalance in that order after the listener is registered 2ms
+ ✓ src/chat/ui/panel.generated.spec.ts > panel.generated: chatHtml() still hosts the bundle > inlines exactly two scripts, the markdown libs before the panel 1ms
+ ✓ src/chat/ui/panel.generated.spec.ts > panel.generated: chatHtml() still hosts the bundle > carries every element id the panel's shared refs (dom.ts) resolve at boot 1ms
+stderr | src/nft/skill.spec.ts
+bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)
+
+ ✓ src/nft/skill.spec.ts > nft/skill > publishes a skill (mint authority = gate PDA, then publish_item with no prereqs) 57ms
+ ✓ src/nft/skill.spec.ts > nft/skill > buys a skill via buy_item (no client price/minter — gate is a no-op for skills) 10ms
+ ✓ src/nft/skill.spec.ts > nft/skill > throws FormatError when the format check rejects 1ms
+ ✓ src/notes/notes.spec.ts > notes/notes > should post a note if the author holds the skill mint 40ms
+ ✓ src/notes/notes.spec.ts > notes/notes > writes a trimmed row: no subject/isSelfNote, optional meta included 2ms
+ ✓ src/notes/notes.spec.ts > notes/notes > should throw if the author does not hold the skill mint 2ms
+ ✓ src/notes/notes.spec.ts > notes/notes > should read notes and derive subject + isSelfNote 2ms
+ ✓ src/notes/notes.spec.ts > notes/notes > should throw on deleteNote for now 1ms
+ ✓ src/notes/notes.spec.ts > notes/notes > self-note: author == agentWallet writes without a balance check 1ms
+ ✓ src/notes/notes.spec.ts > notes/notes > comment on agent: allowed when the author holds a skill CREATED BY that agent 1ms
+ ✓ src/notes/notes.spec.ts > notes/notes > comment on agent: rejected when the author holds no skill created by that agent 1ms
+ ✓ src/notes/notes.spec.ts > notes/notes > readAgentNotes merges blog + reviews tables, deduped by id, newest first 2ms
+ ✓ src/notes/notes.spec.ts > notes/blog feed (issues #183/#203) > a blog post (top-level self-note) writes to blog:agent and mirrors into the feed anchor 1ms
+ ✓ src/notes/notes.spec.ts > notes/blog feed (issues #183/#203) > a self reply stays in reviews:agent (thread intact) and does not mirror 1ms
+ ✓ src/notes/notes.spec.ts > notes/blog feed (issues #183/#203) > a comment on someone else's board stays in reviews:agent and does not mirror 1ms
+ ✓ src/notes/notes.spec.ts > notes/blog feed (issues #183/#203) > readBlogFeed passes the mirrored full rows through, drops junk, sorts newest first 1ms
+ ✓ src/notes/notes.spec.ts > notes/blog feed (issues #183/#203) > readBlogFeed keeps long bodies whole and dedupes re-mirrored ids 1ms
+ ✓ src/notes/notes.spec.ts > notes/blog feed (issues #183/#203) > readBlogFeed drops a mirrored row whose id does not embed its claimed author 0ms
+ ✓ src/notes/notes.spec.ts > notes/feed v2 (issue #208) > a feed-bumping reply mirrors into the anchor and carries meta.postId 1ms
+ ✓ src/notes/notes.spec.ts > notes/feed v2 (issue #208) > sage posts the reply without bumping 0ms
+ ✓ src/notes/notes.spec.ts > notes/feed v2 (issue #208) > a skill-thread reply (no feedBump) never bumps 0ms
+ ✓ src/notes/notes.spec.ts > notes/feed v2 (issue #208) > past the bump limit a reply stops bumping 0ms
+ ✓ src/notes/notes.spec.ts > notes/feed v2 (issue #208) > readBlogFeed groups activity under its post: ACTIVE refloats, LATEST keeps creation order 0ms
+ ✓ src/notes/notes.spec.ts > notes/feed v2 (issue #208) > activity without its post row never renders a phantom entry 0ms
+ ✓ src/account/webWallet.spec.ts > webWallet > round-trips legacy transactions without dropping partial signatures 51ms
+ ✓ src/account/webWallet.spec.ts > webWallet > fails loudly when no wallet transport is provided 1ms
+ ✓ src/account/localWallet.spec.ts > local wallet key permissions > writes a generated key owner-only, inside an owner-only directory 38ms
+ ✓ src/account/localWallet.spec.ts > local wallet key permissions > reuses an existing key without touching its permissions 3ms
+ ✓ src/nft/minter.spec.ts > nft/minter > resolveMinter returns the override when given one 33ms
+ ✓ src/nft/minter.spec.ts > nft/minter > resolveMinter throws when nothing is configured 1ms
+ ✓ src/nft/minter.spec.ts > nft/minter > resolveMinter parses a JSON byte-array secret from env 1ms
+ ✓ src/nft/minter.spec.ts > nft/minter > resolveMinter rejects a non-array secret 0ms
+ ✓ src/nft/minter.spec.ts > nft/minter > tryMinterPubkey returns null when unconfigured (publish stays open) 0ms
+ ✓ src/nft/minter.spec.ts > nft/minter > tryMinterPubkey prefers an explicit pubkey override 1ms
+ ✓ src/nft/minter.spec.ts > nft/minter > tryMinterPubkey reads AGENTNET_MINTER_PUBKEY without needing the secret 1ms
+ ✓ src/nft/minter.spec.ts > nft/minter > tryMinterPubkey derives the pubkey from the secret when only the secret is set 1ms
+ ✓ src/notes/migrate.spec.ts > notes/migrate (issue #203 backfill) > rewrites top-level self-notes into blog:agent preserving id + timestamp, mirroring the feed 38ms
+ ✓ src/notes/migrate.spec.ts > notes/migrate (issue #203 backfill) > leaves comments and thread replies behind in reviews:agent 1ms
+ ✓ src/notes/migrate.spec.ts > notes/migrate (issue #203 backfill) > is idempotent: skips posts whose id already sits in blog:agent 1ms
+ ✓ src/notes/migrate.spec.ts > notes/migrate (issue #203 backfill) > walks every given wallet and reports per-wallet counts 1ms
+ ✓ src/skill-market/passive.spec.ts > skill-shopping toggle = file move (plan §6) > ON writes the SKILL.md into both scanned skills dirs 10ms
+ ✓ src/skill-market/passive.spec.ts > skill-shopping toggle = file move (plan §6) > OFF moves it out of the scanned dirs into the holding dir (not deleted) 7ms
+ ✓ src/skill-market/passive.spec.ts > skill-shopping toggle = file move (plan §6) > re-toggling ON brings it back to the scanned dirs 8ms
+ ✓ src/skill-market/passive.spec.ts > skill-shopping toggle = file move (plan §6) > toggling OFF twice is idempotent (no throw, stays inactive) 6ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: rel, the Korean relative age > counts in 방금/분/시간/일/개월/년, flooring at each unit 3ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: rel, the Korean relative age > a timestamp in the future is 방금, never a negative age 0ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: fdAgo, the feed row's short age > formats 5s / 12m / 5h / 3d / 2w 0ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: fdAgo, the feed row's short age > rolls units at 60s / 60m / 24h / 7d 0ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: fdAgo, the feed row's short age > never shows 0s: now, sub-second, and the future clamp to 1s (Math.max(1, ...)) 0ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: fdAgo, the feed row's short age > no timestamp is an empty label 0ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: fmtNoteDate > prefers the chain's __blockTime (seconds) over the note's own timestamp (ms) 13ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: fmtNoteDate > is empty without either 0ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: explorerTxUrl follows S.rpcNetwork > mainnet has no cluster; every other network is a ?cluster= query 0ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: explorerTxUrl follows S.rpcNetwork > URL-encodes both the signature and the cluster 0ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: feedImgUrl > returns the original HTTP(S) image URL 0ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: feedImgUrl > omits missing images and values the panel cannot resolve 0ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: looksOnChain tells a base58 image id from a URL or a file name > accepts an address or txid shape (32-44 base58 chars), trimmed 0ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: looksOnChain tells a base58 image id from a URL or a file name > refuses urls, image file names, wrong lengths, non-base58 chars, and nothing 0ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: splitSkillDoc drops a leading frontmatter block > strips ---/.../--- at the top, LF or CRLF, and trims what remains 0ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: splitSkillDoc drops a leading frontmatter block > leaves text without a leading block alone (only trimmed) 0ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: address shorteners and pad2 > agShort keeps 6 + 4 around three dots 0ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: address shorteners and pad2 > short keeps 4 + 3 around two dots, only past 10 chars 0ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: address shorteners and pad2 > pad2 zero-pads a single digit and leaves the rest alone 0ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: SOL amounts > fmtSol trims trailing zeros: 4 dp under 1 SOL, 3 dp from 1 SOL 0ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: SOL amounts > fmtSol of no value is null 0ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: SOL amounts > fmtPrice: unknown stays null, 0 is Free, else the SOL label from a lamports string 0ms
+ ✓ src/chat/ui/panel/format.spec.ts > panel/format: netBadge > is mainnet only for 'mainnet'; everything else reads devnet 0ms
+stderr | src/core/rpc.spec.ts > core/rpc — resolveRpcUrl priority > falls back to env/public when a stored Helius key is dead (Unauthorized)
+[rpc] Helius key rejected by mainnet.helius-rpc.com (revoked / IP allowlist / transient?); using a public RPC — DAS reads (skill market) will be empty until the key works.
+
+stderr | src/core/rpc.spec.ts > core/rpc — resolveRpcUrl priority > hasDasRpc is false when the stored key is rejected (presence is not enough)
+[rpc] Helius key rejected by mainnet.helius-rpc.com (revoked / IP allowlist / transient?); using a public RPC — DAS reads (skill market) will be empty until the key works.
+
+stderr | src/core/rpc.spec.ts > core/rpc — resolveRpcUrl priority > hasDasRpc follows the env RPC a dead key falls back to (it must agree with resolveRpcUrl)
+[rpc] Helius key rejected by mainnet.helius-rpc.com (revoked / IP allowlist / transient?); using a public RPC — DAS reads (skill market) will be empty until the key works.
+
+ ✓ src/core/rpc.spec.ts > core/rpc — resolveRpcUrl priority > falls back to the public network default when nothing is set 8ms
+ ✓ src/core/rpc.spec.ts > core/rpc — resolveRpcUrl priority > uses an env RPC over the default 1ms
+ ✓ src/core/rpc.spec.ts > core/rpc — resolveRpcUrl priority > a registered, WORKING Helius key wins over env and templates the central-network URL 4ms
+ ✓ src/core/rpc.spec.ts > core/rpc — resolveRpcUrl priority > falls back to env/public when a stored Helius key is dead (Unauthorized) 4ms
+ ✓ src/core/rpc.spec.ts > core/rpc — resolveRpcUrl priority > hasDasRpc is false with no key and true only when the stored key actually works 2ms
+ ✓ src/core/rpc.spec.ts > core/rpc — resolveRpcUrl priority > hasDasRpc is false when the stored key is rejected (presence is not enough) 2ms
+ ✓ src/core/rpc.spec.ts > core/rpc — resolveRpcUrl priority > hasDasRpc follows the env RPC a dead key falls back to (it must agree with resolveRpcUrl) 3ms
+ ✓ src/core/rpc.spec.ts > core/rpc — resolveRpcUrl priority > maskedHeliusKey shows only the last 4 chars (null when no key) 2ms
+ ✓ src/core/rpc.spec.ts > core/rpc — resolveRpcUrl priority > clearing the key (empty string) falls back to the default 2ms
+ ✓ src/skill-market/registry.spec.ts > skill-origin registry > the bundled set is skill-shopping + make-skill 5ms
+ ✓ src/skill-market/registry.spec.ts > skill-origin registry > a missing manifest reads as empty (best-effort, no throw) 2ms
+ ✓ src/skill-market/registry.spec.ts > skill-origin registry > records an NFT skill with its mint, then forgets it (round-trip) 5ms
+ ✓ src/skill-market/registry.spec.ts > skill-origin registry > classifies bundled, nft, and local correctly 2ms
+ ✓ src/skill-market/registry.spec.ts > skill-origin registry > bundled wins over a stale manifest entry (a bundled slug never reads as nft) 3ms
+ ✓ src/skill-market/registry.spec.ts > skill-origin registry > classifySkills tags a list and attaches the mint for nft only 3ms
+ ✓ src/core/device.spec.ts > core/device — getDeviceProfile and buildDeviceNotice > generates a new stable UUID on first call and caches/persists it 14ms
+ ✓ src/core/device.spec.ts > core/device — getDeviceProfile and buildDeviceNotice > overrides the label via AGENTNET_DEVICE_LABEL env var 1ms
+ ✓ src/core/device.spec.ts > core/device — getDeviceProfile and buildDeviceNotice > buildDeviceNotice formats the notice correctly with truncated ids 1ms
+ ✓ src/soul/convert/native.spec.ts > soul/convert/native — global instruction file block > splices the soul block into CLAUDE.md, preserving human content, idempotently 11ms
+ ✓ src/soul/convert/native.spec.ts > soul/convert/native — global instruction file block > injectSoulNative is a no-op when the engine home is missing 2ms
+ ✓ src/soul/convert/native.spec.ts > soul/convert/native — global instruction file block > injectSoulNative writes the block when home exists and a soul is stored 2ms
+ ✓ src/skill-market/equipState.spec.ts > wallet-scoped equip state > disposes a mint (sticky, deduped) then un-disposes it, per wallet 11ms
+ ✓ src/skill-market/equipState.spec.ts > wallet-scoped equip state > persists as the documented shape with an updatedAt merge key 2ms
+ ✓ src/skill-market/equipState.spec.ts > wallet-scoped equip state > adopts the legacy device-global disposed list on a wallet's first read 4ms
+ ✓ src/search/search.spec.ts > search/search > should return all skills without filters, sorted by supply by default 3ms
+ ✓ src/search/search.spec.ts > search/search > should filter by keyword in name or description 0ms
+ ✓ src/search/search.spec.ts > search/search > should filter by category 0ms
+ ✓ src/search/search.spec.ts > search/search > should filter by hashtags 0ms
+ ✓ src/search/search.spec.ts > search/search > should filter by type 1ms
+ ✓ src/search/search.spec.ts > search/search > should sort by name 7ms
+ ✓ src/search/search.spec.ts > search/search > should sort by recent 0ms
+ ✓ src/search/search.spec.ts > search/search > uses the provided source for enumeration 1ms
+ ✓ src/search/search.spec.ts > search/search > verifyTraits re-reads category from the mint, overriding the stale snapshot 0ms
+ ✓ src/search/search.spec.ts > search/search > a hydrated source skips the per-mint getMintSupply loop 1ms
+ ✓ src/core/skillSource.spec.ts > core/skillSource — dasSource > maps DAS items to Skill rows (id from item.id) + reads attributes 4ms
+ ✓ src/core/skillSource.spec.ts > core/skillSource — dasSource > throws on a DAS error instead of hiding it 2ms
+ ✓ src/core/skillSource.spec.ts > core/skillSource — dasSource > falls back to the public-mainnet default when no RPC is configured (issue #23) 1ms
+ ✓ src/core/skillSource.spec.ts > core/skillSource — indexerSource > maps /items to Skill rows with live supply + traits, hydrated:true 2ms
+ ✓ src/core/skillSource.spec.ts > core/skillSource — indexerSource > throws on a non-ok indexer response (caller falls back to dasSource) 0ms
+ ✓ src/core/skillSource.spec.ts > core/skillSource — ownedAssetIds / ownedSkillMints > ownedAssetIds returns held Token-2022 NFT mints (0-decimal, held≥1), skipping fungibles/empties 1ms
+ ✓ src/core/skillSource.spec.ts > core/skillSource — ownedAssetIds / ownedSkillMints > fast path: holdings fully covered by the catalog need no on-chain per-asset read 1ms
+ ✓ src/core/skillSource.spec.ts > core/skillSource — ownedAssetIds / ownedSkillMints > rescues a held mint the catalog misses when on-chain it belongs to a current collection 1ms
+ ✓ src/core/skillSource.spec.ts > core/skillSource — ownedAssetIds / ownedSkillMints > self-fetches the catalog from the indexer when none is passed 1ms
+ ✓ src/memory/skillsSection.spec.ts > memory/skillsSection > writes a block naming installed skills with descriptions (claude MEMORY.md) 10ms
+ ✓ src/memory/skillsSection.spec.ts > memory/skillsSection > parses YAML block scalar descriptions (>- and |-) 0ms
+ ✓ src/memory/skillsSection.spec.ts > memory/skillsSection > falls back to the directory name when a skill file cannot be read 0ms
+ ✓ src/memory/skillsSection.spec.ts > memory/skillsSection > says none when no skills are installed 0ms
+ ✓ src/memory/skillsSection.spec.ts > memory/skillsSection > replaces the block in place and preserves content outside the markers 0ms
+ ✓ src/memory/skillsSection.spec.ts > memory/skillsSection > targets AGENTS.md for codex 0ms
+ ✓ src/memory/convert/openclaw.spec.ts > memory/convert/openclaw > renders records as sections inside the fenced block 3ms
+ ✓ src/memory/convert/openclaw.spec.ts > memory/convert/openclaw > preserves human content outside the markers and replaces the block on re-inject 4ms
+ ✓ src/memory/convert/openclaw.spec.ts > memory/convert/openclaw > does not create MEMORY.md for an empty canonical 2ms
+ ✓ src/account/skillShopping.spec.ts > skill-shopping toggle persistence > defaults ON when no config exists 3ms
+ ✓ src/account/skillShopping.spec.ts > skill-shopping toggle persistence > persists OFF then back ON 3ms
+ ✓ src/account/skillShopping.spec.ts > skill-shopping toggle persistence > preserves other config fields (storage choice) across a toggle write 2ms
+ ✓ src/runtime/engineBin.spec.ts > resolveEngineBin cache self-heal > re-resolves after the cached binary is deleted and replaced 9ms
+ ✓ src/account/storageKind.spec.ts > storage kind validation > accepts every kind the registry can build, and nothing else 3ms
+ ✓ src/account/storageKind.spec.ts > storage kind validation > treats an unbuildable persisted kind as no cloud instead of throwing 4ms
+ ✓ src/account/storageKind.spec.ts > storage kind validation > still reads a valid persisted kind 1ms
+ ✓ src/account/storageKind.spec.ts > storage kind validation > refuses to persist an unknown kind 2ms
+ ✓ src/core/quietBigintWarning.spec.ts > quietBigintWarning > swallows exactly the bigint-buffer load warning, once, then restores console.warn 8ms
+ ✓ src/core/quietBigintWarning.spec.ts > quietBigintWarning > passes every other warning through while the hook is armed 0ms
+ ✓ src/core/dasSource.spec.ts > core/dasSource > falls back to the public-mainnet default when no RPC is configured (issue #23) 5ms
+ ✓ src/core/dasSource.spec.ts > core/dasSource > builds a getAssetsByGroup(collection) request and parses items into Skill[] 1ms
+ ✓ src/core/dasSource.spec.ts > core/dasSource > surfaces an RPC error instead of masking it with the table 1ms
+ ✓ src/core/dasSource.spec.ts > core/dasSource > returns an empty list visibly (not a table fallback) when DAS has no members 0ms
+stderr | src/skill-market/ingest/index.spec.ts
+bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)
+
+ ✓ src/notes/quoteRefs.spec.ts > notes/quoteRefs — the >>note: text convention > extracts a ref with its author, from anywhere in the text 2ms
+ ✓ src/notes/quoteRefs.spec.ts > notes/quoteRefs — the >>note: text convention > dedupes repeats and keeps first-appearance order 0ms
+ ✓ src/notes/quoteRefs.spec.ts > notes/quoteRefs — the >>note: text convention > caps at QUOTE_REFS_MAX so one note cannot fan out unbounded reads 0ms
+ ✓ src/notes/quoteRefs.spec.ts > notes/quoteRefs — the >>note: text convention > ignores things that only look like refs 0ms
+ ✓ src/notes/quoteRefs.spec.ts > notes/quoteRefs — the >>note: text convention > a ref glued to alphanumeric text is no match, never a corrupted id 0ms
+ ✓ src/notes/quoteRefs.spec.ts > notes/quoteRefs — the >>note: text convention > accepts the real nonce range: 4 to 6 lowercase base36 chars 0ms
+ ✓ src/notes/quoteRefs.spec.ts > notes/quoteRefs — the >>note: text convention > parseNoteRef accepts exactly one bare id and rejects surrounding junk 0ms
+ ✓ src/notes/quoteRefs.spec.ts > notes/quoteRefs: splitQuoteRefs, the panel's inline-render input > alternates text and ref segments in order and skips empty text runs 0ms
+ ✓ src/notes/quoteRefs.spec.ts > notes/quoteRefs: splitQuoteRefs, the panel's inline-render input > keeps duplicates and never caps: the per-view accounting belongs to the renderer 0ms
+ ✓ src/notes/quoteRefs.spec.ts > notes/quoteRefs: splitQuoteRefs, the panel's inline-render input > refuses a ref glued to alphanumerics and accepts 4-6 char nonces 0ms
+ ✓ src/notes/quoteRefs.spec.ts > notes/quoteRefs: splitQuoteRefs, the panel's inline-render input > splits exactly like the retired panel regex did 1ms
+ ✓ src/skill-market/ingest/index.spec.ts > SkillSync.installBoughtAllRetry > retries and eventually returns the slug once an attempt succeeds 5ms
+ ✓ src/skill-market/ingest/index.spec.ts > SkillSync.installBoughtAllRetry > makes at most `attempts` calls on a total miss 1ms
+ ✓ src/skill-market/ingest/index.spec.ts > SkillSync.installBoughtAllRetry > resolves to null WITHOUT throwing when installBoughtAll always rejects (best-effort contract) 1ms
+ ✓ src/account/runningMarkers.spec.ts > account/runningMarkers > start writes a running marker with the default 20 minute expiry; end overwrites it with ended 2ms
+ ✓ src/account/runningMarkers.spec.ts > account/runningMarkers > end with a stale turnId cannot close a newer turn's marker 0ms
+ ✓ src/account/runningMarkers.spec.ts > account/runningMarkers > liveRemote lists only other devices' running, unexpired markers 1ms
+ ✓ src/account/runningMarkers.spec.ts > account/runningMarkers > liveRemote treats an expired marker as ended regardless of its state 0ms
+ ✓ src/account/runningMarkers.spec.ts > account/runningMarkers > sweep force-closes this device's leftover running markers and drops its ended ones, leaving other devices' alone 0ms
+ ✓ src/account/runningMarkers.spec.ts > account/runningMarkers > ignores a corrupt marker blob instead of failing the list 1ms
+stderr | src/skill-market/ingest/env.spec.ts
+bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)
+
+ ✓ src/skill-market/ingest/env.spec.ts > skill-market/ingest/env publish > routes workflow frontmatter to publishWorkflow 4ms
+ ✓ src/skill-market/ingest/env.spec.ts > skill-market/ingest/env publish > routes skill frontmatter to publishSkill 1ms
+ ✓ src/skill-market/ingest/env.spec.ts > skill-market/ingest/env publish > routes missing frontmatter to publishSkill 0ms
+ ✓ src/nft/checkFormat.spec.ts > nft/checkFormat — checkFormat > passes a valid skill 2ms
+ ✓ src/nft/checkFormat.spec.ts > nft/checkFormat — checkFormat > errors when name/description are missing (no frontmatter) 0ms
+ ✓ src/nft/checkFormat.spec.ts > nft/checkFormat — checkFormat > errors on a non-kebab-case name 0ms
+ ✓ src/nft/checkFormat.spec.ts > nft/checkFormat — checkFormat > errors on a too-short description 0ms
+ ✓ src/nft/checkFormat.spec.ts > nft/checkFormat — checkFormat > errors on an empty body (the permanent mint would carry no instructions) 0ms
+ ✓ src/nft/checkFormat.spec.ts > nft/checkFormat — checkFormat > does NOT error on a long skill (codeIn auto-chunks; no size rule) 0ms
+ ✓ src/nft/checkFormat.spec.ts > nft/checkFormat — checkFormat > warns when category is missing 0ms
+ ✓ src/nft/checkFormat.spec.ts > nft/checkFormat — checkFormat > warns on bad hashtags (uppercase / spaces) 0ms
+ ✓ src/nft/checkFormat.spec.ts > nft/checkFormat — checkWorkflowFormat > passes a valid workflow 0ms
+ ✓ src/nft/checkFormat.spec.ts > nft/checkFormat — checkWorkflowFormat > errors when type is not workflow 0ms
+ ✓ src/nft/checkFormat.spec.ts > nft/checkFormat — checkWorkflowFormat > errors when requiredSkills is empty 0ms
+ ✓ src/nft/checkFormat.spec.ts > nft/checkFormat — checkWorkflowFormat > errors on invalid base58 in requiredSkills 0ms
+ ✓ src/nft/checkFormat.spec.ts > nft/checkFormat — FormatError > carries the issues and a readable message 0ms
+ ✓ src/reputation/reputation.spec.ts > reputation/reputation > computes reputation from skills (supply) + reviews (count), not a score 3ms
+ ✓ src/reputation/reputation.spec.ts > reputation/reputation > reuses a passed-in catalog instead of refetching listSkills 0ms
+ ✓ src/reputation/reputation.spec.ts > reputation/reputation > generates a leaderboard ranked by totalSupply 0ms
+ ✓ src/chat/ui/panel/tiers.spec.ts > panel/tiers: the agent card's star tier > names the tier at each boundary; under 3 stars is unranked (null) 2ms
+ ✓ src/chat/ui/panel/tiers.spec.ts > panel/tiers: the agent card's star tier > agNextTierMin is the next threshold, and stays at the top once Legendary 0ms
+ ✓ src/chat/ui/panel/tiers.spec.ts > panel/tiers: the agent card's star tier > the card and the profile share one threshold ladder; AG_TIERS stays descending for find() 1ms
+ ✓ src/chat/ui/panel/tiers.spec.ts > panel/tiers: the agent card's star tier > agAccent is the avatar hash's hue, so a wallet's accent matches its face 0ms
+ ✓ src/chat/ui/panel/tiers.spec.ts > panel/tiers: the profile gauge > profTierInfo pairs the reached tier with the next one, null at either end 0ms
+ ✓ src/chat/ui/panel/tiers.spec.ts > panel/tiers: the profile gauge > every tier has its CSS colour token and the gauge has 15 segments 0ms
+ ✓ src/chat/ui/panel/tiers.spec.ts > panel/tiers: the per-repo tier ramp (3/10/50/250) > profRepoTier is the base palette under 3 stars, then the highest rung reached 0ms
+ ✓ src/chat/ui/panel/tiers.spec.ts > panel/tiers: the per-repo tier ramp (3/10/50/250) > profRepoFill is tenths of the way to the next rung, full (10) at and past 250 0ms
+ ✓ src/skill-market/scan.spec.ts > scanSkillText — first-pass danger scan (plan §3 ①) > passes an ordinary skill body 3ms
+ ✓ src/skill-market/scan.spec.ts > scanSkillText — first-pass danger scan (plan §3 ①) > passes mentions that aren't actual danger (e.g. removing a temp file) 1ms
+ ✓ src/skill-market/scan.spec.ts > scanSkillText — first-pass danger scan (plan §3 ①) > flags an rm -rf of a sensitive root 0ms
+ ✓ src/skill-market/scan.spec.ts > scanSkillText — first-pass danger scan (plan §3 ①) > flags reading a wallet keypair / seed phrase 0ms
+ ✓ src/skill-market/scan.spec.ts > scanSkillText — first-pass danger scan (plan §3 ①) > still flags an exfil attempt that reads a key path and sends it 0ms
+ ✓ src/skill-market/scan.spec.ts > scanSkillText — first-pass danger scan (plan §3 ①) > flags a bare mention of a key path (no exfil verb) — deliberate false-positive tradeoff 1ms
+ ✓ src/skill-market/scan.spec.ts > scanSkillText — first-pass danger scan (plan §3 ①) > flags indirection / copy-verb / split-line exfil of a key path (bypass regressions) 0ms
+ ✓ src/skill-market/scan.spec.ts > scanSkillText — first-pass danger scan (plan §3 ①) > flags curl piped straight into a shell 0ms
+ ✓ src/skill-market/scan.spec.ts > scanSkillText — first-pass danger scan (plan §3 ①) > flags exfiltrating env/secrets to the network 0ms
+ ✓ src/skill-market/scan.spec.ts > scanSkillText — first-pass danger scan (plan §3 ①) > decodes a base64 payload and flags the hidden command 0ms
+ ✓ src/skill-market/scan.spec.ts > scanSkillText — first-pass danger scan (plan §3 ①) > ignores base64-looking text that decodes to garbage 0ms
+ ✓ src/links/github.spec.ts > github link helpers > keeps only safe external protocols 2ms
+ ✓ src/links/github.spec.ts > github link helpers > parses repository links 1ms
+ ✓ src/links/github.spec.ts > github link helpers > parses pull request links 0ms
+ ✓ src/links/github.spec.ts > github link helpers > parses commit links 0ms
+ ✓ src/links/github.spec.ts > github link helpers > parses blob links 0ms
+ ✓ src/links/github.spec.ts > github link helpers > ignores non-GitHub links for rich cards 0ms
+ ✓ src/links/github.spec.ts > github link helpers > validates post_blog GitHub links as https only 0ms
+stderr | src/nft/readSkillText.spec.ts
+bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)
+
+ ✓ src/nft/readSkillText.spec.ts > nft/readSkillText > resolves mint → legacy bare-sig uri → skillText in the code-in JSON 3ms
+ ✓ src/nft/readSkillText.spec.ts > nft/readSkillText > resolves a gateway-URL uri by extracting the sig from its last segment 1ms
+ ✓ src/nft/readSkillText.spec.ts > nft/readSkillText > returns null (no on-chain read) when the uri carries no recognisable sig 0ms
+ ✓ src/nft/readSkillText.spec.ts > nft/readSkillText > returns null when the mint has no metadata 0ms
+ ✓ src/search/unlock.spec.ts > search/listUnlockable > returns unlockable first, then almost-there by fewest missing 2ms
+ ✓ src/search/unlock.spec.ts > search/listUnlockable > respects maxMissing (0 = only already-unlockable) 0ms
+ ✓ src/search/unlock.spec.ts > search/listUnlockable > ignores plain skills and prereq-less workflows 0ms
+ ✓ src/search/unlock.spec.ts > search/listUnlockable > a bogus heldMints is harmless — discovery only, on-chain gate is the truth 0ms
+ ✓ src/chat/ui/avatar.spec.ts > chat/ui/avatar: hashSeed and avatarSvg match the pre-migration goldens > reproduces every golden byte-for-byte 3ms
+ ✓ src/chat/ui/avatar.spec.ts > chat/ui/avatar: hashSeed and avatarSvg match the pre-migration goldens > drops the shared <style> block so two avatars on one page cannot recolor each other 0ms
+ ✓ src/chat/ui/avatar.spec.ts > chat/ui/avatar: hashSeed and avatarSvg match the pre-migration goldens > gives different seeds different faces; the empty seed is the 'default' face 0ms
+ ✓ src/memory/previewSection.spec.ts > memory/previewSection > renders the loopback-link hint when the surface opts in (AGENTNET_PREVIEW_HINT set) 3ms
+ ✓ src/memory/previewSection.spec.ts > memory/previewSection > removes the block when the surface does not opt in, keeping content outside the markers 0ms
+ ✓ src/memory/previewSection.spec.ts > memory/previewSection > never dirties a file to write nothing (disabled + no existing block = no write) 0ms
+ ✓ src/memory/previewSection.spec.ts > memory/previewSection > toggles idempotently through the SHARED splicer: add, then remove, exactly one block each pass 0ms
+ ✓ src/memory/previewSection.spec.ts > memory/previewSection > targets AGENTS.md for codex via the shared memoryFileFor mapping 0ms
+ ✓ src/skill-market/ingest/convert.spec.ts > toSkillMd frontmatter normalization > quotes a publisher description containing ': ' (the codex strict-YAML fix) 2ms
+ ✓ src/skill-market/ingest/convert.spec.ts > toSkillMd frontmatter normalization > leaves an already-quoted description untouched (idempotent) 0ms
+ ✓ src/skill-market/ingest/convert.spec.ts > toSkillMd frontmatter normalization > leaves flow collections and block scalars untouched 0ms
+ ✓ src/skill-market/ingest/convert.spec.ts > toSkillMd frontmatter normalization > still synthesizes safe frontmatter when the body has none 0ms
+stderr | src/nft/buildItemJson.spec.ts
+bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)
+
+ ✓ src/soul/parse.spec.ts > soul/parse > lifts recognized sections and preserves the rest as extras 2ms
+ ✓ src/soul/parse.spec.ts > soul/parse > treats a bare H1 as the name and keeps preamble text 0ms
+ ✓ src/soul/parse.spec.ts > soul/parse > parses an empty/heading-less soul without throwing 0ms
+ ✓ src/soul/parse.spec.ts > soul/convert/eliza > maps sections to characterfile fields; extras concatenate into lore 1ms
+ ✓ src/soul/parse.spec.ts > soul/convert/eliza > falls back to the provided name and omits system when no boundaries 0ms
+ ✓ src/nft/buildItemJson.spec.ts > nft/buildItemJson — shared skill+workflow JSON shape > skill shape: name/description/attributes/skillText, image omitted when absent 2ms
+ ✓ src/nft/buildItemJson.spec.ts > nft/buildItemJson — shared skill+workflow JSON shape > skill shape: image is included, in position, when present 0ms
+ ✓ src/nft/buildItemJson.spec.ts > nft/buildItemJson — shared skill+workflow JSON shape > workflow shape: requiredSkill traits appended after hashtags, no image 0ms
+ ✓ src/nft/buildItemJson.spec.ts > nft/buildItemJson — shared skill+workflow JSON shape > a workflow always carries its description (regression: it must never be blank) 0ms
+ ✓ src/chat/ui/skillSigil.spec.ts > chat/ui/skillSigil: skillSigilSvg matches the pre-migration goldens > reproduces every golden byte-for-byte 3ms
+ ✓ src/chat/ui/skillSigil.spec.ts > chat/ui/skillSigil: skillSigilSvg matches the pre-migration goldens > is deterministic: the same name twice is identical 1ms
+ ✓ src/runtime/convert/claude.spec.ts > mapClaudeMessage rate_limit_event > scales the fraction to a percentage and seconds to ms 2ms
+ ✓ src/runtime/convert/claude.spec.ts > mapClaudeMessage rate_limit_event > clamps a window past its cap to a full gauge 0ms
+ ✓ src/runtime/convert/claude.spec.ts > mapClaudeMessage rate_limit_event > reports a rejection that carries no utilization as a full window 0ms
+ ✓ src/notes/solBalance.spec.ts > notes/solBalance > reads native SOL balance via conn.getBalance 2ms
+ ✓ src/notes/solBalance.spec.ts > notes/solBalance > affords when balance >= price + tx-fee buffer 0ms
+ ✓ src/notes/solBalance.spec.ts > notes/solBalance > does not afford when balance is short by less than the buffer 0ms
+ ✓ src/notes/solBalance.spec.ts > notes/solBalance > does not afford an empty wallet 0ms
+ ✓ src/runtime/spawn-images.spec.ts > runtime/spawn — claudeUserContent (Anthropic content blocks) > returns a plain string when there are no images (unchanged common path) 1ms
+ ✓ src/runtime/spawn-images.spec.ts > runtime/spawn — claudeUserContent (Anthropic content blocks) > builds a text block + one base64 image block per image 0ms
+ ✓ src/runtime/spawn-images.spec.ts > runtime/spawn — claudeUserContent (Anthropic content blocks) > drops the empty text block for an image-only turn 0ms
+ ✓ src/runtime/codexModels.spec.ts > hasStaleModelsCacheSignal > flags the models-cache parse failure an outdated codex logs 2ms
+ ✓ src/runtime/codexModels.spec.ts > hasStaleModelsCacheSignal > stays quiet on a healthy probe 0ms
+ ✓ test/webview-rate-limit.spec.js > webview plan limits > keeps a plan reading with its engine through local and host switches 2ms
+ ✓ test/webview-rate-limit.spec.js > webview plan limits > files a late Claude frame under Claude while Codex is selected 0ms
+ ✓ test/webview-rate-limit.spec.js > webview plan limits > preserves status-only readings within the reporting engine 0ms
+ ✓ test/webview-rate-limit.spec.js > keeps a late Claude quota out of Custom when that engine is available 0ms
+ ✓ src/chat/ui/panel/quoteCard.spec.ts > panel/quoteCard: quoteCardModel > a titled post keeps its title and quotes the whole text, trimmed, as the snippet 2ms
+ ✓ src/chat/ui/panel/quoteCard.spec.ts > panel/quoteCard: quoteCardModel > an untitled post promotes its trimmed first line and snips from line two 0ms
+ ✓ src/chat/ui/panel/quoteCard.spec.ts > panel/quoteCard: quoteCardModel > empty or missing text is an empty card, never a throw 0ms
+ ✓ src/chat/ui/panel/quoteCard.spec.ts > panel/quoteCard: quoteCardModel > CRLF is not special: the split is on \n, trim eats the promoted line's \r, inner \r stays 0ms
+ ✓ src/chat/ui/panel/quoteCard.spec.ts > panel/quoteCard: quoteCardModel > a blank first line yields no title and the rest as the snippet 0ms
+ ✓ src/chat/ui/panel/quoteCard.spec.ts > panel/quoteCard: quoteCardModel > a whitespace-only title still counts as a title (no trim before deciding) 0ms
+ ✓ src/core/seed.spec.ts > core/seed > should have correct static constants 2ms
+ ✓ src/core/seed.spec.ts > core/seed > should format mysessionsHint correctly 0ms
+ ✓ src/core/seed.spec.ts > core/seed > should format reviewsHint correctly (collection then item) 0ms
+ ✓ src/core/seed.spec.ts > core/seed > should format reviewsAgentHint correctly 0ms
+ ✓ src/core/seed.spec.ts > core/seed > networkFromRpcUrl — gateway follows the live RPC, not the static switch > reads devnet from common devnet RPC hosts 0ms
+ ✓ src/core/seed.spec.ts > core/seed > networkFromRpcUrl — gateway follows the live RPC, not the static switch > reads mainnet from common mainnet RPC hosts 0ms
+ ✓ src/core/seed.spec.ts > core/seed > networkFromRpcUrl — gateway follows the live RPC, not the static switch > matches the gateway to the RPC's network 0ms
+ ✓ src/core/seed.spec.ts > core/seed > networkFromRpcUrl — gateway follows the live RPC, not the static switch > falls back to the static network for an unrecognized host 0ms
+
+ Test Files  69 passed (69)
+      Tests  503 passed | 5 skipped (508)
+   Start at  22:37:52
+   Duration  27.78s (transform 1.19s, setup 0ms, import 8.37s, tests 35.48s, environment 6ms)
