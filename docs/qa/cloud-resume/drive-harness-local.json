@@ -1,0 +1,14 @@
+{
+  "transport": "local-files-NOT-Drive",
+  "sessionId": "qa-device-pages-00a78f89-4ef3-4d9d-86c0-0bedb05a6d2c",
+  "physicalHosts": 1,
+  "independentDeviceProcesses": 2,
+  "result": "PASS",
+  "onlineMessages": 92,
+  "afterReconnectMessages": 96,
+  "canonicalSessions": 1,
+  "pagination": "matches full load",
+  "sealedPages": "unchanged",
+  "legacyPage": "unchanged",
+  "cleanup": "verified"
+}

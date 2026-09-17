@@ -25,3 +25,23 @@ The implementation and local regression suite are complete for this draft. The k
 A real two-device Google Drive run has **not** been performed: this checkout has no saved Google sign-in. The local harness exercises the actual encrypted storage/runtime paths with an in-memory cloud adapter, so it does not establish Drive transport acceptance. The PR remains draft until that integration check is complete.
 
 Known scope limits: old clients do not display new-format messages; two old clients still share legacy keys. Each process restart adds a chain head, increasing discovery reads. Delete does not add distributed tombstones, and a restored stale local backup is not automatically refreshed from its longer cloud copy. Serializing uploads does not provide server-side fencing for requests that complete after a timeout. This change does not recover history already overwritten before it was installed.
+
+## Reproducible Drive transport acceptance
+
+Run from the repository root after connecting Google Drive in AgentNet (the selected `AGENTNET_HOME` must contain its authorized Google setup):
+
+```sh
+pnpm --filter @iqlabs-official/agent-sdk exec tsx test/test-gdrive-device-pages.ts
+```
+
+The opt-in harness uses the production Drive adapter, two independent writer processes with distinct device IDs and local directories, plus fresh reader processes. It writes uniquely named encrypted fixtures under an unfunded test wallet's Drive folder. It asserts 92 messages after concurrent page rollover and 96 after Korean offline messages reconnect, compares paginated/full history, verifies one canonical session and unchanged sealed/legacy bytes, then deletes only its own page files. Existing OAuth configuration is referenced by symlink inside temporary profiles; credentials are never printed or copied into evidence. It does not start a model or send any blockchain transactions.
+
+This is a two-device-process transport test on one physical host, not a claim of two physical devices or normal-app UI acceptance. The deliberate offline phase disables only each test process's transport. Folder discovery is initialized before simultaneous page writes; it does not test first-ever concurrent Drive folder creation.
+
+To check the harness without Google access:
+
+```sh
+pnpm --filter @iqlabs-official/agent-sdk exec tsx test/test-gdrive-device-pages.ts --local-smoke
+```
+
+[Local harness receipt](drive-harness-local.json): **PASS**, including cleanup. This mode uses a filesystem cloud substitute and **is not Drive evidence**. The attempted real-mode preflight correctly stopped with `Google Drive is not connected` before creating fixture files; Google sign-in and OAuth client configuration are still needed here.
