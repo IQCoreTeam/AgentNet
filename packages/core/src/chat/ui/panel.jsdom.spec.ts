@@ -78,6 +78,21 @@ function boot(): Page {
 }
 
 describe("panel.jsdom: boot", () => {
+  it("explains a missing Node runtime without offering an engine install", () => {
+    const p = boot();
+    p.host({ type: "cliStatus", claude: "node-missing", codex: "node-missing" });
+    expect(p.document.body.textContent).toContain("Node.js is missing");
+    expect(p.$$("button").map((b) => b.textContent)).not.toContain("Install in terminal");
+    const retry = p.$$("button").find((b) => b.textContent === "Check again");
+    expect(retry).toBeDefined();
+    retry!.click();
+    expect(p.posted.at(-1)).toEqual({ type: "getCliStatus" });
+    expect(p.types()).not.toContain("installEngine");
+    p.host({ type: "cliStatus", claude: "ok", codex: "ok" });
+    expect(p.document.getElementById("log")?.textContent).toContain("is ready.");
+    expect(p.errors).toEqual([]);
+  });
+
   it("runs both inline scripts without an error, posts the boot messages in the legacy order, and has the shell roots", () => {
     const p = boot();
     expect(p.errors).toEqual([]);

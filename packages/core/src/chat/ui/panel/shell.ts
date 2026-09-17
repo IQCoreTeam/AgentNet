@@ -4,7 +4,7 @@
 // listener registration and boot posts keep their sequence.
 import { S } from "./state.js";
 // The core table directly: engine.ts imports this module, so no alias lives there.
-import { ENGINE_INSTALL_COMMAND } from "../../../runtime/engineInstall.js";
+import { ENGINE_INSTALL_COMMAND, NODE_REQUIRED_MESSAGE, NODE_DOWNLOAD_URL } from "../../../runtime/engineInstall.js";
 import { vscode } from "./host.js";
 import { ctxMeter, engineBanner, jumpBtn, limitMeter, loadingEl, log, mainEl } from "./dom.js";
 import { renderMdStreaming } from "./markdown.js";
@@ -79,6 +79,13 @@ export function renderEngineBanner(text, actions, dismissKey) {
 // Missing engine: show how to get it instead of a dead-end "not installed" line.
 // "Install in terminal" runs the command visibly host-side (user watches it run).
 export function renderEngineMissing(which) {
+  if (S.cliReport?.[which] === 'node-missing') {
+    renderActionNotice(NODE_REQUIRED_MESSAGE, [
+      ['Get Node.js', () => window.open(NODE_DOWNLOAD_URL, '_blank', 'noopener,noreferrer')],
+      ['Check again', () => vscode.postMessage({ type: 'getCliStatus' })],
+    ]);
+    return;
+  }
   const name = which === 'claude' ? 'Claude' : 'Codex';
   const command = ENGINE_INSTALL_COMMAND[which];
   renderActionNotice(

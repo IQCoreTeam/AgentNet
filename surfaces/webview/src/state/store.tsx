@@ -47,7 +47,7 @@ export function skillCardFiring(firing: readonly FiringSkill[] | undefined, card
 
 // A rendered log entry. We keep messages as-is and stream into the last assistant/
 // thinking bubble when `partial` is set, matching the HTML webview's bubble model.
-export type EngineStatus = "ok" | "no-login" | "missing";
+export type EngineStatus = import("@iqlabs-official/agent-sdk/runtime/detect").CliStatus;
 
 export interface State {
   phase:
