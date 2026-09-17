@@ -24,6 +24,7 @@
     "@solana/web3.js": "^1.99.0"
   },
   "devDependencies": {
+    "@types/cross-spawn": "^6.0.6",
     "@iqlabs-official/solana-sdk": "^0.2.0",
     "@solana/web3.js": "^1.99.0",
     "@types/jsdom": "^30.0.0",
@@ -36,6 +37,8 @@
     "vitest": "^4.1.8"
   },
   "dependencies": {
+    "read-cmd-shim": "^5.0.0",
+    "cross-spawn": "^7.0.6",
     "@anthropic-ai/claude-agent-sdk": "^0.3.170",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openai/codex-sdk": "^0.139.0",

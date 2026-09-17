@@ -5,7 +5,7 @@
 // engine's own updater, or the official npm command when the engine is missing. All
 // host-side, on an explicit user tap.
 
-import { spawn } from "node:child_process";
+import { spawnEngine as spawn } from "./engineProcess.js";
 import { basename } from "node:path";
 import { ENGINE_UPDATE_COMMAND } from "./engineInstall.js";
 import { resolveEngineBin, type EngineName } from "./engineBin.js";
