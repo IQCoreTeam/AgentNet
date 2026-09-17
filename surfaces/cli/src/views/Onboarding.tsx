@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { Box, Text } from "ink";
-import { Select, TextInput } from "@inkjs/ui";
+import { PasswordInput, Select, TextInput } from "@inkjs/ui";
 import { spawn } from "node:child_process";
 import open from "open";
-import { STORAGE_OPTIONS, type StorageConfig, type StorageKind, startCodexLogin, markCodexConnected, saveCodexApiKey, startGoogleLogin, type GoogleLogin, saveHeliusKey, HELIUS_QUICKSTART_URL, detectCli, ENGINE_INSTALL_COMMAND } from "@iqlabs-official/agent-sdk";
+import { STORAGE_OPTIONS, type StorageConfig, type StorageKind, startCodexLogin, markCodexConnected, saveCodexApiKey, startGoogleLogin, type GoogleLogin, saveHeliusKey, HELIUS_QUICKSTART_URL, detectCli, ENGINE_INSTALL_COMMAND, engineBinary, type EngineKey } from "@iqlabs-official/agent-sdk";
 import type { CliReport, CliStatus } from "@iqlabs-official/agent-sdk";
 import { NODE_REQUIRED_MESSAGE, NODE_DOWNLOAD_URL } from "@iqlabs-official/agent-sdk";
 import { colors, glyph } from "../theme.js";
 import { Iggy } from "../components/Iggy.js";
 import { SetupLadder } from "../components/SetupLadder.js";
+import { CustomEngineForm } from "./LoginGate.js";
 
 // Collapse the many real onboarding steps into the design's five-rung ladder position
 // (tab 02). Wallet is already linked when onboarding starts, so the live rung is 2+.
@@ -19,6 +20,7 @@ function rungOf(step: OnboardStep): number {
     case "codexAuthChoice":
     case "codexLogin":
     case "codexApiKey":
+    case "customConfig":
       return 2; // ENGINE
     case "storage":
     case "location":
@@ -47,7 +49,7 @@ function statusBadge(s: CliStatus) {
   return <Text color={colors.err}>{glyph.fail} not installed</Text>;
 }
 
-type OnboardStep = "engine" | "install" | "codexAuthChoice" | "codexLogin" | "codexApiKey" | "storage" | "location" | "gdriveLogin" | "rpc";
+type OnboardStep = "engine" | "install" | "codexAuthChoice" | "codexLogin" | "codexApiKey" | "customConfig" | "storage" | "location" | "gdriveLogin" | "rpc";
 
 export function Onboarding({
   report,
@@ -56,10 +58,10 @@ export function Onboarding({
 }: {
   report: CliReport;
   address: string;
-  onDone: (engine: "claude" | "codex", cfg?: StorageConfig) => void;
+  onDone: (engine: EngineKey, cfg?: StorageConfig) => void;
 }) {
   const [step, setStep] = useState<OnboardStep>("engine");
-  const [engine, setEngine] = useState<"claude" | "codex">("claude");
+  const [engine, setEngine] = useState<EngineKey>("claude");
   // Live copy of the CLI report: the install step re-runs detectCli after installing an
   // engine, so the badges and routing reflect the new state without restarting the app.
   const [rep, setRep] = useState<CliReport>(report);
@@ -98,12 +100,15 @@ export function Onboarding({
   const [busy, setBusy] = useState(false);
 
   // Route an engine pick from a given report (the live one, or the fresh one detectCli
-  // returns right after an install): missing -> install step, codex without login ->
-  // auth choice, otherwise -> storage.
-  function routeEngine(e: "claude" | "codex", r: CliReport) {
+  // returns right after an install): missing binary -> install step (custom installs
+  // codex, the binary it runs through), custom -> its endpoint form (a config is its
+  // login, no codex auth needed), codex without login -> auth choice, otherwise storage.
+  function routeEngine(e: EngineKey, r: CliReport) {
     setEngine(e);
-    if (r[e] === "missing" || r[e] === "node-missing") {
+    if (r[engineBinary(e)] === "missing" || r[engineBinary(e)] === "node-missing") {
       setStep("install");
+    } else if (e === "custom") {
+      setStep("customConfig");
     } else if (e === "codex" && r.codex === "no-login") {
       setStep("codexAuthChoice");
     } else {
@@ -118,7 +123,7 @@ export function Onboarding({
   const [installErr, setInstallErr] = useState<string | null>(null);
 
   function runInstall() {
-    if (rep[engine] === "node-missing") return;
+    if (rep[engineBinary(engine)] === "node-missing") return;
     setInstalling(true);
     setInstallErr(null);
     setInstallLog([]);
@@ -138,7 +143,7 @@ export function Onboarding({
         const fresh = await detectCli();
         setRep(fresh);
         setInstalling(false);
-        if (fresh[engine] === "missing") {
+        if (fresh[engineBinary(engine)] === "missing") {
           setInstallErr(
             code === 0
               ? "install finished but the engine is still not detected; open a new terminal and check, or install manually"
@@ -256,15 +261,16 @@ export function Onboarding({
             options={[
               { label: "Claude", value: "claude" },
               { label: "Codex", value: "codex" },
+              { label: "Custom (OpenAI-compatible endpoint, runs through Codex)", value: "custom" },
             ]}
-            onChange={(v) => routeEngine(v as "claude" | "codex", rep)}
+            onChange={(v) => routeEngine(v as EngineKey, rep)}
           />
         </Box>
       )}
 
       {step === "install" && (
         <Box flexDirection="column">
-          {rep[engine] === "node-missing" ? (
+          {rep[engineBinary(engine)] === "node-missing" ? (
             <>
               <Text color={colors.warn}>{NODE_REQUIRED_MESSAGE}</Text>
               <Text>{NODE_DOWNLOAD_URL}</Text>
@@ -278,7 +284,7 @@ export function Onboarding({
             </>
           ) : (
             <>
-              <Text color={colors.iqCyan}>{engine} is not installed. install it now?</Text>
+              <Text color={colors.iqCyan}>{engine === "custom" ? "custom engines run through codex, which is not installed. install it now?" : `${engine} is not installed. install it now?`}</Text>
               <Text dimColor>runs: {ENGINE_INSTALL_COMMAND[engine]}</Text>
               {!installing && (
                 <Select
@@ -317,10 +323,18 @@ export function Onboarding({
         </Box>
       )}
 
+      {step === "customConfig" && (
+        <Box flexDirection="column">
+          <Text bold color={colors.iqViolet}>connect a custom engine</Text>
+          <CustomEngineForm onSaved={() => setStep("storage")} />
+        </Box>
+      )}
+
       {step === "codexApiKey" && (
         <Box flexDirection="column">
           <Text color={colors.iqCyan}>Enter your OpenAI API Key:</Text>
-          <TextInput
+          {/* PasswordInput masks the echo so the key never sits readable in scrollback. */}
+          <PasswordInput
             placeholder="sk-proj-..."
             onSubmit={submitApiKey}
           />

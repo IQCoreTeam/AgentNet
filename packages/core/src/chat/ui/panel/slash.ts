@@ -41,6 +41,8 @@ export function renderSlashMenu() {
       { name: 'claude', desc: 'switch to Claude engine', insert: '/engine claude' },
       { name: 'codex',  desc: 'switch to Codex engine',  insert: '/engine codex' }
     ];
+    // custom is offered only once the host says an endpoint config exists
+    if (S.customEngineOn) options.push({ name: 'custom', desc: 'switch to Custom engine', insert: '/engine custom' });
   }
   // 2. Model options
   if (!subCmd) {

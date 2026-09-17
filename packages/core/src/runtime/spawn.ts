@@ -34,6 +34,8 @@ import type {
 import { autoApprove } from "./approval/channel.js";
 import { resolveEngineBin } from "./engineBin.js";
 import { spawnEngine as spawn, spawnClaudeProcess } from "./engineProcess.js";
+import { engineBinary, type EngineKey } from "./engineRegistry.js";
+import type { CustomEngineConfig } from "../account/customEngineAuth.js";
 
 // Loosely-typed view of AskUserQuestion's raw input (the SDK hands us `unknown`-ish data).
 type ApprovalQuestionInput = {
@@ -86,7 +88,7 @@ export interface Engine {
 }
 
 export interface SpawnOpts {
-  cli: "claude" | "codex";
+  cli: EngineKey;
   cwd: string;
   sessionId?: string; // NATIVE resume id (inject/prepareResume resolved it already)
   // codex: called when thread/resume of sessionId is rejected. Returns a fresh native id
@@ -111,6 +113,10 @@ export interface SpawnOpts {
   codexMcp?: { name: string; command: string; args: string[] };
   stream?: boolean; // emit partial assistant deltas (claude includePartialMessages)
   apiKey?: string; // Stage 1 Codex API Key
+  // Custom engine (issue #209): the saved endpoint config. Turned into -c
+  // model_providers overrides on the codex binary (customProviderFlags); the key
+  // rides CUSTOM_ENGINE_API_KEY in the child env, never argv.
+  custom?: CustomEngineConfig;
   githubToken?: string; // configured GitHub PAT, injected into the agent's git env (see gitCredentialEnv)
   ephemeral?: boolean; // If true, disable tools / auto-deny approvals
   effort?: "low" | "medium" | "high" | "xhigh" | "max";
@@ -170,7 +176,15 @@ function codexSandbox(mode: string | undefined, envSandbox: string | undefined):
 }
 
 export function spawnCli(opts: SpawnOpts): Engine {
-  return opts.cli === "claude" ? claudeEngine(opts) : codexEngine(opts);
+  // Last gate against silent egress: a "custom" spawn without its endpoint config
+  // would run stock codex against the user's own OpenAI login. The runtime throws
+  // earlier too (startSession); this catches any caller that skips it.
+  if (opts.cli === "custom" && !opts.custom) {
+    throw new Error("Custom engine is not configured. Connect an endpoint before starting a custom session.");
+  }
+  // Registry-driven: the descriptor's binary picks the engine implementation, so
+  // "custom" runs through codexEngine (a provider passthrough, see opts.custom).
+  return engineBinary(opts.cli) === "claude" ? claudeEngine(opts) : codexEngine(opts);
 }
 
 // Coalesce partial assistant/thinking snapshots to ~frame rate. Partials arrive at token
@@ -229,8 +243,8 @@ function callbacks() {
 // Codex carries the authoritative `modelContextWindow` per turn (we prefer it when
 // present); Claude's SDK exposes no window field, so we fall back to the published
 // model limit. Keep in sync with the constants the surfaces used to hardcode.
-function defaultWindow(cli: "claude" | "codex", _model?: string): number {
-  return cli === "codex" ? 256_000 : 200_000;
+function defaultWindow(cli: EngineKey, _model?: string): number {
+  return cli === "claude" ? 200_000 : 256_000;
 }
 
 function loadPersistentWhitelist(): Set<string> {
@@ -538,13 +552,40 @@ export function codexMcpFlags(m: { name: string; command: string; args: string[]
   ];
 }
 
+// Build the `-c model_providers.custom.*` overrides that point the codex binary at a
+// custom OpenAI-compatible endpoint (issue #209). Same process-scoped mechanism as
+// codexMcpFlags; the API key stays out of argv (env_key names CUSTOM_ENGINE_API_KEY,
+// which codexEngine sets in the child env). Keyless endpoints receive the harmless
+// placeholder below so authentication stays explicit and independent of stock login.
+export function customProviderFlags(cfg: CustomEngineConfig): string[] {
+  // With no model override codex quietly falls back to its own global default model
+  // name, which the endpoint almost certainly does not serve. saveCustomEngineConfig
+  // already rejects a blank model; this guards configs saved before that rule.
+  if (!cfg.model.trim()) {
+    throw new Error("The custom engine needs a model id; codex would otherwise silently use its own default model.");
+  }
+  return [
+    "-c", `model_providers.custom.name=${JSON.stringify(cfg.label ?? cfg.presetId)}`,
+    "-c", `model_providers.custom.base_url=${JSON.stringify(cfg.baseUrl)}`,
+    // Always select the custom credential, including the keyless placeholder,
+    // rather than relying on version-dependent default authentication behavior.
+    "-c", `model_providers.custom.env_key=${JSON.stringify("CUSTOM_ENGINE_API_KEY")}`,
+    "-c", `model_provider=${JSON.stringify("custom")}`,
+    "-c", `model=${JSON.stringify(cfg.model.trim())}`,
+  ];
+}
+
+// What a keyless custom endpoint receives as its bearer value. Keep the declared
+// credential nonempty without borrowing the user's stock Codex credentials.
+const CUSTOM_ENGINE_KEYLESS_PLACEHOLDER = "keyless";
+
 // ── codex: app-server JSON-RPC over stdio. Spawns `codex app-server --stdio`
 // and processes requests and notifications, routing approvals to the ApprovalChannel.
 function codexEngine(opts: SpawnOpts): Engine {
   const cb = callbacks();
   // last known context-window size (tokens). Seeded with the model default; replaced by
   // the real modelContextWindow the moment the server reports it in a usage notification.
-  let knownWindow = defaultWindow("codex", opts.model);
+  let knownWindow = opts.cli === "custom" ? undefined : defaultWindow("codex", opts.model);
   const approval = opts.approval ?? autoApprove();
 
   const codexPath = resolveEngineBin("codex");
@@ -556,7 +597,7 @@ function codexEngine(opts: SpawnOpts): Engine {
   // Make the codex mode chips real: derive the approval policy + sandbox from opts.mode.
   // A mode change restages the session (session.ts), so the next spawn picks these up.
   // When the OS sandbox is FORCED by env (Android proot can't run bubblewrap → danger-full-access),
-  // a non-"full" mode must NOT weaken to on-failure: the sandbox isn't really constraining there, so
+  // a non-"full" mode must retain approval requests: the sandbox isn't really constraining there, so
   // the approval gate is the only real control and must keep asking. Only "full" opts out. Desktop
   // (no env override) uses the mode's own policy.
   const codexApproval = sandbox
@@ -567,6 +608,11 @@ function codexEngine(opts: SpawnOpts): Engine {
   if (opts.apiKey) {
     childEnv.OPENAI_API_KEY = opts.apiKey;
   }
+  // Always set for a custom spawn: the saved key when there is one, else the
+  // keyless placeholder. Do not leave authentication to the user's stock login.
+  if (opts.custom) {
+    childEnv.CUSTOM_ENGINE_API_KEY = opts.custom.apiKey || CUSTOM_ENGINE_KEYLESS_PLACEHOLDER;
+  }
   const mcpFlags = opts.codexMcp ? codexMcpFlags(opts.codexMcp) : [];
   const codexArgs = ["app-server", "--stdio"];
   if (childEnv.AGENTNET_CODEX_DISABLE_PLUGINS === "1") {
@@ -575,6 +621,7 @@ function codexEngine(opts: SpawnOpts): Engine {
     codexArgs.push("--disable", "plugins");
   }
   codexArgs.push(...mcpFlags);
+  if (opts.custom) codexArgs.push(...customProviderFlags(opts.custom));
   const child = spawn(codexPath, codexArgs, {
     env: childEnv,
     stdio: ["pipe", "pipe", "pipe"],
@@ -749,13 +796,13 @@ function codexEngine(opts: SpawnOpts): Engine {
         }
       }
     } else if (msg.method === "thread/tokenUsage/updated") {
-      // Authoritative usage notification: carries the running total AND the real model
-      // context window. Prefer it over the turn/completed estimate when present.
+      // The last request measures current context. The running total includes previous
+      // turns and must not be shown as context occupancy.
       const tu = params?.tokenUsage;
       if (tu) {
-        if (typeof tu.modelContextWindow === "number") knownWindow = tu.modelContextWindow;
-        const total = tu.total?.totalTokens;
-        if (typeof total === "number") cb.emitUsage(total, knownWindow);
+        if (opts.cli !== "custom" && typeof tu.modelContextWindow === "number") knownWindow = tu.modelContextWindow;
+        const last = tu.last?.totalTokens;
+        if (typeof last === "number") cb.emitUsage(last, knownWindow);
       }
     } else if (msg.method === "thread/compacted") {
       // history was condensed to reclaim context — fire the compaction cue. The following
@@ -843,7 +890,9 @@ function codexEngine(opts: SpawnOpts): Engine {
         if (params.command) {
           cmdStr = Array.isArray(params.command) ? params.command.join(" ") : String(params.command);
         }
-        const req = toApprovalRequest("codex", sessionId, "Bash", { command: cmdStr }, params.cwd);
+        // opts.cli, not a hardcoded "codex": the custom engine rides this same path and
+        // its approval cards must badge as "custom".
+        const req = toApprovalRequest(opts.cli, sessionId, "Bash", { command: cmdStr }, params.cwd);
         const key = `bash:${cmdStr}`;
         if (allowed.has(key)) return sendResponse(msg.id, { decision: verbs.always });
         const decision = await approval.request(req);
@@ -869,7 +918,7 @@ function codexEngine(opts: SpawnOpts): Engine {
             }
           }
           
-          const req = toApprovalRequest("codex", sessionId, tool, { file_path: filePath }, opts.cwd);
+          const req = toApprovalRequest(opts.cli, sessionId, tool, { file_path: filePath }, opts.cwd);
           if (diff) req.diff = diff;
 
           const key = `${tool}:${filePath}`;
@@ -879,7 +928,7 @@ function codexEngine(opts: SpawnOpts): Engine {
           if (decision.outcome === "deny") deliverDenyReason(decision.reason);
         } else {
           const pathStr = params.grantRoot || "";
-          const req = toApprovalRequest("codex", sessionId, "Edit", { file_path: pathStr }, opts.cwd);
+          const req = toApprovalRequest(opts.cli, sessionId, "Edit", { file_path: pathStr }, opts.cwd);
           req.title = `Allow file changes under ${pathStr || "workspace"}`;
           if (params.reason) {
             req.title += ` (${params.reason})`;
@@ -891,8 +940,26 @@ function codexEngine(opts: SpawnOpts): Engine {
           sendResponse(msg.id, { decision: codexDecisionVerb(decision, key, ITEM_VERBS) });
           if (decision.outcome === "deny") deliverDenyReason(decision.reason);
         }
+      } else if (msg.method === "mcpServer/elicitation/request") {
+        // Codex uses an empty form for MCP tool consent. Other elicitation forms
+        // need structured user input and cannot be treated as a yes/no approval.
+        const schema = params.requestedSchema;
+        if (params.mode !== "form" || params._meta?.codex_approval_kind !== "mcp_tool_call"
+          || schema?.type !== "object" || Object.keys(schema.properties ?? {}).length || schema.required?.length) {
+          sendError(msg.id, { code: -32602, message: "This MCP input form is not supported." });
+          return;
+        }
+        const req = toApprovalRequest(opts.cli, sessionId, `MCP ${params.serverName}`, params._meta.tool_params ?? {});
+        req.title = params.message;
+        const decision = await approval.request(req);
+        sendResponse(msg.id, {
+          action: decision.outcome === "deny" ? "decline" : "accept",
+          content: decision.outcome === "deny" ? null : {},
+          _meta: decision.outcome === "always" && params._meta.persist?.includes("always") ? { persist: "always" } : null,
+        });
+        if (decision.outcome === "deny") deliverDenyReason(decision.reason);
       } else if (msg.method === "item/permissions/requestApproval") {
-        const req = toApprovalRequest("codex", sessionId, "Permissions", { reason: params.reason }, opts.cwd);
+        const req = toApprovalRequest(opts.cli, sessionId, "Permissions", { reason: params.reason }, opts.cwd);
         req.title = `Grant permissions: ${params.reason || "sandbox access"}`;
         
         const decision = await approval.request(req);
@@ -918,7 +985,7 @@ function codexEngine(opts: SpawnOpts): Engine {
         );
         const req: ApprovalRequest = {
           id: randomId(),
-          cli: "codex",
+          cli: opts.cli,
           sessionId,
           tool: "request_user_input",
           kind: "question",
@@ -952,6 +1019,7 @@ function codexEngine(opts: SpawnOpts): Engine {
     try {
       await sendRequest("thread/resume", {
         threadId,
+        ...(opts.custom ? { modelProvider: "custom" } : {}),
         model: opts.model,
         cwd: opts.cwd,
         approvalPolicy: codexApproval,
@@ -973,6 +1041,7 @@ function codexEngine(opts: SpawnOpts): Engine {
   const startThread = async () => {
     const res = await sendRequest("thread/start", {
       model: opts.model,
+      ...(opts.custom ? { modelProvider: "custom" } : {}),
       cwd: opts.cwd,
       approvalPolicy: codexApproval,
       approvalsReviewer: "user",
@@ -1144,7 +1213,7 @@ function codexEngine(opts: SpawnOpts): Engine {
 // Build a neutral ApprovalRequest from a raw tool name + input (claude tools, or a
 // codex turn). `kind`/fields let a surface render a good card without re-parsing.
 function toApprovalRequest(
-  cli: "claude" | "codex",
+  cli: EngineKey,
   sessionId: string,
   tool: string,
   input: Record<string, unknown>,

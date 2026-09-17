@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useStore, isApprovalForView } from "../state/store";
+import { useStore, isApprovalForView, engineStatus } from "../state/store";
 import { enqueueLiveImages } from "./liveImages";
 import type { Cli, ImageInput } from "../transport/protocol";
 import { AttachIcon } from "../icons";
@@ -13,7 +13,7 @@ import { CHAT_SLASH_COMMANDS } from "@iqlabs-official/agent-sdk/chat/slashComman
 // Tapping it opens a small readout of the numbers behind the ring: the title
 // tooltip only exists for mouse hover, which touch (and most desktop users)
 // never see.
-function CtxDot({ tokens, window: win, compacting }: { tokens: number; window: number; compacting?: boolean }) {
+function CtxDot({ tokens, window: win, compacting }: { tokens: number; window?: number; compacting?: boolean }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLSpanElement>(null);
   // Tap-away closes: listen only while open, the same pattern the pickers use.
@@ -25,7 +25,7 @@ function CtxDot({ tokens, window: win, compacting }: { tokens: number; window: n
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
   }, [open]);
-  const frac = Math.min(1, tokens / win);
+  const frac = win ? Math.min(1, tokens / win) : 0;
   const pct = Math.round(frac * 100);
   const color = compacting
     ? "var(--an-orange, #f80)"
@@ -36,8 +36,8 @@ function CtxDot({ tokens, window: win, compacting }: { tokens: number; window: n
   return (
     <span
       ref={rootRef}
-      className="relative flex items-center"
-      title={compacting ? "Compacting context…" : `Context: ${tokens.toLocaleString()} / ${win.toLocaleString()} tokens (${pct}%)\n${fmtK(tokens)} / ${fmtK(win)} ctx`}
+      className="relative flex shrink-0 items-center"
+      title={compacting ? "Compacting context…" : !win ? `${tokens.toLocaleString()} context tokens reported by the engine. Model limit unverified.` : `Context: ${tokens.toLocaleString()} / ${win.toLocaleString()} tokens (${pct}%)\n${fmtK(tokens)} / ${fmtK(win)} ctx`}
     >
       {open && (
         <div
@@ -49,10 +49,9 @@ function CtxDot({ tokens, window: win, compacting }: { tokens: number; window: n
             <div style={{ color: "var(--an-orange, #f80)" }}>COMPACTING…</div>
           ) : (
             <>
-              <div style={{ color: "var(--an-fg)" }}>{tokens.toLocaleString()} / {win.toLocaleString()} tk</div>
+              <div style={{ color: "var(--an-fg)" }}>{tokens.toLocaleString()}{win ? ` / ${win.toLocaleString()} tk` : " context tokens"}</div>
               <div className="mt-0.5 flex items-center gap-1.5">
-                <span style={{ color }}>{pct}%</span>
-                <span style={{ color: "var(--an-fg-mute)" }}>used · compacts near full</span>
+                {win ? <><span style={{ color }}>{pct}%</span><span style={{ color: "var(--an-fg-mute)" }}>used · compacts near full</span></> : <span style={{ color: "var(--an-fg-mute)" }}>Engine-reported · model limit unverified</span>}
               </div>
             </>
           )}
@@ -63,10 +62,10 @@ function CtxDot({ tokens, window: win, compacting }: { tokens: number; window: n
         aria-label="Context usage"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center active:opacity-80"
+        className="flex min-h-8 min-w-8 items-center justify-center active:opacity-80"
         style={{ background: "none", border: 0, padding: 0 }}
       >
-      <svg width="18" height="18" viewBox="0 0 18 18" style={{ display: "block" }}>
+      {!win && !compacting ? <span className="an-term-mono text-[10px]" style={{ color: "var(--an-fg-dim)" }}>{fmtK(tokens)} ctx</span> : <svg width="18" height="18" viewBox="0 0 18 18" style={{ display: "block" }}>
         <circle cx="9" cy="9" r={r} fill="none" stroke="var(--an-line, #333)" strokeWidth="2.5" />
         <circle
           cx="9" cy="9" r={r}
@@ -78,7 +77,7 @@ function CtxDot({ tokens, window: win, compacting }: { tokens: number; window: n
           transform={compacting ? undefined : "rotate(-90 9 9)"}
           style={compacting ? { transformBox: "fill-box", transformOrigin: "center", animation: "ctxspin 1s linear infinite" } : undefined}
         />
-      </svg>
+      </svg>}
       </button>
       {compacting && <style>{`@keyframes ctxspin { from { transform: rotate(-90deg); } to { transform: rotate(270deg); } }`}</style>}
     </span>
@@ -160,6 +159,14 @@ const EFFORTS = [
   { value: "max",    label: "max" },
 ];
 
+// Codex's modes serve the custom engine too: custom IS the codex binary pointed at
+// another endpoint, so its sandbox/approval chips are identical.
+const CODEX_MODES = [
+  { value: "readonly", label: "Read only",   title: "Read-only sandbox; ask before edits, commands, network" },
+  { value: "auto",     label: "Auto accept", title: "Auto-accept edits + run inside the workspace; approve on failure (default)" },
+  { value: "full",     label: "Full access", title: "Full disk + network access, never ask (use with care)" },
+];
+
 const MODES: Record<Cli, { value: string; label: string; title: string }[]> = {
   // Kept in the SAME order + wording as the VSCode surface (webview.ts) so the modes read
   // identically everywhere — the SDK's native permission-mode order.
@@ -169,11 +176,16 @@ const MODES: Record<Cli, { value: string; label: string; title: string }[]> = {
     { value: "plan",        label: "Plan",        title: "Plan mode: read-only until you approve the plan" },
     { value: "bypassPermissions", label: "Bypass", title: "Bypass all permission prompts (--dangerously-skip-permissions). Auto-runs every command, edit, and on-chain spend. Use with care." },
   ],
-  codex: [
-    { value: "readonly", label: "Read only",   title: "Read-only sandbox; ask before edits, commands, network" },
-    { value: "auto",     label: "Auto accept", title: "Auto-accept edits + run inside the workspace; approve on failure (default)" },
-    { value: "full",     label: "Full access", title: "Full disk + network access, never ask (use with care)" },
-  ],
+  codex: CODEX_MODES,
+  custom: CODEX_MODES,
+};
+
+// The active engine tints the composer border + chip (claude = orange, codex = green,
+// custom = violet) so the input itself shows which platform you're talking to.
+const ENGINE_ACCENTS: Record<Cli, string> = {
+  claude: "var(--claude)",
+  codex: "var(--an-green)",
+  custom: "var(--an-violet)",
 };
 
 function slashCommandsForCli(cli: Cli): { name: string; desc: string; insert: string }[] {
@@ -235,9 +247,9 @@ export function Composer() {
   // the first real model when `model` isn't in the list (initial, or after a live upgrade).
   const models = toModelRows(state.modelCatalog[state.cli]);
   const selectedModel = models.some((m) => m.value === model) ? model : (models[0]?.value ?? "default");
-  // The active engine tints the composer border (claude = orange, codex = green) so the
-  // input itself shows which platform you're talking to — vscode's folder-tab idea.
-  const engineAccent = state.cli === "claude" ? "var(--claude)" : "var(--an-green)";
+  const engineAccent = ENGINE_ACCENTS[state.cli];
+  // The custom chip appears only once the host reports a stored endpoint config.
+  const engines: Cli[] = state.customEngine?.masked ? ["claude", "codex", "custom"] : ["claude", "codex"];
 
   // Voice dictation via the platform Web Speech API (Android WebView / Chrome support it).
   // Interim results stream into the textarea; a second tap stops. Silent no-op if absent.
@@ -283,7 +295,7 @@ export function Composer() {
   // Tapping it opens the login screen; everything else in the app stays reachable. No
   // report yet (boot) counts as unlocked so the composer doesn't flash locked for
   // signed-in users.
-  const engineLocked = !!state.cliReport && state.cliReport[state.cli] !== "ok";
+  const engineLocked = !!state.cliReport && engineStatus(state, state.cli) !== "ok";
 
   const [slashIdx, setSlashIdx] = useState(0);
   const [suppressSlash, setSuppressSlash] = useState(false);
@@ -302,7 +314,8 @@ export function Composer() {
       const prefix = (m[1] || '').toLowerCase();
       const options = [
         { name: 'claude', desc: 'switch to Claude engine', insert: '/engine claude' },
-        { name: 'codex',  desc: 'switch to Codex engine',  insert: '/engine codex' }
+        { name: 'codex',  desc: 'switch to Codex engine',  insert: '/engine codex' },
+        ...(state.customEngine?.masked ? [{ name: 'custom', desc: 'switch to your custom endpoint', insert: '/engine custom' }] : [])
       ];
       activeMatches = options.filter(opt => opt.name.toLowerCase().startsWith(prefix));
     }
@@ -454,7 +467,7 @@ export function Composer() {
           setText(""); return;
         }
         case "engine":
-          if (arg === "claude" || arg === "codex") switchEngine(arg);
+          if (arg === "claude" || arg === "codex" || arg === "custom") switchEngine(arg);
           setText(""); return;
         case "model":
           if (arg) send({ type: "model", model: arg });
@@ -466,13 +479,26 @@ export function Composer() {
           if (arg) { setEffort(arg); send({ type: "effort", effort: arg === "default" ? undefined : arg }); }
           setText(""); return;
         case "login": {
-          const target = arg === "claude" || arg === "codex" ? arg : state.cli;
+          // Only the two binaries hold accounts. On the custom engine, "signing in"
+          // means saving an endpoint config, so point at the form instead of starting
+          // a Codex device auth the user never asked for.
+          if (state.cli === "custom" && arg !== "claude" && arg !== "codex") {
+            setSlashNotice("Custom endpoints have no login. Connect one under Settings, AI Connections.");
+            setText(""); return;
+          }
+          const target = arg === "claude" || arg === "codex" ? arg : state.cli === "claude" ? "claude" : "codex";
           if (target === "claude" && arg && arg !== "claude" && arg !== "codex") send({ type: "claudeAuthCode", code: arg });
           else send({ type: target === "claude" ? "startClaudeLogin" : "startCodexLogin" });
           setText(""); return;
         }
         case "logout": {
-          const target = arg === "claude" || arg === "codex" ? arg : state.cli;
+          // Same guard: falling through would resolve custom to the codex BINARY and
+          // sign the user out of their real Codex account.
+          if (state.cli === "custom" && arg !== "claude" && arg !== "codex") {
+            setSlashNotice("Custom endpoints have no login to sign out of. Remove the endpoint under Settings, AI Connections.");
+            setText(""); return;
+          }
+          const target = arg === "claude" || arg === "codex" ? arg : state.cli === "claude" ? "claude" : "codex";
           send({ type: "logoutEngine", cli: target });
           setText(""); return;
         }
@@ -540,9 +566,9 @@ export function Composer() {
           live in the popover so the bar stays clean on a phone) */}
       <div className="relative mb-2 flex flex-wrap items-center gap-1.5 text-xs">
         <div className="an-term-seg">
-          {(["claude", "codex"] as Cli[]).map((c) => {
+          {engines.map((c) => {
             const on = state.cli === c;
-            const accent = c === "claude" ? "var(--claude)" : "var(--an-green)";
+            const accent = ENGINE_ACCENTS[c];
             return (
               <button
                 key={c}
@@ -572,7 +598,7 @@ export function Composer() {
           )}
           {(state.contextTokens !== undefined || state.isCompacting) && (() => {
             const tokens = state.contextTokens ?? 0;
-            const win = state.contextWindow ?? (state.cli === "codex" ? 256_000 : 200_000);
+            const win = state.cli === "custom" ? undefined : state.contextWindow ?? (state.cli === "codex" ? 256_000 : 200_000);
             return <CtxDot tokens={tokens} window={win} compacting={state.isCompacting} />;
           })()}
           {queueCount > 0 && (

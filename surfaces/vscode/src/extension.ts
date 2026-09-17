@@ -26,6 +26,12 @@ import {
   markClaudeConnected,
   startCodexLogin,
   markCodexConnected,
+  loadCustomEngineConfig,
+  maskedCustomEngine,
+  customEngineStatus,
+  customModelOption,
+  messageBinary,
+  type CliReport,
   logoutClaude,
   logoutCodex,
   marketplaceEnv,
@@ -203,15 +209,27 @@ function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-async function pushCliStatus(transport: WebviewTransport) {
+// Returns the report so a caller that needs it next (the custom-engine push at boot) does
+// not pay for a second probe.
+async function pushCliStatus(transport: WebviewTransport): Promise<CliReport> {
   const cli = await detectCli();
   transport.send({ type: "cliStatus", claude: cli.claude, codex: cli.codex });
+  return cli;
 }
 
 // Engines whose "out of date" banner the user dismissed. Session-scoped (module-level, so
 // it spans every panel): once dismissed, the codex-stale probe stops re-sending engineUpdate,
 // so a new chat does not re-surface the banner. Reset naturally on the next VS Code restart.
 const engineUpdateDismissed = new Set<"claude" | "codex">();
+
+// Masked custom-engine summary + core's preset catalog (issue #209). The raw key/URL
+// stay host-side; the webview only ever sees this view. The chat panel uses `masked`
+// as its custom-tab gate and has no connect form, so a null rides out unless a custom
+// session could actually spawn (binary + config, core's one readiness answer).
+async function pushCustomEngine(transport: WebviewTransport, report?: CliReport) {
+  const ready = (await customEngineStatus(report)) === "ok";
+  transport.send({ type: "customEngine", masked: ready ? await maskedCustomEngine() : null });
+}
 
 // After an install was launched from the notice button, re-check until the engine stops
 // reporting "missing" (bounded: ~5 min), then push the fresh status so the webview moves
@@ -238,7 +256,15 @@ function watchEngineInstall(transport: WebviewTransport, engine: "claude" | "cod
 function attachAuthHandlers(transport: WebviewTransport) {
   transport.onRecv(async (m: any) => {
     switch (m?.type) {
-      case "ready":
+      case "ready": {
+        // The chat panel shows the custom tab only while a config exists (it handles
+        // the customEngine push both ways), so its state must land at boot too. The
+        // panel carries no connect form, so the host handles no
+        // getCustomEngine/saveCustomEngine: connecting happens in the AgentNet app.
+        const report = await pushCliStatus(transport);
+        await pushCustomEngine(transport, report);
+        return;
+      }
       case "getCliStatus":
         await pushCliStatus(transport);
         return;
@@ -306,7 +332,7 @@ function attachAuthHandlers(transport: WebviewTransport) {
         // background: the user consented via the notice button, sees the exact command,
         // and can watch or abort it. After an install, poll detectCli until the engine
         // shows up so the webview flips from "missing" without a manual reload.
-        const engine = m.cli === "codex" ? "codex" : "claude";
+        const engine = messageBinary(m.cli);
         const command = m.update ? CODEX_UPDATE_COMMAND : ENGINE_INSTALL_COMMAND[engine];
         const term = vscode.window.createTerminal(`AgentNet: ${m.update ? "update" : "install"} ${engine}`);
         term.show();
@@ -318,7 +344,7 @@ function attachAuthHandlers(transport: WebviewTransport) {
         if (m.cli === "claude" || m.cli === "codex") engineUpdateDismissed.add(m.cli);
         return;
       case "logoutEngine": {
-        const engine = m.cli === "codex" ? "codex" : "claude";
+        const engine = messageBinary(m.cli);
         try {
           if (engine === "codex") await logoutCodex();
           else await logoutClaude();
@@ -651,7 +677,9 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
     approval,
     claimSession,
     modelOptions: async (cli) =>
-      cli === "codex" ? (await codexModelOptionsPromise)?.options ?? null : await claudeModelOptionsPromise,
+      cli === "custom"
+        ? await loadCustomEngineConfig().then((cfg) => (cfg ? customModelOption(cfg.model, cfg.label) : null)).catch(() => null)
+        : cli === "codex" ? (await codexModelOptionsPromise)?.options ?? null : await claudeModelOptionsPromise,
     searchSkills: async (query, kind) => (await marketPromise).searchSkills(query, kind),
     getSkillDetail: async (mint) => (await marketPromise).getSkillDetail(mint),
     // local SKILL.md body for the equipped-skill popup (mint-less skills); without this

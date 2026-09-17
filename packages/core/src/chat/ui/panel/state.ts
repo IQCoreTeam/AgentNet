@@ -26,6 +26,7 @@ export const S = {
   // ---- engine.ts ----
   cli: 'claude',
   cliReport: null as any,
+  customEngineOn: false, // a saved custom-endpoint config exists (host-announced)
   // ---- turns.ts ----
   tailTurn: null as any, // the turn new (bottom) replies attach to
   headTurn: null as any, // the turn prepended (top, older) replies attach to

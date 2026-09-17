@@ -3,6 +3,7 @@
 // modules in dependency order, and main.ts calls the wire functions in the legacy order so
 // listener registration and boot posts keep their sequence.
 import { S } from "./state.js";
+import { engineBinary } from "../../../runtime/engineRegistry.js";
 // The core table directly: engine.ts imports this module, so no alias lives there.
 import { ENGINE_INSTALL_COMMAND, NODE_REQUIRED_MESSAGE, NODE_DOWNLOAD_URL } from "../../../runtime/engineInstall.js";
 import { vscode } from "./host.js";
@@ -79,7 +80,7 @@ export function renderEngineBanner(text, actions, dismissKey) {
 // Missing engine: show how to get it instead of a dead-end "not installed" line.
 // "Install in terminal" runs the command visibly host-side (user watches it run).
 export function renderEngineMissing(which) {
-  if (S.cliReport?.[which] === 'node-missing') {
+  if (S.cliReport?.[engineBinary(which)] === 'node-missing') {
     renderActionNotice(NODE_REQUIRED_MESSAGE, [
       ['Get Node.js', () => window.open(NODE_DOWNLOAD_URL, '_blank', 'noopener,noreferrer')],
       ['Check again', () => vscode.postMessage({ type: 'getCliStatus' })],

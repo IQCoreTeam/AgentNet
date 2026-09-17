@@ -1150,8 +1150,7 @@ body {
   position: relative;
   flex: 1;
   min-height: 0;
-  /* The pager moves by transform. Focus must not scroll its four-page track. */
-  overflow: clip;
+  overflow: hidden;
 }
 .an-shell-panels::after {
   content: "";
