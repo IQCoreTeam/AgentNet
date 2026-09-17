@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { openExternalUrl } from "../platform/openExternalUrl";
-import { useAutoOpenExternalUrl } from "../platform/useAutoOpenExternalUrl";
 
 // Compact Google Drive connect for the unlock tutorial's Cloud_Backup step: start OAuth,
 // auto-open the URL, manual-code fallback, dev client-id entry — trimmed to a single
@@ -21,7 +20,6 @@ export function ConnectDriveForm({ onDone, skipLabel = "Skip for now" }: { onDon
   const [savingCreds, setSavingCreds] = useState(false);
   const advanced = useRef(false);
 
-  useAutoOpenExternalUrl(googleLoginUrl);
 
   // Drive reported connected → advance exactly once.
   useEffect(() => {
