@@ -4,6 +4,17 @@ export function openExternalUrl(url: string): void {
     window.AgentNetShell.openUrl(url);
     return;
   }
-  const opened = window.open(url, "_blank", "noopener,noreferrer");
-  if (!opened) window.location.assign(url);
+  // noopener makes window.open return null even when it succeeds, so it cannot
+  // distinguish a blocked popup. Open an empty tab, sever its opener, then navigate.
+  const opened = window.open("about:blank", "_blank");
+  if (opened) {
+    opened.opener = null;
+    // Navigate through a noreferrer link to preserve the original referrer policy.
+    const link = opened.document.createElement("a");
+    link.href = url;
+    link.rel = "noreferrer";
+    link.click();
+  } else {
+    window.location.assign(url);
+  }
 }

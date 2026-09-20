@@ -14,6 +14,7 @@ import { Alert } from "./Alert";
 import { useVisualViewportVars, useKeyboardChrome, useIsDesktop } from "./layoutEffects";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { syncAgentService, notifyApproval, clearApprovalNotice, ensureBackgroundConsent, notifyTurnComplete } from "./platform/agentService";
+import { useAutoOpenExternalUrl } from "./platform/useAutoOpenExternalUrl";
 import { haptics } from "./haptics";
 
 // Phase router. Entry is NEVER blocked: `init` drops a fresh user straight into a
@@ -28,6 +29,7 @@ import { haptics } from "./haptics";
 //   chat         → runtime ready → the tab shell
 export function App() {
   const { state, getClientId, send, closeMarket, clearCelebrate, dismissAuth } = useStore();
+  useAutoOpenExternalUrl(state.googleLoginUrl);
   useVisualViewportVars();
   useKeyboardChrome();
 
