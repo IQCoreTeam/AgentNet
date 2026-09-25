@@ -20,3 +20,9 @@ Building from source instead (developers): see [android.md](android.md) — the 
 
 > AgentNet is **one codebase, many surfaces** (Android, VS Code, a local web server). They
 > share the same core; each guide here is just how to install and launch that one surface.
+
+## Giving your agent GitHub access
+
+Want your agent to clone, push, or open PRs? Register a GitHub token once in
+**Settings → GitHub**. See **[github-token.md](github-token.md)** — how the token is found and
+used (and how agents should discover it, so they don't get stuck looking).

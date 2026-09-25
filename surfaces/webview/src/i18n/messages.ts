@@ -70,11 +70,12 @@ export const M = {
   unlock: {
     titleBar: m("AgentNet Full Unlock", "에이전트넷 풀 언락", "AgentNet Полная Разблокировка"),
     progress: m("Unlock_Progress", "잠금해제_진행도", "Прогресс_Разблокировки"),
-    creatingTitle: m("Setting up", "준비 중", "Подготовка"),
-    creatingBody: m(
-      "Creating your wallet. No signature, no payment. This just takes a moment.",
-      "지갑을 만들고 있어요. 서명도, 결제도 없어요. 잠깐이면 됩니다.",
-      "Создаём ваш кошелёк. Без подписи, без оплаты. Это займёт мгновение.",
+    chooseTitle: m("Choose your wallet", "지갑 선택", "Выберите кошелёк"),
+    chooseStatus: m("Pick_One", "하나_선택", "Выбор"),
+    chooseBody: m(
+      "Use the device wallet (no signature, no payment), or connect Phantom. You can switch any time by disconnecting.",
+      "이 기기 지갑을 쓰거나(서명·결제 없음), Phantom을 연결하세요. 연결 해제하면 언제든 바꿀 수 있어요.",
+      "Используйте кошелёк устройства (без подписи и оплаты) или подключите Phantom. Отключившись, вы можете сменить его в любой момент.",
     ),
     locked: m("Locked", "잠김", "Заблокировано"),
     fund: {
