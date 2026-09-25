@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type C
 import { useStore } from "../state/store";
 import { HeliusKeyForm } from "../settings/HeliusKeyForm";
 import { ConnectDriveForm } from "../settings/ConnectDriveForm";
+import { ConnectWallet } from "../onboarding/ConnectWallet";
 import { CheckIcon, LockIcon } from "../icons";
 import { useT } from "../i18n";
 import { M } from "../i18n/messages";
@@ -10,10 +11,12 @@ import { haptics } from "../haptics";
 export type UnlockReason = "skills" | "buy" | "publish" | "comment" | "identity" | "sync";
 
 // The second tutorial: Full Unlock (setup). Opened from Settings or when an action needs it.
-// The wallet is auto-created on open (device-local keypair, no signature), so the flow is just
-// three optional steps: fund the wallet, back up to cloud, add a market RPC. `creating` is the
-// brief auto-create wait before Fund. No pitch, no App_Installed, no signature connect step.
-type UnlockScreen = "creating" | "fund" | "cloud" | "advanced" | "done";
+// The wallet is CHOSEN on open (device-local keypair, or Phantom/web wallet) rather than
+// silently minted — a returning user who disconnected must be able to pick a different wallet,
+// and a present device keypair must not skip the step. After a wallet lands the flow is three
+// optional steps: fund the wallet, back up to cloud, add a market RPC. `choose` is the wallet
+// picker before Fund. No pitch, no App_Installed step.
+type UnlockScreen = "choose" | "fund" | "cloud" | "advanced" | "done";
 
 // Beginner-friendly funding explainer (buy with a card, or transfer from an exchange). One
 // source of truth, shared by the unlock Fund step and Settings > My Wallet.
@@ -24,8 +27,8 @@ type UnlockAction = (walletAddress: string) => void;
 // Exported so the first-boot Welcome tutorial textures its title bar identically.
 export const SCANLINES = "repeating-linear-gradient(0deg, rgba(0,0,0,0.11) 0, rgba(0,0,0,0.11) 1px, transparent 1px, transparent 4px)";
 
-// Three steps: fund 01, cloud 02, rpc 03. `creating` is the pre-step wallet mint (no number).
-const SEQ: Record<UnlockScreen, string> = { creating: "00", fund: "01", cloud: "02", advanced: "03", done: "03" };
+// Three steps: fund 01, cloud 02, rpc 03. `choose` is the pre-step wallet picker (no number).
+const SEQ: Record<UnlockScreen, string> = { choose: "00", fund: "01", cloud: "02", advanced: "03", done: "03" };
 
 // Per-reason unlock title + return-action label; copy lives in the central dictionary.
 const REASON_COPY = M.unlock.reason;
@@ -54,12 +57,12 @@ export function useUnlock(): UnlockContextValue {
 }
 
 export function UnlockProvider({ children }: { children: ReactNode }) {
-  const { state, send } = useStore();
+  const { state } = useStore();
   const t = useT();
   const unlocked = !!state.walletAddress;
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<UnlockReason>("identity");
-  const [screen, setScreen] = useState<UnlockScreen>("creating");
+  const [screen, setScreen] = useState<UnlockScreen>("choose");
   const [celebrating, setCelebrating] = useState(false);
   const pending = useRef<UnlockAction | null>(null);
   const wasUnlocked = useRef(unlocked);
@@ -75,9 +78,11 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
     }, 1150);
   }
 
-  // Full Unlock. The wallet is created for the user (device-local keypair, no signature): with
-  // no wallet yet, mint one and wait on `creating` until it lands, then the effect below advances
-  // to Fund. If a wallet already exists, the gated action just proceeds (nothing to unlock).
+  // Full Unlock. The user picks a wallet on the `choose` step (device-local keypair, or
+  // Phantom/web wallet) — we do NOT silently mint one, so a returning user who disconnected can
+  // switch wallets and a present device keypair never auto-skips this step. Once a wallet lands
+  // the effect below advances to Fund. If a wallet is already connected, the gated action just
+  // proceeds (nothing to unlock).
   function requestUnlock(nextReason: UnlockReason, onUnlocked?: UnlockAction) {
     if (unlocked && state.walletAddress) {
       onUnlocked?.(state.walletAddress);
@@ -85,16 +90,14 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
     }
     pending.current = onUnlocked ?? null;
     setReason(nextReason);
-    setScreen("creating");
+    setScreen("choose");
     setOpen(true);
-    // Recommended path: a device-local keypair minted server-side. No wallet app, no signature.
-    send({ type: "makeLocalWallet" });
   }
 
   useEffect(() => {
     if (!wasUnlocked.current && unlocked && open) {
-      // Wallet just created → step 01 (Fund_Wallet), then the optional Cloud_Backup and Market
-      // RPC before the Unlocked screen. Every step here is skippable.
+      // Wallet just picked (local or Phantom) → step 01 (Fund_Wallet), then the optional
+      // Cloud_Backup and Market RPC before the Unlocked screen. Every step here is skippable.
       setScreen("fund");
       haptics.unlock();
     }
@@ -114,7 +117,7 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
   function dismiss() {
     setOpen(false);
     pending.current = null;
-    setScreen("creating");
+    setScreen("choose");
     if (unlocked) startBadgeReveal();
   }
 
@@ -154,7 +157,7 @@ export function UnlockProvider({ children }: { children: ReactNode }) {
 
             {/* key={screen} remounts the content on each step swap so the icon replays its flicker. */}
             <div key={screen} className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-              {screen === "creating" && <CreatingWallet />}
+              {screen === "choose" && <ChooseWallet />}
               {screen === "fund" && (
                 <StepScreen step={1} title={t(M.unlock.fund.title)} status={t(M.unlock.fund.status)} detail={t(M.unlock.fund.detail)} icon={ICON_FUND}>
                   <FundControls address={state.walletAddress ?? ""} onDone={enterCloud} />
@@ -249,16 +252,22 @@ export function LinkRow({ label, sub, href, className = "" }: { label: string; s
   );
 }
 
-// The pre-step wait while the device-local keypair is minted server-side (no signature, no pay).
-function CreatingWallet() {
+// The pre-step wallet picker. Reuses the canonical ConnectWallet chooser (device-local keypair
+// vs Phantom/web wallet) so there is one source of truth for wallet detection and connect —
+// no duplicated picker logic here. Both paths end in a `walletConnected` push that flips
+// `unlocked`, and the effect above advances to Fund. Shown even when a device keypair already
+// exists on disk, so a returning user can deliberately choose Phantom instead.
+function ChooseWallet() {
   const t = useT();
   return (
-    <div className="mx-auto max-w-sm py-8 text-center">
-      <span className="an-term-mono mx-auto grid h-12 w-12 place-items-center border" style={{ borderColor: "var(--an-green)", background: "var(--an-green)", color: "var(--an-on-green)" }}>{ICON_FUND}</span>
-      <p className="an-term-mono mt-4 text-[10px] uppercase tracking-[0.14em] text-[color:var(--an-fg-dim)]">&gt;CREATING_WALLET<span className="unlock-cursor">_</span></p>
-      <h3 className="an-term-mono mt-1.5 text-[19px] font-bold uppercase tracking-[0.06em] text-[color:var(--an-fg)]">{t(M.unlock.creatingTitle)}</h3>
-      <p className="mx-auto mt-2 max-w-xs text-body-dense leading-relaxed text-[color:var(--an-fg-dim)]">{t(M.unlock.creatingBody)}</p>
-      <span className="mx-auto mt-6 block h-5 w-5 animate-spin rounded-full border-2 border-t-transparent" style={{ borderColor: "var(--an-green)", borderTopColor: "transparent" }} />
+    <div className="mx-auto max-w-sm py-4">
+      <div className="text-center">
+        <span className="an-term-mono mx-auto grid h-12 w-12 place-items-center border" style={{ borderColor: "var(--an-green)", background: "var(--an-green)", color: "var(--an-on-green)" }}>{ICON_FUND}</span>
+        <p className="an-term-mono mt-4 text-[10px] uppercase tracking-[0.14em] text-[color:var(--an-fg-dim)]">&gt;SELECT_WALLET · <span className="text-[color:var(--an-green)]">{t(M.unlock.chooseStatus)}</span></p>
+        <h3 className="an-term-mono mt-1.5 text-[19px] font-bold uppercase tracking-[0.06em] text-[color:var(--an-fg)]">{t(M.unlock.chooseTitle)}</h3>
+        <p className="mx-auto mt-2 max-w-xs text-body-dense leading-relaxed text-[color:var(--an-fg-dim)]">{t(M.unlock.chooseBody)}</p>
+      </div>
+      <div className="mt-6"><ConnectWallet embedded /></div>
     </div>
   );
 }
