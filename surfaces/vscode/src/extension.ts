@@ -56,7 +56,7 @@ import {
   type CodexLogin,
   type StorageConfig,
 } from "@iqlabs-official/agent-sdk";
-import { localWallet, solanaDefaultKeypairPath } from "@iqlabs-official/agent-sdk/account/localWallet";
+import { localWallet, solanaDefaultKeypairPath, exportKeypair, importKeypair } from "@iqlabs-official/agent-sdk/account/localWallet";
 import { NotifyingApprovalChannel } from "./approvalNotify.js";
 
 // Built during onboarding (or restored on a configured device), then handed to chat.
@@ -800,6 +800,25 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
       closeAllChatPanels();
       openOnboarding(context);
       void refreshSidebar(); // wallet gone → sidebar shows the onboard CTA
+    },
+    // My Wallet → Export / Import, over the same keypair file the boot path reopens
+    // (the path picked in onboarding, else the Solana CLI default).
+    exportSecretKey: async () => {
+      if (!wallet) throw new Error("No wallet is connected.");
+      return exportKeypair(context.globalState.get<string>("keypairPath") ?? solanaDefaultKeypairPath(), wallet.address);
+    },
+    importSecretKey: async (secret) => {
+      const path = context.globalState.get<string>("keypairPath") ?? solanaDefaultKeypairPath();
+      const r = await importKeypair(path, secret);
+      wallet = r.wallet;
+      await context.globalState.update("keypairPath", r.path);
+      // Same teardown as disconnect: every open chat tab is bound to the old wallet's runtime.
+      runtime = await connect(wallet, cloudStatusCb);
+      lastSessionsFrame = null;
+      closeAllChatPanels();
+      openChat(context);
+      void refreshSidebar();
+      return r.address;
     },
   });
 

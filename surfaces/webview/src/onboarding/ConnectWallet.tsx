@@ -3,7 +3,7 @@
 // sign the FIXED SESSION_KEY_MESSAGE once (that signature derives the session key), and
 // send {connectWallet, address, signature}. The store flips to chat on `walletConnected`.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 // Subpath import (not the barrel) — the core index drags in node-only modules that can't
 // bundle for the browser. webWallet.ts is browser-safe (only @solana/web3.js + types).
 import { SESSION_KEY_MESSAGE } from "@iqlabs-official/agent-sdk/account/webWallet";
@@ -54,8 +54,15 @@ function phantomStore(): { label: string; url: string } {
 }
 
 export function ConnectWallet({ embedded = false }: { embedded?: boolean } = {}) {
-  const { send } = useStore();
+  const { state, send, clearWalletImport } = useStore();
   const [busy, setBusy] = useState<string | null>(null);
+  // Import existing wallet: a secret key exported on another device (My Wallet → Export).
+  // Success arrives as walletConnected (the store flips to chat); a rejection lands in
+  // state.walletImport.error and is shown under the box.
+  const [importText, setImportText] = useState("");
+  useEffect(() => {
+    if (state.walletImport?.error) setBusy(null);
+  }, [state.walletImport]);
   // Android-only: MWA can't tell us a wallet is missing until we try, so we surface the
   // "install a wallet" guidance reactively once transact reports NoWalletFound.
   const [hint, setHint] = useState<string | null>(null);
@@ -118,7 +125,13 @@ export function ConnectWallet({ embedded = false }: { embedded?: boolean } = {})
     }
   }
 
-  const [mode, setMode] = useState<"choose" | "web">("choose");
+  const [mode, setMode] = useState<"choose" | "web" | "import">("choose");
+
+  function importKey() {
+    setBusy("import");
+    clearWalletImport();
+    send({ type: "importSecretKey", secretKey: importText });
+  }
 
   // The recommended path: mint/adopt a device-local keypair server-side. No wallet app and
   // no signature prompt — the server flips us to unlocked via `walletConnected`.
@@ -187,6 +200,43 @@ export function ConnectWallet({ embedded = false }: { embedded?: boolean } = {})
         >
           Connect web wallet
         </button>
+        <button
+          type="button"
+          disabled={busy !== null}
+          onClick={() => { clearWalletImport(); setMode("import"); }}
+          className="an-btn an-btn-outline w-full"
+          style={{ flexDirection: "column", gap: 2 }}
+        >
+          <span>Import existing wallet</span>
+          <span style={{ fontSize: "0.72rem", fontWeight: 600, opacity: 0.72 }}>Same wallet on every device · syncs your history</span>
+        </button>
+      </div>
+    ) : mode === "import" ? (
+      <div className="space-y-3">
+        <button
+          type="button"
+          onClick={() => { setMode("choose"); clearWalletImport(); }}
+          className="min-h-11 text-left text-sm text-zinc-400"
+        >
+          ‹ Back
+        </button>
+        <p className="text-sm text-zinc-400">
+          Paste the secret key from My Wallet, Export secret key on your other device. Sessions synced under that wallet appear here after import.
+        </p>
+        <textarea
+          value={importText}
+          onChange={(e) => { setImportText(e.target.value); if (state.walletImport) clearWalletImport(); }}
+          placeholder="[12, 34, 56, ...] or a base58 key"
+          rows={5}
+          spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+          className="an-term-mono w-full resize-none border border-[color:var(--an-line)] bg-[color:var(--an-bg-1)] px-3 py-3 text-[12px] text-[color:var(--an-fg)] placeholder-[color:var(--an-fg-mute)] focus:border-[color:var(--an-green-line)] focus:outline-none"
+        />
+        {state.walletImport?.error ? <p className="an-term-mono text-[11px]" style={{ color: "var(--an-red)" }}>{state.walletImport.error}</p> : null}
+        <OnboardingButton disabled={busy !== null || !importText.trim()} onClick={importKey}>
+          {busy === "import" ? "Importing..." : "Import wallet"}
+        </OnboardingButton>
       </div>
     ) : (
       <div className="space-y-3">

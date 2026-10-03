@@ -113,6 +113,20 @@ function SettingsSubHeader({ title, onBack }: { title: string; onBack: () => voi
   );
 }
 
+// LinkRow's in-app twin: same terminal row, but a button that drives a local action
+// (Export / Import on My Wallet) instead of opening a URL. `mark` is the trailing glyph.
+function ActionRow({ label, sub, mark, onClick }: { label: string; sub: string; mark: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="flex w-full items-center gap-2 border border-[color:var(--an-line)] px-3 py-2.5 text-left active:opacity-80">
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="an-term-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--an-green)]">&gt;{label}</span>
+        <span className="truncate text-[11px] text-[color:var(--an-fg-dim)]">{sub}</span>
+      </span>
+      <span className="an-term-mono shrink-0 text-[11px] text-[color:var(--an-fg-mute)]">{mark}</span>
+    </button>
+  );
+}
+
 // One row in the Storage radio picker: a filled dot marks the active backend, tap to switch.
 // Compact + token-styled to sit naturally in the settings drawer (no emoji / em-dash).
 function StorageOption({ active, title, subtitle, onClick }: { active: boolean; title: string; subtitle: string; onClick: () => void }) {
@@ -247,7 +261,7 @@ function CustomEngineRow() {
   );
 }
 
-type SettingsMode = "list" | "configure" | "wallet" | "connect" | "gdrive" | "custom" | "helius" | "github" | "engines" | "language";
+type SettingsMode = "list" | "configure" | "wallet" | "walletImport" | "connect" | "gdrive" | "custom" | "helius" | "github" | "engines" | "language";
 
 // The server runs on the host this page came from, so its OS decides whether an
 // iCloud Drive folder can exist. Every macOS host webview (Tauri WKWebView, a
@@ -270,7 +284,7 @@ export function Sessions({
   initialMode?: SettingsMode;
   settingsRoot?: boolean;
 }) {
-  const { state, send, selectEngine, getClientId, notify } = useStore();
+  const { state, send, selectEngine, getClientId, notify, hideSecretKey, clearWalletImport } = useStore();
   const { requestUnlock } = useUnlock();
   const t = useT();
   const { lang, setLang } = useLang();
@@ -286,9 +300,14 @@ export function Sessions({
   const [code, setCode] = useState("");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
-  // Two-step guard on the My Wallet disconnect: a local wallet's key lives only on this device
-  // (no in-app export), so an accidental tap must not wipe it. First tap arms this confirm.
+  // Two-step guard on the My Wallet disconnect: a local wallet's key lives only on this device,
+  // so an accidental tap must not wipe it. First tap arms this confirm.
   const [confirmDisc, setConfirmDisc] = useState(false);
+  // Same two-step shape for Export secret key: the first tap arms a warning, Reveal asks the
+  // host for the key (state.secretKey holds it only while the panel is open).
+  const [confirmExport, setConfirmExport] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importing, setImporting] = useState(false);
   const [bgExec, setBgExec] = useState(backgroundExecEnabled());
   const [screenOffExec, setScreenOffExec] = useState(screenOffExecEnabled());
 
@@ -352,6 +371,29 @@ export function Sessions({
     if (googleLoginError) setBusy(false);
   }, [googleLoginError]);
 
+  // The revealed secret key lives only on the My Wallet screen: leaving it (any other
+  // settings view, or the drawer unmounting) hides it and disarms the reveal confirm.
+  useEffect(() => {
+    if (settingsMode !== "wallet") {
+      hideSecretKey();
+      setConfirmExport(false);
+    }
+  }, [settingsMode]);
+  useEffect(() => () => hideSecretKey(), []);
+
+  // Import result: success returns to My Wallet (the host already announced the new wallet
+  // via walletConnected); an error stays on the form and is shown under the box.
+  useEffect(() => {
+    if (!state.walletImport) return;
+    setImporting(false);
+    if (state.walletImport.address) {
+      setImportText("");
+      clearWalletImport();
+      setSettingsMode("wallet");
+      notify(`Wallet imported: ${state.walletImport.address.slice(0, 4)}…${state.walletImport.address.slice(-4)}`);
+    }
+  }, [state.walletImport]);
+
   // Esc closes the drawer (never a trap)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -363,16 +405,16 @@ export function Sessions({
     return () => document.removeEventListener("keydown", onKey);
   }, [settingsMode, onClose, rootMode]);
 
-  // Copy the wallet address from the My Wallet sub-screen (clipboard API, textarea fallback for
-  // the Android WebView). Reuses the shared `copied` flash state.
-  async function copyWalletAddress() {
-    if (!state.walletAddress) return;
+  // Copy from the My Wallet sub-screen (clipboard API, textarea fallback for the Android
+  // WebView): the address, or the revealed secret key. Reuses the shared `copied` flash state.
+  async function copyWalletText(text: string | null) {
+    if (!text) return;
     haptics.tap();
     try {
-      await navigator.clipboard.writeText(state.walletAddress);
+      await navigator.clipboard.writeText(text);
     } catch {
       const ta = document.createElement("textarea");
-      ta.value = state.walletAddress;
+      ta.value = text;
       document.body.appendChild(ta);
       ta.select();
       document.execCommand("copy");
@@ -769,12 +811,46 @@ export function Sessions({
             <div className="min-h-0 flex-1 overflow-y-auto">
               <div className="relative border px-3 py-3" style={{ borderColor: "var(--an-green-line)", background: "var(--an-green-dim)" }}>
                 <p className="an-term-mono text-[9px] font-bold uppercase tracking-[0.12em]" style={{ color: "var(--an-green)" }}>&gt;{t(M.wallet.addressLabel)}</p>
-                <button type="button" onClick={copyWalletAddress} className="an-term-mono absolute right-2 top-2 border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.1em] active:opacity-70" style={{ borderColor: "var(--an-term-line-2)", color: "var(--an-fg-mute)" }}>{copied ? t(M.wallet.copied) : t(M.wallet.copy)}</button>
+                <button type="button" onClick={() => copyWalletText(state.walletAddress)} className="an-term-mono absolute right-2 top-2 border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.1em] active:opacity-70" style={{ borderColor: "var(--an-term-line-2)", color: "var(--an-fg-mute)" }}>{copied && !state.secretKey ? t(M.wallet.copied) : t(M.wallet.copy)}</button>
                 <p className="an-term-mono mt-2 break-all pr-12 text-[12px] leading-relaxed" style={{ color: "var(--an-term-fg)" }}>{state.walletAddress}</p>
               </div>
               <div className="mt-3 flex flex-col gap-2">
                 <LinkRow label={t(M.wallet.addFundsLabel)} sub={t(M.wallet.addFundsSub)} href={FUND_GUIDE_URL} />
                 <LinkRow label={t(M.wallet.explorerLabel)} sub={t(M.wallet.explorerSub)} href={`https://solscan.io/account/${state.walletAddress}`} />
+                <ActionRow
+                  label={t(M.wallet.exportLabel)}
+                  sub={t(M.wallet.exportSub)}
+                  mark={state.secretKey || confirmExport ? "[-]" : "[+]"}
+                  onClick={() => {
+                    if (state.secretKey || confirmExport) { hideSecretKey(); setConfirmExport(false); }
+                    else setConfirmExport(true);
+                  }}
+                />
+                {confirmExport && !state.secretKey ? (
+                  // Armed: the key is not requested until Reveal, so a stray tap shows nothing.
+                  <div>
+                    <div className="border p-3" style={{ borderColor: "var(--an-red)", background: "rgba(229,72,77,0.08)" }}>
+                      <p className="an-term-mono text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: "var(--an-red)" }}>&gt;{t(M.wallet.revealTitle)}</p>
+                      <p className="mt-2 text-[11px] leading-relaxed" style={{ color: "var(--an-fg-dim)" }}>{t(M.wallet.revealWarning)}</p>
+                      {state.secretKeyError ? <p className="an-term-mono mt-2 text-[11px]" style={{ color: "var(--an-red)" }}>{state.secretKeyError}</p> : null}
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <button onClick={() => { setConfirmExport(false); hideSecretKey(); }} className="an-btn an-btn-outline flex-1">{t(M.wallet.cancel)}</button>
+                      <button onClick={() => { haptics.tap(); send({ type: "exportSecretKey" }); }} className="an-btn an-btn-danger flex-1">{t(M.wallet.reveal)}</button>
+                    </div>
+                  </div>
+                ) : null}
+                {state.secretKey ? (
+                  <div className="relative border px-3 py-3" style={{ borderColor: "var(--an-red)", background: "rgba(229,72,77,0.08)" }}>
+                    <p className="an-term-mono text-[9px] font-bold uppercase tracking-[0.12em]" style={{ color: "var(--an-red)" }}>&gt;{t(M.wallet.secretLabel)}</p>
+                    <span className="absolute right-2 top-2 flex gap-1">
+                      <button type="button" onClick={() => copyWalletText(state.secretKey)} className="an-term-mono border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.1em] active:opacity-70" style={{ borderColor: "var(--an-term-line-2)", color: "var(--an-fg-mute)" }}>{copied ? t(M.wallet.copied) : t(M.wallet.copy)}</button>
+                      <button type="button" onClick={() => { hideSecretKey(); setConfirmExport(false); }} className="an-term-mono border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.1em] active:opacity-70" style={{ borderColor: "var(--an-term-line-2)", color: "var(--an-fg-mute)" }}>{t(M.wallet.hide)}</button>
+                    </span>
+                    <p className="an-term-mono mt-2 break-all pr-28 text-[11px] leading-relaxed" style={{ color: "var(--an-term-fg)" }}>{state.secretKey}</p>
+                  </div>
+                ) : null}
+                <ActionRow label={t(M.wallet.importLabel)} sub={t(M.wallet.importSub)} mark="[>]" onClick={() => { clearWalletImport(); setSettingsMode("walletImport"); }} />
               </div>
               <div className="an-term-mono mt-3 flex justify-between border-t pt-3 text-[10px] uppercase tracking-[0.08em]" style={{ borderColor: "var(--an-term-line)", color: "var(--an-fg-mute)" }}>
                 <span>{t(M.wallet.network)}</span><span style={{ color: "var(--an-term-fg-2)" }}>Solana Mainnet</span>
@@ -914,6 +990,43 @@ export function Sessions({
             <p className="mt-3 px-1 text-[10px] leading-relaxed" style={{ color: "var(--an-fg-mute)" }}>
               {t(M.settings.languageHint)}
             </p>
+          </div>
+        ) : settingsMode === "walletImport" ? (
+          // Paste a secret key exported on another device; the host adopts it as this device's
+          // local wallet and answers walletImported (handled by the effect above).
+          <div className="flex h-full flex-col">
+            <SettingsSubHeader title={t(M.wallet.importTitle)} onBack={() => { clearWalletImport(); setSettingsMode("wallet"); }} />
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <p className="px-1 text-[11px] leading-relaxed" style={{ color: "var(--an-fg-dim)" }}>{t(M.wallet.importHint)}</p>
+              {state.walletAddress ? (
+                <div className="mt-3 border p-3" style={{ borderColor: "var(--an-red)", background: "rgba(229,72,77,0.08)" }}>
+                  <p className="text-[11px] leading-relaxed" style={{ color: "var(--an-fg-dim)" }}>{t(M.wallet.importReplaceWarning)}</p>
+                </div>
+              ) : null}
+              <textarea
+                value={importText}
+                onChange={(e) => { setImportText(e.target.value); if (state.walletImport) clearWalletImport(); }}
+                placeholder={t(M.wallet.importPlaceholder)}
+                rows={5}
+                spellCheck={false}
+                autoCapitalize="off"
+                autoCorrect="off"
+                className="an-term-mono mt-3 w-full resize-none border border-[color:var(--an-line)] bg-[color:var(--an-bg-1)] px-3 py-3 text-[12px] text-[color:var(--an-fg)] placeholder-[color:var(--an-fg-mute)] focus:border-[color:var(--an-green-line)] focus:outline-none"
+              />
+              {state.walletImport?.error ? <p className="an-term-mono mt-2 px-1 text-[11px]" style={{ color: "var(--an-red)" }}>{state.walletImport.error}</p> : null}
+              <button
+                disabled={importing || !importText.trim()}
+                onClick={() => {
+                  haptics.tap();
+                  setImporting(true);
+                  clearWalletImport();
+                  send({ type: "importSecretKey", secretKey: importText });
+                }}
+                className="an-btn an-btn-green mt-3 w-full disabled:opacity-50"
+              >
+                {importing ? t(M.wallet.importing) : t(M.wallet.importAction)}
+              </button>
+            </div>
           </div>
         ) : settingsMode === "connect" ? (
           <div className="flex flex-col h-full justify-between">

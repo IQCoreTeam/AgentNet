@@ -119,6 +119,10 @@ export type ClientMessage =
   | { type: "getEngineVersions" }
   | { type: "updateEngine"; cli: Cli }
   | { type: "disconnectWallet" }
+  // My Wallet: read the device-local keypair out as keypair-file text (behind a reveal
+  // confirmation), or adopt one exported on another device so both run the same wallet.
+  | { type: "exportSecretKey" }
+  | { type: "importSecretKey"; secretKey: string }
   | { type: "pickCloud" }
   | { type: "connectCloud"; kind: string; location?: string; authHeader?: string }
   | { type: "disconnectCloud" }
@@ -244,6 +248,9 @@ export type ServerMessage =
   // setup/auth:
   | { type: "init"; defaultPath: string | null; cloudKind: string | null; hasWallet?: boolean }
   | { type: "walletConnected"; address: string | null; storageOptions: unknown; storageConfigured?: boolean }
+  // answers to exportSecretKey / importSecretKey; `error` carries the host's reason
+  | { type: "secretKey"; secretKey: string | null; error?: string }
+  | { type: "walletImported"; address: string | null; error?: string }
   // claude subscription login: server reports whether login is needed, streams the OAuth
   // URL to open, and the final result after the user pastes their code.
   | ({ type: "cliStatus" } & import("@iqlabs-official/agent-sdk/runtime/detect").CliReport)

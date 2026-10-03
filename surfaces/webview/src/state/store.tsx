@@ -89,6 +89,12 @@ export interface State {
   // nft skills/workflows currently casting. Plain local skills never enter this list.
   firingSkills: FiringSkill[];
   walletAddress: string | null;
+  // My Wallet → Export: the revealed keypair text, held only while the reveal panel is open
+  // (hidden again by the user, by leaving the screen, or by any wallet change).
+  secretKey: string | null;
+  secretKeyError: string | null;
+  // My Wallet / Connect → Import: the host's rejection reason for the last paste, if any.
+  walletImport: { address: string | null; error: string | null } | null;
   cli: Cli;
   googleLoginUrl: string | null;
   googleLoginError: string | null;
@@ -191,6 +197,9 @@ export const initialState: State = {
   engineVersions: null,
   engineUpdating: {},
   claudeLoginUrl: null,
+  secretKey: null,
+  secretKeyError: null,
+  walletImport: null,
   googleLoginUrl: null,
   googleLoginError: null,
   claudeLoginError: null,
@@ -307,6 +316,8 @@ type LocalAction =
   | { type: "__typing" }
   | { type: "__removeApproval"; id: string }
   | { type: "__clearToast" }
+  | { type: "__hideSecretKey" }
+  | { type: "__clearWalletImport" }
   | { type: "__selectEngine"; cli: Cli }
   | { type: "__switchEngine"; cli: Cli }
   | { type: "__dismissAuth" }
@@ -375,9 +386,20 @@ export function reducer(state: State, ev: Action): State {
     case "init":
       // The host always provides chat. Without a real wallet this is a persistent,
       // device-local guest runtime; wallet setup is progressive and never blocks entry.
-      return { ...state, walletAddress: ev.hasWallet === false ? null : state.walletAddress, phase: "chat" };
+      return { ...state, walletAddress: ev.hasWallet === false ? null : state.walletAddress, phase: "chat", secretKey: null, secretKeyError: null };
     case "walletConnected":
-      return { ...state, walletAddress: ev.address, phase: "chat" };
+      // A wallet change invalidates any revealed key.
+      return { ...state, walletAddress: ev.address, phase: "chat", secretKey: null, secretKeyError: null };
+    case "secretKey":
+      return { ...state, secretKey: ev.secretKey, secretKeyError: ev.error ?? null };
+    case "walletImported":
+      // The import screen consumes this (success → back to My Wallet, error → shown inline)
+      // and clears it; a success also arrives as walletConnected from the host.
+      return { ...state, walletImport: { address: ev.address, error: ev.address ? null : (ev.error ?? "Import failed.") } };
+    case "__hideSecretKey":
+      return { ...state, secretKey: null, secretKeyError: null };
+    case "__clearWalletImport":
+      return { ...state, walletImport: null };
     case "cliStatus":
       // Authentication is progressive too. Stay in chat until a send or explicit engine
       // switch asks selectEngine() to route to the matching login surface.
@@ -748,6 +770,8 @@ interface Store {
   startTyping: () => void;
   resolveApproval: (id: string) => void;
   clearToast: () => void;
+  hideSecretKey: () => void;
+  clearWalletImport: () => void;
   selectEngine: (cli: Cli) => void;
   switchEngine: (cli: Cli) => void;
   dismissAuth: () => void;
@@ -1000,6 +1024,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // Drop an answered approval from the dock immediately; core won't re-send it.
       resolveApproval: (id) => raw({ type: "__removeApproval", id }),
       clearToast: () => raw({ type: "__clearToast" }),
+      hideSecretKey: () => raw({ type: "__hideSecretKey" }),
+      clearWalletImport: () => raw({ type: "__clearWalletImport" }),
       // Activate the chosen engine; routing (login gate / chat) is decided in the reducer.
       selectEngine,
       switchEngine,

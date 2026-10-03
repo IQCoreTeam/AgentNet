@@ -280,12 +280,44 @@ export const M = {
     disconnectSub: m("Clears the saved session on this device", "이 기기에 저장된 세션을 지웁니다", "Удаляет сохранённую сессию на этом устройстве"),
     confirmDisconnect: m("CONFIRM_DISCONNECT", "연결해제_확인", "ПОДТВЕРДИТЬ_ОТКЛЮЧЕНИЕ"),
     confirmWarning: m(
-      "Make sure you can recover this wallet first. This clears its key from this device, and there is no in-app backup. If you have not saved a way to restore it, you could lose access to this wallet and any funds in it.",
-      "먼저 이 지갑을 복구할 수 있는지 확인하세요. 이 기기에서 키가 지워지고, 앱 내 백업은 없어요. 복원할 방법을 저장해두지 않았다면 이 지갑과 그 안의 자금에 접근하지 못할 수 있어요.",
-      "Сначала убедитесь, что можете восстановить этот кошелёк. Это удалит его ключ с устройства, и резервной копии в приложении нет. Если вы не сохранили способ восстановления, вы можете потерять доступ к этому кошельку и средствам в нём.",
+      "Make sure you can recover this wallet first. This removes it from this device. If you have not saved its secret key (Export secret key, above), you could lose access to this wallet and any funds in it.",
+      "먼저 이 지갑을 복구할 수 있는지 확인하세요. 이 기기에서 지갑이 제거돼요. 비밀키를 저장해두지 않았다면(위의 비밀키 내보내기) 이 지갑과 그 안의 자금에 접근하지 못할 수 있어요.",
+      "Сначала убедитесь, что можете восстановить этот кошелёк. Он будет удалён с этого устройства. Если вы не сохранили его секретный ключ (Экспорт секретного ключа выше), вы можете потерять доступ к кошельку и средствам в нём.",
     ),
     keepWallet: m("Keep wallet", "지갑 유지", "Оставить кошелёк"),
     disconnectAction: m("Disconnect", "연결해제", "Отключить"),
+    // Export: reveal the device-local secret key so the same wallet can be used on another
+    // device (and its synced sessions appear there).
+    exportLabel: m("EXPORT_SECRET_KEY", "비밀키_내보내기", "ЭКСПОРТ_СЕКРЕТНОГО_КЛЮЧА"),
+    exportSub: m("Use this wallet on another device", "이 지갑을 다른 기기에서도 쓰기", "Использовать этот кошелёк на другом устройстве"),
+    revealTitle: m("REVEAL_SECRET_KEY", "비밀키_표시", "ПОКАЗАТЬ_СЕКРЕТНЫЙ_КЛЮЧ"),
+    revealWarning: m(
+      "Anyone with this key controls the wallet and everything in it. Never share it and never paste it into a chat. Only use it in Import wallet on your other device.",
+      "이 키를 가진 사람은 지갑과 그 안의 모든 것을 통제할 수 있어요. 절대 공유하거나 채팅에 붙여넣지 마세요. 다른 기기의 지갑 가져오기에만 사용하세요.",
+      "Любой, у кого есть этот ключ, управляет кошельком и всем, что в нём. Никогда не делитесь им и не вставляйте в чат. Используйте только в Импорте кошелька на другом устройстве.",
+    ),
+    reveal: m("Reveal", "표시", "Показать"),
+    cancel: m("Cancel", "취소", "Отмена"),
+    secretLabel: m("YOUR_SECRET_KEY", "내_비밀키", "СЕКРЕТНЫЙ_КЛЮЧ"),
+    hide: m("[hide]", "[숨기기]", "[СКРЫТЬ]"),
+    exportUnavailable: m("Export is not available for this wallet.", "이 지갑은 내보낼 수 없어요.", "Экспорт недоступен для этого кошелька."),
+    // Import: adopt a key exported elsewhere as this device's local wallet.
+    importLabel: m("IMPORT_WALLET", "지갑_가져오기", "ИМПОРТ_КОШЕЛЬКА"),
+    importSub: m("Paste a key exported on another device", "다른 기기에서 내보낸 키 붙여넣기", "Вставить ключ с другого устройства"),
+    importTitle: m("Import wallet", "지갑 가져오기", "Импорт кошелька"),
+    importHint: m(
+      "Paste the secret key from My Wallet, Export secret key on your other device. Sessions synced under that wallet appear here after import.",
+      "다른 기기의 내 지갑, 비밀키 내보내기에서 복사한 비밀키를 붙여넣으세요. 그 지갑으로 동기화된 세션이 가져온 뒤 여기에 나타나요.",
+      "Вставьте секретный ключ из Мой Кошелёк, Экспорт секретного ключа на другом устройстве. Сессии этого кошелька появятся здесь после импорта.",
+    ),
+    importReplaceWarning: m(
+      "This replaces the local wallet on this device. Export the current one first if it holds funds.",
+      "이 기기의 로컬 지갑이 교체돼요. 현재 지갑에 자금이 있다면 먼저 내보내세요.",
+      "Это заменит локальный кошелёк на этом устройстве. Сначала экспортируйте текущий, если на нём есть средства.",
+    ),
+    importPlaceholder: m("[12, 34, 56, ...] or a base58 key", "[12, 34, 56, ...] 또는 base58 키", "[12, 34, 56, ...] или ключ base58"),
+    importAction: m("Import", "가져오기", "Импорт"),
+    importing: m("Importing...", "가져오는 중...", "Импорт..."),
   },
 
   storagePicker: {

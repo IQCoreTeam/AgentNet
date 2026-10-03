@@ -51,6 +51,12 @@ export interface ChatEnv {
   // reconnectCloud message itself; its no-op here is harmless.
   reconnectCloud?(cfg: { kind?: string }): Promise<void>;
   disconnectWallet?(): Promise<void>;
+  // Local-wallet key portability (My Wallet → Export / Import). The host owns the keypair
+  // file, so it reads it out as keypair-file text / adopts a pasted key and returns the
+  // new address. Hosts whose wallet is an external app (or that have no key file) leave
+  // these unset; the UI then gets an explicit "not available here" instead of silence.
+  exportSecretKey?(): Promise<string>;
+  importSecretKey?(secret: string): Promise<string>;
   openCloud?(kind: string, location?: string): Promise<void>;
   walletAddress(): string | null; // for the "My Wallet" view
   storageInfo(): Promise<{ info: unknown; options: unknown; googleCredsConfigured?: boolean }>; // header storage pill
@@ -778,6 +784,27 @@ export function createChatSession(
       case "disconnectCloud": await env.disconnectCloud?.(); await pushStorage(); await pushSessions(); break;
       case "reconnectCloud":  await env.reconnectCloud?.({ kind: m.kind }); await pushStorage(); await pushSessions(); break;
       case "disconnectWallet": await env.disconnectWallet?.(); break;
+      // The secret key crosses the UI transport exactly once, on an explicit tap behind the
+      // reveal confirmation; it is never pushed unasked and never cached host-side.
+      case "exportSecretKey": {
+        try {
+          if (!env.exportSecretKey) throw new Error("Export is not available on this surface.");
+          transport.send({ type: "secretKey", secretKey: await env.exportSecretKey() });
+        } catch (e) {
+          transport.send({ type: "secretKey", secretKey: null, error: (e as Error).message });
+        }
+        break;
+      }
+      case "importSecretKey": {
+        try {
+          if (!env.importSecretKey) throw new Error("Import is not available on this surface.");
+          if (typeof m.secretKey !== "string") throw new Error("Paste a secret key first.");
+          transport.send({ type: "walletImported", address: await env.importSecretKey(m.secretKey) });
+        } catch (e) {
+          transport.send({ type: "walletImported", address: null, error: (e as Error).message });
+        }
+        break;
+      }
       case "openCloud":       await env.openCloud?.(m.kind, m.location); break;
       case "wallet":          transport.send({ type: "wallet", address: env.walletAddress() }); break;
       // ── marketplace: search → buy → install (delegated to the host) ──

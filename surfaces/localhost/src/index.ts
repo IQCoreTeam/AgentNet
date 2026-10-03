@@ -85,6 +85,7 @@ import {
 } from "@iqlabs-official/agent-sdk";
 import { SessionStore } from "@iqlabs-official/agent-sdk/account/store";
 import { migrateSessions } from "@iqlabs-official/agent-sdk/account/migrate";
+import { exportKeypair, importKeypair, solanaDefaultKeypairPath } from "@iqlabs-official/agent-sdk/account/localWallet";
 
 const PORT = Number(process.env.AGENTNET_PORT ?? 4317);
 // This surface serves the app to a user with a system browser (desktop web + the Android
@@ -459,6 +460,14 @@ async function connectLocalWallet(): Promise<string> {
   await adoptWallet(loaded.wallet, loaded.address);
   await saveWalletMode("local");
   return loaded.address;
+}
+
+// After a local wallet is adopted (minted or imported): tell the UI it is unlocked and
+// refresh everything keyed off the wallet.
+async function announceLocalWallet(c: Client): Promise<void> {
+  c.send({ type: "walletConnected", address: walletAddress, storageOptions: STORAGE_OPTIONS, storageConfigured: await isCloudConnected() });
+  c.send({ type: "storage", info: await getStorageInfo(), options: STORAGE_OPTIONS, googleCredsConfigured: await hasGoogleCreds() });
+  await pushCliStatus(c);
 }
 
 // ── one connected UI (one SSE stream) ──
@@ -1141,6 +1150,24 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
       c.send({ type: "clear" });
       c.send({ type: "init", defaultPath: null, cloudKind: null, hasWallet: false });
     },
+    // My Wallet → Export: only the device-local keypair can be read out. An external wallet
+    // (Phantom/MWA) never gave us its key, and the guest key is not a chain wallet.
+    exportSecretKey: async () => {
+      if (!walletAddress || (await loadWalletMode()) !== "local") {
+        throw new Error("Only a local wallet can be exported. A wallet app keeps its own key; export it there.");
+      }
+      return exportKeypair(solanaDefaultKeypairPath(), walletAddress);
+    },
+    // My Wallet / Connect → Import: adopt a key exported on another device so both run the
+    // SAME wallet and their session histories merge. Replaces the standing wallet choice.
+    importSecretKey: async (secret) => {
+      const r = await importKeypair(solanaDefaultKeypairPath(), secret);
+      await adoptWallet(r.wallet, r.address);
+      await saveWalletMode("local");
+      await announceLocalWallet(c);
+      if (r.replaced) console.log(`[wallet] previous local key moved to ${r.replaced}`);
+      return r.address;
+    },
     openCloud: async (kind, location) => {
       if (kind === "gdrive" && walletAddress) {
         const link = await agentnetFolderLink(walletAddress);
@@ -1242,9 +1269,7 @@ function attachWalletConnection(c: Client) {
         c.send({ type: "toast", text: "Local wallet failed: " + (e as Error).message });
         return;
       }
-      c.send({ type: "walletConnected", address: walletAddress, storageOptions: STORAGE_OPTIONS, storageConfigured: await isCloudConnected() });
-      c.send({ type: "storage", info: await getStorageInfo(), options: STORAGE_OPTIONS, googleCredsConfigured: await hasGoogleCreds() });
-      await pushCliStatus(c);
+      await announceLocalWallet(c);
       return;
     }
     // Opt-in per-session sync (issue #123): copy ONE local (guest) session into the
