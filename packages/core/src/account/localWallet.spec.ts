@@ -53,20 +53,34 @@ describe("local wallet export / import", () => {
     ); // leading-zero bytes survive
   });
 
-  it("parses the keypair-file JSON array and a base58 secret key to the same wallet", () => {
-    const kp = Keypair.generate();
-    // A PublicKey only wraps 32 bytes, so encode the 64-byte secret by hand (the inverse
-    // of base58Decode) to stand in for what Phantom's "export private key" produces.
+  // A PublicKey only wraps 32 bytes, so encode a 64-byte secret by hand (the inverse of
+  // base58Decode) to stand in for what Phantom's "export private key" produces. Leading
+  // zero bytes become leading "1"s, which the big-integer division alone would drop.
+  function base58Encode(bytes: Uint8Array): string {
     const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
     let n = 0n;
-    for (const byte of kp.secretKey) n = (n << 8n) + BigInt(byte);
+    for (const byte of bytes) n = (n << 8n) + BigInt(byte);
     let encoded = "";
     while (n > 0n) {
       encoded = alphabet[Number(n % 58n)] + encoded;
       n /= 58n;
     }
-    expect(parseSecretKey(keypairFileText(kp)).publicKey.toBase58()).toBe(kp.publicKey.toBase58());
-    expect(parseSecretKey(`  ${encoded}\n`).publicKey.toBase58()).toBe(kp.publicKey.toBase58());
+    for (const byte of bytes) {
+      if (byte !== 0) break;
+      encoded = "1" + encoded;
+    }
+    return encoded;
+  }
+
+  it("parses the keypair-file JSON array and a base58 secret key to the same wallet", () => {
+    // A seed starting with 0x00 puts a zero byte at the front of the 64-byte secret key,
+    // so the base58 form starts with "1" and the leading-zero path is exercised every run.
+    const zeroLed = Keypair.fromSeed(Uint8Array.from([0, ...Array.from({ length: 31 }, (_, i) => i + 1)]));
+    for (const kp of [Keypair.generate(), zeroLed]) {
+      expect(parseSecretKey(keypairFileText(kp)).publicKey.toBase58()).toBe(kp.publicKey.toBase58());
+      expect(parseSecretKey(`  ${base58Encode(kp.secretKey)}\n`).publicKey.toBase58()).toBe(kp.publicKey.toBase58());
+    }
+    expect(base58Encode(zeroLed.secretKey).startsWith("1")).toBe(true);
     expect(() => parseSecretKey("")).toThrow(/Paste a secret key/);
     expect(() => parseSecretKey("[1,2,3]")).toThrow(/not a Solana secret key/);
     expect(() => parseSecretKey("not-a-key!")).toThrow(/not a Solana secret key/);
