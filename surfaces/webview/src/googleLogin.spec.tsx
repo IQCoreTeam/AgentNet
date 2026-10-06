@@ -7,7 +7,9 @@ import { initialState } from "./state/store";
 import { LangProvider } from "./i18n";
 import { openExternalUrl } from "./platform/openExternalUrl";
 
-const store = vi.hoisted(() => ({ state: {} as any, send: vi.fn(), getClientId: () => "qa", closeMarket: vi.fn() }));
+// Only the store actions that run on mount/unmount need to exist on this stub: Sessions
+// drops any revealed secret key whenever it is not on the My Wallet screen.
+const store = vi.hoisted(() => ({ state: {} as any, send: vi.fn(), getClientId: () => "qa", closeMarket: vi.fn(), hideSecretKey: vi.fn(), clearWalletImport: vi.fn() }));
 vi.mock("./state/store", async importOriginal => ({ ...await importOriginal<typeof import("./state/store")>(), useStore: () => store }));
 vi.mock("./platform/openExternalUrl", () => ({ openExternalUrl: vi.fn() }));
 vi.mock("./unlock/WelcomeTutorial", () => ({ WelcomeTutorial: () => null }));
