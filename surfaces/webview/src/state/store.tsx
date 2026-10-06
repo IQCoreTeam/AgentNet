@@ -428,7 +428,7 @@ export function reducer(state: State, ev: Action): State {
       return {
         ...state,
         contextTokens: ev.contextTokens,
-        contextWindow: ev.contextWindow,
+        contextWindow: state.cli === "custom" ? undefined : ev.contextWindow,
       };
     case "rateLimit":
       // core reports a rejected window as 100; a frame without a reading keeps the last
@@ -560,12 +560,12 @@ export function reducer(state: State, ev: Action): State {
     case "status": {
       const s = ev.status;
       if (s.sessionId && state.activeSessionId && s.sessionId !== state.activeSessionId) return state;
-      const win = s.contextWindow;
+      const win = s.cli === "custom" ? undefined : s.contextWindow;
       const fmtK = (n: number) => n >= 1000 ? Math.round(n / 1000) + "k" : String(n);
       const ctx = s.contextTokens === undefined
         ? ""
         : !win
-          ? `, ctx ${fmtK(s.contextTokens)} tokens (model limit unverified)`
+          ? `, ctx ${fmtK(s.contextTokens)} tokens (${s.cli === "custom" ? "provider limit unknown" : "model limit unverified"})`
           : `, ctx ${fmtK(s.contextTokens)} / ${fmtK(win)} (${Math.round((s.contextTokens / win) * 100)}%)`;
       return {
         ...state,
