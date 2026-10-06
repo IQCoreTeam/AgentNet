@@ -47,7 +47,11 @@ APK with no Linux container. Never ship it; delete any `outputs/apk/release/app-
 it leaves behind so nobody grabs it later.
 
 ```bash
-# 1) fresh dists — ALWAYS, or you re-ship whatever stale tar sits in the tree
+# 1) fresh dists — ALWAYS, or you re-ship whatever stale tar sits in the tree.
+#    WIPE them first: tsup never deletes old chunk-*.js, so a dist/ rebuilt in place for
+#    months ships dozens of orphaned chunks (found 2026-10-06: 43 chunks in a local bundle
+#    vs 9 from CI). CI is immune because it builds from a fresh checkout.
+rm -rf surfaces/localhost/dist surfaces/webview/dist
 pnpm --filter agentnet-localhost build && pnpm --filter agentnet-webview build
 STAGE="$(mktemp -d)/server-bundle" && mkdir -p "$STAGE/webview"
 cp -R surfaces/localhost/dist/. "$STAGE/" && cp -R surfaces/webview/dist/. "$STAGE/webview/"
