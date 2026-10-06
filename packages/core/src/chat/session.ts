@@ -17,7 +17,7 @@ import type { ApprovalChannel } from "../runtime/approval/channel.js";
 import type { SkillCard, MarketRequest } from "./marketMessages.js";
 import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { customModelOption, type ChatModelOption } from "./modelOptions.js";
+import { customModelOption, findChatModelOption, normalizeModelEffort, type ChatModelOption } from "./modelOptions.js";
 import { loadCustomEngineConfig, customEngineStatus } from "../account/customEngineAuth.js";
 import { ENGINE_KEYS, ENGINE_REGISTRY, type EngineKey } from "../runtime/engineRegistry.js";
 
@@ -235,7 +235,7 @@ export function createChatSession(
     pendingId?: string;
     model?: string;
     mode?: string;
-    effort?: "low" | "medium" | "high" | "xhigh" | "max";
+    effort?: string;
     restage?: SessionHandle | null;
     lastUsage?: number;
     lastWindow?: number;
@@ -309,9 +309,9 @@ export function createChatSession(
     // Only the visible handle updates the slot's last-seen usage — a parked/background
     // session must not overwrite the meter for the chat the user is actually looking at.
     h.onUsage((contextTokens, contextWindow) => {
-      if (isVisibleHandle(forCli, h)) {
+      if (isVisibleHandle(forCli, h) && slots[forCli].restage !== h) {
         slots[forCli].lastUsage = contextTokens;
-        if (contextWindow !== undefined) slots[forCli].lastWindow = contextWindow;
+        slots[forCli].lastWindow = contextWindow;
         transport.send({ type: "usage", contextTokens, contextWindow: slots[forCli].lastWindow });
       }
     });
@@ -356,6 +356,7 @@ export function createChatSession(
   // actually produced each turn — not the current tab.
   async function repaint() {
     transport.send({ type: "clear" });
+    pushSettings();
     const id = slot().pendingId;
     if (!id) return;
     // Show the loading state while we read the session. CRITICAL: the paint path reads the
@@ -517,12 +518,34 @@ export function createChatSession(
     transport.send({ type: "skillShopping", on });
   }
 
+  const modelCatalogs = new Map<EngineKey, ChatModelOption[]>();
+  const modelProbes = new Map<EngineKey, Promise<void>>();
+  function pushSettings(requestId?: string, forCli = cli) {
+    const s = slots[forCli];
+    transport.send({ type: "settings", cli: forCli, model: s.model, effort: s.effort, mode: s.mode, sessionId: s.handle?.sessionId ?? s.pendingId, ...(requestId ? { requestId } : {}) });
+  }
   async function pushModelOptions(forCli: EngineKey) {
     if (!env.modelOptions) return;
-    const options = await env.modelOptions(forCli).catch(() => null);
-    // Empty/failed probe → leave the webview on its static baseline (listClaudeModelOptions
-    // already logs the reason). Only override the picker when we have a live list.
-    if (options?.length) transport.send({ type: "modelOptions", cli: forCli, options });
+    const pending = modelProbes.get(forCli);
+    if (pending) return pending;
+    const probe = (async () => {
+      const options = await env.modelOptions!(forCli).catch(() => null);
+      // Empty/failed probe → leave the webview on its static baseline (listClaudeModelOptions
+      // already logs the reason). Only override the picker when we have a live list.
+      if (options?.length) {
+        modelCatalogs.set(forCli, options);
+        const s = slots[forCli];
+        const effort = normalizeModelEffort(findChatModelOption(options, s.model), s.effort);
+        if (s.effort !== effort) {
+          s.effort = effort;
+          if (s.handle) s.restage = s.handle;
+        }
+        transport.send({ type: "modelOptions", cli: forCli, options });
+        pushSettings(undefined, forCli);
+      }
+    })();
+    modelProbes.set(forCli, probe);
+    try { await probe; } finally { modelProbes.delete(forCli); }
   }
 
   // Process messages STRICTLY in order — each handler runs to completion before the
@@ -608,7 +631,7 @@ export function createChatSession(
         // slot, and repaint — the next send resumes it (history re-injected into the
         // new cli). If nothing was open, just switch to a blank chat as before.
         if (ENGINE_KEYS.includes(m.cli) && m.cli !== cli) {
-          const carry = slot().pendingId; // the session the OLD engine was showing
+          const carry = slot().handle?.sessionId || slot().pendingId;
           cli = m.cli;
           void pushModelOptions(cli);
           if (carry && slot().pendingId !== carry) {
@@ -620,12 +643,22 @@ export function createChatSession(
           await pushSessions();
         }
         break;
+      case "getModelOptions":
+        void pushModelOptions(cli);
+        break;
+      case "getSettings":
+        pushSettings(typeof m.requestId === "string" ? m.requestId : undefined);
+        break;
       case "model":
         // model is per-slot. Don't kill a live handle (that would abort an in-flight
         // turn) — flag for a lazy re-spawn on the next send. If no handle exists yet,
         // the next spawn already picks up the new value, so no restage is needed.
         slot().model = m.model && m.model !== "default" ? m.model : undefined;
+        slot().effort = normalizeModelEffort(findChatModelOption(modelCatalogs.get(cli) ?? [], slot().model), slot().effort);
+        slot().lastWindow = undefined;
+        slot().lastUsage = undefined;
         if (slot().handle) slot().restage = slot().handle;
+        pushSettings();
         break;
       case "mode":
         // permission mode is per-slot. Unlike model, the value is always meaningful
@@ -638,18 +671,23 @@ export function createChatSession(
           slot().mode = m.mode;
           const h = slot().handle;
           if (h) {
-            h.updateMode?.(m.mode);
             slot().restage = h;
           }
+          pushSettings();
         }
         break;
       case "effort": {
         // reasoning effort is per-slot. Same lazy-restage rule as model/mode: never kill
         // a live turn — the new effort takes effect from the next spawned handle.
-        const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
-        const e = EFFORTS.find((v) => v === m.effort);
-        slot().effort = e;
+        const requested = typeof m.effort === "string" && m.effort !== "default" ? m.effort : undefined;
+        if (requested && !modelCatalogs.has(cli)) await pushModelOptions(cli);
+        const model = findChatModelOption(modelCatalogs.get(cli) ?? [], slot().model);
+        if (requested && !normalizeModelEffort(model, requested)) {
+          transport.send({ type: "toast", text: "This model does not advertise support for that effort level." }); pushSettings(); break;
+        }
+        slot().effort = requested;
         if (slot().handle) slot().restage = slot().handle;
+        pushSettings();
         break;
       }
       case "send": {

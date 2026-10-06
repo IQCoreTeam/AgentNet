@@ -7,7 +7,7 @@ import { vscode } from "./host.js";
 import { approvalDock, composer, input, log } from "./dom.js";
 import { renderEngineMissing, renderNotice, stickToBottom, syncWatermark } from "./shell.js";
 import { completeSlash, renderSlashMenu, slashCommandsForCli } from "./slash.js";
-import { effortByCli, fillModels, fillModes, modeByCli, modelByCli, selectTab } from "./engine.js";
+import { changeModel, currentEffortOptions, effortByCli, fillModes, modeByCli, openModeMenu, openModelMenu, selectTab } from "./engine.js";
 import { tailBody } from "./turns.js";
 import { closeMenus } from "./menus.js";
 import { setSkills, skillsBtn, skillsPanel } from "./skills.js";
@@ -217,14 +217,21 @@ export function send() {
         if (arg === 'claude' || arg === 'codex' || arg === 'custom') selectTab(arg);
         input.value = ''; return;
       case 'model':
-        if (arg) { modelByCli[S.cli] = arg; fillModels(); vscode.postMessage({ type: 'model', model: arg }); }
+        if (arg) changeModel(arg);
+        else openModelMenu();
         input.value = ''; return;
       case 'mode':
         if (arg) { modeByCli[S.cli] = arg; fillModes(); vscode.postMessage({ type: 'mode', mode: arg }); }
         input.value = ''; return;
-      case 'effort':
-        if (arg) { effortByCli[S.cli] = arg; fillModes(); vscode.postMessage({ type: 'effort', effort: arg === 'default' ? undefined : arg }); }
+      case 'effort': {
+        const supported = currentEffortOptions().map(o => o.value);
+        if (!arg) openModeMenu();
+        else if (supported.includes(arg)) {
+          effortByCli[S.cli] = arg; fillModes();
+          vscode.postMessage({ type: 'effort', effort: arg === 'default' ? undefined : arg });
+        } else renderNotice('Usage: /effort ' + supported.join('|'));
         input.value = ''; return;
+      }
       case 'help': {
         const helpText = slashCommandsForCli()
           .map(function(c) { return '/' + c.name + (c.args ? ' ' + c.args : '') + ' - ' + c.desc; })

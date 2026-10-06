@@ -6,7 +6,7 @@ import { S } from "./state.js";
 import { CHAT_SLASH_COMMANDS, type SlashEngine } from "../../slashCommands.js";
 import { input, slashMenu } from "./dom.js";
 import { escapeHtml } from "./markdown.js";
-import { EFFORTS, MODELS, MODES } from "./engine.js";
+import { currentEffortOptions, MODELS, MODES } from "./engine.js";
 import { autoGrowInput } from "./composer.js";
 
 // ---- slash command autocomplete ----
@@ -74,8 +74,8 @@ export function renderSlashMenu() {
     if (m) {
       subCmd = 'effort';
       prefix = (m[1] || '').toLowerCase();
-      options = EFFORTS.map(function(o) {
-        return { name: o.value, desc: o.label + ' - ' + o.title, insert: '/effort ' + o.value };
+      options = currentEffortOptions().map(function(o) {
+        return { name: o.value, desc: o.value === 'default' ? 'engine default' : o.label, insert: '/effort ' + o.value };
       });
     }
   }

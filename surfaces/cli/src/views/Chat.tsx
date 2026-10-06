@@ -1,4 +1,5 @@
 import { contextNotice } from "@iqlabs-official/agent-sdk/chat/contextNotice";
+import { findChatModelOption } from "@iqlabs-official/agent-sdk/chat/modelOptions";
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Box, Text, Static, useApp, useInput, useStdout } from "ink";
 import type { AgentRuntime, Wallet, ChatMessage, SkillActivation } from "@iqlabs-official/agent-sdk/runtime/contract";
@@ -52,9 +53,9 @@ import { Footer } from "../components/Footer.js";
 import { SessionList } from "./SessionList.js";
 import { LoginGate } from "./LoginGate.js";
 import { SkillMarket } from "./SkillMarket.js";
+import { loadModelOptions } from "../models.js";
 import { ModelPicker } from "./ModelPicker.js";
 import { EffortPicker } from "./EffortPicker.js";
-import type { EffortLevel } from "../prefs.js";
 import { loadInputHistory, appendInputHistory, mergeHistory } from "../inputHistory.js";
 import { type Mood } from "../components/Iggy.js";
 import { Spinner } from "../components/Spinner.js";
@@ -1001,7 +1002,7 @@ export function Chat({
     setPendingCloudKind(null);
   }
 
-  function runSlash(raw: string) {
+  async function runSlash(raw: string) {
     const [cmd, ...rest] = raw.slice(1).trim().split(/\s+/);
     const arg = rest.join(" ");
     switch (cmd) {
@@ -1050,7 +1051,6 @@ export function Chat({
         setShowModels(true);
         return;
       case "effort": {
-        const VALID: EffortLevel[] = ["low", "medium", "high", "xhigh", "max"];
         if (!arg) {
           setShowEfforts(true);
           return;
@@ -1060,11 +1060,14 @@ export function Chat({
           setNotice("effort → default");
           return;
         }
-        if (VALID.includes(arg as EffortLevel)) {
-          chat.changeEffort(arg as EffortLevel);
+        const catalog = await loadModelOptions(chat.cli);
+        const selected = findChatModelOption(catalog, chat.model);
+        const supported = selected?.supportedEfforts ?? [];
+        if (supported.includes(arg)) {
+          chat.changeEffort(arg);
           setNotice(`effort → ${arg}`);
         } else {
-          setNotice("usage: /effort low|medium|high|xhigh|max|default");
+          setNotice(`usage: /effort ${["default", ...supported].join("|")} (${selected?.label ?? chat.model ?? chat.cli})`);
         }
         return;
       }
@@ -1194,12 +1197,11 @@ export function Chat({
             lines.push(`engine    claude`);
             lines.push(`auth      subscription`);
           }
-          const win = chat.contextWindow ?? (engineBinary(chat.cli) === "codex" ? 256_000 : 200_000);
-          const used = chat.contextTokens ?? Math.round(chat.messages.reduce((n, m) => n + m.text.length, 0) / 4);
-          lines.push(`model     ${chat.model ?? "default"}`);
-          lines.push(chat.cli === "custom"
-            ? `ctx used  ${chat.contextTokens === undefined ? "not reported" : chat.contextTokens.toLocaleString() + " tokens"} (provider limit unknown)`
-            : `ctx used  ${used.toLocaleString()} / ${win.toLocaleString()} tokens`);
+          const win = chat.cli === "custom" ? undefined : chat.contextWindow;
+          const used = chat.contextTokens;
+          lines.push(`model     ${chat.modelLabel ?? chat.model ?? "default"}`);
+          lines.push(`ctx used  ${used === undefined ? "not reported" : used.toLocaleString()}`
+            + (win && win > 0 ? ` / ${win.toLocaleString()} tokens` : `${used === undefined ? "" : " tokens"} (provider limit unknown)`));
           setAccountLines(lines);
           setShowAccount(true);
         })();
@@ -1243,18 +1245,10 @@ export function Chat({
   }
 
   const mood: Mood = eggMood ?? (pendingApproval ? "tool" : chat.busy ? "thinking" : idle ? "sleeping" : "idle");
-  // context-left: prefer the engine's REAL per-turn usage; before the first turn reports,
-  // fall back to a rough chars/4 estimate so the meter isn't blank.
-  const WINDOW = chat.cli === "custom" ? undefined : chat.contextWindow ?? (engineBinary(chat.cli) === "codex" ? 256_000 : 200_000);
-  // Only fall back to char-count estimate when there are actual messages — otherwise
-  // the bar shows 0/200k on every fresh session which is meaningless noise.
-  const usedTokens =
-    chat.contextTokens ??
-    (chat.cli !== "custom" && chat.messages.length > 0
-      ? chat.messages.reduce((n, m) => n + m.text.length, 0) / 4
-      : undefined);
+  // A percentage needs the engine's reported usage and its reported capacity.
+  const WINDOW = chat.cli !== "custom" && chat.contextWindow && chat.contextWindow > 0 ? chat.contextWindow : undefined;
+  const usedTokens = chat.contextTokens;
   const usedFrac = usedTokens !== undefined && WINDOW !== undefined ? Math.min(1, usedTokens / WINDOW) : undefined;
-  const ctxReal = chat.contextTokens !== undefined;
 
   // An approval that arrives while the user is on ANOTHER screen must not be invisible.
   // Every overlay below owns the whole frame, so the inline card (which lives in the
@@ -1483,6 +1477,8 @@ export function Chat({
   if (showEfforts) {
     return (
       <EffortPicker
+        cli={chat.cli}
+        model={chat.model}
         current={chat.effort}
         onPick={(v) => {
           chat.changeEffort(v);
@@ -1767,7 +1763,6 @@ export function Chat({
         ctx={usedFrac}
         ctxTokens={usedTokens !== undefined ? Math.round(usedTokens) : undefined}
         ctxWindow={usedFrac !== undefined ? WINDOW : undefined}
-        ctxApprox={!ctxReal}
       />
       <Text color={colors.bone}>{rule(ruleW)}</Text>
 

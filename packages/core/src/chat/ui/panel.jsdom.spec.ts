@@ -120,6 +120,64 @@ describe("panel.jsdom: every inbound type", () => {
 });
 
 describe("panel.jsdom: composer", () => {
+  it("uses model capabilities for effort chips and slash commands, and resets an unsupported choice", () => {
+    const p = boot();
+    p.host({ type: "cliStatus", claude: "ok", codex: "ok" });
+    p.host({ type: "modelOptions", cli: "claude", options: [
+      { value: "wide", chipLabel: "Wide", label: "Wide", supportedEfforts: ["high", "ultra"] },
+      { value: "limited", chipLabel: "Limited", label: "Limited", supportedEfforts: ["low"] },
+    ] });
+    p.host({ type: "settings", cli: "claude", model: "wide", effort: "ultra", mode: "plan" });
+    expect(p.$("#modelLabel")!.textContent).toBe("Wide");
+    expect(p.$("#modeEffortTag")!.textContent).toBe("· ultra");
+    expect(p.$$("#modeMenu .effChip").map(e => e.textContent)).toEqual(["default", "high", "ultra"]);
+
+    p.$("#modeBtn")!.click();
+    expect(p.posted.at(-1)).toEqual({ type: "getModelOptions" });
+    p.$("#modelBtn")!.click();
+    p.$$("#modelMenu .modeOpt").find(e => e.querySelector(".mlabel")?.textContent === "Limited")!.click();
+    expect(p.$("#modelLabel")!.textContent).toBe("Limited");
+    expect(p.$("#modeEffortTag")!.textContent).toBe("");
+    expect(p.$$("#modeMenu .effChip").map(e => e.textContent)).toEqual(["default", "low"]);
+    expect(p.posted.slice(-2)).toEqual([{ type: "model", model: "limited" }, { type: "effort" }]);
+
+    const input = p.$("#input") as HTMLTextAreaElement;
+    const send = (text: string) => {
+      input.value = text;
+      p.fire(input, "input");
+      p.key(input, "Enter");
+    };
+    const effortsBefore = p.posted.filter(m => m.type === "effort").length;
+    send("/effort ultra");
+    expect(p.document.body.textContent).toContain("Usage: /effort default|low");
+    expect(p.posted.filter(m => m.type === "effort")).toHaveLength(effortsBefore);
+    send("/effort low");
+    expect(p.posted.at(-1)).toEqual({ type: "effort", effort: "low" });
+    send("/model unlisted-model");
+    expect(p.$("#modelLabel")!.textContent).toBe("unlisted-model");
+    expect(p.$("#modeEffortTag")!.textContent).toBe("");
+    input.value = "/effort ";
+    p.fire(input, "input");
+    expect(p.$$("#slashMenu .slashOpt .cmd").map(e => e.textContent)).toEqual(["default"]);
+    expect(p.$("#slashMenu")!.textContent).not.toContain("undefined");
+    expect(p.errors).toEqual([]);
+  });
+
+  it("restores the default model and effort from host settings without sending a model override", () => {
+    const p = boot();
+    p.host({ type: "settings", cli: "claude", effort: "high", mode: "acceptEdits" });
+    const at = p.posted.length;
+    p.host({ type: "modelOptions", cli: "claude", options: [
+      { value: "recommended", chipLabel: "Recommended", label: "Recommended", supportedEfforts: ["high"] },
+    ] });
+    expect(p.$("#modelLabel")!.textContent).toBe("Recommended");
+    expect(p.$("#modeEffortTag")!.textContent).toBe("· high");
+    expect(p.posted.slice(at)).toEqual([]);
+    p.host({ type: "settings", cli: "claude" });
+    expect(p.$("#modeEffortTag")!.textContent).toBe("");
+    expect(p.errors).toEqual([]);
+  });
+
   it("sends on Enter with exactly { type, text, images }, opens the slash menu on /mod, and interrupts on Escape while busy", () => {
     const p = boot();
     p.host({ type: "cliStatus", claude: "ok", codex: "ok" });

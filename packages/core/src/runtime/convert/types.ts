@@ -9,8 +9,8 @@ export interface ParseResult {
   turnEnded: boolean; // true when the engine signals the turn is done
   // raw installed-skill candidate from this event. Runtime filters this to nft origin.
   skill?: string;
-  // tokens occupying the context window after this event (input + cached + cache-create).
-  // Set on a turn-final/result frame; lets a surface show a real context-left meter.
+  // Tokens in the last main-model request (including cached input).
+  // Turn-level aggregate billing and subagent requests must not populate this field.
   contextTokens?: number;
   // plan rate-limit utilization from a rate_limit_event (claude.ai accounts). Lets a
   // surface draw a "used N% of your limit" gauge. Absent on ordinary frames.

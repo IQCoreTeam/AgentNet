@@ -117,14 +117,14 @@ export function mapClaudeMessage(m: unknown): ParseResult {
     type?: string;
     subtype?: string;
     session_id?: string;
+    parent_tool_use_id?: string | null;
     compact_metadata?: unknown;
-    message?: { content?: Block[] | string; role?: string };
-    event?: { type?: string; delta?: { type?: string; text?: string } };
-    usage?: {
-      input_tokens?: number;
-      cache_read_input_tokens?: number;
-      cache_creation_input_tokens?: number;
+    message?: {
+      content?: Block[] | string;
+      role?: string;
+      usage?: { input_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
     };
+    event?: { type?: string; delta?: { type?: string; text?: string } };
     rate_limit_info?: {
       status?: string;
       utilization?: number; // fraction of the window, 0-1 (past 1 when usage runs over a cap)
@@ -183,6 +183,14 @@ export function mapClaudeMessage(m: unknown): ParseResult {
     }
   }
 
+  // Each main assistant response reports its own prompt input. Per-step output_tokens
+  // is a placeholder; result usage sums the turn; subagents have separate contexts.
+  if (msg.type === "assistant" && !msg.parent_tool_use_id && msg.message?.usage) {
+    const u = msg.message.usage;
+    out.contextTokens = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0)
+      + (u.cache_creation_input_tokens ?? 0);
+  }
+
   // a user frame may carry tool_result blocks (a prior tool's output). The SDK doesn't
   // give us the id→name map the line path used, so we surface any NON-EMPTY result as
   // a tool output card (the preceding tool_use card already labels what ran).
@@ -198,15 +206,9 @@ export function mapClaudeMessage(m: unknown): ParseResult {
     }
   }
 
-  // a 'result' frame ends the turn — and carries the turn's token usage. The context
-  // window occupancy = input + cache-read + cache-create (the full prompt that was sent).
+  // A result ends the turn. Its aggregate billing usage is not context occupancy.
   if (msg.type === "result") {
     out.turnEnded = true;
-    const u = msg.usage;
-    if (u) {
-      out.contextTokens =
-        (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
-    }
   }
   return out;
 }

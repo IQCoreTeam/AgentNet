@@ -7,49 +7,36 @@ export type ChatModelOption = {
   chipLabel: string;
   label: string;
   description: string;
+  resolvedModel?: string;
+  supportedEfforts?: string[];
 };
 
 // One shared model catalog for every surface. The runtime only cares about the raw
 // `value` (passed as the CLI/app-server model override); surfaces use the richer
 // labels/descriptions so the picker is understandable instead of exposing bare aliases.
-// No bare "default" pseudo-entry: the first real model is the sensible default, and the
-// picker shows its actual name (e.g. "Opus 5") instead of an opaque "default" chip.
 // This is only the offline/fallback baseline — surfaces upgrade to the CLI's live list.
 export const CHAT_MODEL_OPTIONS: Record<EngineKey, ChatModelOption[]> = {
   claude: [
     {
       value: "opus",
-      chipLabel: "Opus 5",
-      label: "Opus 5",
+      chipLabel: "Opus",
+      label: "Opus",
       description: "Most capable · Claude alias: opus",
     },
     {
       value: "sonnet",
-      chipLabel: "Sonnet 5",
-      label: "Sonnet 5",
+      chipLabel: "Sonnet",
+      label: "Sonnet",
       description: "Balanced · Claude alias: sonnet",
     },
     {
       value: "haiku",
-      chipLabel: "Haiku 4.5",
-      label: "Haiku 4.5",
+      chipLabel: "Haiku",
+      label: "Haiku",
       description: "Fastest · Claude alias: haiku",
     },
   ],
-  codex: [
-    {
-      value: "gpt-5.5-codex",
-      chipLabel: "GPT-5.5 Codex",
-      label: "GPT-5.5 Codex",
-      description: "Coding-tuned · exact value: gpt-5.5-codex",
-    },
-    {
-      value: "gpt-5.5",
-      chipLabel: "GPT-5.5",
-      label: "GPT-5.5",
-      description: "General GPT model · exact value: gpt-5.5",
-    },
-  ],
+  codex: [{ chipLabel: "Default", label: "Default", description: "CLI default · live model catalog unavailable" }],
   // The custom engine has no catalog: its one model is whatever the saved endpoint
   // config names, which lives on the host side. Surfaces build the entry with
   // customModelOption from the stored config and push it over their live channel.
@@ -69,7 +56,16 @@ export function customModelOption(model: string, label?: string): ChatModelOptio
   }];
 }
 
-export function findChatModelOption(cli: EngineKey, model?: string): ChatModelOption | undefined {
-  const opts = CHAT_MODEL_OPTIONS[cli];
-  return opts.find((opt) => (opt.value ?? "default") === (model ?? "default"));
+export function findChatModelOption(catalog: EngineKey | ChatModelOption[], model?: string): ChatModelOption | undefined {
+  const options = typeof catalog === "string" ? CHAT_MODEL_OPTIONS[catalog] : catalog;
+  return !model || model === "default" ? options[0] : options.find(option => option.value === model || option.resolvedModel === model);
+}
+
+export function normalizeModelEffort(model: ChatModelOption | undefined, effort?: string): string | undefined {
+  return effort && model?.supportedEfforts?.includes(effort) ? effort : undefined;
+}
+
+// Omitted capability metadata means unknown, not support for every engine's levels.
+export function modelEffortOptions(model?: ChatModelOption): { value: string; label: string }[] {
+  return [{ value: "default", label: "default" }, ...(model?.supportedEfforts ?? []).map(value => ({ value, label: value === "xhigh" ? "x-high" : value }))];
 }

@@ -9,6 +9,7 @@ import type {
 } from "@iqlabs-official/agent-sdk/runtime/contract";
 import type { ApprovalChannel } from "@iqlabs-official/agent-sdk/runtime/approval/channel";
 import type { ChatModelOption, EngineKey } from "@iqlabs-official/agent-sdk";
+import { findChatModelOption, normalizeModelEffort } from "@iqlabs-official/agent-sdk/chat/modelOptions";
 import { readPrefs, savePrefs, LAST_MODEL_PREF, type EffortLevel } from "../prefs.js";
 import { loadModelOptions, MODELS } from "../models.js";
 
@@ -20,7 +21,7 @@ import { loadModelOptions, MODELS } from "../models.js";
 // The static baseline answers synchronously so the band never flashes a placeholder;
 // the live probe upgrades it once the installed CLI reports its real catalog.
 function labelFor(model: string | undefined, catalog: ChatModelOption[]): string | undefined {
-  const chosen = model ? catalog.find((o) => o.value === model) : catalog[0];
+  const chosen = findChatModelOption(catalog, model);
   return chosen?.chipLabel ?? model;
 }
 
@@ -50,7 +51,7 @@ export function useChat(
   const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [cli, setCli] = useState<EngineKey>(opts.cli);
-  const [model, setModel] = useState<string | undefined>(opts.model);
+  const [model, setModel] = useState<string | undefined>(opts.model === "default" ? undefined : opts.model);
   const [effort, setEffort] = useState<EffortLevel | undefined>(opts.effort);
   const [pendingId, setPendingId] = useState<string | undefined>(opts.resume);
   const [elapsed, setElapsed] = useState<number | undefined>(undefined);
@@ -74,6 +75,7 @@ export function useChat(
   const [modelLabel, setModelLabel] = useState<string | undefined>(() =>
     labelFor(opts.model, MODELS[opts.cli]),
   );
+  const modelCatalogs = useRef(new Map<EngineKey, ChatModelOption[]>());
 
   // Re-resolve the display name whenever the engine or the override changes.
   useEffect(() => {
@@ -81,7 +83,16 @@ export function useChat(
     setModelLabel(labelFor(model, MODELS[cli])); // instant, from the static baseline
     void loadModelOptions(cli)
       .then((catalog) => {
-        if (live) setModelLabel(labelFor(model, catalog));
+        if (!live || cliRef.current !== cli || modelRef.current !== model) return;
+        modelCatalogs.current.set(cli, catalog);
+        setModelLabel(labelFor(model, catalog));
+        const selected = findChatModelOption(catalog, model);
+        const validEffort = normalizeModelEffort(selected, effortRef.current);
+        if (validEffort !== effortRef.current) {
+          effortRef.current = validEffort;
+          setEffort(validEffort);
+          void savePrefs({ lastEffort: validEffort });
+        }
       })
       .catch(() => {
         /* probe failed — the baseline label already on screen is the right fallback */
@@ -276,16 +287,19 @@ export function useChat(
     // models[0]?.value`) — validate against the live per-engine catalog, fall back to its
     // first entry (often "default", i.e. no override) instead of sending garbage.
     let modelToUse = modelRef.current;
-    if (modelToUse) {
-      try {
-        const catalog = await loadModelOptions(cliRef.current);
-        if (!catalog.some((m) => m.value === modelToUse)) {
-          modelToUse = catalog[0]?.value;
-        }
-      } catch {
-        /* catalog probe failed — send what we have; the engine call itself will surface
-           a clear error if it's genuinely invalid */
-      }
+    const catalog = await loadModelOptions(cliRef.current);
+    modelCatalogs.current.set(cliRef.current, catalog);
+    if (modelToUse && !findChatModelOption(catalog, modelToUse)) {
+      modelToUse = catalog[0]?.value;
+      modelRef.current = modelToUse;
+      setModel(modelToUse);
+      void savePrefs({ [LAST_MODEL_PREF[cliRef.current]]: modelToUse });
+    }
+    const validEffort = normalizeModelEffort(findChatModelOption(catalog, modelToUse), effortRef.current);
+    if (validEffort !== effortRef.current) {
+      effortRef.current = validEffort;
+      setEffort(validEffort);
+      void savePrefs({ lastEffort: validEffort });
     }
     const h = await runtime.startSession({
       cli: cliRef.current,
@@ -341,14 +355,25 @@ export function useChat(
     (next: EngineKey) => {
       if (next === cliRef.current) return;
       dropHandle();
+      cliRef.current = next;
+      modelRef.current = undefined;
       setCli(next);
+      setModel(undefined);
+      const nextEffort = normalizeModelEffort(findChatModelOption(modelCatalogs.current.get(next) ?? MODELS[next]), effortRef.current);
+      effortRef.current = nextEffort;
+      setEffort(nextEffort);
       setContextTokens(undefined);
       setContextWindow(undefined);
-      void savePrefs({ lastCli: next });
+      void savePrefs({ lastCli: next, lastEffort: nextEffort });
       // a model id is engine-specific (claude's "sonnet" is a 400 on codex's API and vice
       // versa) — load whatever the NEW engine last used (or its own default) instead of
       // carrying over the previous engine's model string.
-      void readPrefs().then((p) => setModel(p[LAST_MODEL_PREF[next]]));
+      void readPrefs().then((p) => {
+        if (cliRef.current !== next) return;
+        const saved = p[LAST_MODEL_PREF[next]];
+        modelRef.current = saved === "default" ? undefined : saved;
+        setModel(modelRef.current);
+      });
     },
     [dropHandle],
   );
@@ -356,10 +381,15 @@ export function useChat(
   const changeModel = useCallback(
     (m?: string) => {
       dropHandle();
+      if (m === "default") m = undefined;
+      modelRef.current = m;
       setModel(m);
+      const nextEffort = normalizeModelEffort(findChatModelOption(modelCatalogs.current.get(cliRef.current) ?? MODELS[cliRef.current], m), effortRef.current);
+      effortRef.current = nextEffort;
+      setEffort(nextEffort);
       setContextTokens(undefined);
       setContextWindow(undefined);
-      void savePrefs({ [LAST_MODEL_PREF[cliRef.current]]: m });
+      void savePrefs({ [LAST_MODEL_PREF[cliRef.current]]: m, lastEffort: nextEffort });
     },
     [dropHandle],
   );
@@ -367,6 +397,7 @@ export function useChat(
   const changeEffort = useCallback(
     (e?: EffortLevel) => {
       dropHandle();
+      effortRef.current = e;
       setEffort(e);
       void savePrefs({ lastEffort: e });
     },

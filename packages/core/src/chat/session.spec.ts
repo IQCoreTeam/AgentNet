@@ -686,13 +686,13 @@ describe("Custom context reporting", () => {
       fromUI({ type: "platform", cli: "custom" });
       fromUI({ type: "slashCommand", command: "context" });
       await flush();
-      expect(transport.send).toHaveBeenCalledWith({ type: "notice", text: "Context: usage not reported yet. Provider context limit unknown." });
+      expect(transport.send).toHaveBeenCalledWith({ type: "notice", text: "Context (custom): usage not reported yet. Model context limit unknown." });
       fromUI({ type: "send", text: "fixture" });
       await flush();
       handles[0].emitUsage(12000, 256000);
       fromUI({ type: "slashCommand", command: "context" });
       await flush();
-      expect(transport.send).toHaveBeenCalledWith({ type: "notice", text: "Context (custom): 12,000 tokens used. Provider context limit unknown." });
+      expect(transport.send).toHaveBeenCalledWith({ type: "notice", text: "Context (custom): 12,000 tokens last reported. Model context limit unknown." });
     } finally { chat.stop(); }
   });
 });
@@ -771,4 +771,85 @@ it("adopts merged scrollback even when the newest 30 messages are identical loca
   const older = transport.send.mock.calls.map(c => c[0]).find(e => e.type === "older");
   expect(older?.messages.map((m: any) => m.text)).toEqual(["기기 B 0", "기기 B 1", "기기 B 2"]);
   expect(older?.hasMore).toBe(false);
+});
+
+describe("chat model settings", () => {
+  const catalog = [
+    { value: "opus", chipLabel: "Opus", label: "Opus", description: "", supportedEfforts: ["high", "ultra"] },
+    { value: "haiku", chipLabel: "Haiku", label: "Haiku", description: "", supportedEfforts: [] },
+  ];
+  it("acknowledges actual settings and removes unsupported effort on a model switch", async () => {
+    const { fromUI, transport, handles } = harness({ env: { modelOptions: async () => catalog } });
+    fromUI({ type: "effort", effort: "ultra" });
+    await flush();
+    fromUI({ type: "model", model: "haiku" });
+    fromUI({ type: "getSettings", requestId: "restore-1" });
+    fromUI({ type: "send", text: "test" });
+    await flush();
+    expect(transport.send).toHaveBeenCalledWith(expect.objectContaining({ type: "settings", requestId: "restore-1", cli: "claude", model: "haiku", effort: undefined }));
+    expect((handles[0] as any).opts.effort).toBeUndefined();
+  });
+  it("rejects a typed effort for an unlisted model rather than using another model's capabilities", async () => {
+    const { fromUI, transport, handles } = harness({ env: { modelOptions: async () => catalog } });
+    fromUI({ type: "model", model: "unlisted" });
+    fromUI({ type: "effort", effort: "high" });
+    fromUI({ type: "send", text: "test" });
+    await flush();
+    expect(transport.send).toHaveBeenCalledWith(expect.objectContaining({ type: "toast" }));
+    expect((handles[0] as any).opts.effort).toBeUndefined();
+  });
+  it("coalesces simultaneous probes and retries after a failed probe", async () => {
+    let complete!: (value: null) => void;
+    const query = vi.fn().mockImplementationOnce(() => new Promise(resolve => { complete = resolve; })).mockResolvedValueOnce(catalog);
+    const { fromUI, transport } = harness({ env: { modelOptions: query } });
+    fromUI({ type: "getModelOptions" });
+    fromUI({ type: "getModelOptions" });
+    await flush();
+    expect(query).toHaveBeenCalledTimes(1);
+    complete(null);
+    await flush();
+    fromUI({ type: "getModelOptions" });
+    await flush();
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(transport.send).toHaveBeenCalledWith(expect.objectContaining({ type: "modelOptions", options: catalog }));
+  });
+  it("drops a previous context denominator when the engine reports none", async () => {
+    const { fromUI, handles, transport } = harness();
+    fromUI({ type: "send", text: "test" });
+    await flush();
+    handles[0].emitUsage(10, 100);
+    handles[0].emitUsage(20);
+    expect(transport.send).toHaveBeenLastCalledWith({ type: "usage", contextTokens: 20, contextWindow: undefined });
+  });
+});
+
+describe("model-change usage boundaries", () => {
+  it("does not report an old in-flight model's window under the next model", async () => {
+    const { fromUI, handles, transport } = harness();
+    fromUI({ type: "send", text: "first" });
+    await flush();
+    handles[0].emitUsage(10, 100);
+    fromUI({ type: "model", model: "next-model" });
+    await flush();
+    transport.send.mockClear();
+    handles[0].emitUsage(20, 100);
+    expect(transport.send).not.toHaveBeenCalled();
+    expect(handles[0].stop).not.toHaveBeenCalled();
+  });
+});
+
+it("carries a newly-created engine session when switching before any explicit open", async () => {
+  const loadSessionLocal = vi.fn(async () => ({ messages: [{ role: "assistant", text: "kept history", ts: 1 }], hasMore: false, cursor: 0 }));
+  const { fromUI, handles, transport, startSession } = harness({ rt: { loadSessionLocal } });
+  fromUI({ type: "send", text: "first" });
+  await flush();
+  handles[0].emitTurnEnd();
+  await flush();
+  fromUI({ type: "platform", cli: "codex" });
+  await flush();
+  expect(loadSessionLocal).toHaveBeenCalledWith("sess-0");
+  expect(transport.send).toHaveBeenCalledWith(expect.objectContaining({ type: "message", msg: expect.objectContaining({ text: "kept history" }) }));
+  fromUI({ type: "send", text: "next" });
+  await flush();
+  expect(startSession).toHaveBeenLastCalledWith(expect.objectContaining({ cli: "codex", sessionId: "sess-0" }));
 });

@@ -143,9 +143,9 @@ export interface SessionHandle {
   onMessage(cb: (msg: ChatMessage) => void): void; // CLI output (UI renders)
   onTurnEnd(cb: () => void): void; // turn finished (runtime auto-saves here)
   onSkill(cb: (skill: SkillActivation) => void): void; // nft skill fired -> UI casting cue
-  // real context-window occupancy (tokens) reported by the engine each turn, plus the
-  // model's window size (contextWindow) when known — so the UI can render a percentage
-  // meter, not just a raw count. Optional for the UI to use; surfaces may ignore it.
+  // Latest context snapshot reported by the engine: Codex last-request total; Claude
+  // last main-model prompt input. Model window only when known; an omitted limit means
+  // surfaces can display tokens but cannot calculate a percentage.
   onUsage(cb: (contextTokens: number, contextWindow?: number) => void): void;
   // plan rate-limit utilization changed (claude.ai accounts only). Optional: surfaces that
   // don't draw a limit gauge simply never subscribe, and engines that never emit it (codex,
@@ -187,8 +187,8 @@ export interface AgentRuntime {
     apiKey?: string;
     // Ephemeral (side-channel /btw) session that doesn't save messages to the store.
     ephemeral?: boolean;
-    // Reasoning effort level (claude: adaptive thinking depth; codex: reasoning_effort).
-    effort?: "low" | "medium" | "high" | "xhigh" | "max";
+    // Reasoning effort level (claude: supported SDK level; codex: model-advertised value).
+    effort?: string;
     // Surface→webview channel for marketplace events emitted by the agent's OWN tool calls
     // (buy_skill done, publish_skill progress/result). Lets a chat-driven buy/publish reuse
     // the same celebration/toast/gauge the UI buy gets. Omit → no agent-tool market events.
@@ -261,7 +261,7 @@ export interface SessionMeta {
   // the model/effort the session last ran with (absent = engine default), so a
   // resume can restore them instead of silently switching to another model
   model?: string;
-  effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  effort?: string;
 }
 
 // what gets encrypted to storage (CLI-neutral, so codex↔claude + cross-device)
@@ -273,5 +273,5 @@ export interface CanonicalSession {
   ts: number;
   lastDevice?: { id: string; label: string };
   model?: string;
-  effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  effort?: string;
 }

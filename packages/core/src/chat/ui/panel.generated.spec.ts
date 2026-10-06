@@ -56,7 +56,10 @@ describe("panel.generated: the bundle has the shape chatHtml() inlines", () => {
   it("inlines every CHAT_MODEL_OPTIONS engine and model (a treeshake pass once dropped them)", () => {
     for (const [engine, options] of Object.entries(CHAT_MODEL_OPTIONS)) {
       expect(js).toMatch(new RegExp(`${engine}: \\[`));
-      for (const o of options) expect(js).toContain(JSON.stringify(o.value));
+      for (const o of options) {
+        expect(js).toContain(JSON.stringify(o.chipLabel));
+        if (o.value !== undefined) expect(js).toContain(JSON.stringify(o.value));
+      }
     }
   });
 

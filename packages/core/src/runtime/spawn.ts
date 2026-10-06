@@ -19,7 +19,7 @@ import { mkdir, writeFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { configFile, rootDir } from "../core/paths.js";
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { query, type EffortLevel } from "@anthropic-ai/claude-agent-sdk";
 import type { ChatMessage, ImageInput, RateLimitInfo } from "./contract.js";
 import { mapClaudeMessage } from "./convert/claude.js";
 import { skillFromPath } from "./convert/codex.js";
@@ -70,9 +70,8 @@ export interface Engine {
   onError(cb: (text: string) => void): void;
   // raw installed-skill candidate. Runtime filters this to nft origin before UI.
   onSkill(cb: (name: string) => void): void;
-  // real context occupancy per turn. contextWindow is the model's window size when the
-  // engine reports it (codex modelContextWindow), else a sensible default — so the UI can
-  // render a percentage/meter instead of a bare token count.
+  // Latest main-model context snapshot: Codex last-request total; Claude last prompt
+  // input (its per-step output count is a placeholder). Window only when reported.
   onUsage(cb: (contextTokens: number, contextWindow?: number) => void): void;
   // plan rate-limit utilization changed (claude.ai accounts only; codex never fires it).
   // Optional so engine doubles/other implementations that never emit it can omit the hook.
@@ -119,7 +118,7 @@ export interface SpawnOpts {
   custom?: CustomEngineConfig;
   githubToken?: string; // configured GitHub PAT, injected into the agent's git env (see gitCredentialEnv)
   ephemeral?: boolean; // If true, disable tools / auto-deny approvals
-  effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  effort?: string;
 }
 
 // Environment that lets the AGENT's git authenticate to GitHub with the user's configured
@@ -143,7 +142,7 @@ function gitCredentialEnv(token?: string): Record<string, string> {
 }
 
 // claude permission modes: how aggressively tools run without a per-call gate.
-//   default        — canUseTool gates every tool (ask before edits/commands)
+//   default        — SDK permissions plus approval for gated actions; reads can run
 //   acceptEdits    — file edits auto-apply; other tools still gated
 //   plan           — read-only until the model proposes a plan (ExitPlanMode)
 //   bypassPermissions — nothing is gated (full auto)
@@ -153,6 +152,14 @@ function claudePermissionMode(
   return mode === "acceptEdits" || mode === "plan" || mode === "bypassPermissions"
     ? mode
     : "default";
+}
+
+function claudeEffort(effort?: string): EffortLevel | undefined {
+  switch (effort) {
+    case undefined: case "": case "default": return undefined;
+    case "low": case "medium": case "high": case "xhigh": case "max": return effort;
+    default: throw new Error(`Unsupported Claude effort level: ${effort}`);
+  }
 }
 
 // Codex approval policy per UI mode. The picker sends "auto" | "readonly" | "full"; the
@@ -167,12 +174,11 @@ function codexApprovalPolicy(mode?: string): "on-request" | "never" {
 // Codex OS sandbox per UI mode. AGENTNET_CODEX_SANDBOX wins when set (Android forces
 // danger-full-access because bubblewrap can't run under proot — there the approvalPolicy
 // above is the real control); otherwise derive the sandbox from the mode.
-function codexSandbox(mode: string | undefined, envSandbox: string | undefined): string | undefined {
+function codexSandbox(mode: string | undefined, envSandbox: string | undefined): string {
   if (envSandbox) return envSandbox;
   if (mode === "full") return "danger-full-access";
   if (mode === "readonly") return "read-only";
-  if (mode === "auto") return "workspace-write";
-  return undefined; // codex default
+  return "workspace-write"; // the documented AgentNet default is auto
 }
 
 export function spawnCli(opts: SpawnOpts): Engine {
@@ -237,14 +243,6 @@ function callbacks() {
     // Drop any queued partial + timer without emitting (session stop / interrupt teardown).
     stopPartials: () => { if (partialTimer) { clearTimeout(partialTimer); partialTimer = null; } pendingPartial.clear(); },
   };
-}
-
-// Default context-window size (tokens) when the engine doesn't report a real one.
-// Codex carries the authoritative `modelContextWindow` per turn (we prefer it when
-// present); Claude's SDK exposes no window field, so we fall back to the published
-// model limit. Keep in sync with the constants the surfaces used to hardcode.
-function defaultWindow(cli: EngineKey, _model?: string): number {
-  return cli === "claude" ? 200_000 : 256_000;
 }
 
 function loadPersistentWhitelist(): Set<string> {
@@ -327,6 +325,7 @@ let seqImg = 0; // monotonic so two images in one turn never collide on a filena
 
 // ── claude: SDK query with streaming input + canUseTool → ApprovalChannel ─────
 function claudeEngine(opts: SpawnOpts): Engine {
+  const effort = claudeEffort(opts.effort);
   const cb = callbacks();
   const approval = opts.approval ?? autoApprove();
   let sessionId = opts.sessionId ?? "";
@@ -439,6 +438,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
       model: opts.model,
       cwd: opts.cwd,
       permissionMode: claudePermissionMode(opts.mode),
+      ...(opts.mode === "bypassPermissions" ? { allowDangerouslySkipPermissions: true } : {}),
       canUseTool,
       // Token-by-token streaming is ON by default (codex already streams unconditionally) so
       // claude renders incrementally like the official VSCode extension instead of sitting on
@@ -446,7 +446,7 @@ function claudeEngine(opts: SpawnOpts): Engine {
       // Partials arrive as text deltas → accumulated into a cumulative snapshot below and
       // rendered with replace-semantics (no append), so there's no duplication.
       includePartialMessages: opts.stream !== false,
-      effort: opts.effort,
+      effort,
       // Vanilla claude: use the stock claude_code system prompt with NOTHING appended.
       // We used to append an "anti-laziness" nudge here, but it made the agent feel
       // slightly off vs real claude (over-verifying, stiffer). Skill awareness now
@@ -480,6 +480,9 @@ function claudeEngine(opts: SpawnOpts): Engine {
   const firedSkillIds = new Set<string>();
   (async () => {
     let streamBuf = "";
+    let lastContextTokens: number | undefined;
+    let contextModel: string | undefined;
+    const modelWindows = new Map<string, number>();
     try {
       for await (const m of q) {
         // A Claude skill call surfaces as a `Skill` tool_use. Detect it here (not only
@@ -507,12 +510,34 @@ function claudeEngine(opts: SpawnOpts): Engine {
             cb.emitMsg(markIfDenied(cm));
           }
         }
-        if (r.contextTokens !== undefined) cb.emitUsage(r.contextTokens, defaultWindow("claude", opts.model));
+        if (r.contextTokens !== undefined) {
+          lastContextTokens = r.contextTokens;
+          contextModel = typeof am.message?.model === "string" ? am.message.model : undefined;
+          cb.emitUsage(lastContextTokens, contextModel ? modelWindows.get(contextModel) : undefined);
+        }
+        // SDK result.modelUsage contains limits per actual model, including subagents.
+        // Match the main assistant's model instead of guessing from an alias or taking
+        // another model's limit. result.usage is aggregate billing, not context occupancy.
+        if (m.type === "result" && lastContextTokens !== undefined) {
+          const usage = contextModel ? m.modelUsage?.[contextModel] : undefined;
+          // Provider-specific usage keys can differ from the assistant's wire model.
+          // The SDK supplies the canonical identity; ambiguous matches stay unknown.
+          const canonical = contextModel && !usage
+            ? Object.values(m.modelUsage ?? {}).filter(value => value.canonicalModel === contextModel)
+            : [];
+          const window = (usage ?? (canonical.length === 1 ? canonical[0] : undefined))?.contextWindow;
+          const knownWindow = typeof window === "number" && Number.isFinite(window) && window > 0 ? window : undefined;
+          if (contextModel) {
+            if (knownWindow !== undefined) modelWindows.set(contextModel, knownWindow);
+            else modelWindows.delete(contextModel);
+          }
+          cb.emitUsage(lastContextTokens, knownWindow);
+        }
         if (r.rateLimit) cb.emitRateLimit(r.rateLimit);
         // claude surfaces a compaction as a "summary" record (compact_boundary); mirror it
         // as the explicit compaction cue so the UI behaves the same as it does for codex.
         if (r.messages.some((cm) => cm.role === "summary")) cb.emitCompact();
-        if (r.turnEnded) { streamBuf = ""; pendingDenials.length = 0; cb.emitTurn(); }
+        if (r.turnEnded) { streamBuf = ""; lastContextTokens = undefined; pendingDenials.length = 0; cb.emitTurn(); }
       }
     } catch (e) {
       cb.emitErr(`[claude engine] ${e instanceof Error ? e.message : String(e)}`);
@@ -583,9 +608,10 @@ const CUSTOM_ENGINE_KEYLESS_PLACEHOLDER = "keyless";
 // and processes requests and notifications, routing approvals to the ApprovalChannel.
 function codexEngine(opts: SpawnOpts): Engine {
   const cb = callbacks();
-  // last known context-window size (tokens). Seeded with the model default; replaced by
-  // the real modelContextWindow the moment the server reports it in a usage notification.
-  let knownWindow = opts.cli === "custom" ? undefined : defaultWindow("codex", opts.model);
+  // Only report a denominator supplied by this engine. Custom provider limits cannot
+  // be inferred from the stock Codex model metadata used by the passthrough.
+  let knownWindow: number | undefined;
+  const effort = opts.effort === "default" ? undefined : opts.effort;
   const approval = opts.approval ?? autoApprove();
 
   const codexPath = resolveEngineBin("codex");
@@ -800,7 +826,10 @@ function codexEngine(opts: SpawnOpts): Engine {
       // turns and must not be shown as context occupancy.
       const tu = params?.tokenUsage;
       if (tu) {
-        if (opts.cli !== "custom" && typeof tu.modelContextWindow === "number") knownWindow = tu.modelContextWindow;
+        if (opts.cli !== "custom" && "modelContextWindow" in tu) {
+          const window = tu.modelContextWindow;
+          knownWindow = typeof window === "number" && Number.isFinite(window) && window > 0 ? window : undefined;
+        }
         const last = tu.last?.totalTokens;
         if (typeof last === "number") cb.emitUsage(last, knownWindow);
       }
@@ -810,10 +839,6 @@ function codexEngine(opts: SpawnOpts): Engine {
       cb.emitCompact();
       cb.emitMsg({ role: "summary", text: "[conversation compacted]", ts: Date.now() });
     } else if (msg.method === "turn/completed") {
-      if (params?.usage) {
-        const usage = params.usage;
-        cb.emitUsage((usage.input_tokens ?? 0) + (usage.cached_input_tokens ?? 0), knownWindow);
-      }
       cb.emitTurn();
       running = false;
       currentTurnId = null;
@@ -1025,7 +1050,7 @@ function codexEngine(opts: SpawnOpts): Engine {
         approvalPolicy: codexApproval,
         approvalsReviewer: "user",
         ...(effectiveSandbox ? { sandbox: effectiveSandbox } : {}),
-        ...(opts.effort ? { reasoning_effort: opts.effort } : {}),
+        ...(effort ? { config: { model_reasoning_effort: effort } } : {}),
       });
     } catch (e: any) {
       console.error(`[codex] thread/resume ${threadId} rejected: ${e.message}`);
@@ -1046,7 +1071,7 @@ function codexEngine(opts: SpawnOpts): Engine {
       approvalPolicy: codexApproval,
       approvalsReviewer: "user",
       ...(effectiveSandbox ? { sandbox: effectiveSandbox } : {}),
-      ...(opts.effort ? { reasoning_effort: opts.effort } : {}),
+      ...(effort ? { config: { model_reasoning_effort: effort } } : {}),
     });
     const threadId = res?.thread?.id;
     if (threadId) {
@@ -1099,7 +1124,7 @@ function codexEngine(opts: SpawnOpts): Engine {
     const input: any[] = [{ type: "text", text, text_elements: [] }];
     for (const p of imgFiles?.paths ?? []) input.push({ type: "localImage", path: p });
     try {
-      await sendRequest("turn/start", { threadId: sessionId, input });
+      await sendRequest("turn/start", { threadId: sessionId, input, ...(effort ? { effort } : {}) });
     } catch (e) {
       cb.emitErr(`[codex engine] ${e instanceof Error ? e.message : String(e)}`);
       cb.emitTurn();
@@ -1206,7 +1231,6 @@ function codexEngine(opts: SpawnOpts): Engine {
       force.unref?.();
       child.once("exit", () => clearTimeout(force));
     },
-    updateMode: (mode) => {},
   };
 }
 

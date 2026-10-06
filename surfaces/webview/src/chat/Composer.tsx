@@ -5,7 +5,7 @@ import type { Cli, ImageInput } from "../transport/protocol";
 import { AttachIcon } from "../icons";
 import { haptics } from "../haptics";
 import { useElementHeightVariable } from "../layoutEffects";
-import type { ChatModelOption } from "@iqlabs-official/agent-sdk/chat/modelOptions";
+import { findChatModelOption, modelEffortOptions, normalizeModelEffort } from "@iqlabs-official/agent-sdk/chat/modelOptions";
 import { CHAT_SLASH_COMMANDS } from "@iqlabs-official/agent-sdk/chat/slashCommands";
 
 // ── Context dot (compact donut circle for mobile, mirrors Claude Code's meter) ──
@@ -142,28 +142,11 @@ function LimitDot({ pct, window: win, resetsAt, status }: { pct: number; window?
   );
 }
 
-// Map the shared model catalog (state.modelCatalog — static baseline, upgraded live from
-// the installed CLI) into the picker's {value,label,desc} rows. No bare "default": the
-// first real model is the default, shown by its actual name (Opus 4.8, GPT-5.5 Codex…).
-type ModelRow = { value: string; label: string; desc: string };
-function toModelRows(opts: readonly ChatModelOption[]): ModelRow[] {
-  return opts.map((o) => ({ value: o.value ?? "default", label: o.chipLabel, desc: o.description }));
-}
-
-const EFFORTS = [
-  { value: "default", label: "default" },
-  { value: "low",    label: "low" },
-  { value: "medium", label: "medium" },
-  { value: "high",   label: "high" },
-  { value: "xhigh",  label: "x-high" },
-  { value: "max",    label: "max" },
-];
-
 // Codex's modes serve the custom engine too: custom IS the codex binary pointed at
 // another endpoint, so its sandbox/approval chips are identical.
 const CODEX_MODES = [
-  { value: "readonly", label: "Read only",   title: "Read-only sandbox; ask before edits, commands, network" },
-  { value: "auto",     label: "Auto accept", title: "Auto-accept edits + run inside the workspace; approve on failure (default)" },
+  { value: "readonly", label: "Read only",   title: "Read-only sandbox; escalation requires approval" },
+  { value: "auto",     label: "Auto accept", title: "Permit workspace edits and commands; request approval for escalation" },
   { value: "full",     label: "Full access", title: "Full disk + network access, never ask (use with care)" },
 ];
 
@@ -237,16 +220,24 @@ export function Composer() {
   const { state, send, selectEngine, switchEngine, queueCount, markCompacting } = useStore();
   const limit = state.rateLimits[state.cli];
   const [text, setText] = useState("");
-  const [effort, setEffort] = useState("default");
-  const [model, setModel] = useState("default");
+  const effort = state.effortByCli[state.cli];
+  const model = state.modelByCli[state.cli];
   const [controlsOpen, setControlsOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const recognitionRef = useRef<any>(null);
   const mode = state.modeByCli[state.cli] ?? MODES[state.cli][0].value;
-  // live model rows for the active engine (upgraded from the CLI). selectedModel falls to
-  // the first real model when `model` isn't in the list (initial, or after a live upgrade).
-  const models = toModelRows(state.modelCatalog[state.cli]);
-  const selectedModel = models.some((m) => m.value === model) ? model : (models[0]?.value ?? "default");
+  // An omitted override follows the first recommended model; unknown explicit IDs
+  // remain visible so a failed catalog lookup cannot mislabel the running model.
+  const models = state.modelCatalog[state.cli].map(o => ({ value: o.value ?? "default", label: o.chipLabel, desc: o.description }));
+  const selectedOption = findChatModelOption(state.modelCatalog[state.cli], model);
+  const selectedModel = selectedOption?.value ?? model ?? "default";
+  if (model && model !== "default" && !selectedOption) models.push({ value: model, label: model, desc: "Selected model · absent from current CLI catalog" });
+  const effortOptions = modelEffortOptions(selectedOption);
+  useEffect(() => {
+    if (effort !== "default" && selectedOption?.supportedEfforts && !selectedOption.supportedEfforts.includes(effort)) {
+      send({ type: "effort" });
+    }
+  }, [state.cli, selectedModel, selectedOption, effort, send]);
   const engineAccent = ENGINE_ACCENTS[state.cli];
   // The custom chip appears only once the host reports a stored endpoint config.
   const engines: Cli[] = state.customEngine?.masked ? ["claude", "codex", "custom"] : ["claude", "codex"];
@@ -276,6 +267,10 @@ export function Composer() {
     rec.start();
   }
   function changeMode(v: string) {
+    if (!MODES[state.cli].some(option => option.value === v)) {
+      setSlashNotice("Supported modes: " + MODES[state.cli].map(option => option.value).join(", "));
+      return;
+    }
     send({ type: "mode", mode: v });
   }
   const [attached, setAttached] = useState<(ImageInput & { dataUrl: string })[]>([]);
@@ -346,7 +341,7 @@ export function Composer() {
       if (m) {
         subCmd = 'effort';
         const prefix = (m[1] || '').toLowerCase();
-        const options = EFFORTS.map(o => ({ name: o.value, desc: o.label, insert: '/effort ' + o.value }));
+        const options = effortOptions.map(o => ({ name: o.value, desc: o.label, insert: '/effort ' + o.value }));
         activeMatches = options.filter(opt => opt.name.toLowerCase().startsWith(prefix));
       }
     }
@@ -476,7 +471,9 @@ export function Composer() {
           if (arg) changeMode(arg);
           setText(""); return;
         case "effort":
-          if (arg) { setEffort(arg); send({ type: "effort", effort: arg === "default" ? undefined : arg }); }
+          if (arg && arg !== "default" && !normalizeModelEffort(selectedOption, arg)) {
+            setSlashNotice("Supported effort levels: " + effortOptions.map(o => o.value).join(", "));
+          } else if (arg) send({ type: "effort", effort: arg === "default" ? undefined : arg });
           setText(""); return;
         case "login": {
           // Only the two binaries hold accounts. On the custom engine, "signing in"
@@ -581,7 +578,7 @@ export function Composer() {
           })}
         </div>
         <button
-          onClick={() => setControlsOpen((o) => !o)}
+          onClick={() => { if (!controlsOpen) send({ type: "getModelOptions" }); setControlsOpen((o) => !o); }}
           className="an-term-chip shrink-0"
           aria-label="Model and mode settings"
           aria-expanded={controlsOpen}
@@ -598,7 +595,7 @@ export function Composer() {
           )}
           {(state.contextTokens !== undefined || state.isCompacting) && (() => {
             const tokens = state.contextTokens ?? 0;
-            const win = state.cli === "custom" ? undefined : state.contextWindow ?? (state.cli === "codex" ? 256_000 : 200_000);
+            const win = state.contextWindow;
             return <CtxDot tokens={tokens} window={win} compacting={state.isCompacting} />;
           })()}
           {queueCount > 0 && (
@@ -620,7 +617,7 @@ export function Composer() {
                   label="Model"
                   value={selectedModel}
                   options={models.map((m) => ({ value: m.value, label: m.label }))}
-                  onPick={(v) => { setModel(v); send({ type: "model", model: v === "default" ? undefined : v }); }}
+                  onPick={(v) => send({ type: "model", model: v === "default" ? undefined : v })}
                 />
                 {/* version/detail of the selected model, from the shared catalog */}
                 <p className="an-term-mono text-[9px] uppercase leading-snug" style={{ color: "var(--an-term-fg-7)", letterSpacing: "0.5px" }}>
@@ -630,8 +627,8 @@ export function Composer() {
               <ChipGroup
                 label="Effort"
                 value={effort}
-                options={EFFORTS}
-                onPick={(v) => { setEffort(v); send({ type: "effort", effort: v === "default" ? undefined : v }); }}
+                options={effortOptions}
+                onPick={(v) => send({ type: "effort", effort: v === "default" ? undefined : v })}
               />
               <ChipGroup
                 label="Mode"
