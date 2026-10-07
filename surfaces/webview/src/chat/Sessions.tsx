@@ -503,6 +503,19 @@ export function Sessions({
                   {state.sessionsSynced ? `[ ${String(state.sessions.length).padStart(2, "0")} ]` : ""}
                 </span>
               </div>
+              {/* Cloud not connected: a quiet gray caption in the same terminal type as the
+                  header, pinned under it so it never blocks the local list. Taps into the
+                  storage picker. Only once the list has synced and only when there is no cloud
+                  tier, so it never competes with the reauth/transient bands above. */}
+              {online && state.sessionsSynced && state.sessionsCloud === "none" && (
+                <button
+                  onClick={() => setSettingsMode("connect")}
+                  className="an-term-mono mb-1 w-full px-1 text-left text-[9px] font-bold uppercase"
+                  style={{ color: "var(--an-term-fg-8)", letterSpacing: "1px" }}
+                >
+                  {t(M.menu.connectDriveSync)}
+                </button>
+              )}
               <div className="min-h-0 flex-1 overflow-y-auto pr-1" style={{ touchAction: "pan-y" }}>
                 {/* Offline, but some chats are cached: a calm band, then the saved list. */}
                 {!online && state.sessions.length > 0 && (

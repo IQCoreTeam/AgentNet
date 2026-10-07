@@ -209,6 +209,7 @@ export const M = {
     settings: m("Settings", "설정", "Настройки"),
     settingsSub: m("Storage, RPC, GitHub, wallet", "저장소, RPC, GitHub, 지갑", "Хранилище, RPC, GitHub, кошелёк"),
     recents: m("Recents", "최근 항목", "Недавние"),
+    connectDriveSync: m("We recommend Google Drive for sync. Tap to connect", "동기화를 위해 Google Drive 연결을 추천해요. 눌러서 연결하기", "Рекомендуем Google Drive для синхронизации. Нажмите, чтобы подключить"),
     offlineSaved: m("Offline · showing saved chats", "오프라인 · 저장된 채팅 표시", "Оффлайн · показаны сохранённые чаты"),
     cloudSignedOut: m("Cloud sync signed out · showing this device only · reconnect in Storage", "클라우드 동기화 로그아웃됨 · 이 기기만 표시 · 저장소에서 재연결", "Облачная синхронизация вышла · показано только это устройство · переподключите в Хранилище"),
     cloudUnreachable: m("Cloud unreachable · showing this device only", "클라우드 연결 불가 · 이 기기만 표시", "Облако недоступно · показано только это устройство"),

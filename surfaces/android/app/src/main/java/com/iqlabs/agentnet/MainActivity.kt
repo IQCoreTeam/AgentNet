@@ -19,6 +19,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -275,6 +276,22 @@ class MainActivity : AppCompatActivity() {
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_POST_NOTIFICATIONS)
         }
+
+        // Back must NOT finish this single-activity app. We are one Android Activity hosting a
+        // WebView SPA whose screens (wallet chooser, settings, a pending wallet connect) are React
+        // state, not entries on the Android back stack — so a RETURN_TO_HOME back gesture would
+        // finish() the Activity, hit onDestroy, and tear down the node server, resetting everything
+        // to a fresh guest. That is exactly the "selected Phantom, bounced back to the wallet
+        // chooser" bug: the user swiped back out of the (slow) wallet round-trip and the back
+        // killed the server mid-connect. Route back like HOME instead — moveTaskToBack keeps the
+        // Activity (and the server) alive and the WebView resumes with its state intact. In-app
+        // up-navigation is handled by the on-screen back buttons; a real close is recents-swipe.
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (::webView.isInitialized && webView.canGoBack()) webView.goBack()
+                else moveTaskToBack(true)
+            }
+        })
 
         startServerFlow()
     }
@@ -562,13 +579,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        // Only a real close (back button / finish(), isFinishing=true) reaches here and tears
-        // down the server. Backgrounding (HOME, the recents/edge-swipe gesture) is onStop with
-        // isFinishing=false and NO onDestroy — the server stays alive and the WebView resumes
-        // untouched. server.stop() kills the whole proot→node guest tree (see ServerManager).
-        if (::googleTokenServer.isInitialized) googleTokenServer.stop()
-        stopService(Intent(this, ServerService::class.java)) // no orphaned foreground notif
-        server.stop()
+        // Tear the server down only on a genuine close. Back no longer reaches here (it routes to
+        // moveTaskToBack, see onCreate), and HOME/recents backgrounding is onStop without onDestroy
+        // — so onDestroy now means either a recents-swipe close (isFinishing, keep stopping) or a
+        // config-change recreate (isChangingConfigurations, must NOT kill the server or the
+        // recreated Activity would cold-start a guest and drop the session). Guard accordingly.
+        // server.stop() kills the whole proot→node guest tree (see ServerManager).
+        if (isFinishing && !isChangingConfigurations) {
+            if (::googleTokenServer.isInitialized) googleTokenServer.stop()
+            stopService(Intent(this, ServerService::class.java)) // no orphaned foreground notif
+            server.stop()
+        }
         super.onDestroy()
     }
 }
