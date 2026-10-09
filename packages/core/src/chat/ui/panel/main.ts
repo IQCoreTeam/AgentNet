@@ -10,7 +10,7 @@ import { log, approvalDock } from "./dom.js";
 import { escapeHtml } from "./markdown.js";
 import { syncWatermark, renderNotice, renderEngineBanner, renderLimitMeter, setCtxTokens, clearCtx, copyAction, renderEngineMissing, renderStatus, showLoading, hideLoading, wireShell } from "./shell.js";
 import { wireSlash } from "./slash.js";
-import { CODEX_UPDATE_CMD, applyModelOptions, hideCustomTab, setTab, showCustomTab, wireEngine } from "./engine.js";
+import { CODEX_UPDATE_CMD, applyModelOptions, effortByCli, fillModels, fillModes, hideCustomTab, modeByCli, modelByCli, setTab, showCustomTab, wireEngine } from "./engine.js";
 import "./format.js";
 import "./turns.js";
 import { dismissApproval, renderApproval } from "./approval.js";
@@ -63,6 +63,13 @@ window.addEventListener('message', (event) => {
     // doubles as the reveal signal for the hidden tab
     if (m.cli === 'custom') showCustomTab();
     applyModelOptions(m.cli, m.options);
+  }
+  else if (m.type === 'settings') {
+    if (m.cli !== 'claude' && m.cli !== 'codex' && m.cli !== 'custom') return;
+    modelByCli[m.cli] = m.model && m.model !== 'default' ? m.model : null;
+    effortByCli[m.cli] = m.effort || 'default';
+    if (m.mode) modeByCli[m.cli] = m.mode;
+    if (m.cli === S.cli) { fillModels(); fillModes(); }
   }
   else if (m.type === 'usage') {
     // per-chat context tokens — the secondary chip, revealed by clicking the usage gauge

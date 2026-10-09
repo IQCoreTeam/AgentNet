@@ -26,12 +26,10 @@ function modelToOption(model: ModelInfo): ChatModelOption {
   const lead = desc?.split(" · ")[0]?.trim(); // "Fable 5" or "Opus 5 with 1M context"
   if (model.value === "default" && lead) {
     // The CLI's "Default (recommended)" hides the real model name in its description.
-    // This entry auto-follows the CLI's recommendation, so "default" is implied by it
-    // being the first/selected entry — we don't spell it out. Show the plain resolved
-    // model name ("Opus 5") instead of a "Default · " prefix; the picker highlight already
-    // marks which entry is active.
-    full = lead;
-    chip = lead.split(" with ")[0].trim(); // "Opus 5"
+    // Keep the alias visible: default can resolve to the same model as opus,
+    // but follows the CLI recommendation when it changes.
+    full = "Default · " + lead;
+    chip = "Default · " + lead.split(" with ")[0].trim(); // "Opus 5"
   } else if (lead && lead.toLowerCase().startsWith(displayName.toLowerCase())) {
     // Relabel ONLY when the lead is "<family> <version>" — a version token being digits with
     // optional dotted minors ("Fable" → "Fable 5", "Haiku" → "Haiku 4.5"). Anything else after
@@ -46,6 +44,8 @@ function modelToOption(model: ModelInfo): ChatModelOption {
   }
   const extra = `Claude alias: ${model.value}`;
   return {
+    resolvedModel: model.resolvedModel,
+    supportedEfforts: model.supportsEffort ? model.supportedEffortLevels ?? [] : [],
     value: model.value,
     chipLabel: chip,
     label: full,
@@ -97,9 +97,17 @@ export async function listClaudeModelOptions(cwd?: string): Promise<ChatModelOpt
     }
     console.error(`[claudeModels] loaded ${models.length} models: ${models.map((m) => m.value).join(", ")}`);
 
-    // No bare "default" entry: supportedModels() already lists the CLI's recommended model
-    // first, so the picker defaults to it and shows its real name instead of "default".
-    return models.map(modelToOption);
+    const options = models.map(modelToOption);
+    const recommended = options.find(option => option.value === "default");
+    const resolved = recommended?.label.replace(/^Default · /, "");
+    const explicit = options.find(option => option.value !== "default" && (
+      recommended?.resolvedModel && option.resolvedModel
+        ? recommended.resolvedModel === option.resolvedModel
+        : option.label === resolved
+    ));
+    // The recommendation often resolves to an alias already in the list. Show that
+    // model once, first; an omitted model override still follows the CLI default.
+    return explicit ? [explicit, ...options.filter(option => option !== explicit && option !== recommended)] : options;
   } catch (e) {
     console.error(`[claudeModels] probe failed (${(e as Error)?.message || e}); falling back to static baseline`);
     return null;

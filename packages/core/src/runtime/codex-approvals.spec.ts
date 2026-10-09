@@ -23,14 +23,14 @@ describe.each([
   { cli: "custom", sessionId: "existing-thread" },
 ] as const)("Codex startup and usage ($cli, session $sessionId)", ({ cli, sessionId }) => {
   it.each([
-    { mode: "auto", override: "", policy: "on-request", sandbox: "workspace-write" },
-    { mode: "readonly", override: "", policy: "on-request", sandbox: "read-only" },
-    { mode: "full", override: "", policy: "never", sandbox: "danger-full-access" },
-    { mode: undefined, override: "", policy: "on-request", sandbox: undefined },
-    { mode: "auto", override: "danger-full-access", policy: "on-request", sandbox: "danger-full-access" },
-    { mode: "readonly", override: "danger-full-access", policy: "on-request", sandbox: "danger-full-access" },
-    { mode: "full", override: "danger-full-access", policy: "never", sandbox: "danger-full-access" },
-  ])("$mode with sandbox override '$override'", async ({ mode, override, policy, sandbox }) => {
+    { mode: "auto", override: "", policy: "on-request", sandbox: "workspace-write", effort: "high" },
+    { mode: "readonly", override: "", policy: "on-request", sandbox: "read-only", effort: "ultra" },
+    { mode: "full", override: "", policy: "never", sandbox: "danger-full-access", effort: undefined },
+    { mode: undefined, override: "", policy: "on-request", sandbox: "workspace-write", effort: "default" },
+    { mode: "auto", override: "danger-full-access", policy: "on-request", sandbox: "danger-full-access", effort: undefined },
+    { mode: "readonly", override: "danger-full-access", policy: "on-request", sandbox: "danger-full-access", effort: undefined },
+    { mode: "full", override: "danger-full-access", policy: "never", sandbox: "danger-full-access", effort: undefined },
+  ])("$mode with sandbox override '$override' and effort '$effort'", async ({ mode, override, policy, sandbox, effort }) => {
     vi.stubEnv("AGENTNET_CODEX_SANDBOX", override);
     const requests: { id: number; method: string; params: Record<string, unknown> }[] = [];
     const stdout = new PassThrough();
@@ -60,7 +60,7 @@ describe.each([
     });
     vi.mocked(spawn).mockReturnValue(child as unknown as ReturnType<typeof spawn>);
     const approve = vi.fn(async () => ({ outcome: "once" as "once" | "deny" | "always" }));
-    const engine = spawnCli({ approval: { request: approve }, cli, cwd: process.cwd(), mode, sessionId, ...(cli === "custom" ? { custom: { baseUrl: "http://127.0.0.1:11669/v1", model: "mock-model", apiKey: "", presetId: "manual" } } : {}) });
+    const engine = spawnCli({ approval: { request: approve }, cli, cwd: process.cwd(), mode, effort, sessionId, ...(cli === "custom" ? { custom: { baseUrl: "http://127.0.0.1:11669/v1", model: "mock-model", apiKey: "", presetId: "manual" } } : {}) });
     const usage = vi.fn();
     engine.onUsage(usage);
     const opened = vi.fn();
@@ -73,10 +73,26 @@ describe.each([
       expect(requests[1].params).toMatchObject({ approvalPolicy: policy, approvalsReviewer: "user" });
       expect(requests[1].params.sandbox).toBe(sandbox);
       expect(requests[1].params.modelProvider).toBe(cli === "custom" ? "custom" : undefined);
+      expect(requests[1].params).not.toHaveProperty("reasoning_effort");
+      if (effort && effort !== "default") {
+        expect(requests[1].params.config).toEqual({ model_reasoning_effort: effort });
+      } else {
+        expect(requests[1].params).not.toHaveProperty("config");
+      }
+      engine.send("Fixture turn");
+      await vi.waitFor(() => expect(requests.find(r => r.method === "turn/start")).toBeDefined());
+      const turn = requests.find(r => r.method === "turn/start")!;
+      expect(turn.params).toMatchObject({ threadId: sessionId ?? "new-thread", input: [{ type: "text", text: "Fixture turn", text_elements: [] }] });
+      expect(turn.params).not.toHaveProperty("reasoning_effort");
+      if (effort && effort !== "default") {
+        expect(turn.params.effort).toBe(effort);
+      } else {
+        expect(turn.params).not.toHaveProperty("effort");
+      }
       stdout.write(JSON.stringify({ method: "thread/tokenUsage/updated", params: {
         tokenUsage: { last: { totalTokens: 1000 } },
       } }) + "\n");
-      expect(usage).toHaveBeenLastCalledWith(1000, cli === "custom" ? undefined : 256000);
+      expect(usage).toHaveBeenLastCalledWith(1000, undefined);
       // A second turn adds to billed totals, not to current context occupancy.
       for (const [total, last] of [[40000, 20000], [60000, 21000], [61000, 1000]]) {
         stdout.write(JSON.stringify({ method: "thread/tokenUsage/updated", params: {
@@ -84,6 +100,18 @@ describe.each([
         } }) + "\n");
         expect(usage).toHaveBeenLastCalledWith(last, cli === "custom" ? undefined : 32000);
       }
+      for (const modelContextWindow of [null, 0, -1]) {
+        stdout.write(JSON.stringify({ method: "thread/tokenUsage/updated", params: {
+          tokenUsage: { last: { totalTokens: 1200 }, modelContextWindow },
+        } }) + "\n");
+        expect(usage).toHaveBeenLastCalledWith(1200, undefined);
+      }
+      const usageCalls = usage.mock.calls.length;
+      stdout.write(JSON.stringify({ method: "turn/completed", params: {
+        turn: { id: "fixture-turn", status: "completed", items: [] },
+        usage: { input_tokens: 99000, cached_input_tokens: 99000 },
+      } }) + "\n");
+      expect(usage).toHaveBeenCalledTimes(usageCalls);
       for (const [id, outcome] of (["once", "deny", "always"] as const).entries()) {
         approve.mockResolvedValueOnce({ outcome });
         stdout.write(JSON.stringify({ id: 100 + id, method: "mcpServer/elicitation/request", params: {

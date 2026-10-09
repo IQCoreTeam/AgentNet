@@ -24,6 +24,7 @@ function modelToOption(model: Model): ChatModelOption {
   const desc = model.description?.trim();
   const extra = `exact value: ${model.model}`;
   return {
+    supportedEfforts: model.supportedReasoningEfforts?.map(o => o.reasoningEffort) ?? [],
     value: model.model,
     chipLabel: display,
     label: display,

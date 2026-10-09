@@ -666,7 +666,6 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
   // resolved inside (registered Helius key wins; else env; else public-devnet default).
   const marketPromise = marketplaceEnv(wallet!);
   const codexModelOptionsPromise = listCodexModelOptions().catch(() => null);
-  const claudeModelOptionsPromise = listClaudeModelOptions(getCwd()).catch(() => null);
   // Engine health, outdated leg: the codex probe flags a stale models cache (binary too
   // old to parse it, so newer models exist but stay hidden). Tell the panel once.
   void codexModelOptionsPromise.then((r) => {
@@ -679,7 +678,7 @@ async function openChat(context: vscode.ExtensionContext, column = vscode.ViewCo
     modelOptions: async (cli) =>
       cli === "custom"
         ? await loadCustomEngineConfig().then((cfg) => (cfg ? customModelOption(cfg.model, cfg.label) : null)).catch(() => null)
-        : cli === "codex" ? (await codexModelOptionsPromise)?.options ?? null : await claudeModelOptionsPromise,
+        : cli === "codex" ? (await listCodexModelOptions().catch(() => null))?.options ?? null : await listClaudeModelOptions(getCwd()).catch(() => null),
     searchSkills: async (query, kind) => (await marketPromise).searchSkills(query, kind),
     getSkillDetail: async (mint) => (await marketPromise).getSkillDetail(mint),
     // local SKILL.md body for the equipped-skill popup (mint-less skills); without this

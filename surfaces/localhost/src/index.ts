@@ -1105,25 +1105,20 @@ function attachChat(id: string, c: Client, rt: AgentRuntime) {
     onRecv: (cb: (m: any) => void) => { c.recvs.push(cb); },
   };
   const approval = withTimeout(new TransportApprovalChannel(transport));
-  // claude lister is nullable (probe can fail); reuse its type for both caches so the
-  // codex `.catch(() => null)` widening is allowed too.
-  type ModelOpts = Awaited<ReturnType<typeof listClaudeModelOptions>>;
-  let codexModelOptionsPromise: Promise<ModelOpts> | null = null;
-  let claudeModelOptionsPromise: Promise<ModelOpts> | null = null;
   const chat = createChatSession(rt, transport, {
     cwd: () => process.cwd(),
     approval,
     // Live model catalog from the installed CLI (same auth, no extra cost); the picker
-    // falls back to the static baseline when the probe returns null. Cached per engine so
-    // the subprocess spins up once, not on every picker open. The custom engine has no
+    // falls back to the static baseline when the probe returns null. Refreshed on
+    // demand, with concurrent probes deduplicated by the dispatcher. The custom engine has no
     // probe: its one model is whatever the stored endpoint config names (uncached, so a
     // re-save shows up on the next picker open).
     modelOptions: async (cli) =>
       cli === "custom"
         ? await loadCustomEngineConfig().then((cfg) => (cfg ? customModelOption(cfg.model, cfg.label) : null)).catch(() => null)
         : cli === "codex"
-          ? await (codexModelOptionsPromise ??= listCodexModelOptions().then((r) => r.options).catch(() => null))
-          : await (claudeModelOptionsPromise ??= listClaudeModelOptions(process.cwd()).catch(() => null)),
+          ? await listCodexModelOptions().then((r) => r.options).catch(() => null)
+          : await listClaudeModelOptions(process.cwd()).catch(() => null),
     walletAddress: () => walletAddress,
     storageInfo: async () => ({ info: await getStorageInfo(), options: STORAGE_OPTIONS, googleCredsConfigured: await hasGoogleCreds() }),
     connectCloud: async (cfg) => {

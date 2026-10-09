@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import type { EngineKey } from "@iqlabs-official/agent-sdk";
+import { findChatModelOption } from "@iqlabs-official/agent-sdk/chat/modelOptions";
 import { MODELS, loadModelOptions } from "../models.js";
 import { colors, rule } from "../theme.js";
 import { displayWidth } from "../format.js";
@@ -34,12 +35,13 @@ export function ModelPicker({
     loadModelOptions(cli).then((catalog) => {
       if (!alive) return;
       setOpts(catalog);
-      setLive(true);
+      setLive(catalog !== MODELS[cli]);
+      setIdx(Math.max(0, catalog.indexOf(findChatModelOption(catalog, current)!)));
     });
     return () => {
       alive = false;
     };
-  }, [cli]);
+  }, [cli, current]);
   const [idx, setIdx] = useState(Math.max(0, MODELS[cli].findIndex((o) => o.value === current)));
 
   // opts can shrink/grow when the live catalog replaces the baseline; keep idx in range.
@@ -59,10 +61,11 @@ export function ModelPicker({
   const sideW = innerW >= 64 ? Math.min(38, Math.floor(innerW * 0.42)) : 0;
   const listW = innerW - sideW;
 
-  const isCurrent = (o: { value?: string }) => o.value === current || (!o.value && !current);
-  const currentLabel = (opts.find(isCurrent)?.label ?? "default").toUpperCase();
+  const selected = findChatModelOption(opts, current);
+  const isCurrent = (o: { value?: string }) => o === selected;
+  const currentLabel = (selected?.label ?? current ?? "default").toUpperCase();
   const focusedDesc = opts[safeIdx]?.description ?? "";
-  const sourceCaption = live ? "READ FROM THE INSTALLED CLI" : "BUILT-IN LIST · READING CLI…";
+  const sourceCaption = cli === "custom" ? "CONFIGURED ENDPOINT" : live ? "READ FROM THE INSTALLED CLI" : "BUILT-IN LIST";
 
   return (
     <Box flexDirection="column" width={totalW} borderStyle="bold" borderColor={colors.bone}>

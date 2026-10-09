@@ -14,6 +14,7 @@ import {
 } from "react";
 import { Transport } from "../transport/client";
 import { openExternalUrl } from "../platform/openExternalUrl";
+import { DEFAULT_SELECTION_PREFERENCES, readSelectionPreferences, writeSelectionPreferences, type SelectionPreferences } from "./selectionPreferences";
 import { isAndroidWallet, signAndroidTransaction, restoreAndroidWallet } from "../onboarding/androidWallet";
 import { providerSignBase64 } from "@iqlabs-official/agent-sdk/account/webWallet";
 import type {
@@ -33,7 +34,7 @@ import type {
   Reputation,
 } from "../transport/protocol";
 // leaf subpath (not the barrel) so the browser bundle doesn't drag in the Node-only SDK.
-import { CHAT_MODEL_OPTIONS, type ChatModelOption } from "@iqlabs-official/agent-sdk/chat/modelOptions";
+import { CHAT_MODEL_OPTIONS, findChatModelOption, type ChatModelOption } from "@iqlabs-official/agent-sdk/chat/modelOptions";
 
 export type FiringSkill = { name: string; kind: "skill" | "workflow"; origin: "nft"; mint: string };
 
@@ -150,7 +151,8 @@ export interface State {
   // Unlike context, this is NOT reset on a new chat — it tracks the plan, not the session.
   rateLimits: Partial<Record<Cli, Extract<ServerMessage, { type: "rateLimit" }>>>;
   isCompacting: boolean;
-  currentModel?: string;
+  modelByCli: Record<Cli, string>;
+  effortByCli: Record<Cli, string>;
   // live model catalog per engine, seeded from the static baseline and upgraded when the
   // server pushes `modelOptions` (the installed CLI's real list, e.g. Fable/Sonnet-1M).
   modelCatalog: Record<Cli, ChatModelOption[]>;
@@ -191,7 +193,7 @@ export const initialState: State = {
   rateLimits: {},
   phase: "connecting",
   walletAddress: null,
-  cli: "claude",
+  cli: DEFAULT_SELECTION_PREFERENCES.cli,
   cliReport: null,
   customEngine: null,
   engineVersions: null,
@@ -244,7 +246,8 @@ export const initialState: State = {
   publishProgress: null,
   publishKind: null,
   firingSkills: [],
-  currentModel: undefined,
+  modelByCli: DEFAULT_SELECTION_PREFERENCES.modelByCli,
+  effortByCli: DEFAULT_SELECTION_PREFERENCES.effortByCli,
   modelCatalog: { claude: CHAT_MODEL_OPTIONS.claude, codex: CHAT_MODEL_OPTIONS.codex, custom: CHAT_MODEL_OPTIONS.custom },
   queuePending: 0,
   agents: [],
@@ -329,13 +332,15 @@ type LocalAction =
   | { type: "__marketSearching" }
   | { type: "__clearMarketDetail" }
   | { type: "__clearPublishResult" }
-  | { type: "__modelChange"; model: string }
+  | { type: "__restorePreferences"; prefs: SelectionPreferences }
+  | { type: "__modelChange"; cli: Cli; model: string }
+  | { type: "__effortChange"; cli: Cli; effort: string }
   | { type: "__queueMsg"; text: string }
   | { type: "__dequeueMsg" }
   | { type: "__loadingAgents" }
   | { type: "__loadingAgentProfile" }
   | { type: "__clearAgentProfile" }
-  | { type: "__changeMode"; mode: string }
+  | { type: "__changeMode"; cli: Cli; mode: string }
   | { type: "__clearFiringSkill" }
   | { type: "__setToast"; text: string }
   | { type: "__openingSession"; sessionId: string }
@@ -445,7 +450,7 @@ export function reducer(state: State, ev: Action): State {
       return {
         ...state,
         contextTokens: ev.contextTokens,
-        contextWindow: ev.contextWindow ?? state.contextWindow,
+        contextWindow: state.cli === "custom" ? undefined : ev.contextWindow,
       };
     case "rateLimit":
       // core reports a rejected window as 100; a frame without a reading keeps the last
@@ -525,7 +530,7 @@ export function reducer(state: State, ev: Action): State {
     // round-trip, which left the screen on the stale chat with no feedback. The server's
     // messages/page/sessions then reconcile this.
     case "__openingSession":
-      return { ...state, activeSessionId: ev.sessionId, loading: true, log: [], typing: false, hasMore: false, firingSkills: [] };
+      return { ...state, activeSessionId: ev.sessionId, loading: true, log: [], typing: false, hasMore: false, cursor: 0, contextTokens: undefined, contextWindow: undefined, firingSkills: [] };
     case "__newChat":
       return {
         ...state,
@@ -542,6 +547,17 @@ export function reducer(state: State, ev: Action): State {
       };
     case "platform":
       return { ...state, cli: ev.cli };
+    case "__restorePreferences":
+      return { ...state, ...ev.prefs, modeByCli: { ...initialState.modeByCli } };
+    case "settings":
+      if (ev.sessionId && state.activeSessionId && ev.sessionId !== state.activeSessionId) return state;
+      return {
+        ...state,
+        modelByCli: { ...state.modelByCli, [ev.cli]: ev.model || "default" },
+        effortByCli: { ...state.effortByCli, [ev.cli]: ev.effort || "default" },
+        modeByCli: { ...state.modeByCli, [ev.cli]: ev.mode ?? initialState.modeByCli[ev.cli] },
+        ...(ev.cli === state.cli && state.modelByCli[ev.cli] !== (ev.model || "default") ? { contextTokens: undefined, contextWindow: undefined } : {}),
+      };
     case "storage":
       return { ...state, storage: { info: ev.info, options: ev.options, googleCredsConfigured: ev.googleCredsConfigured } };
     case "googleCredsStatus":
@@ -565,15 +581,19 @@ export function reducer(state: State, ev: Action): State {
       return { ...state, toast: ev.text };
     case "status": {
       const s = ev.status;
-      const win = s.contextWindow ?? (s.cli === "claude" ? 200_000 : 256_000);
+      if (s.sessionId && state.activeSessionId && s.sessionId !== state.activeSessionId) return state;
+      const win = s.cli === "custom" ? undefined : s.contextWindow;
       const fmtK = (n: number) => n >= 1000 ? Math.round(n / 1000) + "k" : String(n);
       const ctx = s.contextTokens === undefined
         ? ""
-        : s.cli === "custom"
-          ? `, ctx ${fmtK(s.contextTokens)} tokens (provider limit unknown)`
+        : !win
+          ? `, ctx ${fmtK(s.contextTokens)} tokens (${s.cli === "custom" ? "provider limit unknown" : "model limit unverified"})`
           : `, ctx ${fmtK(s.contextTokens)} / ${fmtK(win)} (${Math.round((s.contextTokens / win) * 100)}%)`;
       return {
         ...state,
+        modelByCli: { ...state.modelByCli, [s.cli]: s.model || "default" },
+        effortByCli: { ...state.effortByCli, [s.cli]: s.effort || "default" },
+        modeByCli: { ...state.modeByCli, [s.cli]: s.mode ?? initialState.modeByCli[s.cli] },
         toast: `${s.cli}: model ${s.model ?? "default"}, mode ${s.mode ?? "default"}, effort ${s.effort ?? "default"}${ctx}`,
       };
     }
@@ -599,9 +619,12 @@ export function reducer(state: State, ev: Action): State {
     case "__modelChange":
       return {
         ...state,
-        currentModel: ev.model,
+        modelByCli: { ...state.modelByCli, [ev.cli]: ev.model },
+        ...(ev.cli === state.cli ? { contextTokens: undefined, contextWindow: undefined } : {}),
         log: [...state.log, { role: "summary" as const, text: `─── model: ${ev.model} ───` }],
       };
+    case "__effortChange":
+      return { ...state, effortByCli: { ...state.effortByCli, [ev.cli]: ev.effort } };
     case "__queueMsg":
       return {
         ...state,
@@ -747,7 +770,7 @@ export function reducer(state: State, ev: Action): State {
         ...state,
         modeByCli: {
           ...state.modeByCli,
-          [state.cli]: ev.mode,
+          [ev.cli]: ev.mode,
         },
       };
     case "__clearFiringSkill":
@@ -830,19 +853,115 @@ async function handleSignTransaction(t: Transport, id: string, txBase64: string)
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [state, raw] = useReducer(reducer, initialState);
+  const [state, raw] = useReducer(reducer, initialState, (base) => ({ ...base, ...readSelectionPreferences(null) }));
   const transportRef = useRef<Transport | null>(null);
+  const transportEpoch = useRef(0);
+  const postQueue = useRef<Promise<void>>(Promise.resolve());
+  const preferenceWallet = useRef<string | null>(null);
+  const preferences = useRef<SelectionPreferences>({ cli: state.cli, modelByCli: state.modelByCli, effortByCli: state.effortByCli });
+  const pendingSettings = useRef<string | null>("boot");
+  const settingsRequest = useRef(0);
+  const liveCatalogs = useRef(new Map<Cli, ChatModelOption[]>());
+  const deferredEfforts = useRef(new Set<Cli>());
   const msgQueue = useRef<{ text: string; images?: ImageInput[] }[]>([]);
   const busyRef = useRef(false);
   const perfLoadStart = useRef<number | null>(null); // perf diag: session-open timing
 
+  function postMessages(messages: ClientMessage[]) {
+    const t = transportRef.current;
+    const epoch = transportEpoch.current;
+    if (!t) return;
+    postQueue.current = postQueue.current.catch(() => {}).then(async () => {
+      for (const msg of messages) {
+        if (epoch !== transportEpoch.current) return;
+        await t.post(msg);
+      }
+    });
+  }
+
+  function restoreSelections(ready: boolean) {
+    const prefs = preferences.current;
+    if (prefs.effortByCli[prefs.cli] !== "default") deferredEfforts.current.add(prefs.cli);
+    else deferredEfforts.current.delete(prefs.cli);
+    const requestId = `selection-${++settingsRequest.current}`;
+    pendingSettings.current = requestId;
+    postMessages([
+      { type: "platform", cli: prefs.cli },
+      { type: "model", model: prefs.modelByCli[prefs.cli] === "default" ? undefined : prefs.modelByCli[prefs.cli] },
+      { type: "effort", effort: prefs.effortByCli[prefs.cli] === "default" ? undefined : prefs.effortByCli[prefs.cli] },
+      ...(ready ? [{ type: "ready" } as const] : []),
+      { type: "getSettings", requestId },
+    ]);
+  }
+
+  function savePreferences(next: SelectionPreferences) {
+    preferences.current = next;
+    writeSelectionPreferences(preferenceWallet.current, next);
+  }
+
+  function saveSelectionSnapshot(snapshot: { cli: Cli; model?: string; effort?: string }) {
+    const desiredEffort = preferences.current.effortByCli[snapshot.cli];
+    const actualEffort = snapshot.effort || "default";
+    const option = findChatModelOption(liveCatalogs.current.get(snapshot.cli) ?? [], snapshot.model);
+    // Failed catalog discovery must not erase a saved choice. Keep it for a later
+    // capability report while displaying the backend's actual default in current state.
+    const awaitingEngine = deferredEfforts.current.has(snapshot.cli) && snapshot.cli !== preferences.current.cli && option?.supportedEfforts?.includes(desiredEffort);
+    const retainEffort = desiredEffort !== "default" && actualEffort === "default" && (!option?.supportedEfforts || awaitingEngine);
+    if (retainEffort) deferredEfforts.current.add(snapshot.cli);
+    else deferredEfforts.current.delete(snapshot.cli);
+    savePreferences({
+      ...preferences.current,
+      modelByCli: { ...preferences.current.modelByCli, [snapshot.cli]: snapshot.model || "default" },
+      effortByCli: { ...preferences.current.effortByCli, [snapshot.cli]: retainEffort ? desiredEffort : actualEffort },
+    });
+  }
+
   useEffect(() => {
     const t = new Transport();
     transportRef.current = t;
+    transportEpoch.current += 1;
+    liveCatalogs.current.clear();
     const off = t.onEvent((msg) => {
       if (msg.type === "signTransaction") {
         void handleSignTransaction(t, msg.id, msg.tx);
         return;
+      }
+      const wallet = msg.type === "wallet" || msg.type === "walletConnected" ? msg.address : msg.type === "init" && msg.hasWallet === false ? null : undefined;
+      if (wallet !== undefined && wallet !== preferenceWallet.current) {
+        preferenceWallet.current = wallet;
+        preferences.current = readSelectionPreferences(wallet);
+        deferredEfforts.current.clear();
+        pendingSettings.current = "boot";
+        raw({ type: "__restorePreferences", prefs: preferences.current });
+      }
+      if (msg.type === "settings") {
+        // A new SSE client starts with engine defaults. Wait for the acknowledgement
+        // queued AFTER our saved model/effort before projecting or persisting its snapshot.
+        if (pendingSettings.current && msg.requestId !== pendingSettings.current) return;
+        if (msg.sessionId && stateRef.current.activeSessionId && msg.sessionId !== stateRef.current.activeSessionId) return;
+        pendingSettings.current = null;
+        saveSelectionSnapshot(msg);
+      }
+      if (msg.type === "modelOptions" && msg.options.length) {
+        liveCatalogs.current.set(msg.cli, msg.options);
+        const desiredEffort = preferences.current.effortByCli[msg.cli];
+        const option = findChatModelOption(msg.options, preferences.current.modelByCli[msg.cli]);
+        if (desiredEffort !== "default" && option?.supportedEfforts) {
+          if (!option.supportedEfforts.includes(desiredEffort)) {
+            deferredEfforts.current.delete(msg.cli);
+            savePreferences({ ...preferences.current, effortByCli: { ...preferences.current.effortByCli, [msg.cli]: "default" } });
+          } else if (deferredEfforts.current.has(msg.cli) && msg.cli === preferences.current.cli) {
+            deferredEfforts.current.delete(msg.cli);
+            const requestId = `selection-${++settingsRequest.current}`;
+            pendingSettings.current = requestId;
+            postMessages([{ type: "effort", effort: desiredEffort }, { type: "getSettings", requestId }]);
+          }
+        }
+      }
+      if (msg.type === "status" && !pendingSettings.current) {
+        const snapshot = msg.status;
+        if (snapshot.sessionId && stateRef.current.activeSessionId && snapshot.sessionId !== stateRef.current.activeSessionId) return;
+        saveSelectionSnapshot(snapshot);
       }
       // perf diag: measure session-open from the server's `loading` to the painted
       // history. dispatch = reducer time for the message burst; paint = after the browser
@@ -864,7 +983,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     });
     t.open();
-    void t.post({ type: "ready" });
+    postMessages([{ type: "ready" }]);
     return () => {
       off();
       t.close();
@@ -898,7 +1017,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const next = msgQueue.current.shift()!;
       raw({ type: "__dequeueMsg" });
       raw({ type: "__typing" });
-      void transportRef.current?.post({ type: "send", text: next.text, images: next.images });
+      postMessages([{ type: "send", text: next.text, images: next.images }]);
     }
   }, [state.typing]);
 
@@ -911,13 +1030,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (state.phase === "chat" && !wasChat.current) {
       wasChat.current = true;
+      transportEpoch.current += 1;
+      liveCatalogs.current.clear();
       transportRef.current?.reopen();
       // reopen() spins up a FRESH client that the server binds to attachChat (runtime now
       // exists). That handler only pushes sessions + storage on "ready" — and the initial
       // ready (sent at mount) went to the now-discarded onboarding client. So re-send it,
       // or the chat lands with no session list and a stale "local only" storage pill.
-      void transportRef.current?.post({ type: "ready" });
-      void transportRef.current?.post({ type: "platform", cli: state.cli });
+      restoreSelections(true);
     } else if (state.phase !== "chat") {
       wasChat.current = false;
     }
@@ -933,9 +1053,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     if (previousWallet.current === state.walletAddress) return;
     previousWallet.current = state.walletAddress;
+    transportEpoch.current += 1;
+    liveCatalogs.current.clear();
     transportRef.current?.reopen();
-    void transportRef.current?.post({ type: "ready" });
-    void transportRef.current?.post({ type: "platform", cli: state.cli });
+    restoreSelections(true);
   }, [state.walletAddress, state.cli]);
 
   // Live-state ref so the (stable) actions can read the CURRENT state without being rebuilt
@@ -948,12 +1069,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const st = stateRef.current;
       const status = engineStatus(st, cli);
       raw({ type: "__selectEngine", cli });
+      savePreferences({ ...preferences.current, cli });
       if (!st.cliReport) {
         void transportRef.current?.post({ type: "getCliStatus" });
         return;
       }
       if (status === "ok" && st.phase === "chat") {
-        void transportRef.current?.post({ type: "platform", cli });
+        restoreSelections(false);
       }
     };
     // Engine chip/panel tap: switch which engine is active WITHOUT routing to its login
@@ -961,12 +1083,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const switchEngine = (cli: Cli) => {
       const st = stateRef.current;
       raw({ type: "__switchEngine", cli });
+      savePreferences({ ...preferences.current, cli });
       if (!st.cliReport) {
         void transportRef.current?.post({ type: "getCliStatus" });
         return;
       }
       if (engineStatus(st, cli) === "ok" && st.phase === "chat") {
-        void transportRef.current?.post({ type: "platform", cli });
+        restoreSelections(false);
       }
     };
     const send = (msg: ClientMessage) => {
@@ -999,11 +1122,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         raw({ type: "__newChat" });
       }
       // Inject inline model-switch separator into chat log.
-      if (msg.type === "model" && msg.model) {
-        raw({ type: "__modelChange", model: msg.model });
+      if (msg.type === "model") {
+        raw({ type: "__modelChange", cli: st.cli, model: msg.model || "default" });
+        savePreferences({ ...preferences.current, modelByCli: { ...preferences.current.modelByCli, [st.cli]: msg.model || "default" } });
+      }
+      if (msg.type === "effort") {
+        deferredEfforts.current.delete(st.cli);
+        raw({ type: "__effortChange", cli: st.cli, effort: msg.effort || "default" });
+        savePreferences({ ...preferences.current, effortByCli: { ...preferences.current.effortByCli, [st.cli]: msg.effort || "default" } });
       }
       if (msg.type === "mode" && typeof msg.mode === "string") {
-        raw({ type: "__changeMode", mode: msg.mode });
+        raw({ type: "__changeMode", cli: st.cli, mode: msg.mode });
       }
       // Opening an agent's profile should feel instant: show a skeleton immediately instead of a
       // dead tap while the server load round-trips. Only when NAVIGATING to a different agent (or
@@ -1011,12 +1140,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (msg.type === "getAgentProfile" && st.agentProfile?.wallet !== msg.wallet) {
         raw({ type: "__loadingAgentProfile" });
       }
-      void transportRef.current?.post(msg);
+      if (msg.type === "model" || msg.type === "effort" || msg.type === "mode" || msg.type === "open" || msg.type === "new") {
+        const requestId = `selection-${++settingsRequest.current}`;
+        pendingSettings.current = requestId;
+        postMessages([msg, { type: "getSettings", requestId }]);
+      } else {
+        postMessages([msg]);
+      }
       // After a switch, ask the approval channel to replay anything still parked — this is
       // what restores a pending question when the user returns to its session (approvals
       // only ever stream once otherwise). Ordering is safe: `clear` no longer touches
       // approvals and the snapshot replaces the list wholesale.
-      if (msg.type === "open") void transportRef.current?.post({ type: "resendApprovals" });
+      if (msg.type === "open") postMessages([{ type: "resendApprovals" }]);
     };
     return {
       send,

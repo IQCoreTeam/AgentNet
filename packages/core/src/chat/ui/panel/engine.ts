@@ -4,7 +4,7 @@
 // listener registration and boot posts keep their sequence.
 import { S } from "./state.js";
 import { engineBinary } from "../../../runtime/engineRegistry.js";
-import { CHAT_MODEL_OPTIONS } from "../../modelOptions.js";
+import { CHAT_MODEL_OPTIONS, findChatModelOption, modelEffortOptions, normalizeModelEffort } from "../../modelOptions.js";
 import { CODEX_UPDATE_COMMAND, ENGINE_INSTALL_COMMAND } from "../../../runtime/engineInstall.js";
 import { vscode } from "./host.js";
 import { composer, input, jumpBtn, modeBtn, modeEffortTag, modeLabel, modeMenu, modelBtn, modelLabel, modelMenu, tabs } from "./dom.js";
@@ -26,8 +26,8 @@ export const modelValue = (opt) => (opt && opt.value) ? opt.value : 'default';
 // The custom engine runs through the codex binary, so codex's sandbox modes are its modes:
 // one list, referenced twice, instead of a copy that could drift.
 const CODEX_MODES = [
-  { value: 'readonly', label: 'Read only',   title: 'Read-only sandbox; ask before edits, commands, network' },
-  { value: 'auto',     label: 'Auto accept', title: 'Auto-accept edits + run inside the workspace; approve on failure (default)' },
+  { value: 'readonly', label: 'Read only',   title: 'Read-only sandbox; escalation requires approval' },
+  { value: 'auto',     label: 'Auto accept', title: 'Permit workspace edits and commands; request approval for escalation' },
   { value: 'full',     label: 'Full access', title: 'Full disk + network access, never ask (use with care)' },
 ];
 export const MODES = {
@@ -40,15 +40,10 @@ export const MODES = {
   codex: CODEX_MODES,
   custom: CODEX_MODES,
 };
-// reasoning effort levels (applies to both engines; labels mirror CLI EffortPicker)
-export const EFFORTS = [
-  { value: 'default', label: 'default',  title: 'Engine default (usually medium)' },
-  { value: 'low',     label: 'low',      title: 'Minimal thinking, fastest' },
-  { value: 'medium',  label: 'medium',   title: 'Moderate reasoning' },
-  { value: 'high',    label: 'high',     title: 'Deeper thinking' },
-  { value: 'xhigh',  label: 'x-high',   title: 'Extended reasoning' },
-  { value: 'max',     label: 'max',      title: 'Maximum effort (select models)' },
-];
+// Capabilities belong to the selected model, including the engine's default entry.
+export function currentEffortOptions() {
+  return modelEffortOptions(findChatModelOption(MODELS[S.cli] || [], modelByCli[S.cli]));
+}
 // remember the chosen mode + model + effort per engine so switching tabs restores them.
 // model starts null (not 'default') so currentModel() falls to the first real model and
 // the chip shows its actual name (e.g. "Opus 4.8") instead of an opaque "default".
@@ -61,13 +56,22 @@ export function currentModel() {
   const opts = MODELS[S.cli] || [];
   return modelByCli[S.cli] || modelValue(opts[0]);
 }
+export function changeModel(model) {
+  modelByCli[S.cli] = model && model !== 'default' ? model : null;
+  const resetEffort = !currentEffortOptions().some(o => o.value === currentEffort());
+  if (resetEffort) effortByCli[S.cli] = 'default';
+  fillModels();
+  fillModes();
+  vscode.postMessage({ type: 'model', model: model || 'default' });
+  if (resetEffort) vscode.postMessage({ type: 'effort' });
+}
 // Build the model picker for the active engine: set the chip label to the current
 // model and render one popover row per model (label + actual value + a check on the
 // selected one). Keep the chip concise; put the extra detail in the picker rows.
 export function fillModels() {
   const opts = MODELS[S.cli] || [{ chipLabel: 'default', label: 'Default', description: 'No model override' }];
   const cur = currentModel();
-  const curOpt = opts.find(o => modelValue(o) === cur) || opts[0];
+  const curOpt = opts.find(o => modelValue(o) === cur);
   modelLabel.textContent = curOpt ? (curOpt.chipLabel || curOpt.label) : (cur === 'default' ? 'default' : cur);
   modelMenu.innerHTML = '';
   for (const m of opts) {
@@ -82,10 +86,8 @@ export function fillModels() {
     row.appendChild(txt); row.appendChild(chk);
     row.addEventListener('click', (e) => {
       e.stopPropagation();
-      modelByCli[S.cli] = value;
       modelMenu.style.display = 'none';
-      fillModels();
-      vscode.postMessage({ type: 'model', model: value });
+      changeModel(value);
     });
     modelMenu.appendChild(row);
   }
@@ -93,11 +95,17 @@ export function fillModels() {
 export function applyModelOptions(engine, options) {
   if (!engine || !Array.isArray(options) || !options.length) return;
   MODELS[engine] = options;
-  const cur = modelByCli[engine] || 'default';
-  const changed = !options.some((o) => modelValue(o) === cur);
+  const selected = findChatModelOption(options, modelByCli[engine]);
+  if (effortByCli[engine] !== 'default' && !normalizeModelEffort(selected, effortByCli[engine])) {
+    effortByCli[engine] = 'default';
+    if (engine === S.cli) vscode.postMessage({ type: 'effort' });
+  }
+  const cur = modelByCli[engine];
+  const changed = !!cur && !options.some((o) => modelValue(o) === cur);
   if (changed) modelByCli[engine] = modelValue(options[0]);
   if (engine === S.cli) {
     fillModels();
+    fillModes();
     if (changed) vscode.postMessage({ type: 'model', model: currentModel() });
   }
 }
@@ -113,6 +121,7 @@ function placeMenuAbove(menu: HTMLElement, anchor: DOMRect) {
   menu.style.bottom = (window.innerHeight - anchor.top + 6) + 'px';
 }
 export function openModelMenu() {
+  vscode.postMessage({ type: 'getModelOptions' });
   modelMenu.style.display = 'block';
   placeMenuAbove(modelMenu, modelBtn.getBoundingClientRect());
 }
@@ -132,7 +141,7 @@ export function fillModes() {
   // the chip carries effort as a tail, but only when it's off default — nothing to
   // report otherwise, and a bare "Auto edit" stays readable in a narrow panel
   const curEff = currentEffort();
-  const curEffOpt = EFFORTS.find(o => o.value === curEff);
+  const curEffOpt = currentEffortOptions().find(o => o.value === curEff);
   modeEffortTag.textContent = curEff === 'default' || !curEffOpt ? '' : '· ' + curEffOpt.label;
   modeMenu.innerHTML = '';
   for (const m of opts) {
@@ -159,11 +168,11 @@ export function fillModes() {
   const head = document.createElement('div'); head.className = 'mSection';
   head.textContent = 'Effort · reasoning depth';
   const chips = document.createElement('div'); chips.className = 'effChips';
-  for (const e of EFFORTS) {
+  for (const e of currentEffortOptions()) {
     const chip = document.createElement('button');
     chip.className = 'effChip' + (e.value === curEff ? ' sel' : '');
     chip.textContent = e.label;
-    if (e.title) chip.title = e.title;   // the row description survives as a tooltip
+    if (e.value === 'default') chip.title = 'Engine default';
     chip.addEventListener('click', (ev) => {
       ev.stopPropagation();
       effortByCli[S.cli] = e.value;
@@ -178,6 +187,7 @@ export function fillModes() {
 // open the popover anchored above the chip (composer sits at the bottom of the
 // panel, so it opens upward); position:fixed keeps it out of #inputWrap's clip.
 export function openModeMenu() {
+  vscode.postMessage({ type: "getModelOptions" });
   modeMenu.style.display = 'block';
   placeMenuAbove(modeMenu, modeBtn.getBoundingClientRect());
 }

@@ -8,7 +8,7 @@ import { coerceEngineKey, type EngineKey } from "@iqlabs-official/agent-sdk";
 // user finished first-run setup — so we DON'T re-onboard every launch (the "local only"
 // path writes no storage config, which previously left isInitialized() false forever) —
 // plus the last engine/model/session for a friendly resume.
-export type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
+export type EffortLevel = string;
 
 export interface Prefs {
   onboarded?: boolean;

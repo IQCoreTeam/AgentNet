@@ -104,6 +104,8 @@ export type ClientMessage =
   | { type: "open"; sessionId: string }
   | { type: "platform"; cli: Cli }
   | { type: "model"; model?: string }
+  | { type: "getModelOptions" }
+  | { type: "getSettings"; requestId?: string }
   | { type: "mode"; mode?: string }
   | { type: "effort"; effort?: string }
   | { type: "send"; text: string; images?: ImageInput[] }
@@ -219,8 +221,12 @@ export type ServerMessage =
         mode?: string;
         effort?: string;
         contextTokens?: number;
+        contextWindow?: number;
       };
     }
+  // Full selection snapshot for one engine. Absent model/effort restores its default;
+  // sessionId identifies the view so a late session-open result cannot replace a new pick.
+  | { type: "settings"; cli: Cli; sessionId?: string; model?: string; effort?: string; mode?: string; requestId?: string }
   | { type: "message"; msg: ChatMessage }
   | { type: "turnEnd" }
   | { type: "page"; hasMore: boolean; cursor: number | string }

@@ -23,3 +23,20 @@ describe("mapClaudeMessage rate_limit_event", () => {
       .toEqual({ utilization: 100, window: "seven_day", resetsAt: 1893456000000, status: "rejected" });
   });
 });
+
+describe("mapClaudeMessage context usage", () => {
+  const usage = { input_tokens: 100, cache_read_input_tokens: 200, cache_creation_input_tokens: 300, output_tokens: 40 };
+
+  it("measures the main prompt with cached input, excluding placeholder output tokens", () => {
+    expect(mapClaudeMessage({ type: "assistant", parent_tool_use_id: null, message: { content: [], usage } }).contextTokens)
+      .toBe(600);
+  });
+
+  it("does not replace the main context with a subagent's request or turn aggregate", () => {
+    expect(mapClaudeMessage({ type: "assistant", parent_tool_use_id: "agent-call", message: { content: [], usage } }).contextTokens)
+      .toBeUndefined();
+    const result = mapClaudeMessage({ type: "result", usage: { input_tokens: 99000 } });
+    expect(result.contextTokens).toBeUndefined();
+    expect(result.turnEnded).toBe(true);
+  });
+});
