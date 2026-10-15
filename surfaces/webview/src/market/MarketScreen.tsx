@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { skillCardFiring, useStore } from "../state/store";
 import { SkillSdCard } from "./SkillSdCard";
 import { SkillDetailView } from "./SkillDetailView";
+import { readSkillDrafts, type SkillDraft } from "./skillDrafts";
 import { PublishForm } from "./PublishForm";
 import { AgentDirectory } from "./AgentDirectory";
 import { BlogFeed } from "./BlogFeed";
@@ -14,7 +15,7 @@ import { LockIcon, SolIcon } from "../icons";
 import { AlertCard } from "../Alert";
 import { haptics } from "../haptics";
 
-type MarketView = "browse" | "publish" | "helius";
+type MarketView = "browse" | "publish" | "helius" | "drafts";
 export type ShellTab = "market" | "skills" | "profile";
 
 // The market-setup tutorial auto-opens the first time a wallet-less user reaches the market
@@ -37,6 +38,9 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
   // Search text is LOCAL: keying it into the global store re-rendered the whole app on every
   // keystroke. Only MarketScreen reads it, so it lives here (matches AgentDirectory's search).
   const [query, setQuery] = useState("");
+  const [drafts, setDrafts] = useState<SkillDraft[]>([]);
+  const [draftError, setDraftError] = useState("");
+  const [editingDraft, setEditingDraft] = useState<SkillDraft>();
   const [view, setView] = useState<MarketView>("browse");
   // Hide already-owned skills from the market results by default (you came to find NEW ones);
   // untick to show them too (muted/greyed).
@@ -171,12 +175,54 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
     );
   }
 
+  function openDrafts() {
+    try { setDrafts(readSkillDrafts()); setDraftError(""); }
+    catch (error) { setDraftError(error instanceof Error ? error.message : String(error)); }
+    setView("drafts");
+  }
+
+  if (view === "drafts") return (
+    <div className="an-screen flex h-full flex-col bg-zinc-950">
+      <header className="flex shrink-0 items-center gap-3 border-b px-3.5 py-3" style={{ borderColor: "var(--an-term-line)" }}>
+        <button type="button" className="an-iconbtn shrink-0" aria-label="Back to market" onClick={() => setView("browse")}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m15 18-6-6 6-6" /></svg>
+        </button>
+        <div className="min-w-0 flex-1">
+          <h1 className="an-term-title text-[18px] leading-none">Drafts</h1>
+          <p className="mt-1 text-xs" style={{ color: "var(--an-term-fg-3)" }}>Saved on this device</p>
+        </div>
+        <button
+          type="button"
+          className="an-term-mono an-market-action"
+          data-tone="draft"
+          onClick={() => { setEditingDraft(undefined); setMarketTab("skill"); setView("publish"); }}
+        >+ New draft</button>
+      </header>
+      <div className="flex-1 space-y-2 overflow-y-auto p-3.5">
+        {draftError && <p role="alert" className="text-sm text-red-300">{draftError}</p>}
+        {!draftError && drafts.length === 0 && <p className="py-8 text-center text-sm" style={{ color: "var(--an-term-fg-3)" }}>No drafts yet</p>}
+        {!draftError && drafts.map(d => (
+          <button
+            type="button"
+            key={d.id}
+            className="block w-full border p-3 text-left active:opacity-80"
+            style={{ borderColor: "var(--an-term-line)", background: "var(--an-bg-1)" }}
+            onClick={() => { setEditingDraft(d); setView("publish"); }}
+          >
+            <span className="an-term-mono block break-words text-sm font-bold" style={{ color: "var(--an-term-fg)" }}>{d.name || "Untitled draft"}</span>
+            {d.description && <span className="mt-1 block line-clamp-2 text-xs" style={{ color: "var(--an-term-fg-3)" }}>{d.description}</span>}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
   // Publish form (market tab) — opens pre-set to whichever kind you were browsing (skill
   // or workflow tab), same as the VSCode builder.
   if (view === "publish") {
     return (
       <div className="an-screen flex flex-col h-full bg-zinc-950">
-        <PublishForm initialKind={state.marketTab} onBack={() => setView("browse")} />
+        <PublishForm initialKind={editingDraft ? "skill" : state.marketTab} initialDraft={editingDraft} onBack={() => setView("browse")} />
       </div>
     );
   }
@@ -245,11 +291,20 @@ export function MarketScreen({ tab, onBack, onGoMarket }: { tab: ShellTab; onBac
           </button>
         )}
         {isMarket && (
+          <button
+            type="button"
+            onClick={openDrafts}
+            className="an-term-mono an-market-action"
+            data-tone="draft"
+          >
+            Drafts
+          </button>
+        )}
+        {isMarket && (
           <LockedGate reason="publish" onUnlocked={() => setView("publish")} className="shrink-0 self-center" badge={false}>
             <button
-              onClick={() => setView("publish")}
-              className="an-term-mono text-[10px] font-bold uppercase tracking-wider active:opacity-80"
-              style={{ color: "var(--an-term-green)", border: "1px solid var(--an-term-green-line-2)", background: "var(--an-term-green-bg)", padding: "7px 11px" }}
+              onClick={() => { setEditingDraft(undefined); setView("publish"); }}
+              className="an-term-mono an-market-action"
             >
               + Publish
             </button>

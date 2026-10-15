@@ -217,9 +217,18 @@ function ChipGroup({ label, value, options, onPick, accent = "green" }: {
 
 // Input + engine tabs + model/effort pickers. FROZEN while an approval is pending.
 export function Composer() {
-  const { state, send, selectEngine, switchEngine, queueCount, markCompacting } = useStore();
+  const { state, send, prefillComposer, selectEngine, switchEngine, queueCount, markCompacting } = useStore();
   const limit = state.rateLimits[state.cli];
   const [text, setText] = useState("");
+  const handledPrefill = useRef<string | null>(null);
+  useEffect(() => {
+    const incoming = state.composerPrefill;
+    if (incoming === null) { handledPrefill.current = null; return; }
+    if (handledPrefill.current === incoming) return;
+    handledPrefill.current = incoming;
+    setText(previous => previous ? `${previous}\n\n${incoming}` : incoming);
+    prefillComposer(null);
+  }, [state.composerPrefill, prefillComposer]);
   const effort = state.effortByCli[state.cli];
   const model = state.modelByCli[state.cli];
   const [controlsOpen, setControlsOpen] = useState(false);

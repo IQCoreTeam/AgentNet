@@ -170,6 +170,7 @@ const LAST = 3; // Chat(0) Skills(1) Rank(2) Market(3)
 function TabShell() {
   const { state, send } = useStore();
   const [idx, setIdx] = useState(0);
+  useEffect(() => { if (state.composerPrefill !== null) setIdx(0); }, [state.composerPrefill]);
   // Faint tick whenever the pager lands on a different tab (tap or swipe).
   const prevIdx = useRef(0);
   useEffect(() => {

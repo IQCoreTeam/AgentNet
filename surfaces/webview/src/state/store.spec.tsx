@@ -86,3 +86,11 @@ describe("context usage", () => {
     expect(background.contextWindow).toBe(100_000);
   });
 });
+
+it('prefilling a local skill test does not add messages or publish requests', () => {
+  const next = reducer(initialState, { type: '__prefillComposer', text: 'Local draft test' });
+  expect(next.composerPrefill).toBe('Local draft test');
+  expect(next.log).toEqual(initialState.log);
+  expect(next.publishProgress).toBeNull();
+  expect(reducer(next, { type: '__prefillComposer', text: null }).composerPrefill).toBeNull();
+});

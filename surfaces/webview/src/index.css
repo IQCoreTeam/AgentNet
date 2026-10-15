@@ -2250,3 +2250,24 @@ html[data-keyboard="open"] .an-shell-panels::after { display: none; }
   from { transform: translateX(-24px); opacity: 0; }
   to   { transform: translateX(0); opacity: 1; }
 }
+
+/* Market header actions share geometry; drafts use the existing violet accent. */
+.an-market-action {
+  flex-shrink: 0;
+  align-self: center;
+  padding: 7px 11px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--an-term-green);
+  border: 1px solid var(--an-term-green-line-2);
+  background: var(--an-term-green-bg);
+}
+.an-market-action[data-tone="draft"] {
+  color: var(--an-violet);
+  border-color: color-mix(in srgb, var(--an-violet) 35%, transparent);
+  background: color-mix(in srgb, var(--an-violet) 8%, var(--an-bg-1));
+}
+.an-market-action:active { opacity: 0.8; }
+.an-market-action:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }

@@ -59,6 +59,8 @@ export interface State {
     | "codexAuth"
     | "customAuth" // custom engine picked with no saved endpoint: the AI Connections form, not a login
     | "chat";
+  // One-shot, user-reviewed text handed from the draft editor to chat.
+  composerPrefill: string | null;
   // market overlay (accessible from chat phase via "Markets" button)
   marketOpen: boolean;
   marketInitialView: "browse" | "agents" | "owned";
@@ -225,6 +227,7 @@ export const initialState: State = {
   buyCelebrate: false,
   buyCelebrateLabel: null,
   lastBuyError: null,
+  composerPrefill: null,
   marketOpen: false,
   marketInitialView: "browse",
   marketTab: "skill",
@@ -326,6 +329,7 @@ type LocalAction =
   | { type: "__dismissAuth" }
   | { type: "__savePlan"; text: string }
   | { type: "__openMarket"; initialView?: "browse" | "agents" | "owned" }
+  | { type: "__prefillComposer"; text: string | null }
   | { type: "__closeMarket" }
   | { type: "__setMarketTab"; tab: "skill" | "workflow" }
   | { type: "__setMarketQuery"; query: string }
@@ -604,6 +608,8 @@ export function reducer(state: State, ev: Action): State {
       return { ...state, log: [...state.log, { role: "summary" as const, text: `Saved plan\n\n${ev.text}` }] };
     case "__openMarket":
       return { ...state, marketOpen: true, marketInitialView: ev.initialView ?? "browse" };
+    case "__prefillComposer":
+      return { ...state, composerPrefill: ev.text };
     case "__closeMarket":
       return { ...state, marketOpen: false, marketDetail: null, publishResult: null };
     case "__setMarketTab":
@@ -802,6 +808,7 @@ interface Store {
   openMarket: () => void;
   openMarketAgents: () => void;
   openOwnedSkills: () => void;
+  prefillComposer: (text: string | null) => void;
   closeMarket: () => void;
   setMarketTab: (tab: "skill" | "workflow") => void;
   setMarketQuery: (q: string) => void;
@@ -1169,6 +1176,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       openMarket: () => raw({ type: "__openMarket" }),
       openMarketAgents: () => raw({ type: "__openMarket", initialView: "agents" }),
       openOwnedSkills: () => raw({ type: "__openMarket", initialView: "owned" }),
+      prefillComposer: (text) => raw({ type: "__prefillComposer", text }),
       closeMarket: () => raw({ type: "__closeMarket" }),
       setMarketTab: (tab) => raw({ type: "__setMarketTab", tab }),
       setMarketQuery: (query) => raw({ type: "__setMarketQuery", query }),

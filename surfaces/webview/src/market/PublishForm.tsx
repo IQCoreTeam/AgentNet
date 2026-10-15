@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useStore } from "../state/store";
 import { haptics } from "../haptics";
+import { saveSkillDraft, type SkillDraft } from "./skillDrafts";
 import { ImageIcon, SkillIcon } from "../icons";
 
 // Per-kind tint: skills forge violet, workflows forge amber (matches their card colors).
@@ -94,27 +95,48 @@ interface Props {
   // Which kind the form opens to — e.g. hitting Publish from the Workflow browse tab should
   // land straight in workflow mode, same as the VSCode builder. Defaults to "skill".
   initialKind?: "skill" | "workflow";
+  initialDraft?: SkillDraft;
 }
 
 // A workflow can require at most 16 skills (MAX_REQUIRED_SKILLS in the agent-workflow-nft
 // contract) and at least 1 — the on-chain gate that gives a workflow meaning.
 const MAX_REQUIRED_SKILLS = 16;
 
-export function PublishForm({ onBack, initialKind = "skill" }: Props) {
-  const { send, state, clearPublishResult } = useStore();
+export function PublishForm({ onBack, initialKind = "skill", initialDraft }: Props) {
+  const { send, state, clearPublishResult, prefillComposer } = useStore();
   const [kind, setKind] = useState<"skill" | "workflow">(initialKind);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [text, setText] = useState("");
-  const [category, setCategory] = useState("");
-  const [hashtags, setHashtags] = useState("");
+  const [name, setName] = useState(initialDraft?.name ?? "");
+  const [description, setDescription] = useState(initialDraft?.description ?? "");
+  const [text, setText] = useState(initialDraft?.text ?? "");
+  const [category, setCategory] = useState(initialDraft?.category ?? "");
+  const [hashtags, setHashtags] = useState(initialDraft?.hashtags ?? "");
   // Default 0.1 SOL, in lockstep with the CLI form and the make-skill MCP tool — type 0
   // explicitly to publish free. A 0 default made every mobile publish silently free.
-  const [priceSol, setPriceSol] = useState("0.1");
-  const [imageUrl, setImageUrl] = useState(""); // http/on-chain link only — no file upload
+  const [priceSol, setPriceSol] = useState(initialDraft?.priceSol ?? "0.1");
+  const [imageUrl, setImageUrl] = useState(initialDraft?.imageUrl ?? ""); // http/on-chain link only — no file upload
   const [submitting, setSubmitting] = useState(false);
   // Required-skills picker (workflow mode only): mint -> selected.
   const [reqSel, setReqSel] = useState<Record<string, boolean>>({});
+
+  const [draftId] = useState(() => initialDraft?.id ?? crypto.randomUUID());
+  const [draftNotice, setDraftNotice] = useState("");
+
+  function saveDraft() {
+    try {
+      saveSkillDraft({ id: draftId, name, description, text, category, hashtags, priceSol, imageUrl });
+      setDraftNotice("Draft saved.");
+      return true;
+    } catch (error) {
+      setDraftNotice(`Could not save draft: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+  }
+
+  function testDraft() {
+    if (!saveDraft()) return;
+    prefillComposer(`Use this local, unpublished skill draft for the task below. It is a test, not a request to publish or mint it.\n\nSkill: ${name}\n${description}\n\n${text}\n\nTask: `);
+    onBack();
+  }
 
   const result = state.publishResult;
 
@@ -187,6 +209,7 @@ export function PublishForm({ onBack, initialKind = "skill" }: Props) {
           <SkillIcon className="h-10 w-10" style={{ color: fg.accent }} />
           <p className="an-term-mono" style={{ margin: 0, fontWeight: 700, fontSize: 14, letterSpacing: "0.1em", textTransform: "uppercase", color: fg.accent }}>&gt;{kind === "workflow" ? "Workflow_Minted" : "Skill_Minted"}<span className="unlock-cursor">_</span></p>
           {result.mint && <p className="font-mono text-[11px]" style={{ color: "var(--an-term-fg-6)", wordBreak: "break-all", maxWidth: 280 }}>{result.mint}</p>}
+          <p className="max-w-sm text-xs leading-relaxed" style={{ color: "var(--an-term-fg-3)" }}>Published on-chain. It may take a few minutes to appear in Market. No need to publish again.</p>
           <button onClick={() => { haptics.tick(); clearPublishResult(); onBack(); }} className="an-term-mono" style={{ marginTop: 6, fontWeight: 700, fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: fg.accent, background: "none", border: 0, cursor: "pointer" }}>&gt; Back_to_Market [&gt;]</button>
         </div>
       </div>
@@ -363,6 +386,15 @@ export function PublishForm({ onBack, initialKind = "skill" }: Props) {
       </div>
 
       <div className="shrink-0 bg-transparent p-3 an-tabbar-inset">
+        {kind === "skill" && <div className="mb-3 space-y-2">
+          <div className="flex gap-2">
+            <button type="button" className="an-term-field" onClick={saveDraft} disabled={!name.trim()}>Save draft</button>
+            <button type="button" className="an-term-field" onClick={testDraft} disabled={!name.trim() || !text.trim()}>Test in chat</button>
+          </div>
+          <p className="text-xs" style={{ color: "var(--an-fg-mute)" }}>Saved on this device. Test opens in chat; review and add a task before sending.</p>
+          {draftNotice && <p role="status" className="text-xs">{draftNotice}</p>}
+        </div>}
+
         {/* Failure surfaces here as a bubble (not a separate page) so the filled-in form stays put. */}
         {result && !result.ok && (
           <div className="relative mb-3 rounded-lg border border-red-500/40 bg-red-950/60 px-3 py-2 text-xs text-red-300">
@@ -374,6 +406,7 @@ export function PublishForm({ onBack, initialKind = "skill" }: Props) {
           onClick={handleSubmit}
           disabled={
             submitting ||
+            !state.walletAddress ||
             !name.trim() ||
             !imageValid ||
             (kind === "skill" ? !text.trim() : chosenReqMints.length === 0 || chosenReqMints.length > MAX_REQUIRED_SKILLS)
