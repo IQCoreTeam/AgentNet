@@ -2,7 +2,8 @@
 //
 // ONE model for skills AND workflows: every item is minted only through this
 // program (the item mint's authority is a program PDA), so a token can't be minted
-// without going through buy_item. An item's required_skills is empty for a skill
+// without going through buy_item, or the proposed holder-approved migration
+// that burns one existing copy before replacing it. An item's required_skills is empty for a skill
 // (anyone can buy) and filled for a workflow (buyer must hold every listed skill).
 
 import {
@@ -13,12 +14,15 @@ import {
 import {
   getAssociatedTokenAddressSync,
   TOKEN_2022_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { getWorkflowGateProgramId, getFeeTreasury } from "../core/seed.js";
 
 // Anchor instruction discriminators (sha256("global:<name>")[0..8]) — from the IDL.
 const DISC_PUBLISH = Buffer.from([125, 80, 203, 31, 0, 230, 147, 33]); // publish_item
 const DISC_BUY = Buffer.from([80, 82, 193, 201, 216, 27, 70, 184]); // buy_item
+const DISC_MIGRATE = Buffer.from([239, 95, 169, 146, 202, 182, 224, 157]); // migrate_item
+const DISC_ROTATE_CREATOR = Buffer.from([65, 236, 156, 189, 194, 232, 216, 42]); // rotate_creator
 
 const ITEM_SEED = Buffer.from("item");
 const MINT_AUTH_SEED = Buffer.from("mint-auth");
@@ -126,4 +130,54 @@ export function buyItemIx(args: {
     })),
   ];
   return new TransactionInstruction({ programId: programId(), keys, data: DISC_BUY });
+}
+
+/** Proposed program upgrade: holder-approved, supply-preserving move of one copy.
+ * The recipient pays any ATA rent. This is key-holder consent, not human recovery proof. */
+export function migrateItemIx(args: {
+  owner: PublicKey;
+  recipient: PublicKey;
+  itemMint: PublicKey;
+  requiredSkills: PublicKey[];
+}): TransactionInstruction {
+  return new TransactionInstruction({
+    programId: programId(),
+    keys: [
+      { pubkey: args.recipient, isSigner: true, isWritable: true },
+      { pubkey: args.owner, isSigner: true, isWritable: false },
+      { pubkey: args.recipient, isSigner: true, isWritable: false },
+      { pubkey: itemConfigPda(args.itemMint), isSigner: false, isWritable: false },
+      { pubkey: args.itemMint, isSigner: false, isWritable: true },
+      { pubkey: itemMintAuthorityPda(args.itemMint), isSigner: false, isWritable: false },
+      { pubkey: getAssociatedTokenAddressSync(args.itemMint, args.owner, false, TOKEN_2022_PROGRAM_ID), isSigner: false, isWritable: true },
+      { pubkey: getAssociatedTokenAddressSync(args.itemMint, args.recipient, false, TOKEN_2022_PROGRAM_ID), isSigner: false, isWritable: true },
+      { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      ...args.requiredSkills.map((mint) => ({
+        pubkey: getAssociatedTokenAddressSync(mint, args.recipient, false, TOKEN_2022_PROGRAM_ID),
+        isSigner: false,
+        isWritable: false,
+      })),
+    ],
+    data: DISC_MIGRATE,
+  });
+}
+
+/** Proposed program upgrade: both current and new creator sign the payout change. */
+export function rotateCreatorIx(args: {
+  creator: PublicKey;
+  newCreator: PublicKey;
+  itemMint: PublicKey;
+}): TransactionInstruction {
+  return new TransactionInstruction({
+    programId: programId(),
+    keys: [
+      { pubkey: args.creator, isSigner: true, isWritable: false },
+      { pubkey: args.newCreator, isSigner: true, isWritable: false },
+      { pubkey: args.itemMint, isSigner: false, isWritable: false },
+      { pubkey: itemConfigPda(args.itemMint), isSigner: false, isWritable: true },
+    ],
+    data: DISC_ROTATE_CREATOR,
+  });
 }
